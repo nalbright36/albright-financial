@@ -1,0 +1,166 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 720px;">
+
+    <a href="{% url 'strategies' %}" style="display: inline-block; margin-bottom: 20px; color: var(--text-secondary); font-size: 0.875rem;">
+        &larr; Back to Strategies
+    </a>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <!-- Basic info -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header"><span class="card__label">Basic Info</span></div>
+
+            <div class="field">
+                <label for="name">Name</label>
+                <input type="text" name="name" id="name" required>
+            </div>
+
+            <div class="field">
+                <label for="description">Description</label>
+                <input type="text" name="description" id="description" placeholder="Optional">
+            </div>
+        </div>
+
+        <!-- Stock universe -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header"><span class="card__label">Stock Universe</span></div>
+            <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-top: -8px; margin-bottom: 16px;">
+                Either list specific symbols, or leave symbols blank and use filters below &mdash;
+                the engine re-checks the filters every pass, so the eligible list can change day to day.
+            </p>
+
+            <div class="field">
+                <label for="symbols">Manual Symbols (optional override)</label>
+                <input type="text" name="symbols" id="symbols" placeholder="AAPL,MSFT,NVDA — leave blank to use filters">
+            </div>
+
+            <div class="field">
+                <label>Sectors (leave all unchecked for every sector)</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+                    {% for sector in sectors %}
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--text-primary); text-transform: none; letter-spacing: 0; font-weight: 400;">
+                        <input type="checkbox" name="filter_sectors" value="{{ sector }}" style="width: auto;">
+                        {{ sector }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="grid grid-2">
+                <div class="field">
+                    <label for="filter_min_price">Min Price ($)</label>
+                    <input type="number" step="0.01" name="filter_min_price" id="filter_min_price" placeholder="Optional">
+                </div>
+                <div class="field">
+                    <label for="filter_max_price">Max Price ($)</label>
+                    <input type="number" step="0.01" name="filter_max_price" id="filter_max_price" placeholder="Optional">
+                </div>
+                <div class="field">
+                    <label for="filter_min_day_change_pct">Min Day Change (%)</label>
+                    <input type="number" step="0.1" name="filter_min_day_change_pct" id="filter_min_day_change_pct" placeholder="e.g. 2">
+                </div>
+                <div class="field">
+                    <label for="filter_max_day_change_pct">Max Day Change (%)</label>
+                    <input type="number" step="0.1" name="filter_max_day_change_pct" id="filter_max_day_change_pct" placeholder="e.g. 10">
+                </div>
+                <div class="field">
+                    <label for="filter_min_reddit_mentions_24h">Min Reddit Mentions (24h)</label>
+                    <input type="number" name="filter_min_reddit_mentions_24h" id="filter_min_reddit_mentions_24h" placeholder="Optional">
+                </div>
+                <div class="field">
+                    <label for="filter_min_reddit_positive_ratio">Min Positive Sentiment Ratio (0&ndash;1)</label>
+                    <input type="number" step="0.05" min="0" max="1" name="filter_min_reddit_positive_ratio" id="filter_min_reddit_positive_ratio" placeholder="e.g. 0.6">
+                </div>
+            </div>
+        </div>
+
+        <!-- Entry signal -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header"><span class="card__label">Entry Signal</span></div>
+
+            <div class="field">
+                <label for="strategy_type">Strategy Type</label>
+                <select name="strategy_type" id="strategy_type" required>
+                    {% for value, label in strategy_type_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="parameters">Parameters (JSON)</label>
+                <input type="text" name="parameters" id="parameters" placeholder='{"short_period": 10, "long_period": 30}'>
+            </div>
+        </div>
+
+        <!-- Position sizing -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header"><span class="card__label">Position Sizing</span></div>
+
+            <div class="grid grid-2">
+                <div class="field">
+                    <label for="position_sizing_method">Method</label>
+                    <select name="position_sizing_method" id="position_sizing_method">
+                        {% for value, label in position_sizing_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="position_sizing_value">Value</label>
+                    <input type="number" step="0.01" name="position_sizing_value" id="position_sizing_value" value="1" required>
+                </div>
+            </div>
+            <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                Shares: enter a share count (e.g. 10). Dollar amount: enter dollars (e.g. 500).
+                % of buying power: enter a percent (e.g. 5 = 5%).
+            </p>
+        </div>
+
+        <!-- Risk management -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header"><span class="card__label">Risk Management</span></div>
+
+            <div class="grid grid-2">
+                <div class="field">
+                    <label for="take_profit_pct">Take Profit (%)</label>
+                    <input type="number" step="0.1" name="take_profit_pct" id="take_profit_pct" placeholder="Optional, e.g. 10">
+                </div>
+                <div class="field">
+                    <label for="stop_loss_pct">Stop Loss (%)</label>
+                    <input type="number" step="0.1" name="stop_loss_pct" id="stop_loss_pct" placeholder="Optional, e.g. 5">
+                </div>
+                <div class="field">
+                    <label for="max_hold_days">Max Hold (days)</label>
+                    <input type="number" name="max_hold_days" id="max_hold_days" placeholder="Optional">
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create Strategy</button>
+    </form>
+
+</div>
+
+<script>
+const PARAM_PLACEHOLDERS = {
+    "moving_average_crossover": '{"short_period": 10, "long_period": 30}',
+    "reddit_sentiment_threshold": '{"min_mentions_24h": 5, "min_positive_ratio_24h": 0.6, "min_positive_acceleration_pct": 30}',
+};
+
+const strategyTypeSelect = document.getElementById('strategy_type');
+const parametersInput = document.getElementById('parameters');
+
+function updateParamPlaceholder() {
+    const placeholder = PARAM_PLACEHOLDERS[strategyTypeSelect.value];
+    if (placeholder) parametersInput.placeholder = placeholder;
+}
+
+strategyTypeSelect.addEventListener('change', updateParamPlaceholder);
+updateParamPlaceholder(); // set correctly on initial load too
+</script>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 560px;">
+
+    <div class="card">
+        <div class="card__header"><span class="card__label">Connect Your Alpaca Account</span></div>
+
+        {% if existing %}
+        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 16px;">
+            Currently connected &mdash;
+            <span class="badge neutral">{% if existing.is_paper %}Paper{% else %}Live{% endif %}</span>
+            account, since {{ existing.connected_at|date:"M j, Y" }}.
+            Submitting the form below will replace these credentials.
+        </p>
+        {% endif %}
+
+        {% if error %}
+        <p style="color: var(--loss); font-size: 0.875rem; margin-bottom: 16px;">{{ error }}</p>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="field">
+                <label for="api_key">API Key ID</label>
+                <input type="password" name="api_key" id="api_key" autocomplete="off" required>
+            </div>
+
+            <div class="field">
+                <label for="secret_key">Secret Key</label>
+                <input type="password" name="secret_key" id="secret_key" autocomplete="off" required>
+            </div>
+
+            <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+                <input type="checkbox" name="is_paper" id="is_paper" checked style="width: auto;">
+                <label for="is_paper" style="margin: 0; text-transform: none; letter-spacing: 0; font-size: 0.875rem;">
+                    This is a paper trading account
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Connect Account</button>
+        </form>
+
+        {% if existing %}
+        <form
+            method="post"
+            action="{% url 'disconnect_alpaca_account' %}"
+            style="margin-top: 16px;"
+            onsubmit="return confirm('Disconnect your Alpaca account? You will need to re-enter your API keys to reconnect.');"
+        >
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">Disconnect Account</button>
+        </form>
+        {% endif %}
+
+        <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: 20px; line-height: 1.5;">
+            Your keys are encrypted before storage and are never shown again after saving &mdash;
+            if you need to change them later, you'll re-enter new ones here rather than edit existing ones.
+            Generate API keys from your own Alpaca dashboard at
+            <a href="https://app.alpaca.markets/" target="_blank" rel="noopener">app.alpaca.markets</a>.
+        </p>
+    </div>
+
+</div>
+{% endblock %}

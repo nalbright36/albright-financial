@@ -1,0 +1,46 @@
+{% extends "index.html" %}
+{% block content %}
+
+<div class="table-title-container">
+
+    {% if registered %}
+    <h3>Thank you for registering!</h3>
+    {% else %}
+    <h3>Fill out the form:</h3>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <table id="logintable">
+
+            <tr>
+                <td><label for="username">Username: </label></td>
+                <div id="login-page-input">
+                    <td><input id="login-input" type="text" name="username" placeholder="Enter Username"></td>
+                </div>
+            </tr>
+
+            <tr>
+                <td><label for="email">Email: </label></td>
+                <td><input type="email" name="email" placeholder="Enter Email"></td>
+            </tr>
+
+            <tr>
+                <td><label for="password">Password: </label></td>
+                <td><input type="password" name="password" placeholder="Enter Password"></td>
+            </tr>
+
+        </table>
+
+        <br>
+
+        <input id="register-page-button" type="submit" value="Register">
+    </form>
+
+    <p>or</p>
+    
+    <a href="/user_login/"><button>Log In</button></a>
+    {% endif %}
+
+</div>
+
+{% endblock %}

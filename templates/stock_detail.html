@@ -1,0 +1,253 @@
+{% extends "index.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <a href="{% url 'market_scanner' %}" style="display: inline-block; margin-bottom: 20px; color: var(--text-secondary); font-size: 0.875rem;">
+        &larr; Back to Scanner
+    </a>
+
+    {% if error %}
+        <div class="card" style="border-color: var(--loss);">
+            <p style="color: var(--loss); margin: 0;">{{ error }}</p>
+        </div>
+
+    {% else %}
+
+        <!-- Header: symbol, company, price -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header">
+                <div>
+                    <span class="card__label">{{ symbol }} &middot; {{ sector }}</span>
+                    <h2 style="margin-top: 4px;">{{ name }}</h2>
+                </div>
+                <span class="badge neutral">Bid ${{ bid_price|floatformat:2|default:"—" }} / Ask ${{ ask_price|floatformat:2|default:"—" }}</span>
+            </div>
+
+            <span class="ledger-stat__value num">${{ price|floatformat:2 }}</span>
+            <div class="ledger-stat__delta {% if is_gain %}gain{% else %}loss{% endif %}">
+                <span class="num">
+                    {% if is_gain %}+{% endif %}{{ change|floatformat:2 }}
+                    ({% if is_gain %}+{% endif %}{{ change_pct|floatformat:2 }}%)
+                </span>
+                <span style="color: var(--text-tertiary); font-family: var(--font-body);">&nbsp;today</span>
+            </div>
+        </div>
+
+        <!-- Interactive candlestick chart -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header">
+                <span class="card__label">Price History</span>
+                <div id="timeframe-selector" style="display: flex; gap: 6px;">
+                    {% for tf in timeframe_options %}
+                    <button
+                        type="button"
+                        class="btn btn-secondary btn-timeframe{% if tf.key == default_timeframe %} active{% endif %}"
+                        data-tf="{{ tf.key }}"
+                    >{{ tf.key }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            <div id="price-chart"></div>
+        </div>
+
+        <!-- Stat grid: day range, 52wk range, volume, avg volume -->
+        <div class="grid grid-4" style="margin-bottom: 20px;">
+            <div class="card">
+                <div class="card__header"><span class="card__label">Day Range</span></div>
+                <span class="num" style="font-size: 1.1rem;">${{ day_low|floatformat:2 }} &ndash; ${{ day_high|floatformat:2 }}</span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">52-Week Range</span></div>
+                <span class="num" style="font-size: 1.1rem;">
+                    {% if week52_low %}${{ week52_low|floatformat:2 }} &ndash; ${{ week52_high|floatformat:2 }}{% else %}&mdash;{% endif %}
+                </span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Volume</span></div>
+                <span class="num" style="font-size: 1.1rem;">{{ volume|intcomma }}</span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Avg Daily Volume (1yr)</span></div>
+                <span class="num" style="font-size: 1.1rem;">
+                    {% if avg_volume %}{{ avg_volume|intcomma }}{% else %}&mdash;{% endif %}
+                </span>
+            </div>
+        </div>
+
+        <!-- Reddit sentiment -->
+        <div class="card">
+            <div class="card__header">
+                <span class="card__label">Reddit Sentiment</span>
+                {% if reddit_summary %}
+                <span class="badge neutral">Updated {{ reddit_summary.computed_at|date:"M j, g:i A" }}</span>
+                {% else %}
+                <span class="badge neutral">No data yet</span>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-3">
+                <!-- 24h -->
+                <div>
+                    <span class="card__label">Last 24h</span>
+                    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge gain">+{{ reddit_summary.positive_24h|default:0 }}</span>
+                        <span class="badge neutral">{{ reddit_summary.neutral_24h|default:0 }} neu</span>
+                        <span class="badge loss">&minus;{{ reddit_summary.negative_24h|default:0 }}</span>
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-top: 8px;">
+                        {{ reddit_summary.mentions_24h|default:0 }} total mentions
+                    </p>
+                    {% if reddit_summary.positive_change_24h_vs_7d_avg is not None %}
+                    <p class="num" style="font-size: 0.8125rem; margin-top: 4px; color: {% if reddit_summary.positive_change_24h_vs_7d_avg >= 0 %}var(--gain){% else %}var(--loss){% endif %};">
+                        Positive mentions {% if reddit_summary.positive_change_24h_vs_7d_avg >= 0 %}+{% endif %}{{ reddit_summary.positive_change_24h_vs_7d_avg|floatformat:0 }}% vs 7d avg
+                    </p>
+                    {% endif %}
+                </div>
+
+                <!-- 7d -->
+                <div>
+                    <span class="card__label">Last 7 Days</span>
+                    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge gain">+{{ reddit_summary.positive_7d|default:0 }}</span>
+                        <span class="badge neutral">{{ reddit_summary.neutral_7d|default:0 }} neu</span>
+                        <span class="badge loss">&minus;{{ reddit_summary.negative_7d|default:0 }}</span>
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-top: 8px;">
+                        {{ reddit_summary.mentions_7d|default:0 }} total mentions
+                    </p>
+                    {% if reddit_summary.positive_change_7d_vs_30d_avg is not None %}
+                    <p class="num" style="font-size: 0.8125rem; margin-top: 4px; color: {% if reddit_summary.positive_change_7d_vs_30d_avg >= 0 %}var(--gain){% else %}var(--loss){% endif %};">
+                        Positive mentions {% if reddit_summary.positive_change_7d_vs_30d_avg >= 0 %}+{% endif %}{{ reddit_summary.positive_change_7d_vs_30d_avg|floatformat:0 }}% vs 30d avg
+                    </p>
+                    {% endif %}
+                </div>
+
+                <!-- 30d -->
+                <div>
+                    <span class="card__label">Last 30 Days</span>
+                    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge gain">+{{ reddit_summary.positive_30d|default:0 }}</span>
+                        <span class="badge neutral">{{ reddit_summary.neutral_30d|default:0 }} neu</span>
+                        <span class="badge loss">&minus;{{ reddit_summary.negative_30d|default:0 }}</span>
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-top: 8px;">
+                        {{ reddit_summary.mentions_30d|default:0 }} total mentions
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    {% endif %}
+
+</div>
+
+{% if not error %}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function () {
+    const initialData = {{ chart_data_json|safe }};
+    const container = document.getElementById('price-chart');
+    const barsApiBase = "{% url 'stock_bars_api' symbol=symbol %}";
+    const buttons = document.querySelectorAll('.btn-timeframe');
+
+    if (!container) return;
+
+    function cssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function showMessage(text) {
+        container.innerHTML = '<p style="color: var(--text-secondary); padding: 16px 0;">' + text + '</p>';
+    }
+
+    if (!initialData.length) {
+        showMessage('No historical price data available.');
+        return;
+    }
+
+    const chart = LightweightCharts.createChart(container, {
+        layout: {
+            background: { color: 'transparent' },
+            textColor: cssVar('--text-secondary'),
+        },
+        grid: {
+            vertLines: { color: cssVar('--border') },
+            horzLines: { color: cssVar('--border') },
+        },
+        rightPriceScale: { borderColor: cssVar('--border') },
+        timeScale: { borderColor: cssVar('--border') },
+        width: container.clientWidth,
+        height: 420,
+    });
+
+    const candleSeries = chart.addCandlestickSeries({
+        upColor: cssVar('--gain'),
+        downColor: cssVar('--loss'),
+        borderVisible: false,
+        wickUpColor: cssVar('--gain'),
+        wickDownColor: cssVar('--loss'),
+    });
+
+    candleSeries.setData(initialData);
+    chart.timeScale().fitContent();
+
+    window.addEventListener('resize', function () {
+        chart.applyOptions({ width: container.clientWidth });
+    });
+
+    // ---- Timeframe switching ----
+    let activeRequest = null;
+
+    function loadTimeframe(tf, button) {
+        buttons.forEach(function (b) { b.classList.remove('active'); });
+        button.classList.add('active');
+        button.disabled = true;
+
+        // If a previous request is still in flight, ignore its result
+        // when it lands so a fast double-click can't apply stale data.
+        const requestId = Symbol();
+        activeRequest = requestId;
+
+        fetch(barsApiBase + '?tf=' + encodeURIComponent(tf), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+            .then(function (response) {
+                if (!response.ok) throw new Error('Request failed');
+                return response.json();
+            })
+            .then(function (data) {
+                if (activeRequest !== requestId) return; // superseded by a newer click
+                if (data.error || !data.bars || !data.bars.length) {
+                    throw new Error(data.error || 'No data for this timeframe');
+                }
+                candleSeries.setData(data.bars);
+                chart.timeScale().fitContent();
+            })
+            .catch(function () {
+                if (activeRequest !== requestId) return;
+                // Leave the existing chart data visible rather than
+                // blanking it — a failed switch shouldn't lose what
+                // was already showing.
+                button.classList.add('btn-timeframe-error');
+                setTimeout(function () {
+                    button.classList.remove('btn-timeframe-error');
+                }, 1200);
+            })
+            .finally(function () {
+                if (activeRequest === requestId) button.disabled = false;
+            });
+    }
+
+    buttons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            if (button.classList.contains('active')) return;
+            loadTimeframe(button.dataset.tf, button);
+        });
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

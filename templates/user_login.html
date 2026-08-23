@@ -1,0 +1,39 @@
+{% extends "index.html" %}
+{% block content %}
+
+<div class="table-title-container">
+
+    <br>
+
+    <form action="{%  url 'user_login' %}" method="post">
+        {% csrf_token %}
+
+        <table id="logintable">
+
+            <tr>
+                <td><label for="username">Username: </label></td>
+                <div id="login-page-input">
+                    <td><input id="login-input" type="text" name="username" placeholder="Enter Username"></td>
+                </div>
+            </tr>
+
+            <tr>
+                <td><label for="username">Password: </label></td>
+                <td><input type="password" name="password" placeholder="Enter Password"></td>
+            </tr>
+
+        </table>
+
+        <br>
+
+        <input id="login-page-button" type="submit" name="" value="Login">
+
+    </form>
+
+    <br>
+
+    <a href='/reset_password'>Reset Password</a>
+
+</div>
+
+{% endblock %}

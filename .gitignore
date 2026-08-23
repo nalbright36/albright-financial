@@ -1,0 +1,28 @@
+# Environment variables / secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.Python
+
+# Virtual environments
+venv/
+env/
+atenv/
+
+# Django
+*.log
+db.sqlite3
+staticfiles/
+/media/
+
+# Editor/OS cruft
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

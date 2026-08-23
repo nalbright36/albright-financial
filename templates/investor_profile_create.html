@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+{% extends 'index.html' %}
+{% load static %}
+
+  {% block content %}
+  <h2>Create Investor Profile</h2>
+
+  <form method="post" autocomplete="off" enctype="multipart/form-data">
+
+    {% csrf_token %}
+
+    <table>
+
+      <tr>
+        <td><label for="first_name">First Name: </label></td>
+        <td>{{ form.first_name }}</td>
+      </tr>
+      <tr>
+        <td><label for="last_name">Last Name: </label></td>
+        <td>{{ form.last_name }}</td>
+      </tr>
+      <tr>
+        <td><label for="date_of_birth">Date of Birth: </label></td>
+        <td>{{ form.date_of_birth }}</td>
+      </tr>
+      <tr>
+        <td><label for="expected_retirement_date">Expected Retirement Date: </label></td>
+        <td>{{ form.expected_retirement_date }}</td>
+      </tr>
+      <tr>
+        <td><label for="risk_tolerance">Risk Tolerance: </label></td>
+        <td>{{ form.risk_tolerance }}</td>
+      </tr>
+      <tr>
+        <td><label for="marital_status">Marital Status: </label></td>
+        <td>{{ form.marital_status }}</td>
+      </tr>
+      <tr>
+        <td><label for="dependents_count">Dependents Count: </label></td>
+        <td>{{ form.dependents_count }}</td>
+      </tr>
+      <tr>
+        <td><label for="home_street_address">Home Street Address: </label></td>
+        <td>{{ form.home_street_address }}</td>
+      </tr>
+      <tr>
+        <td><label for="home_city">Home City: </label></td>
+        <td>{{ form.home_city }}</td>
+      </tr>
+      <tr>
+        <td><label for="home_state">Home State: </label></td>
+        <td>{{ form.home_state }}</td>
+      </tr>
+      <tr>
+        <td><label for="home_zip">Home Zip: </label></td>
+        <td>{{ form.home_zip }}</td>
+      </tr>
+      <tr>
+        <td><label for="employment_status">Employment Status: </label></td>
+        <td>{{ form.employment_status }}</td>
+      </tr>
+      <tr>
+        <td><label for="goal_type">Goal Type: </label></td>
+        <td>{{ form.goal_type }}</td>
+      </tr>
+      <tr>
+        <td><label for="maximum_tolerable_drawdown">Maximum Tolerable Drawdown: </label></td>
+        <td>{{ form.maximum_tolerable_drawdown }}</td>
+      </tr>
+      <tr>
+        <td><label for="monthly_contribution_amount">Monthly Contribution Amount: </label></td>
+        <td>{{ form.monthly_contribution_amount }}</td>
+      </tr>
+      <tr>
+        <td><label for="liquid_assets">Liquid Assets: </label></td>
+        <td>{{ form.liquid_assets }}</td>
+      </tr>
+      <tr>
+        <td><label for="debt">Debt: </label></td>
+        <td>{{ form.debt }}</td>
+      </tr>
+
+    </table>
+
+    <br>
+    <input type="submit" name="" value="Submit" class="form-button" id="form-button">
+
+  </form>
+    
+  {% endblock %}

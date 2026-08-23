@@ -1,0 +1,169 @@
+{% extends "index.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    {% if error %}
+        <div class="card" style="border-color: var(--loss);">
+            <p style="color: var(--loss); margin: 0;">{{ error }}</p>
+        </div>
+
+    {% else %}
+
+        <div class="card">
+            <div class="card__header">
+                <span class="card__label">S&amp;P 500 Scanner</span>
+                <span class="badge neutral">
+                    <span id="scanner-count">{{ rows|length }} symbols</span>
+                    {% if as_of %}&middot; as of {{ as_of }}{% endif %}
+                </span>
+            </div>
+
+            {% if rows %}
+            <div class="scanner-controls">
+                <input
+                    type="text"
+                    id="scanner-search"
+                    placeholder="Search symbol or company..."
+                    autocomplete="off"
+                >
+                <select id="scanner-sector-filter">
+                    <option value="">All sectors</option>
+                    {% for sector in sectors %}
+                    <option value="{{ sector }}">{{ sector }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="scanner-table">
+                <thead>
+                    <tr>
+                        <th data-sort-key="symbol">Symbol</th>
+                        <th data-sort-key="name">Company</th>
+                        <th data-sort-key="sector">Sector</th>
+                        <th class="num" data-sort-key="price">Price</th>
+                        <th class="num" data-sort-key="changePct">Change</th>
+                        <th class="num" data-sort-key="dayLow">Day Range</th>
+                        <th class="num" data-sort-key="volume">Volume</th>
+                        <th class="num" data-sort-key="redditPositive">Reddit +</th>
+                        <th class="num" data-sort-key="redditNeutral">Reddit Neu</th>
+                        <th class="num" data-sort-key="redditNegative">Reddit &minus;</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr
+                        data-symbol="{{ r.symbol }}"
+                        data-name="{{ r.name }}"
+                        data-sector="{{ r.sector }}"
+                        data-price="{{ r.price }}"
+                        data-change="{{ r.change }}"
+                        data-change-pct="{{ r.change_pct }}"
+                        data-volume="{{ r.volume }}"
+                        data-day-low="{{ r.day_low }}"
+                        data-day-high="{{ r.day_high }}"
+                        data-reddit-positive="{{ r.reddit_positive }}"
+                        data-reddit-neutral="{{ r.reddit_neutral }}"
+                        data-reddit-negative="{{ r.reddit_negative }}"
+                    >
+                        <td class="symbol"><a href="{% url 'stock_detail' symbol=r.symbol %}">{{ r.symbol }}</a></td>
+                        <td>{{ r.name }}</td>
+                        <td style="color: var(--text-secondary);">{{ r.sector }}</td>
+                        <td class="num">${{ r.price|floatformat:2 }}</td>
+                        <td class="num">
+                            <span class="badge {% if r.is_gain %}gain{% else %}loss{% endif %}">
+                                {% if r.is_gain %}+{% endif %}{{ r.change|floatformat:2 }}
+                                ({% if r.is_gain %}+{% endif %}{{ r.change_pct|floatformat:2 }}%)
+                            </span>
+                        </td>
+                        <td class="num">${{ r.day_low|floatformat:2 }} &ndash; ${{ r.day_high|floatformat:2 }}</td>
+                        <td class="num">{{ r.volume|intcomma }}</td>
+                        <td class="num"><span class="badge gain">{{ r.reddit_positive }}</span></td>
+                        <td class="num"><span class="badge neutral">{{ r.reddit_neutral }}</span></td>
+                        <td class="num"><span class="badge loss">{{ r.reddit_negative }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+                <p style="color: var(--text-secondary);">No market data available right now.</p>
+            {% endif %}
+        </div>
+
+    {% endif %}
+
+</div>
+
+<script>
+(function () {
+    const table = document.getElementById('scanner-table');
+    if (!table) return; // no rows to wire up (error state or empty)
+
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const searchInput = document.getElementById('scanner-search');
+    const sectorFilter = document.getElementById('scanner-sector-filter');
+    const countLabel = document.getElementById('scanner-count');
+    const headers = Array.from(table.querySelectorAll('th[data-sort-key]'));
+
+    let sortKey = null;
+    let sortAsc = true;
+
+    function applyFilters() {
+        const query = searchInput.value.trim().toLowerCase();
+        const sector = sectorFilter.value;
+        let visibleCount = 0;
+
+        rows.forEach(function (row) {
+            const symbol = row.dataset.symbol.toLowerCase();
+            const name = row.dataset.name.toLowerCase();
+            const rowSector = row.dataset.sector;
+
+            const matchesQuery = !query || symbol.includes(query) || name.includes(query);
+            const matchesSector = !sector || rowSector === sector;
+            const visible = matchesQuery && matchesSector;
+
+            row.style.display = visible ? '' : 'none';
+            if (visible) visibleCount += 1;
+        });
+
+        countLabel.textContent = visibleCount + ' symbols';
+    }
+
+    function sortRows(key) {
+        sortAsc = sortKey === key ? !sortAsc : true;
+        sortKey = key;
+
+        const sorted = rows.slice().sort(function (a, b) {
+            const rawA = a.dataset[key];
+            const rawB = b.dataset[key];
+            const numA = parseFloat(rawA);
+            const numB = parseFloat(rawB);
+            const isNumeric = !isNaN(numA) && !isNaN(numB);
+
+            const cmp = isNumeric ? (numA - numB) : rawA.localeCompare(rawB);
+            return sortAsc ? cmp : -cmp;
+        });
+
+        sorted.forEach(function (row) { tbody.appendChild(row); });
+
+        headers.forEach(function (h) { h.classList.remove('sorted-asc', 'sorted-desc'); });
+        const activeHeader = headers.find(function (h) { return h.dataset.sortKey === key; });
+        if (activeHeader) activeHeader.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+    }
+
+    searchInput.addEventListener('input', applyFilters);
+    sectorFilter.addEventListener('change', applyFilters);
+    headers.forEach(function (h) {
+        h.addEventListener('click', function () { sortRows(h.dataset.sortKey); });
+    });
+
+    // Default sort: symbol, ascending
+    sortRows('symbol');
+})();
+</script>
+{% endblock %}

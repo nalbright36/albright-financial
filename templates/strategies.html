@@ -1,0 +1,99 @@
+{% extends "index.html" %}
+{% load humanize %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h2>Strategies</h2>
+        <a href="{% url 'strategy_create' %}" class="btn btn-primary">+ New Strategy</a>
+    </div>
+
+    {% if strategy_rows %}
+    <div class="grid grid-2">
+        {% for row in strategy_rows %}
+        <div class="card">
+            <div class="card__header">
+                <div>
+                    <span class="card__label">{{ row.strategy.get_strategy_type_display }}</span>
+                    <h3 style="margin-top: 4px;">{{ row.strategy.name }}</h3>
+                </div>
+                <label class="toggle-switch">
+                    <input
+                        type="checkbox"
+                        class="strategy-toggle"
+                        data-toggle-url="{% url 'strategy_toggle' strategy_id=row.strategy.id %}"
+                        {% if row.strategy.is_active %}checked{% endif %}
+                    >
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0 0 14px;">
+                {{ row.strategy.symbols }}
+                &middot;
+                <span class="badge neutral">{% if row.strategy.is_paper %}Paper{% else %}Live{% endif %}</span>
+            </p>
+
+            <span class="ledger-stat__value num" style="font-size: 1.5rem;">
+                {% if row.total_pnl >= 0 %}+{% endif %}${{ row.total_pnl|floatformat:2|intcomma }}
+            </span>
+            <div class="ledger-stat__delta {% if row.is_gain %}gain{% else %}loss{% endif %}">
+                <span class="num">{{ row.open_trades }} open position{{ row.open_trades|pluralize }}</span>
+            </div>
+
+            <div style="display: flex; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+                <div>
+                    <span class="card__label" style="font-size: 0.6875rem;">Closed Trades</span>
+                    <div class="num" style="font-size: 0.9375rem; margin-top: 2px;">{{ row.closed_trades }}</div>
+                </div>
+                <div>
+                    <span class="card__label" style="font-size: 0.6875rem;">Win Rate</span>
+                    <div class="num" style="font-size: 0.9375rem; margin-top: 2px;">
+                        {% if row.win_rate is not None %}{{ row.win_rate|floatformat:0 }}%{% else %}&mdash;{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+        <div class="card">
+            <p style="color: var(--text-secondary);">No strategies yet. Create your first one to get started.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
+document.querySelectorAll('.strategy-toggle').forEach(function (toggle) {
+    toggle.addEventListener('change', function () {
+        const previousState = !toggle.checked;
+        toggle.disabled = true;
+
+        fetch(toggle.dataset.toggleUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+            credentials: 'same-origin',
+        })
+            .then(function (response) {
+                if (!response.ok) throw new Error('Toggle failed');
+                return response.json();
+            })
+            .catch(function () {
+                toggle.checked = previousState; // revert on failure
+                alert('Could not update strategy status. Please try again.');
+            })
+            .finally(function () {
+                toggle.disabled = false;
+            });
+    });
+});
+</script>
+{% endblock %}

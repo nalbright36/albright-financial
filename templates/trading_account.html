@@ -1,0 +1,109 @@
+{% extends "index.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    {% if not_connected %}
+        <div class="card">
+            <div class="card__header"><span class="card__label">Trading Account</span></div>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                You haven't connected an Alpaca account yet. Connect your own API keys to see your
+                account balance and positions here.
+            </p>
+            <a href="{% url 'connect_alpaca_account' %}" class="btn btn-primary">Connect Alpaca Account</a>
+        </div>
+
+    {% elif error %}
+        <div class="card" style="border-color: var(--loss);">
+            <p style="color: var(--loss); margin: 0;">{{ error }}</p>
+            <a href="{% url 'connect_alpaca_account' %}" style="display: inline-block; margin-top: 12px; font-size: 0.875rem;">
+                Reconnect your account &rarr;
+            </a>
+        </div>
+
+    {% else %}
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+            <span class="badge neutral">{% if is_paper %}Paper Account{% else %}Live Account{% endif %}</span>
+        </div>
+
+        <!-- Top summary row: portfolio value as the hero ledger stat -->
+        <div class="grid grid-3" style="margin-bottom: 28px;">
+
+            <div class="card">
+                <div class="card__header">
+                    <span class="card__label">Portfolio Value</span>
+                </div>
+                <span class="ledger-stat__value num">${{ portfolio_value|floatformat:2|intcomma }}</span>
+                <div class="ledger-stat__delta {% if is_gain_today %}gain{% else %}loss{% endif %}">
+                    <span class="num">
+                        {% if is_gain_today %}+{% endif %}${{ day_change|floatformat:2|intcomma }}
+                        ({% if is_gain_today %}+{% endif %}{{ day_change_pct|floatformat:2 }}%)
+                    </span>
+                    <span style="color: var(--text-tertiary); font-family: var(--font-body);">&nbsp;today</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card__header">
+                    <span class="card__label">Cash</span>
+                </div>
+                <span class="ledger-stat__value num">${{ cash|floatformat:2|intcomma }}</span>
+            </div>
+
+            <div class="card">
+                <div class="card__header">
+                    <span class="card__label">Buying Power</span>
+                </div>
+                <span class="ledger-stat__value num">${{ buying_power|floatformat:2|intcomma }}</span>
+            </div>
+
+        </div>
+
+        <!-- Holdings table -->
+        <div class="card">
+            <div class="card__header">
+                <span class="card__label">Open Positions</span>
+                <span class="badge neutral">{{ holdings|length }} holding{{ holdings|length|pluralize }}</span>
+            </div>
+
+            {% if holdings %}
+            <table class="holdings">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Avg Entry</th>
+                        <th class="num">Current Price</th>
+                        <th class="num">Market Value</th>
+                        <th class="num">Unrealized P&amp;L</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in holdings %}
+                    <tr>
+                        <td class="symbol">{{ h.symbol }}</td>
+                        <td class="num">{{ h.qty }}</td>
+                        <td class="num">${{ h.avg_entry_price|floatformat:2 }}</td>
+                        <td class="num">${{ h.current_price|floatformat:2 }}</td>
+                        <td class="num">${{ h.market_value|floatformat:2 }}</td>
+                        <td class="num">
+                            <span class="badge {% if h.is_gain %}gain{% else %}loss{% endif %}">
+                                {% if h.is_gain %}+{% endif %}${{ h.unrealized_pl|floatformat:2 }}
+                                ({% if h.is_gain %}+{% endif %}{{ h.unrealized_plpc|floatformat:2 }}%)
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p style="color: var(--text-secondary);">No open positions right now.</p>
+            {% endif %}
+        </div>
+
+    {% endif %}
+
+</div>
+{% endblock %}

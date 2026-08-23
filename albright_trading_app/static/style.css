@@ -1,0 +1,768 @@
+/* ============================================================
+   FINANCE TELEMETRY — a mission-control design system for
+   trading/portfolio UIs
+   ------------------------------------------------------------
+   Concept: your positions as telemetry, not spreadsheet rows.
+   Deep-space palette, phosphor-cyan accent, HUD corner brackets
+   on panels, a quiet starfield, and a glow on live numbers.
+   Same class names as before — only re-skin, no markup changes
+   needed in your templates.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ---------- Tokens ---------- */
+:root {
+  /* Surfaces — deep space, not pure black */
+  --bg:            #070B14;
+  --bg-elevated:   #0C1220;
+  --surface:       rgba(17, 25, 43, 0.68);
+  --surface-hover: rgba(25, 36, 58, 0.85);
+  --border:        rgba(120, 170, 210, 0.16);
+  --border-strong: rgba(94, 224, 255, 0.38);
+
+  /* Text */
+  --text-primary:   #E9F1F7;
+  --text-secondary: #8393AD;
+  --text-tertiary:  #4E5B78;
+
+  /* Brand / interactive — phosphor cyan, telemetry-readout color */
+  --accent:        #4FE0FF;
+  --accent-hover:  #8EEEFF;
+  --accent-dim:    #1E7A94;
+  --accent-glow:   rgba(79, 224, 255, 0.45);
+
+  /* Signal colors — muted but with a faint glow, not flat */
+  --gain:          #5CE0A6;
+  --gain-bg:       rgba(92, 224, 166, 0.10);
+  --gain-glow:     rgba(92, 224, 166, 0.35);
+  --loss:          #FF6E68;
+  --loss-bg:       rgba(255, 110, 104, 0.10);
+  --loss-glow:     rgba(255, 110, 104, 0.35);
+  --neutral:       #8393AD;
+
+  /* Alert red — deliberately more saturated than --loss, reserved
+     for things that need real urgency (live-account warnings,
+     triggered stop-losses, danger states) rather than routine
+     day-to-day red/green P&L coloring. */
+  --alert:         #FF3860;
+  --alert-bg:      rgba(255, 56, 96, 0.12);
+  --alert-glow:    rgba(255, 56, 96, 0.5);
+
+  /* Nebula tints — used only in the background atmosphere, never
+     on text or UI elements. */
+  --nebula-red:    rgba(255, 60, 90, 0.16);
+  --nebula-violet: rgba(150, 70, 255, 0.12);
+
+  /* Type */
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+  /* Scale */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px -10px rgba(0, 0, 0, 0.65);
+}
+
+/* Registering this custom property lets the corner-bracket
+   hover transition animate smoothly in supporting browsers
+   (Chrome/Edge/Safari). Falls back to an instant color swap
+   elsewhere — harmless either way. */
+@property --bracket-color {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #1E7A94;
+}
+
+/* ---------- Reset & base ---------- */
+* { box-sizing: border-box; }
+
+/* Starfield + nebula — layered so it doesn't scroll with content.
+   Base layer (grid, static stars, nebula blobs) never animates;
+   the twinkle and shooting-star layers below are the only motion,
+   and both respect prefers-reduced-motion. */
+body {
+  background-color: var(--bg);
+  background-image:
+    /* faint orbital chart grid, sits beneath everything else */
+    linear-gradient(rgba(94, 224, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(94, 224, 255, 0.035) 1px, transparent 1px),
+    /* soft red/violet nebula glow — atmosphere, not detail */
+    radial-gradient(ellipse 900px 600px at 12% 8%, var(--nebula-red), transparent 70%),
+    radial-gradient(ellipse 800px 700px at 90% 85%, var(--nebula-violet), transparent 70%),
+    radial-gradient(ellipse 600px 500px at 75% 15%, var(--nebula-red), transparent 75%),
+    /* static stars */
+    radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.35), transparent),
+    radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.25), transparent),
+    radial-gradient(1.5px 1.5px at 85% 60%, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.2), transparent),
+    radial-gradient(1px 1px at 10% 65%, rgba(255,255,255,0.25), transparent),
+    radial-gradient(1.5px 1.5px at 92% 25%, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1px 1px at 55% 50%, rgba(255,255,255,0.18), transparent);
+  background-repeat:
+    repeat, repeat,
+    no-repeat, no-repeat, no-repeat,
+    no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-size:
+    64px 64px, 64px 64px,
+    auto, auto, auto,
+    auto, auto, auto, auto, auto, auto, auto;
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Twinkle layer — a handful of brighter stars that slowly pulse.
+   Fixed + negative z-index keeps it pinned behind all page content
+   regardless of stacking contexts created elsewhere (backdrop-filter,
+   position:relative, etc). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 30% 20%, #FFFFFF, transparent),
+    radial-gradient(1.5px 1.5px at 75% 70%, #FFFFFF, transparent),
+    radial-gradient(2px 2px at 15% 85%, #FFFFFF, transparent),
+    radial-gradient(1.5px 1.5px at 60% 40%, #FFFFFF, transparent),
+    radial-gradient(2px 2px at 88% 50%, #FFFFFF, transparent);
+  background-repeat: no-repeat;
+  animation: twinkle 4s ease-in-out infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+
+/* Shooting star — a thin streak that crosses the sky briefly once
+   every cycle, then stays invisible for the rest of it. */
+body::after {
+  content: "";
+  position: fixed;
+  top: 12%;
+  left: -10%;
+  z-index: -1;
+  pointer-events: none;
+  width: 140px;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, var(--accent-hover), transparent);
+  box-shadow: 0 0 6px 1px var(--accent-glow);
+  opacity: 0;
+  transform: rotate(18deg);
+  animation: shooting-star 9s linear infinite;
+}
+
+@keyframes shooting-star {
+  0%, 88%  { opacity: 0; transform: translate(0, 0) rotate(18deg); }
+  90%      { opacity: 1; }
+  97%      { opacity: 0.4; }
+  100%     { opacity: 0; transform: translate(130vw, 65vh) rotate(18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; opacity: 0.6; }
+  body::after { display: none; }
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Holographic gradient text for primary headings */
+h1, h2, .font-display {
+  background: linear-gradient(100deg, var(--text-primary) 20%, var(--accent) 55%, var(--text-primary) 85%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.125rem; color: var(--text-primary); }
+
+/* All numeric data uses monospace with tabular figures so
+   columns of prices/quantities align vertically. */
+.num, .ledger-stat__value, table.holdings td.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Layout ---------- */
+.container {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.grid {
+  display: grid;
+  gap: 20px;
+}
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .container { padding: 0 16px; }
+}
+
+/* ---------- Top nav ---------- */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10, 15, 26, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.navbar__brand {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: none; /* brand text itself stays solid, unlike h1/h2 */
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 4px;
+}
+
+/* Brand mark: a small pulsing "signal" dot instead of the old
+   diamond — reads as a live telemetry indicator. */
+.navbar__brand::before {
+  content: "";
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px 1px var(--accent-glow);
+  display: inline-block;
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+
+/* Radar-ping ring expanding outward from the dot */
+.navbar__brand::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  transform: translateY(-50%) scale(1);
+  animation: radar-ping 2.4s ease-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes radar-ping {
+  0%   { transform: translateY(-50%) scale(1); opacity: 0.6; }
+  100% { transform: translateY(-50%) scale(3.2); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar__brand::before { animation: none; }
+  .navbar__brand::after { display: none; }
+}
+
+.navbar__links {
+  display: flex;
+  gap: 28px;
+  font-size: 0.875rem;
+}
+
+.navbar__links a {
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.navbar__links a:hover,
+.navbar__links a.active {
+  color: var(--accent);
+}
+
+/* ---------- Ticker rail (signature element) ----------
+   A thin strip of live-looking symbols with a scanning glow
+   line beneath it, like an instrument-panel readout. */
+.ticker {
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 8px 0;
+}
+
+.ticker::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -30%;
+  width: 30%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  animation: scan-line 5s linear infinite;
+}
+
+@keyframes scan-line {
+  0%   { left: -30%; }
+  100% { left: 100%; }
+}
+
+.ticker__track {
+  display: inline-flex;
+  gap: 32px;
+  animation: ticker-scroll 32s linear infinite;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.ticker__item { color: var(--text-secondary); }
+.ticker__item .num { color: var(--text-primary); margin: 0 6px; }
+.ticker__item.up .delta { color: var(--gain); }
+.ticker__item.down .delta { color: var(--loss); }
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker__track { animation: none; }
+  .ticker::after { animation: none; display: none; }
+}
+
+/* ---------- Cards (viewport panels) ---------- */
+.card {
+  --bracket-color: var(--accent-dim);
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  overflow: hidden;
+
+  /* Four-corner HUD brackets, drawn entirely with layered
+     background gradients — no extra markup needed. */
+  background-image:
+    linear-gradient(to right, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to bottom, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to left, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to bottom, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to right, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to top, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to left, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(to top, var(--bracket-color), var(--bracket-color)),
+    linear-gradient(var(--surface), var(--surface));
+  background-repeat: no-repeat;
+  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right, 0 0;
+  background-size: 14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px, 100% 100%;
+  transition: --bracket-color 0.2s ease;
+}
+
+.card:hover {
+  --bracket-color: var(--accent);
+}
+
+/* Scanning glow line sweeps across the panel on hover — reads
+   as an instrument doing a live re-read of the data. */
+.card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(79, 224, 255, 0.06), transparent);
+  pointer-events: none;
+  transition: left 0.9s ease;
+}
+.card:hover::after {
+  left: 120%;
+}
+
+.card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.card__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+/* Signature: the ledger stat — a large glowing tabular number
+   on a rule, like a telemetry readout, with a direction
+   triangle instead of a raw sign. */
+.ledger-stat__value {
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-shadow: 0 0 18px rgba(79, 224, 255, 0.18);
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 10px;
+  display: block;
+}
+
+.ledger-stat__delta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+}
+
+.ledger-stat__delta.gain { color: var(--gain); text-shadow: 0 0 10px var(--gain-glow); }
+.ledger-stat__delta.loss { color: var(--loss); text-shadow: 0 0 10px var(--loss-glow); }
+
+.ledger-stat__delta::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+.ledger-stat__delta.gain::before {
+  border-bottom: 7px solid var(--gain);
+  filter: drop-shadow(0 0 3px var(--gain-glow));
+}
+.ledger-stat__delta.loss::before {
+  border-top: 7px solid var(--loss);
+  filter: drop-shadow(0 0 3px var(--loss-glow));
+}
+
+/* ---------- Badges / pills ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  border: 1px solid transparent;
+}
+.badge.gain { background: var(--gain-bg); color: var(--gain); border-color: rgba(92, 224, 166, 0.25); }
+.badge.loss { background: var(--loss-bg); color: var(--loss); border-color: rgba(255, 110, 104, 0.25); }
+.badge.neutral { background: var(--surface-hover); color: var(--text-secondary); }
+
+/* ---------- Holdings table ---------- */
+table.holdings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+table.holdings th {
+  text-align: left;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+table.holdings td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+table.holdings td.num,
+table.holdings th.num { text-align: center; }
+
+table.holdings tr:hover td {
+  background: var(--surface-hover);
+}
+
+table.holdings td.symbol {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+table.holdings td.symbol a {
+  color: var(--accent);
+  text-shadow: 0 0 8px var(--accent-glow);
+}
+table.holdings td.symbol a:hover {
+  color: var(--accent-hover);
+}
+
+/* ---------- Stock detail chart ---------- */
+#price-chart {
+  width: 100%;
+  height: 420px;
+}
+
+.btn-timeframe {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+}
+
+.btn-timeframe.active {
+  background: var(--accent);
+  color: #051019;
+  border-color: var(--accent);
+}
+
+.btn-timeframe:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn-timeframe-error {
+  border-color: var(--loss) !important;
+  color: var(--loss) !important;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 18px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #051019;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+.btn-secondary {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.btn-secondary:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.btn-buy { background: var(--gain); color: #06231A; }
+.btn-buy:hover { box-shadow: 0 0 16px var(--gain-glow); }
+
+.btn-sell { background: var(--loss); color: #290C0A; }
+.btn-sell:hover { box-shadow: 0 0 16px var(--loss-glow); }
+
+/* ---------- Forms ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.field input,
+.field select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 224, 255, 0.12);
+  outline: none;
+}
+
+/* ---------- Scanner controls (search / sector filter bar) ---------- */
+.scanner-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.scanner-controls input[type="text"],
+.scanner-controls select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+.scanner-controls input[type="text"] {
+  flex: 1 1 240px;
+}
+
+.scanner-controls select {
+  flex: 0 1 200px;
+}
+
+.scanner-controls input[type="text"]::placeholder {
+  color: var(--text-tertiary);
+}
+
+.scanner-controls input[type="text"]:focus,
+.scanner-controls select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 224, 255, 0.12);
+  outline: none;
+}
+
+/* Sortable table headers */
+table.holdings th[data-sort-key] {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+table.holdings th[data-sort-key]:hover {
+  color: var(--accent);
+}
+table.holdings th.sorted-asc::after,
+table.holdings th.sorted-desc::after {
+  color: var(--accent);
+  font-size: 0.65rem;
+  margin-left: 4px;
+}
+table.holdings th.sorted-asc::after {
+  content: "\25B2";
+}
+table.holdings th.sorted-desc::after {
+  content: "\25BC";
+}
+
+/* ---------- Toggle switch (strategy on/off) ---------- */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--gain-bg);
+  border-color: var(--gain);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: var(--gain);
+  box-shadow: 0 0 6px var(--gain-glow);
+}
+
+.toggle-switch input:disabled + .toggle-slider {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---------- Divider / section rule ---------- */
+.rule {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 28px 0;
+}
