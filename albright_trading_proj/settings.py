@@ -165,3 +165,8 @@ ALPACA_CREDENTIALS_ENCRYPTION_KEY = "YjaZLd11-N65By3GD2MVt7w02yDM-IoFyH8OpDvlwkg
 REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET")
 REDDIT_USER_AGENT = "albright-trading-sentiment-bot/1.0 by u/sportslabalgo"
+
+# For hosting on PythonAnywhere
+DEBUG = False
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+ALLOWED_HOSTS = ["www.sportslabalgo.com", "127.0.0.1", "natealbright36.pythonanywhere.com"]
