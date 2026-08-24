@@ -19,6 +19,7 @@ import time
 import logging
 import datetime as dt
 from dateutil import tz
+from django.utils import timezone
 from time import strftime, localtime
 import base64
 import ast
@@ -45,10 +46,256 @@ def index(request):
 def test(request):
     return HttpResponse("test")
 
+SESSION_STATE_LABELS = {
+    "open": "Market Open",
+    "pre_market": "Pre-Market",
+    "after_hours": "After Hours",
+    "weekend": "Market Closed",
+}
+ 
+ 
+def get_market_session_state():
+    """
+    Returns one of: "open", "pre_market", "after_hours", "weekend".
+    Derived from Alpaca's own trading clock, so holidays are handled
+    correctly too, not just Saturday/Sunday. Used only for labeling
+    now — the underlying data source is the same for every "closed"
+    state (see get_last_session_snapshot_rows below).
+    """
+    trading_client = TradingClient(
+        settings.ALPACA_API_KEY, settings.ALPACA_SECRET_KEY, paper=settings.ALPACA_PAPER
+    )
+    clock = trading_client.get_clock()
+ 
+    if clock.is_open:
+        return "open"
+ 
+    now = clock.timestamp
+    next_open = clock.next_open
+ 
+    if next_open.date() == now.date():
+        return "pre_market"
+    if (next_open.date() - now.date()).days == 1:
+        return "after_hours"
+    return "weekend"  # weekend or holiday — both treated the same way
+ 
+ 
+def get_last_session_snapshot_rows(constituents):
+    """
+    Same row shape as get_snapshot_rows, but computed from the two
+    most recently COMPLETED daily bars rather than the live snapshot.
+    Used any time the market is closed — pre-market, after-hours,
+    weekend, or holiday — so the numbers always describe how the
+    last full trading day actually performed, rather than relying on
+    live/extended-hours tick data that isn't reliably available on
+    the free data feed. This is deliberately unambiguous: "the last
+    two completed sessions" means the same thing regardless of which
+    closed-state we're in.
+    """
+    symbol_lookup = {c["symbol"]: c for c in constituents}
+    symbols = list(symbol_lookup.keys())
+ 
+    client = StockHistoricalDataClient(
+        api_key=settings.ALPACA_API_KEY,
+        secret_key=settings.ALPACA_SECRET_KEY,
+    )
+ 
+    rows = []
+    chunk_size = 100
+    # 10 days back safely spans a long weekend or multi-day holiday
+    # closure while still guaranteeing at least 2 completed bars.
+    lookback_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=10)
+ 
+    for i in range(0, len(symbols), chunk_size):
+        chunk = symbols[i:i + chunk_size]
+        try:
+            bars_by_symbol = client.get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=chunk,
+                    timeframe=TimeFrame.Day,
+                    start=lookback_start,
+                )
+            ).data
+        except Exception:
+            logger.exception("Failed to fetch last-session bars for chunk starting at %d", i)
+            continue
+ 
+        for symbol in chunk:
+            bars = bars_by_symbol.get(symbol, [])
+            if len(bars) < 2:
+                continue  # not enough history to compute a change yet
+ 
+            latest = bars[-1]
+            previous = bars[-2]
+ 
+            price = float(latest.close)
+            prev_close = float(previous.close)
+            change = price - prev_close
+            change_pct = (change / prev_close * 100) if prev_close else 0
+ 
+            meta = symbol_lookup[symbol]
+            rows.append({
+                "symbol": symbol,
+                "name": meta["name"],
+                "sector": meta["sector"],
+                "price": price,
+                "change": change,
+                "change_pct": change_pct,
+                "volume": int(latest.volume),
+                "day_high": float(latest.high),
+                "day_low": float(latest.low),
+                "is_gain": change >= 0,
+                "session_date": latest.timestamp.date(),
+            })
+ 
+    return rows
+ 
+ 
+def get_market_outlook():
+    """
+    Returns {"summary": {...}, "outlook_text": str or None}, or None
+    if data couldn't be loaded. "open" uses live snapshot data; every
+    other state uses the last two completed daily bars. Cached per
+    session state so a state transition busts the cache immediately.
+    """
+    session_state = get_market_session_state()
+    cache_key = f"market_outlook_{session_state}"
+ 
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+ 
+    try:
+        constituents = get_sp500_constituents()
+    except Exception:
+        logger.exception("Failed to load constituents for home page outlook")
+        return None
+ 
+    try:
+        if session_state == "open":
+            rows = get_snapshot_rows(constituents)
+        else:
+            rows = get_last_session_snapshot_rows(constituents)
+    except Exception:
+        logger.exception(
+            "Failed to load market data for home page outlook (state=%s)", session_state
+        )
+        return None
+ 
+    if not rows:
+        return None
+ 
+    gainers = sorted(rows, key=lambda r: r["change_pct"], reverse=True)
+    losers = sorted(rows, key=lambda r: r["change_pct"])
+ 
+    advancers = sum(1 for r in rows if r["change_pct"] > 0)
+    decliners = sum(1 for r in rows if r["change_pct"] < 0)
+    unchanged = len(rows) - advancers - decliners
+    avg_change_pct = sum(r["change_pct"] for r in rows) / len(rows)
+ 
+    session_date = rows[0].get("session_date") if session_state != "open" else None
+ 
+    summary = {
+        "session_state": session_state,
+        "session_state_label": SESSION_STATE_LABELS.get(session_state, session_state),
+        "session_date": session_date,
+        "advancers": advancers,
+        "decliners": decliners,
+        "unchanged": unchanged,
+        "avg_change_pct": avg_change_pct,
+        "top_gainers": gainers[:5],
+        "top_losers": losers[:5],
+        "generated_at": timezone.now(),
+    }
+ 
+    result = {"summary": summary, "outlook_text": _generate_ai_outlook(summary)}
+ 
+    ttl = 60 * 10 if session_state == "open" else 60 * 30
+    cache.set(cache_key, result, ttl)
+    return result
+ 
+ 
+def _generate_ai_outlook(summary):
+    """
+    Returns a short AI-generated market status paragraph, tailored to
+    the current session state, or None if generation fails — the
+    page falls back to showing just the numbers.
+    """
+    if not settings.OPENAI_API_KEY:
+        return None
+ 
+    state = summary["session_state"]
+ 
+    gainers_lines = "\n".join(
+        f"- {g['symbol']} ({g['name']}): {g['change_pct']:+.2f}%" for g in summary["top_gainers"]
+    )
+    losers_lines = "\n".join(
+        f"- {l['symbol']} ({l['name']}): {l['change_pct']:+.2f}%" for l in summary["top_losers"]
+    )
+ 
+    breadth_line = (
+        f"{summary['advancers']} advancers, {summary['decliners']} decliners, "
+        f"{summary['unchanged']} unchanged. Average change: {summary['avg_change_pct']:.2f}%."
+    )
+ 
+    session_date_str = (
+        summary["session_date"].strftime("%A, %B %-d")
+        if summary.get("session_date") else None
+    )
+ 
+    if state == "open":
+        context_line = "The market is OPEN right now — this reflects live, in-progress trading today."
+    elif state == "pre_market":
+        context_line = (
+            f"The market has not opened yet today. These numbers are from the last completed "
+            f"trading session ({session_date_str}), NOT live pre-market activity — describe this "
+            f"as the most recent close, not today's action, since today hasn't started trading yet."
+        )
+    elif state == "after_hours":
+        context_line = (
+            f"The market has closed for the day. These are the official closing numbers from "
+            f"today's session ({session_date_str})."
+        )
+    else:  # weekend or holiday
+        context_line = (
+            f"Markets are currently closed (weekend or holiday). These numbers reflect how the "
+            f"last trading session ({session_date_str}) closed. Frame this as a recap of how that "
+            f"session finished, and simply note that trading resumes next session — do not predict "
+            f"what will happen then."
+        )
+ 
+    prompt = f"""You are writing a short, factual market status update for a personal trading dashboard.
+ 
+{context_line}
+ 
+S&P 500 breadth: {breadth_line}
+ 
+Top 5 gainers:
+{gainers_lines}
+ 
+Top 5 losers:
+{losers_lines}
+ 
+Write 3-4 sentences in a clear, professional tone matching the market status described above. Mention overall breadth/sentiment and name one or two notable movers. Do not give investment advice, recommendations, or predictions about future price direction — describe what happened, not what anyone should do about it."""
+ 
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=220,
+            temperature=0.6,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        logger.exception("Failed to generate AI market outlook")
+        return None
+ 
+ 
 def home(request):
-    context = {
-               }
-    return render(request,'home.html',context=context)
+    outlook = get_market_outlook()
+    context = {"outlook": outlook}
+    return render(request, 'home.html', context=context)
 
 @login_required
 def connect_alpaca_account(request):

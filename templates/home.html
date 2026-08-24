@@ -1,7 +1,111 @@
-<!DOCTYPE html>
 {% extends 'index.html' %}
 {% load static %}
 
-  {% block content %}
-  <h2>Welcome to the Home Page</h2>
-  {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    {% if outlook %}
+
+        <!-- AI-generated outlook hero -->
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card__header">
+                <span class="card__label">Market Outlook</span>
+                <span class="badge {% if outlook.summary.session_state == 'open' %}gain{% else %}neutral{% endif %}">
+                    {{ outlook.summary.session_state_label }}
+                    {% if outlook.summary.session_date %}
+                        &middot; as of {{ outlook.summary.session_date|date:"M j" }} close
+                    {% else %}
+                        &middot; {{ outlook.summary.generated_at|date:"g:i A" }}
+                    {% endif %}
+                </span>
+            </div>
+
+            {% if outlook.outlook_text %}
+                <p style="font-size: 1.0625rem; line-height: 1.65; color: var(--text-primary); margin: 0;">
+                    {{ outlook.outlook_text }}
+                </p>
+                <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 14px; margin-bottom: 0;">
+                    Automatically generated from market data. Not financial advice.
+                </p>
+            {% else %}
+                <p style="color: var(--text-secondary); margin: 0;">
+                    Today's summary isn't available right now — the numbers below are still current.
+                </p>
+            {% endif %}
+        </div>
+
+        <!-- Market breadth -->
+        <div class="grid grid-4" style="margin-bottom: 24px;">
+            <div class="card">
+                <div class="card__header"><span class="card__label">Advancers</span></div>
+                <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">
+                    {{ outlook.summary.advancers }}
+                </span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Decliners</span></div>
+                <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--loss); border-bottom: none; padding-bottom: 0;">
+                    {{ outlook.summary.decliners }}
+                </span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Unchanged</span></div>
+                <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">
+                    {{ outlook.summary.unchanged }}
+                </span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Avg Change</span></div>
+                <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0; color: {% if outlook.summary.avg_change_pct >= 0 %}var(--gain){% else %}var(--loss){% endif %};">
+                    {% if outlook.summary.avg_change_pct >= 0 %}+{% endif %}{{ outlook.summary.avg_change_pct|floatformat:2 }}%
+                </span>
+            </div>
+        </div>
+
+        <!-- Top movers -->
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card__header">
+                    <span class="card__label">
+                        {% if outlook.summary.session_state == 'open' %}Top Gainers{% else %}Top Gainers &mdash; Last Close{% endif %}
+                    </span>
+                </div>
+                {% for stock in outlook.summary.top_gainers %}
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
+                    <div>
+                        <a href="{% url 'stock_detail' symbol=stock.symbol %}" class="symbol num" style="font-weight: 600;">{{ stock.symbol }}</a>
+                        <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">{{ stock.name }}</span>
+                    </div>
+                    <span class="badge gain">+{{ stock.change_pct|floatformat:2 }}%</span>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="card">
+                <div class="card__header">
+                    <span class="card__label">
+                        {% if outlook.summary.session_state == 'open' %}Top Losers{% else %}Top Losers &mdash; Last Close{% endif %}
+                    </span>
+                </div>
+                {% for stock in outlook.summary.top_losers %}
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
+                    <div>
+                        <a href="{% url 'stock_detail' symbol=stock.symbol %}" class="symbol num" style="font-weight: 600;">{{ stock.symbol }}</a>
+                        <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">{{ stock.name }}</span>
+                    </div>
+                    <span class="badge loss">{{ stock.change_pct|floatformat:2 }}%</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    {% else %}
+        <div class="card">
+            <p style="color: var(--text-secondary); margin: 0;">
+                Market data isn't available right now. Check back shortly.
+            </p>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

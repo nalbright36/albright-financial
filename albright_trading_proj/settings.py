@@ -169,3 +169,6 @@ REDDIT_USER_AGENT = "albright-trading-sentiment-bot/1.0 by u/sportslabalgo"
 # For hosting on PythonAnywhere
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 ALLOWED_HOSTS = ["www.sportslabalgo.com", "127.0.0.1", "natealbright36.pythonanywhere.com"]
+
+# OpenAI
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
