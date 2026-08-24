@@ -43,13 +43,13 @@
                     <tr>
                         <th data-sort-key="symbol">Symbol</th>
                         <th data-sort-key="name">Company</th>
-                        <th data-sort-key="sector">Sector</th>
+                        <th class="hide-mobile" data-sort-key="sector">Sector</th>
                         <th class="num" data-sort-key="price">Price</th>
                         <th class="num" data-sort-key="changePct">Change</th>
-                        <th class="num" data-sort-key="dayLow">Day Range</th>
-                        <th class="num" data-sort-key="volume">Volume</th>
+                        <th class="num hide-mobile" data-sort-key="dayLow">Day Range</th>
+                        <th class="num hide-mobile" data-sort-key="volume">Volume</th>
                         <th class="num" data-sort-key="redditPositive">Reddit +</th>
-                        <th class="num" data-sort-key="redditNeutral">Reddit Neu</th>
+                        <th class="num hide-mobile" data-sort-key="redditNeutral">Reddit Neu</th>
                         <th class="num" data-sort-key="redditNegative">Reddit &minus;</th>
                     </tr>
                 </thead>
@@ -71,7 +71,7 @@
                     >
                         <td class="symbol"><a href="{% url 'stock_detail' symbol=r.symbol %}">{{ r.symbol }}</a></td>
                         <td>{{ r.name }}</td>
-                        <td style="color: var(--text-secondary);">{{ r.sector }}</td>
+                        <td class="hide-mobile" style="color: var(--text-secondary);">{{ r.sector }}</td>
                         <td class="num">${{ r.price|floatformat:2 }}</td>
                         <td class="num">
                             <span class="badge {% if r.is_gain %}gain{% else %}loss{% endif %}">
@@ -79,10 +79,10 @@
                                 ({% if r.is_gain %}+{% endif %}{{ r.change_pct|floatformat:2 }}%)
                             </span>
                         </td>
-                        <td class="num">${{ r.day_low|floatformat:2 }} &ndash; ${{ r.day_high|floatformat:2 }}</td>
-                        <td class="num">{{ r.volume|intcomma }}</td>
+                        <td class="num hide-mobile">${{ r.day_low|floatformat:2 }} &ndash; ${{ r.day_high|floatformat:2 }}</td>
+                        <td class="num hide-mobile">{{ r.volume|intcomma }}</td>
                         <td class="num"><span class="badge gain">{{ r.reddit_positive }}</span></td>
-                        <td class="num"><span class="badge neutral">{{ r.reddit_neutral }}</span></td>
+                        <td class="num hide-mobile"><span class="badge neutral">{{ r.reddit_neutral }}</span></td>
                         <td class="num"><span class="badge loss">{{ r.reddit_negative }}</span></td>
                     </tr>
                     {% endfor %}

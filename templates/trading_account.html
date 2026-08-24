@@ -74,9 +74,9 @@
                     <tr>
                         <th>Symbol</th>
                         <th class="num">Qty</th>
-                        <th class="num">Avg Entry</th>
+                        <th class="num hide-mobile">Avg Entry</th>
                         <th class="num">Current Price</th>
-                        <th class="num">Market Value</th>
+                        <th class="num hide-mobile">Market Value</th>
                         <th class="num">Unrealized P&amp;L</th>
                     </tr>
                 </thead>
@@ -85,9 +85,9 @@
                     <tr>
                         <td class="symbol">{{ h.symbol }}</td>
                         <td class="num">{{ h.qty }}</td>
-                        <td class="num">${{ h.avg_entry_price|floatformat:2 }}</td>
+                        <td class="num hide-mobile">${{ h.avg_entry_price|floatformat:2 }}</td>
                         <td class="num">${{ h.current_price|floatformat:2 }}</td>
-                        <td class="num">${{ h.market_value|floatformat:2 }}</td>
+                        <td class="num hide-mobile">${{ h.market_value|floatformat:2 }}</td>
                         <td class="num">
                             <span class="badge {% if h.is_gain %}gain{% else %}loss{% endif %}">
                                 {% if h.is_gain %}+{% endif %}${{ h.unrealized_pl|floatformat:2 }}

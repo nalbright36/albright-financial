@@ -41,19 +41,6 @@
   --loss-glow:     rgba(255, 110, 104, 0.35);
   --neutral:       #8393AD;
 
-  /* Alert red — deliberately more saturated than --loss, reserved
-     for things that need real urgency (live-account warnings,
-     triggered stop-losses, danger states) rather than routine
-     day-to-day red/green P&L coloring. */
-  --alert:         #FF3860;
-  --alert-bg:      rgba(255, 56, 96, 0.12);
-  --alert-glow:    rgba(255, 56, 96, 0.5);
-
-  /* Nebula tints — used only in the background atmosphere, never
-     on text or UI elements. */
-  --nebula-red:    rgba(255, 60, 90, 0.16);
-  --nebula-violet: rgba(150, 70, 255, 0.12);
-
   /* Type */
   --font-display: 'Space Grotesk', 'Inter', sans-serif;
   --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -88,10 +75,6 @@ body {
     /* faint orbital chart grid, sits beneath everything else */
     linear-gradient(rgba(94, 224, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(94, 224, 255, 0.035) 1px, transparent 1px),
-    /* soft red/violet nebula glow — atmosphere, not detail */
-    radial-gradient(ellipse 900px 600px at 12% 8%, var(--nebula-red), transparent 70%),
-    radial-gradient(ellipse 800px 700px at 90% 85%, var(--nebula-violet), transparent 70%),
-    radial-gradient(ellipse 600px 500px at 75% 15%, var(--nebula-red), transparent 75%),
     /* static stars */
     radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.35), transparent),
     radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.25), transparent),
@@ -102,11 +85,9 @@ body {
     radial-gradient(1px 1px at 55% 50%, rgba(255,255,255,0.18), transparent);
   background-repeat:
     repeat, repeat,
-    no-repeat, no-repeat, no-repeat,
     no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
   background-size:
     64px 64px, 64px 64px,
-    auto, auto, auto,
     auto, auto, auto, auto, auto, auto, auto;
   background-attachment: fixed;
   color: var(--text-primary);
@@ -760,9 +741,169 @@ table.holdings th.sorted-desc::after {
   cursor: default;
 }
 
+/* ---------- Mobile nav toggle ---------- */
+.navbar__toggle-checkbox {
+  display: none;
+}
+
+.navbar__toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.navbar__toggle span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--text-primary);
+  border-radius: 1px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* ---------- Sector checkbox grid (strategy builder) ---------- */
+.sector-checkbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 /* ---------- Divider / section rule ---------- */
 .rule {
   border: none;
   border-top: 1px solid var(--border);
   margin: 28px 0;
+}
+
+/* ============================================================
+   MOBILE — everything below applies at 640px and under. Placed
+   last so it overrides component rules defined earlier in the
+   cascade without needing !important anywhere.
+   ============================================================ */
+@media (max-width: 640px) {
+
+  /* ---- Nav: switch to hamburger ---- */
+  .navbar {
+    position: relative;
+    padding: 14px 16px;
+  }
+
+  .navbar__brand {
+    font-size: 1rem;
+  }
+
+  .navbar__toggle {
+    display: flex;
+  }
+
+  .navbar__links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 0;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px 16px;
+    z-index: 20;
+  }
+
+  .navbar__links a {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9375rem;
+  }
+  .navbar__links a:last-child {
+    border-bottom: none;
+  }
+
+  #nav-toggle:checked ~ .navbar__links {
+    display: flex;
+  }
+
+  /* Hamburger -> X when open */
+  #nav-toggle:checked ~ .navbar__toggle span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+  #nav-toggle:checked ~ .navbar__toggle span:nth-child(2) {
+    opacity: 0;
+  }
+  #nav-toggle:checked ~ .navbar__toggle span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+
+  /* ---- Layout & spacing ---- */
+  .container {
+    padding: 0 14px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  /* ---- Typography scale-down ---- */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  .ledger-stat__value {
+    font-size: 1.5rem !important;
+  }
+
+  /* ---- Card headers that pack a label + controls side by side
+     need to stack instead of squeezing onto one line ---- */
+  .card__header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  #timeframe-selector {
+    flex-wrap: wrap;
+  }
+
+  /* ---- Chart: shorter on small screens ---- */
+  #price-chart {
+    height: 280px;
+  }
+
+  /* ---- Tables: hide secondary columns, keep the essentials
+     (Symbol, Price, Change) usable without horizontal scrolling.
+     Add class="hide-mobile" to any <th>/<td> that should drop off
+     on narrow screens — Market Scanner's Sector, Day Range, Volume,
+     and Reddit Neutral columns are natural candidates. ---- */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  table.holdings {
+    font-size: 0.8125rem;
+  }
+  table.holdings td, table.holdings th {
+    padding: 10px 8px;
+  }
+
+  /* ---- Scanner controls: stack search + sector filter ---- */
+  .scanner-controls {
+    flex-direction: column;
+  }
+  .scanner-controls input[type="text"],
+  .scanner-controls select {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  /* ---- Grids: force single column everywhere on phones,
+     regardless of how many columns the desktop version used ---- */
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .sector-checkbox-grid {
+    grid-template-columns: 1fr;
+  }
 }

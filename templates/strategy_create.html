@@ -40,7 +40,7 @@
 
             <div class="field">
                 <label>Sectors (leave all unchecked for every sector)</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+                <div class="sector-checkbox-grid">
                     {% for sector in sectors %}
                     <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--text-primary); text-transform: none; letter-spacing: 0; font-weight: 400;">
                         <input type="checkbox" name="filter_sectors" value="{{ sector }}" style="width: auto;">
