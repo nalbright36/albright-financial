@@ -223,6 +223,8 @@ a:hover { color: var(--accent-hover); }
   background: rgba(10, 15, 26, 0.75);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 100;
 }
 
 .navbar__brand {
@@ -789,7 +791,6 @@ table.holdings th.sorted-desc::after {
 
   /* ---- Nav: switch to hamburger ---- */
   .navbar {
-    position: relative;
     padding: 14px 16px;
   }
 
