@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect, get_object_or_404
 from albright_trading_app.forms import UserForm, LoginForm, InvestorProfileForm
 from django.urls import reverse
 from django.conf import settings
@@ -6,7 +6,6 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseRedirect,HttpResponse
 from django.contrib.auth import authenticate,login,logout
 from django.contrib.auth.models import auth
-from django.shortcuts import redirect
 from django.core.cache import cache
 from django.views.decorators.http import require_POST
 from .models import RedditDailyMentionCount, RedditSentimentSummary, Strategy, Trade, AlpacaCredentials, POSITION_SIZING_CHOICES
