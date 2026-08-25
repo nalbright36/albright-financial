@@ -16,7 +16,7 @@
             <div class="card__header">
                 <div>
                     <span class="card__label">{{ row.strategy.get_strategy_type_display }}</span>
-                    <h3 style="margin-top: 4px;">{{ row.strategy.name }}</h3>
+                    <h3 style="margin-top: 4px;"><a href="{% url 'strategy_detail' strategy_id=row.strategy.id %}" style="color: inherit;">{{ row.strategy.name }}</a></h3>
                 </div>
                 <label class="toggle-switch">
                     <input

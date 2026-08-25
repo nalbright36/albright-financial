@@ -1,0 +1,194 @@
+{% extends "index.html" %}
+{% load humanize %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <a href="{% url 'strategies' %}" style="display: inline-block; margin-bottom: 20px; color: var(--text-secondary); font-size: 0.875rem;">
+        &larr; Back to Strategies
+    </a>
+
+    <!-- Header + config summary -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header">
+            <div>
+                <span class="card__label">{{ strategy.get_strategy_type_display }}</span>
+                <h2 style="margin-top: 4px;">{{ strategy.name }}</h2>
+            </div>
+            <label class="toggle-switch">
+                <input
+                    type="checkbox"
+                    class="strategy-toggle"
+                    data-toggle-url="{% url 'strategy_toggle' strategy_id=strategy.id %}"
+                    {% if strategy.is_active %}checked{% endif %}
+                >
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        {% if strategy.description %}
+        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 14px;">{{ strategy.description }}</p>
+        {% endif %}
+
+        <div style="font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 14px;">
+            <div><strong style="color: var(--text-primary); font-weight: 600;">Signal:</strong> {{ entry_signal_desc }}</div>
+            <div><strong style="color: var(--text-primary); font-weight: 600;">Universe:</strong> {{ universe_desc }}</div>
+            <div><strong style="color: var(--text-primary); font-weight: 600;">Sizing:</strong> {{ sizing_desc }}</div>
+            <div><strong style="color: var(--text-primary); font-weight: 600;">Risk:</strong> {{ risk_desc }}</div>
+        </div>
+
+        <span class="badge neutral">{% if strategy.is_paper %}Paper{% else %}Live{% endif %}</span>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-4" style="margin-bottom: 20px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Realized P&amp;L</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if total_realized_pnl >= 0 %}var(--gain){% else %}var(--loss){% endif %};">
+                {% if total_realized_pnl >= 0 %}+{% endif %}${{ total_realized_pnl|floatformat:2|intcomma }}
+            </span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Unrealized P&amp;L</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if total_unrealized_pnl >= 0 %}var(--gain){% else %}var(--loss){% endif %};">
+                {% if total_unrealized_pnl >= 0 %}+{% endif %}${{ total_unrealized_pnl|floatformat:2|intcomma }}
+            </span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Win Rate</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">
+                {% if win_rate is not None %}{{ win_rate|floatformat:0 }}%{% else %}&mdash;{% endif %}
+            </span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Closed Trades</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">
+                {{ closed_count }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Open positions -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">Open Positions</span></div>
+        {% if open_positions %}
+        <div style="overflow-x: auto;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th class="num">Qty</th>
+                    <th class="num">Entry Price</th>
+                    <th class="num">Current Price</th>
+                    <th class="num">Unrealized P&amp;L</th>
+                    <th class="num hide-mobile">Peak Price</th>
+                    <th class="hide-mobile">Entered</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pos in open_positions %}
+                <tr>
+                    <td class="symbol"><a href="{% url 'stock_detail' symbol=pos.trade.symbol %}">{{ pos.trade.symbol }}</a></td>
+                    <td class="num">{{ pos.trade.quantity }}</td>
+                    <td class="num">${{ pos.trade.entry_price|floatformat:2 }}</td>
+                    <td class="num">{% if pos.current_price %}${{ pos.current_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">
+                        {% if pos.unrealized_pnl is not None %}
+                        <span class="badge {% if pos.is_gain %}gain{% else %}loss{% endif %}">
+                            {% if pos.is_gain %}+{% endif %}${{ pos.unrealized_pnl|floatformat:2 }}
+                            ({% if pos.is_gain %}+{% endif %}{{ pos.unrealized_pnl_pct|floatformat:2 }}%)
+                        </span>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td class="num hide-mobile">{% if pos.trade.peak_price %}${{ pos.trade.peak_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="hide-mobile">{{ pos.trade.entered_at|date:"M j, g:i A" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary); margin: 0;">No open positions right now.</p>
+        {% endif %}
+    </div>
+
+    <!-- Trade history -->
+    <div class="card">
+        <div class="card__header"><span class="card__label">Trade History</span></div>
+        {% if closed_trades %}
+        <div style="overflow-x: auto;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th class="hide-mobile">Side</th>
+                    <th class="num">Qty</th>
+                    <th class="num">Entry</th>
+                    <th class="num">Exit</th>
+                    <th class="num">P&amp;L</th>
+                    <th class="hide-mobile">Entered</th>
+                    <th class="hide-mobile">Exited</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in closed_trades %}
+                <tr>
+                    <td class="symbol"><a href="{% url 'stock_detail' symbol=item.trade.symbol %}">{{ item.trade.symbol }}</a></td>
+                    <td class="hide-mobile" style="text-transform: uppercase; color: var(--text-secondary); font-size: 0.75rem;">{{ item.trade.side }}</td>
+                    <td class="num">{{ item.trade.quantity }}</td>
+                    <td class="num">${{ item.trade.entry_price|floatformat:2 }}</td>
+                    <td class="num">{% if item.trade.exit_price %}${{ item.trade.exit_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">
+                        <span class="badge {% if item.is_gain %}gain{% else %}loss{% endif %}">
+                            {% if item.is_gain %}+{% endif %}${{ item.trade.realized_pnl|floatformat:2 }}
+                        </span>
+                    </td>
+                    <td class="hide-mobile">{{ item.trade.entered_at|date:"M j, g:i A" }}</td>
+                    <td class="hide-mobile">{% if item.trade.exited_at %}{{ item.trade.exited_at|date:"M j, g:i A" }}{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary); margin: 0;">No completed trades yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+(function () {
+    const toggle = document.querySelector('.strategy-toggle');
+    if (!toggle) return;
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    toggle.addEventListener('change', function () {
+        const previousState = !toggle.checked;
+        toggle.disabled = true;
+
+        fetch(toggle.dataset.toggleUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+            credentials: 'same-origin',
+        })
+            .then(function (response) {
+                if (!response.ok) throw new Error('Toggle failed');
+                return response.json();
+            })
+            .catch(function () {
+                toggle.checked = previousState;
+                alert('Could not update strategy status. Please try again.');
+            })
+            .finally(function () {
+                toggle.disabled = false;
+            });
+    });
+})();
+</script>
+{% endblock %}

@@ -130,6 +130,21 @@ class Command(BaseCommand):
             if signal == "sell" and open_trade is None:
                 continue
 
+            if signal == "buy" and strategy.max_daily_entries_per_symbol is not None:
+                # Count every BUY entered today for this symbol, whether
+                # it's still open or already closed — a fast take-profit
+                # round-trip still counts as one of today's entries, which
+                # is exactly the case this cap exists to prevent.
+                today = timezone.localdate()
+                entries_today = strategy.trades.filter(
+                    symbol=symbol,
+                    side="buy",
+                    entered_at__date=today,
+                ).count()
+
+                if entries_today >= strategy.max_daily_entries_per_symbol:
+                    continue  # daily entry cap reached for this symbol
+
             last_close = bars[-1]["close"]
             self._place_signal_order(strategy, symbol, signal, open_trade, trading_client, last_close)
 

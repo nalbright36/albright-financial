@@ -210,10 +210,17 @@
                     <label for="max_hold_days">Max Hold (days)</label>
                     <input type="number" name="max_hold_days" id="max_hold_days" placeholder="Optional">
                 </div>
+                <div class="field">
+                    <label for="max_daily_entries_per_symbol">Max Entries / Symbol / Day</label>
+                    <input type="number" name="max_daily_entries_per_symbol" id="max_daily_entries_per_symbol" min="1" placeholder="Optional, e.g. 1">
+                </div>
             </div>
             <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
                 Trailing stop closes the position if price falls this % from its highest point since
                 entry — different from stop loss, which measures from your entry price instead.
+                Max entries limits how many new positions can be opened in the same symbol on the
+                same day, even after an earlier one closes — leave blank if a strategy should be free
+                to re-enter the same symbol repeatedly in one day.
             </p>
         </div>
 

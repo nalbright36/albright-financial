@@ -489,6 +489,9 @@ def _describe_risk_management(strategy):
         parts.append(f"Trailing {strategy.trailing_stop_pct:.1f}%")
     if strategy.max_hold_days is not None:
         parts.append(f"Max hold {strategy.max_hold_days}d")
+    if strategy.max_daily_entries_per_symbol is not None:
+        n = strategy.max_daily_entries_per_symbol
+        parts.append(f"Max {n} entr{'y' if n == 1 else 'ies'}/symbol/day")
  
     return " \u00b7 ".join(parts) if parts else "No exit limits set"
  
@@ -552,6 +555,93 @@ def strategies_list(request):
         })
  
     return render(request, "strategies.html", {"strategy_rows": strategy_rows})
+
+def get_current_prices(symbols):
+    """
+    Returns {symbol: latest_price} for an arbitrary list of symbols.
+    Unlike get_snapshot_rows (built for the full S&P 500), this
+    takes any symbol list — used here for whatever a strategy
+    currently has open, which could be any size from 0 to many.
+    """
+    if not symbols:
+        return {}
+ 
+    client = StockHistoricalDataClient(
+        api_key=settings.ALPACA_API_KEY,
+        secret_key=settings.ALPACA_SECRET_KEY,
+    )
+ 
+    try:
+        snapshots = client.get_stock_snapshot(
+            StockSnapshotRequest(symbol_or_symbols=list(set(symbols)))
+        )
+    except Exception:
+        logger.exception("Failed to fetch current prices for open trades")
+        return {}
+ 
+    prices = {}
+    for symbol, snap in snapshots.items():
+        if snap is None or snap.daily_bar is None:
+            continue
+        prices[symbol] = float(snap.daily_bar.close)
+ 
+    return prices
+
+ 
+@login_required
+def strategy_detail(request, strategy_id):
+    strategy = get_object_or_404(Strategy, id=strategy_id, user=request.user)
+ 
+    open_trades_qs = strategy.trades.filter(status="open").order_by("-entered_at")
+    closed_trades_qs = strategy.trades.filter(status="closed").order_by("-exited_at")
+ 
+    current_prices = get_current_prices([t.symbol for t in open_trades_qs])
+ 
+    open_positions = []
+    total_unrealized_pnl = 0
+    for trade in open_trades_qs:
+        current_price = current_prices.get(trade.symbol)
+ 
+        if current_price is not None and trade.entry_price:
+            unrealized_pnl = (current_price - trade.entry_price) * trade.quantity
+            unrealized_pnl_pct = (current_price - trade.entry_price) / trade.entry_price * 100
+            total_unrealized_pnl += unrealized_pnl
+        else:
+            unrealized_pnl = None
+            unrealized_pnl_pct = None
+ 
+        open_positions.append({
+            "trade": trade,
+            "current_price": current_price,
+            "unrealized_pnl": unrealized_pnl,
+            "unrealized_pnl_pct": unrealized_pnl_pct,
+            "is_gain": (unrealized_pnl or 0) >= 0,
+        })
+ 
+    closed_trades = [
+        {"trade": trade, "is_gain": (trade.realized_pnl or 0) >= 0}
+        for trade in closed_trades_qs
+    ]
+ 
+    total_realized_pnl = closed_trades_qs.aggregate(total=Sum("realized_pnl"))["total"] or 0
+    closed_count = closed_trades_qs.count()
+    winning_count = closed_trades_qs.filter(realized_pnl__gt=0).count()
+    win_rate = (winning_count / closed_count * 100) if closed_count else None
+ 
+    context = {
+        "strategy": strategy,
+        "entry_signal_desc": _describe_entry_signal(strategy),
+        "universe_desc": _describe_universe(strategy),
+        "sizing_desc": _describe_sizing(strategy),
+        "risk_desc": _describe_risk_management(strategy),
+        "open_positions": open_positions,
+        "closed_trades": closed_trades,
+        "total_realized_pnl": total_realized_pnl,
+        "total_unrealized_pnl": total_unrealized_pnl,
+        "closed_count": closed_count,
+        "win_rate": win_rate,
+    }
+    return render(request, "strategy_detail.html", context)
  
  
 @login_required
@@ -663,6 +753,7 @@ def strategy_create(request):
             stop_loss_pct=_parse_optional_float(request.POST.get("stop_loss_pct")),
             trailing_stop_pct=_parse_optional_float(request.POST.get("trailing_stop_pct")),
             max_hold_days=_parse_optional_int(request.POST.get("max_hold_days")),
+            max_daily_entries_per_symbol=_parse_optional_int(request.POST.get("max_daily_entries_per_symbol")),
  
             is_active=False,
             is_paper=True,
