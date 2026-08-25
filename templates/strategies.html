@@ -29,11 +29,16 @@
                 </label>
             </div>
 
-            <p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0 0 14px;">
-                {{ row.strategy.symbols }}
-                &middot;
-                <span class="badge neutral">{% if row.strategy.is_paper %}Paper{% else %}Live{% endif %}</span>
-            </p>
+            <div style="font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 14px;">
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Signal:</strong> {{ row.entry_signal_desc }}</div>
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Universe:</strong> {{ row.universe_desc }}</div>
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Sizing:</strong> {{ row.sizing_desc }}</div>
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Risk:</strong> {{ row.risk_desc }}</div>
+            </div>
+
+            <span class="badge neutral" style="margin-bottom: 14px; display: inline-block;">
+                {% if row.strategy.is_paper %}Paper{% else %}Live{% endif %}
+            </span>
 
             <span class="ledger-stat__value num" style="font-size: 1.5rem;">
                 {% if row.total_pnl >= 0 %}+{% endif %}${{ row.total_pnl|floatformat:2|intcomma }}

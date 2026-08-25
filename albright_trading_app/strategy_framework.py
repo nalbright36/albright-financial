@@ -119,9 +119,126 @@ class RedditSentimentThresholdStrategy(BaseStrategy):
         return "buy"
 
 
+def _compute_rsi(closes, period):
+    """
+    Simple (non-Wilder-smoothed) RSI over the trailing `period` bars.
+    Returns None if there isn't enough history yet.
+    """
+    if len(closes) < period + 1:
+        return None
+
+    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    recent = deltas[-period:]
+    gains = [d for d in recent if d > 0]
+    losses = [-d for d in recent if d < 0]
+
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+
+    if avg_loss == 0:
+        return 100.0
+
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+class RSIThresholdStrategy(BaseStrategy):
+    """
+    Buy when RSI drops below the oversold threshold, sell when it
+    rises above the overbought threshold.
+
+    Params:
+      rsi_period (default 14)
+      oversold_threshold (default 30)
+      overbought_threshold (default 70)
+    """
+
+    def generate_signal(self, symbol, bars, sentiment=None):
+        period = self.params.get("rsi_period", 14)
+        oversold = self.params.get("oversold_threshold", 30)
+        overbought = self.params.get("overbought_threshold", 70)
+
+        closes = [b["close"] for b in bars]
+        rsi = _compute_rsi(closes, period)
+        if rsi is None:
+            return "hold"
+
+        if rsi < oversold:
+            return "buy"
+        if rsi > overbought:
+            return "sell"
+        return "hold"
+
+
+class BollingerReversionStrategy(BaseStrategy):
+    """
+    Buy when price closes below the lower Bollinger Band (potential
+    oversold reversion), sell when it closes above the upper band.
+
+    Params:
+      period (default 20)
+      std_dev (default 2.0) — band width as a multiple of standard deviation
+    """
+
+    def generate_signal(self, symbol, bars, sentiment=None):
+        period = self.params.get("period", 20)
+        std_dev_mult = self.params.get("std_dev", 2.0)
+
+        closes = [b["close"] for b in bars]
+        if len(closes) < period:
+            return "hold"
+
+        window = closes[-period:]
+        mean = sum(window) / period
+        variance = sum((c - mean) ** 2 for c in window) / period
+        std_dev = variance ** 0.5
+
+        upper_band = mean + std_dev_mult * std_dev
+        lower_band = mean - std_dev_mult * std_dev
+        current = closes[-1]
+
+        if current < lower_band:
+            return "buy"
+        if current > upper_band:
+            return "sell"
+        return "hold"
+
+
+class PriceBreakoutStrategy(BaseStrategy):
+    """
+    Buy when price closes above its highest close of the trailing
+    lookback window (breakout above resistance), sell when it closes
+    below the lowest close of that window (breakdown below support).
+
+    Params:
+      breakout_period (default 20)
+    """
+
+    def generate_signal(self, symbol, bars, sentiment=None):
+        period = self.params.get("breakout_period", 20)
+
+        closes = [b["close"] for b in bars]
+        if len(closes) < period + 1:
+            return "hold"
+
+        lookback = closes[-(period + 1):-1]  # exclude today's own close
+        highest = max(lookback)
+        lowest = min(lookback)
+        current = closes[-1]
+
+        if current > highest:
+            return "buy"
+        if current < lowest:
+            return "sell"
+        return "hold"
+
+
 # Add every new strategy class here, and add a matching entry to
 # Strategy.STRATEGY_TYPE_CHOICES in models.py.
 STRATEGY_REGISTRY = {
     "moving_average_crossover": MovingAverageCrossoverStrategy,
     "reddit_sentiment_threshold": RedditSentimentThresholdStrategy,
+    "rsi_threshold": RSIThresholdStrategy,
+    "bollinger_reversion": BollingerReversionStrategy,
+    "price_breakout": PriceBreakoutStrategy,
 }

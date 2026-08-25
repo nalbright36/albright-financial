@@ -147,9 +147,22 @@ class Command(BaseCommand):
                 continue
 
             current_price = bars[-1]["close"]
+
+            # Trailing stop tracks the highest price seen since entry —
+            # update it BEFORE checking the exit condition, so a bar
+            # that makes a new high never immediately triggers its own
+            # trailing stop.
+            if trade.peak_price is None or current_price > trade.peak_price:
+                trade.peak_price = current_price
+                trade.save(update_fields=["peak_price"])
+
             pct_change = (
                 (current_price - trade.entry_price) / trade.entry_price * 100
                 if trade.entry_price else 0
+            )
+            pct_from_peak = (
+                (current_price - trade.peak_price) / trade.peak_price * 100
+                if trade.peak_price else 0
             )
 
             exit_reason = None
@@ -157,6 +170,8 @@ class Command(BaseCommand):
                 exit_reason = "take profit"
             elif strategy.stop_loss_pct is not None and pct_change <= -strategy.stop_loss_pct:
                 exit_reason = "stop loss"
+            elif strategy.trailing_stop_pct is not None and pct_from_peak <= -strategy.trailing_stop_pct:
+                exit_reason = "trailing stop"
             elif strategy.max_hold_days is not None:
                 days_held = (timezone.now() - trade.entered_at).days
                 if days_held >= strategy.max_hold_days:
@@ -186,6 +201,16 @@ class Command(BaseCommand):
                 logger.exception("Failed to fetch buying power for '%s'", strategy.name)
                 return 0
             dollar_amount = buying_power * (value / 100)
+            return max(0, int(dollar_amount // last_close))
+
+        if method == "pct_cash":
+            try:
+                account = trading_client.get_account()
+                cash = float(account.cash)
+            except Exception:
+                logger.exception("Failed to fetch cash balance for '%s'", strategy.name)
+                return 0
+            dollar_amount = cash * (value / 100)
             return max(0, int(dollar_amount // last_close))
 
         logger.warning("Unknown position_sizing_method '%s' for '%s'", method, strategy.name)
@@ -225,6 +250,7 @@ class Command(BaseCommand):
                 side="buy",
                 quantity=qty,
                 entry_price=last_close,
+                peak_price=last_close,
                 alpaca_order_id=str(order.id),
                 status="open",
             )

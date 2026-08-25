@@ -775,6 +775,17 @@ table.holdings th.sorted-desc::after {
   margin-top: 4px;
 }
 
+/* ---------- Strategy parameter groups (shown/hidden via JS
+   based on selected strategy type) ---------- */
+.param-group {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.param-group:first-of-type {
+  margin-top: 16px;
+}
+
 /* ---------- Divider / section rule ---------- */
 .rule {
   border: none;

@@ -145,6 +145,7 @@ POSITION_SIZING_CHOICES = [
     ("fixed_shares", "Fixed number of shares"),
     ("fixed_dollar", "Fixed dollar amount"),
     ("pct_buying_power", "% of buying power"),
+    ("pct_cash", "% of cash"),
 ]
  
  
@@ -152,6 +153,9 @@ class Strategy(models.Model):
     STRATEGY_TYPE_CHOICES = [
         ("moving_average_crossover", "Moving Average Crossover"),
         ("reddit_sentiment_threshold", "Reddit Sentiment Threshold"),
+        ("rsi_threshold", "RSI Threshold"),
+        ("bollinger_reversion", "Bollinger Band Reversion"),
+        ("price_breakout", "Price Breakout"),
     ]
  
     user = models.ForeignKey(
@@ -164,51 +168,35 @@ class Strategy(models.Model):
     strategy_type = models.CharField(max_length=50, choices=STRATEGY_TYPE_CHOICES)
     description = models.TextField(blank=True)
  
-    # ---- Stock universe: manual symbols OR filter criteria ----
-    # If `symbols` is set, it's used as-is and every filter below is
-    # ignored. Leave it blank to have the engine dynamically resolve
-    # the eligible S&P 500 universe from the filters every pass.
     symbols = models.CharField(
         max_length=500, blank=True,
         help_text="Optional manual override — comma-separated symbols. Leave blank to use filters instead.",
     )
  
-    filter_sectors = models.CharField(
-        max_length=500, blank=True,
-        help_text="Comma-separated GICS sectors to include. Leave blank for all sectors.",
-    )
+    filter_sectors = models.CharField(max_length=500, blank=True)
     filter_min_price = models.FloatField(null=True, blank=True)
     filter_max_price = models.FloatField(null=True, blank=True)
-    filter_min_day_change_pct = models.FloatField(
-        null=True, blank=True, help_text="Only include stocks up at least this % today"
-    )
-    filter_max_day_change_pct = models.FloatField(
-        null=True, blank=True, help_text="Only include stocks up at most this % today"
-    )
+    filter_min_day_change_pct = models.FloatField(null=True, blank=True)
+    filter_max_day_change_pct = models.FloatField(null=True, blank=True)
     filter_min_reddit_mentions_24h = models.PositiveIntegerField(null=True, blank=True)
-    filter_min_reddit_positive_ratio = models.FloatField(
-        null=True, blank=True,
-        help_text="0.0–1.0 — require at least this fraction of today's Reddit mentions to be positive",
-    )
+    filter_min_reddit_positive_ratio = models.FloatField(null=True, blank=True)
  
-    # ---- Entry signal ----
     parameters = models.JSONField(
         default=dict, blank=True,
-        help_text='Strategy-specific config, e.g. {"short_period": 10, "long_period": 30}',
+        help_text="Built automatically from the strategy-specific form fields — not edited directly.",
     )
  
-    # ---- Position sizing ----
     position_sizing_method = models.CharField(
         max_length=20, choices=POSITION_SIZING_CHOICES, default="fixed_shares"
     )
-    position_sizing_value = models.FloatField(
-        default=1,
-        help_text="Meaning depends on method: share count, dollar amount, or percent (e.g. 5 = 5%)",
-    )
+    position_sizing_value = models.FloatField(default=1)
  
-    # ---- Risk management ----
     take_profit_pct = models.FloatField(null=True, blank=True, help_text="Close once up this %")
     stop_loss_pct = models.FloatField(null=True, blank=True, help_text="Close once down this %")
+    trailing_stop_pct = models.FloatField(
+        null=True, blank=True,
+        help_text="Close if price falls this % from its highest point since entry",
+    )
     max_hold_days = models.PositiveIntegerField(
         null=True, blank=True, help_text="Force-close after this many days regardless of signal"
     )
@@ -253,6 +241,8 @@ class Trade(models.Model):
 
     entered_at = models.DateTimeField(auto_now_add=True)
     exited_at = models.DateTimeField(null=True, blank=True)
+
+    peak_price = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["-entered_at"]

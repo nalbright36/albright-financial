@@ -91,9 +91,76 @@
                 </select>
             </div>
 
-            <div class="field">
-                <label for="parameters">Parameters (JSON)</label>
-                <input type="text" name="parameters" id="parameters" placeholder='{"short_period": 10, "long_period": 30}'>
+            <!-- Moving Average Crossover -->
+            <div class="param-group" data-strategy-type="moving_average_crossover">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label for="ma_short_period">Short Period (days)</label>
+                        <input type="number" name="ma_short_period" id="ma_short_period" value="10" min="1">
+                    </div>
+                    <div class="field">
+                        <label for="ma_long_period">Long Period (days)</label>
+                        <input type="number" name="ma_long_period" id="ma_long_period" value="30" min="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reddit Sentiment Threshold -->
+            <div class="param-group" data-strategy-type="reddit_sentiment_threshold">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label for="rst_min_mentions_24h">Min Mentions (24h)</label>
+                        <input type="number" name="rst_min_mentions_24h" id="rst_min_mentions_24h" value="5" min="0">
+                    </div>
+                    <div class="field">
+                        <label for="rst_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
+                        <input type="number" step="0.05" min="0" max="1" name="rst_min_positive_ratio_24h" id="rst_min_positive_ratio_24h" value="0.6">
+                    </div>
+                    <div class="field">
+                        <label for="rst_min_positive_acceleration_pct">Min Positive Acceleration % (optional)</label>
+                        <input type="number" step="1" name="rst_min_positive_acceleration_pct" id="rst_min_positive_acceleration_pct" placeholder="e.g. 30">
+                    </div>
+                </div>
+            </div>
+
+            <!-- RSI Threshold -->
+            <div class="param-group" data-strategy-type="rsi_threshold">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label for="rsi_period">RSI Period (days)</label>
+                        <input type="number" name="rsi_period" id="rsi_period" value="14" min="2">
+                    </div>
+                    <div class="field">
+                        <label for="rsi_oversold">Oversold Threshold</label>
+                        <input type="number" name="rsi_oversold" id="rsi_oversold" value="30" min="0" max="100">
+                    </div>
+                    <div class="field">
+                        <label for="rsi_overbought">Overbought Threshold</label>
+                        <input type="number" name="rsi_overbought" id="rsi_overbought" value="70" min="0" max="100">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bollinger Band Reversion -->
+            <div class="param-group" data-strategy-type="bollinger_reversion">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label for="bb_period">Period (days)</label>
+                        <input type="number" name="bb_period" id="bb_period" value="20" min="2">
+                    </div>
+                    <div class="field">
+                        <label for="bb_std_dev">Std Dev Multiplier</label>
+                        <input type="number" step="0.1" name="bb_std_dev" id="bb_std_dev" value="2.0" min="0.1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price Breakout -->
+            <div class="param-group" data-strategy-type="price_breakout">
+                <div class="field">
+                    <label for="breakout_period">Breakout Lookback (days)</label>
+                    <input type="number" name="breakout_period" id="breakout_period" value="20" min="2">
+                </div>
             </div>
         </div>
 
@@ -117,7 +184,8 @@
             </div>
             <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
                 Shares: enter a share count (e.g. 10). Dollar amount: enter dollars (e.g. 500).
-                % of buying power: enter a percent (e.g. 5 = 5%).
+                % of buying power / % of cash: enter a percent (e.g. 5 = 5%). Buying power can include
+                margin if your account has it; % of cash uses only your actual cash balance, never margin.
             </p>
         </div>
 
@@ -135,10 +203,18 @@
                     <input type="number" step="0.1" name="stop_loss_pct" id="stop_loss_pct" placeholder="Optional, e.g. 5">
                 </div>
                 <div class="field">
+                    <label for="trailing_stop_pct">Trailing Stop (%)</label>
+                    <input type="number" step="0.1" name="trailing_stop_pct" id="trailing_stop_pct" placeholder="Optional, e.g. 8">
+                </div>
+                <div class="field">
                     <label for="max_hold_days">Max Hold (days)</label>
                     <input type="number" name="max_hold_days" id="max_hold_days" placeholder="Optional">
                 </div>
             </div>
+            <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                Trailing stop closes the position if price falls this % from its highest point since
+                entry — different from stop loss, which measures from your entry price instead.
+            </p>
         </div>
 
         <button type="submit" class="btn btn-primary">Create Strategy</button>
@@ -147,20 +223,17 @@
 </div>
 
 <script>
-const PARAM_PLACEHOLDERS = {
-    "moving_average_crossover": '{"short_period": 10, "long_period": 30}',
-    "reddit_sentiment_threshold": '{"min_mentions_24h": 5, "min_positive_ratio_24h": 0.6, "min_positive_acceleration_pct": 30}',
-};
-
 const strategyTypeSelect = document.getElementById('strategy_type');
-const parametersInput = document.getElementById('parameters');
+const paramGroups = document.querySelectorAll('.param-group');
 
-function updateParamPlaceholder() {
-    const placeholder = PARAM_PLACEHOLDERS[strategyTypeSelect.value];
-    if (placeholder) parametersInput.placeholder = placeholder;
+function updateParamGroups() {
+    const selected = strategyTypeSelect.value;
+    paramGroups.forEach(function (group) {
+        group.style.display = (group.dataset.strategyType === selected) ? 'block' : 'none';
+    });
 }
 
-strategyTypeSelect.addEventListener('change', updateParamPlaceholder);
-updateParamPlaceholder(); // set correctly on initial load too
+strategyTypeSelect.addEventListener('change', updateParamGroups);
+updateParamGroups(); // set correctly on initial page load too
 </script>
 {% endblock %}

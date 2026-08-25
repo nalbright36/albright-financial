@@ -238,7 +238,7 @@ def _generate_ai_outlook(summary):
     )
  
     session_date_str = (
-        summary["session_date"].strftime("%A, %B %-d")
+        f"{summary['session_date'].strftime('%A, %B')} {summary['session_date'].day}"
         if summary.get("session_date") else None
     )
  
@@ -407,12 +407,103 @@ def trading_account(request):
  
     return render(request, "trading_account.html", context)
 
+def _describe_entry_signal(strategy):
+    p = strategy.parameters or {}
+    t = strategy.strategy_type
+ 
+    if t == "moving_average_crossover":
+        return f"MA Crossover — {p.get('short_period', '?')}/{p.get('long_period', '?')} day"
+ 
+    if t == "reddit_sentiment_threshold":
+        parts = [
+            f"\u2265{p.get('min_mentions_24h', '?')} mentions/24h",
+            f"\u2265{p.get('min_positive_ratio_24h', 0) * 100:.0f}% positive",
+        ]
+        if p.get("min_positive_acceleration_pct") is not None:
+            parts.append(f"+{p['min_positive_acceleration_pct']:.0f}% accel")
+        return "Reddit Sentiment — " + ", ".join(parts)
+ 
+    if t == "rsi_threshold":
+        return (
+            f"RSI({p.get('rsi_period', '?')}) — buy <{p.get('oversold_threshold', '?')}, "
+            f"sell >{p.get('overbought_threshold', '?')}"
+        )
+ 
+    if t == "bollinger_reversion":
+        return f"Bollinger({p.get('period', '?')}, {p.get('std_dev', '?')}\u03c3)"
+ 
+    if t == "price_breakout":
+        return f"{p.get('breakout_period', '?')}-Day Breakout"
+ 
+    return strategy.get_strategy_type_display()
+ 
+ 
+def _describe_universe(strategy):
+    if strategy.symbols.strip():
+        return strategy.symbols
+ 
+    parts = []
+    if strategy.filter_sectors_list:
+        parts.append(", ".join(strategy.filter_sectors_list))
+ 
+    if strategy.filter_min_price is not None or strategy.filter_max_price is not None:
+        lo = f"${strategy.filter_min_price:.0f}" if strategy.filter_min_price is not None else "any"
+        hi = f"${strategy.filter_max_price:.0f}" if strategy.filter_max_price is not None else "any"
+        parts.append(f"Price {lo}\u2013{hi}")
+ 
+    if strategy.filter_min_day_change_pct is not None:
+        parts.append(f"Day change \u2265{strategy.filter_min_day_change_pct:.1f}%")
+    if strategy.filter_max_day_change_pct is not None:
+        parts.append(f"\u2264{strategy.filter_max_day_change_pct:.1f}%")
+ 
+    if strategy.filter_min_reddit_mentions_24h is not None:
+        parts.append(f"\u2265{strategy.filter_min_reddit_mentions_24h} Reddit mentions")
+    if strategy.filter_min_reddit_positive_ratio is not None:
+        parts.append(f"\u2265{strategy.filter_min_reddit_positive_ratio * 100:.0f}% positive sentiment")
+ 
+    return " \u00b7 ".join(parts) if parts else "All S&P 500 stocks"
+ 
+ 
+def _describe_sizing(strategy):
+    method = strategy.position_sizing_method
+    value = strategy.position_sizing_value
+ 
+    if method == "fixed_shares":
+        return f"{int(value)} share{'s' if value != 1 else ''} per trade"
+    if method == "fixed_dollar":
+        return f"${value:,.0f} per trade"
+    if method == "pct_buying_power":
+        return f"{value:.1f}% of buying power"
+    if method == "pct_cash":
+        return f"{value:.1f}% of cash"
+    return f"{value} ({method})"
+ 
+ 
+def _describe_risk_management(strategy):
+    parts = []
+    if strategy.take_profit_pct is not None:
+        parts.append(f"TP {strategy.take_profit_pct:.1f}%")
+    if strategy.stop_loss_pct is not None:
+        parts.append(f"SL {strategy.stop_loss_pct:.1f}%")
+    if strategy.trailing_stop_pct is not None:
+        parts.append(f"Trailing {strategy.trailing_stop_pct:.1f}%")
+    if strategy.max_hold_days is not None:
+        parts.append(f"Max hold {strategy.max_hold_days}d")
+ 
+    return " \u00b7 ".join(parts) if parts else "No exit limits set"
+ 
+ 
+# ============================================================
+# REPLACE your existing strategies view with this version — the
+# only change is the four new *_desc keys added to each row.
+# ============================================================
+ 
 @login_required
 def strategies(request):
-    strategies = Strategy.objects.filter(user=request.user).order_by("name")
-
+    user_strategies = Strategy.objects.filter(user=request.user).order_by("name")
+ 
     strategy_rows = []
-    for strategy in strategies:
+    for strategy in user_strategies:
         total_pnl = strategy.trades.filter(status="closed").aggregate(
             total=Sum("realized_pnl")
         )["total"] or 0
@@ -420,7 +511,7 @@ def strategies(request):
         closed_trades = strategy.trades.filter(status="closed").count()
         winning_trades = strategy.trades.filter(status="closed", realized_pnl__gt=0).count()
         win_rate = (winning_trades / closed_trades * 100) if closed_trades else None
-
+ 
         strategy_rows.append({
             "strategy": strategy,
             "total_pnl": total_pnl,
@@ -428,8 +519,12 @@ def strategies(request):
             "closed_trades": closed_trades,
             "win_rate": win_rate,
             "is_gain": total_pnl >= 0,
+            "entry_signal_desc": _describe_entry_signal(strategy),
+            "universe_desc": _describe_universe(strategy),
+            "sizing_desc": _describe_sizing(strategy),
+            "risk_desc": _describe_risk_management(strategy),
         })
-
+ 
     context = {"strategy_rows": strategy_rows}
     return render(request, 'strategies.html', context=context)
 
@@ -493,21 +588,61 @@ def _parse_optional_int(value):
         return None
  
  
+def _build_parameters_from_post(strategy_type, post):
+    """
+    Builds the strategy's `parameters` dict from the specific named
+    form fields for whichever strategy_type was selected — the form
+    only shows/submits the fields relevant to that type, so this
+    only ever reads the ones that matter for it.
+    """
+    if strategy_type == "moving_average_crossover":
+        return {
+            "short_period": _parse_optional_int(post.get("ma_short_period")) or 10,
+            "long_period": _parse_optional_int(post.get("ma_long_period")) or 30,
+        }
+ 
+    if strategy_type == "reddit_sentiment_threshold":
+        params = {
+            "min_mentions_24h": _parse_optional_int(post.get("rst_min_mentions_24h")) or 5,
+            "min_positive_ratio_24h": _parse_optional_float(post.get("rst_min_positive_ratio_24h")) or 0.6,
+        }
+        acceleration = _parse_optional_float(post.get("rst_min_positive_acceleration_pct"))
+        if acceleration is not None:
+            params["min_positive_acceleration_pct"] = acceleration
+        return params
+ 
+    if strategy_type == "rsi_threshold":
+        return {
+            "rsi_period": _parse_optional_int(post.get("rsi_period")) or 14,
+            "oversold_threshold": _parse_optional_float(post.get("rsi_oversold")) or 30,
+            "overbought_threshold": _parse_optional_float(post.get("rsi_overbought")) or 70,
+        }
+ 
+    if strategy_type == "bollinger_reversion":
+        return {
+            "period": _parse_optional_int(post.get("bb_period")) or 20,
+            "std_dev": _parse_optional_float(post.get("bb_std_dev")) or 2.0,
+        }
+ 
+    if strategy_type == "price_breakout":
+        return {
+            "breakout_period": _parse_optional_int(post.get("breakout_period")) or 20,
+        }
+ 
+    return {}
+ 
+ 
 @login_required
 def strategy_create(request):
     if request.method == "POST":
-        params_raw = request.POST.get("parameters", "").strip() or "{}"
-        try:
-            parameters = json.loads(params_raw)
-        except ValueError:
-            parameters = {}
- 
+        strategy_type = request.POST.get("strategy_type")
+        parameters = _build_parameters_from_post(strategy_type, request.POST)
         selected_sectors = request.POST.getlist("filter_sectors")
  
         Strategy.objects.create(
             user=request.user,
             name=request.POST.get("name", "").strip(),
-            strategy_type=request.POST.get("strategy_type"),
+            strategy_type=strategy_type,
             description=request.POST.get("description", "").strip(),
  
             symbols=request.POST.get("symbols", "").strip(),
@@ -526,6 +661,7 @@ def strategy_create(request):
  
             take_profit_pct=_parse_optional_float(request.POST.get("take_profit_pct")),
             stop_loss_pct=_parse_optional_float(request.POST.get("stop_loss_pct")),
+            trailing_stop_pct=_parse_optional_float(request.POST.get("trailing_stop_pct")),
             max_hold_days=_parse_optional_int(request.POST.get("max_hold_days")),
  
             is_active=False,
@@ -539,9 +675,6 @@ def strategy_create(request):
     except Exception:
         logger.exception("Failed to load sectors for strategy creation form")
         sectors = []
- 
-# ADD to your views.py imports:
-#   from .models import POSITION_SIZING_CHOICES
  
     return render(request, "strategy_create.html", {
         "strategy_type_choices": Strategy.STRATEGY_TYPE_CHOICES,
