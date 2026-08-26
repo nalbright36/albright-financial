@@ -31,11 +31,22 @@
                 <div><strong style="color: var(--text-primary); font-weight: 600;">Risk:</strong> {{ row.risk_desc }}</div>
             </div>
 
-            <span class="ledger-stat__value num" style="font-size: 1.5rem;">
-                {% if row.total_pnl >= 0 %}+{% endif %}${{ row.total_pnl|floatformat:2|intcomma }}
-            </span>
-            <div class="ledger-stat__delta {% if row.is_gain %}gain{% else %}loss{% endif %}">
-                <span class="num">{{ row.closed_trades }} closed trade{{ row.closed_trades|pluralize }}</span>
+            <div class="grid grid-2" style="gap: 12px;">
+                <div>
+                    <span class="card__label" style="font-size: 0.6875rem;">Realized P&amp;L</span>
+                    <div class="num" style="font-size: 1.25rem; font-weight: 500; margin-top: 2px; color: {% if row.is_gain %}var(--gain){% else %}var(--loss){% endif %};">
+                        {% if row.total_pnl >= 0 %}+{% endif %}${{ row.total_pnl|floatformat:2|intcomma }}
+                    </div>
+                </div>
+                <div>
+                    <span class="card__label" style="font-size: 0.6875rem;">Unrealized P&amp;L</span>
+                    <div class="num" style="font-size: 1.25rem; font-weight: 500; margin-top: 2px; color: {% if row.open_trades %}{% if row.is_unrealized_gain %}var(--gain){% else %}var(--loss){% endif %}{% else %}var(--text-tertiary){% endif %};">
+                        {% if row.open_trades %}{% if row.total_unrealized_pnl >= 0 %}+{% endif %}${{ row.total_unrealized_pnl|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="ledger-stat__delta" style="margin-top: 10px;">
+                <span class="num" style="color: var(--text-secondary);">{{ row.closed_trades }} closed trade{{ row.closed_trades|pluralize }}{% if row.open_trades %} &middot; {{ row.open_trades }} still open{% endif %}</span>
             </div>
 
             <form

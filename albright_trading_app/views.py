@@ -499,23 +499,43 @@ def _describe_risk_management(strategy):
  
  
 def _build_strategy_rows(queryset):
+    strategies_list = list(queryset)
+ 
+    # One batched price fetch covering every open position across ALL
+    # these strategies, rather than a separate Alpaca call per
+    # strategy — stays fast regardless of how many strategies exist.
+    all_open_trades = Trade.objects.filter(strategy__in=strategies_list, status="open")
+    current_prices = get_current_prices([t.symbol for t in all_open_trades])
+ 
+    open_trades_by_strategy = {}
+    for trade in all_open_trades:
+        open_trades_by_strategy.setdefault(trade.strategy_id, []).append(trade)
+ 
     strategy_rows = []
-    for strategy in queryset:
+    for strategy in strategies_list:
         total_pnl = strategy.trades.filter(status="closed").aggregate(
             total=Sum("realized_pnl")
         )["total"] or 0
-        open_trades = strategy.trades.filter(status="open").count()
         closed_trades = strategy.trades.filter(status="closed").count()
         winning_trades = strategy.trades.filter(status="closed", realized_pnl__gt=0).count()
         win_rate = (winning_trades / closed_trades * 100) if closed_trades else None
  
+        open_trades_for_strategy = open_trades_by_strategy.get(strategy.id, [])
+        total_unrealized_pnl = 0
+        for trade in open_trades_for_strategy:
+            current_price = current_prices.get(trade.symbol)
+            if current_price is not None and trade.entry_price:
+                total_unrealized_pnl += (current_price - trade.entry_price) * trade.quantity
+ 
         strategy_rows.append({
             "strategy": strategy,
             "total_pnl": total_pnl,
-            "open_trades": open_trades,
+            "total_unrealized_pnl": total_unrealized_pnl,
+            "open_trades": len(open_trades_for_strategy),
             "closed_trades": closed_trades,
             "win_rate": win_rate,
             "is_gain": total_pnl >= 0,
+            "is_unrealized_gain": total_unrealized_pnl >= 0,
             "entry_signal_desc": _describe_entry_signal(strategy),
             "universe_desc": _describe_universe(strategy),
             "sizing_desc": _describe_sizing(strategy),
