@@ -108,6 +108,11 @@ class Command(BaseCommand):
             logger.exception("Failed to resolve symbol universe for '%s'", strategy.name)
             return
 
+        self.stdout.write(
+            f"[{strategy.user.username}] {strategy.name}: universe resolved to "
+            f"{len(symbols)} symbol(s): {', '.join(symbols) if symbols else '(none)'}"
+        )
+
         for symbol in symbols:
             try:
                 bars = get_bars_for_symbol(symbol, "1D")
@@ -120,21 +125,26 @@ class Command(BaseCommand):
 
             sentiment = get_sentiment_for_symbol(symbol)
             signal = strategy_instance.generate_signal(symbol, bars, sentiment=sentiment)
+
+            self.stdout.write(
+                f"[{strategy.user.username}] {strategy.name}: {symbol} -> {signal} "
+                f"(mentions_24h={sentiment.get('mentions_24h')}, "
+                f"positive_ratio_24h={sentiment.get('positive_ratio_24h', 0):.2f})"
+            )
+
             if signal == "hold":
                 continue
 
             open_trade = strategy.trades.filter(symbol=symbol, status="open").first()
 
             if signal == "buy" and open_trade is not None:
+                self.stdout.write(f"  -> skipped: already holding an open position in {symbol}")
                 continue
             if signal == "sell" and open_trade is None:
+                self.stdout.write(f"  -> skipped: sell signal but no open position in {symbol}")
                 continue
 
             if signal == "buy" and strategy.max_daily_entries_per_symbol is not None:
-                # Count every BUY entered today for this symbol, whether
-                # it's still open or already closed — a fast take-profit
-                # round-trip still counts as one of today's entries, which
-                # is exactly the case this cap exists to prevent.
                 today = timezone.localdate()
                 entries_today = strategy.trades.filter(
                     symbol=symbol,
@@ -143,7 +153,11 @@ class Command(BaseCommand):
                 ).count()
 
                 if entries_today >= strategy.max_daily_entries_per_symbol:
-                    continue  # daily entry cap reached for this symbol
+                    self.stdout.write(
+                        f"  -> skipped: daily entry cap reached for {symbol} "
+                        f"({entries_today}/{strategy.max_daily_entries_per_symbol})"
+                    )
+                    continue
 
             last_close = bars[-1]["close"]
             self._place_signal_order(strategy, symbol, signal, open_trade, trading_client, last_close)
@@ -235,6 +249,10 @@ class Command(BaseCommand):
         if signal == "buy":
             qty = self._compute_order_quantity(strategy, trading_client, last_close)
             if qty <= 0:
+                self.stdout.write(
+                    f"  -> skipped: computed order quantity was 0 for {symbol} "
+                    f"(sizing method: {strategy.position_sizing_method}, value: {strategy.position_sizing_value})"
+                )
                 logger.warning(
                     "Computed order quantity was 0 for %s (%s) — skipping buy.", symbol, strategy.name
                 )
