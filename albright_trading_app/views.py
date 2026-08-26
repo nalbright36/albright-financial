@@ -459,7 +459,9 @@ def _describe_universe(strategy):
     if strategy.filter_min_reddit_mentions_24h is not None:
         parts.append(f"\u2265{strategy.filter_min_reddit_mentions_24h} Reddit mentions")
     if strategy.filter_min_reddit_positive_ratio is not None:
-        parts.append(f"\u2265{strategy.filter_min_reddit_positive_ratio * 100:.0f}% positive sentiment")
+        parts.append(f"\u2265{strategy.filter_min_reddit_positive_ratio * 100:.0f}% positive (vs total)")
+    if strategy.filter_min_reddit_positive_vs_negative_ratio is not None:
+        parts.append(f"\u2265{strategy.filter_min_reddit_positive_vs_negative_ratio * 100:.0f}% positive (vs negative)")
  
     return " \u00b7 ".join(parts) if parts else "All S&P 500 stocks"
  
@@ -743,6 +745,7 @@ def strategy_create(request):
             filter_max_day_change_pct=_parse_optional_float(request.POST.get("filter_max_day_change_pct")),
             filter_min_reddit_mentions_24h=_parse_optional_int(request.POST.get("filter_min_reddit_mentions_24h")),
             filter_min_reddit_positive_ratio=_parse_optional_float(request.POST.get("filter_min_reddit_positive_ratio")),
+            filter_min_reddit_positive_vs_negative_ratio=_parse_optional_float(request.POST.get("filter_min_reddit_positive_vs_negative_ratio")),
  
             parameters=parameters,
  

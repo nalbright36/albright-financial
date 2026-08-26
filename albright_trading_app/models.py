@@ -197,14 +197,19 @@ class Strategy(models.Model):
         null=True, blank=True,
         help_text="Close if price falls this % from its highest point since entry",
     )
-    
+
     max_hold_days = models.PositiveIntegerField(
         null=True, blank=True, help_text="Force-close after this many days regardless of signal"
     )
 
     max_daily_entries_per_symbol = models.PositiveIntegerField(
-    null=True, blank=True,
-    help_text="Limit new entries into the same symbol per day. Leave blank for unlimited.",
+        null=True, blank=True,
+        help_text="Limit new entries into the same symbol per day. Leave blank for unlimited.",
+    )
+
+    filter_min_reddit_positive_vs_negative_ratio = models.FloatField(
+        null=True, blank=True,
+        help_text="Positive mentions as a fraction of (positive + negative) only — neutral mentions excluded entirely.",
     )
  
     is_active = models.BooleanField(default=False)
