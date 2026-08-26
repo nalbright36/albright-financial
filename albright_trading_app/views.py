@@ -498,17 +498,9 @@ def _describe_risk_management(strategy):
     return " \u00b7 ".join(parts) if parts else "No exit limits set"
  
  
-# ============================================================
-# REPLACE your existing strategies view with this version — the
-# only change is the four new *_desc keys added to each row.
-# ============================================================
- 
-@login_required
-def strategies(request):
-    user_strategies = Strategy.objects.filter(user=request.user).order_by("name")
- 
+def _build_strategy_rows(queryset):
     strategy_rows = []
-    for strategy in user_strategies:
+    for strategy in queryset:
         total_pnl = strategy.trades.filter(status="closed").aggregate(
             total=Sum("realized_pnl")
         )["total"] or 0
@@ -529,9 +521,54 @@ def strategies(request):
             "sizing_desc": _describe_sizing(strategy),
             "risk_desc": _describe_risk_management(strategy),
         })
+    return strategy_rows
  
-    context = {"strategy_rows": strategy_rows}
-    return render(request, 'strategies.html', context=context)
+ 
+@login_required
+def strategies(request):
+    user_strategies = Strategy.objects.filter(
+        user=request.user, is_archived=False
+    ).order_by("name")
+ 
+    archived_count = Strategy.objects.filter(user=request.user, is_archived=True).count()
+ 
+    context = {
+        "strategy_rows": _build_strategy_rows(user_strategies),
+        "archived_count": archived_count,
+    }
+    return render(request, 'strategies.html', context)
+ 
+ 
+@login_required
+def archived_strategies(request):
+    user_strategies = Strategy.objects.filter(
+        user=request.user, is_archived=True
+    ).order_by("-updated_at")
+ 
+    context = {"strategy_rows": _build_strategy_rows(user_strategies)}
+    return render(request, 'archived_strategies.html', context)
+ 
+ 
+@login_required
+@require_POST
+def strategy_archive(request, strategy_id):
+    strategy = get_object_or_404(Strategy, id=strategy_id, user=request.user)
+    strategy.is_archived = True
+    strategy.is_active = False  # never leave an archived strategy silently trading
+    strategy.save(update_fields=["is_archived", "is_active"])
+    return redirect("strategies")
+ 
+ 
+@login_required
+@require_POST
+def strategy_unarchive(request, strategy_id):
+    strategy = get_object_or_404(Strategy, id=strategy_id, user=request.user)
+    strategy.is_archived = False
+    # Deliberately NOT re-activating — restoring a strategy shouldn't
+    # silently put it back to trading. You toggle it on yourself once
+    # you're ready.
+    strategy.save(update_fields=["is_archived"])
+    return redirect("archived_strategies")
 
 @login_required
 def strategies_list(request):

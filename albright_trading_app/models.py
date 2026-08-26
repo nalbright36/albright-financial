@@ -211,6 +211,11 @@ class Strategy(models.Model):
         null=True, blank=True,
         help_text="Positive mentions as a fraction of (positive + negative) only — neutral mentions excluded entirely.",
     )
+
+    is_archived = models.BooleanField(
+        default=False,
+        help_text="Hidden from the main Strategies page but not deleted. Always inactive while archived.",
+    )
  
     is_active = models.BooleanField(default=False)
     is_paper = models.BooleanField(default=True)
