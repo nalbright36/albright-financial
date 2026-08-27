@@ -1,39 +1,32 @@
 {% extends "index.html" %}
+
 {% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
 
-<div class="table-title-container">
+    <div class="card">
+        <div class="card__header"><span class="card__label">Sign In</span></div>
 
-    <br>
+        <form action="{% url 'user_login' %}" method="post">
+            {% csrf_token %}
 
-    <form action="{%  url 'user_login' %}" method="post">
-        {% csrf_token %}
+            <div class="field">
+                <label for="username">Username</label>
+                <input id="username" type="text" name="username" placeholder="Enter Username" autocomplete="username" required>
+            </div>
 
-        <table id="logintable">
+            <div class="field">
+                <label for="password">Password</label>
+                <input id="password" type="password" name="password" placeholder="Enter Password" autocomplete="current-password" required>
+            </div>
 
-            <tr>
-                <td><label for="username">Username: </label></td>
-                <div id="login-page-input">
-                    <td><input id="login-input" type="text" name="username" placeholder="Enter Username"></td>
-                </div>
-            </tr>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;">Login</button>
+        </form>
 
-            <tr>
-                <td><label for="username">Password: </label></td>
-                <td><input type="password" name="password" placeholder="Enter Password"></td>
-            </tr>
-
-        </table>
-
-        <br>
-
-        <input id="login-page-button" type="submit" name="" value="Login">
-
-    </form>
-
-    <br>
-
-    <a href='/reset_password'>Reset Password</a>
+        <div style="display: flex; justify-content: space-between; margin-top: 18px; font-size: 0.8125rem;">
+            <a href="/reset_password" style="color: var(--text-secondary);">Reset Password</a>
+            <a href="/registration" style="color: var(--text-secondary);">Create an Account</a>
+        </div>
+    </div>
 
 </div>
-
 {% endblock %}

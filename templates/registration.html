@@ -1,46 +1,54 @@
 {% extends "index.html" %}
-{% block content %}
 
-<div class="table-title-container">
+{% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
 
     {% if registered %}
-    <h3>Thank you for registering!</h3>
+
+        <div class="card" style="text-align: center;">
+            <div class="card__header" style="justify-content: center;">
+                <span class="card__label">Registration Complete</span>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Thank you for registering!
+            </p>
+            <a href="/user_login/" class="btn btn-primary" style="width: 100%; display: inline-block; box-sizing: border-box;">
+                Log In
+            </a>
+        </div>
+
     {% else %}
-    <h3>Fill out the form:</h3>
-    <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
 
-        <table id="logintable">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Create an Account</span></div>
 
-            <tr>
-                <td><label for="username">Username: </label></td>
-                <div id="login-page-input">
-                    <td><input id="login-input" type="text" name="username" placeholder="Enter Username"></td>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input id="username" type="text" name="username" placeholder="Enter Username" autocomplete="username" required>
                 </div>
-            </tr>
 
-            <tr>
-                <td><label for="email">Email: </label></td>
-                <td><input type="email" name="email" placeholder="Enter Email"></td>
-            </tr>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input id="email" type="email" name="email" placeholder="Enter Email" autocomplete="email" required>
+                </div>
 
-            <tr>
-                <td><label for="password">Password: </label></td>
-                <td><input type="password" name="password" placeholder="Enter Password"></td>
-            </tr>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" name="password" placeholder="Enter Password" autocomplete="new-password" required>
+                </div>
 
-        </table>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;">Register</button>
+            </form>
 
-        <br>
+            <div style="text-align: center; margin-top: 18px; font-size: 0.8125rem; color: var(--text-secondary);">
+                or <a href="/user_login/">Log In</a>
+            </div>
+        </div>
 
-        <input id="register-page-button" type="submit" value="Register">
-    </form>
-
-    <p>or</p>
-    
-    <a href="/user_login/"><button>Log In</button></a>
     {% endif %}
 
 </div>
-
 {% endblock %}

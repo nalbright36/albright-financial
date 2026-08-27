@@ -1,12 +1,19 @@
 {% extends "index.html" %}
+
 {% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
 
-<div class="table-title-container">
-
-<h2>Success!</h2>
-<br>
-<a href="/user_login/"><button>Login</button></a>
+    <div class="card" style="text-align: center;">
+        <div class="card__header" style="justify-content: center;">
+            <span class="card__label">Success</span>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 20px;">
+            Your request was completed successfully.
+        </p>
+        <a href="/user_login/" class="btn btn-primary" style="width: 100%; display: inline-block; box-sizing: border-box;">
+            Login
+        </a>
+    </div>
 
 </div>
-
 {% endblock %}
