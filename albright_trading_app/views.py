@@ -37,6 +37,8 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from django.http import JsonResponse
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.requests import MarketOrderRequest
 
 logger = logging.getLogger(__name__)
 
@@ -343,14 +345,7 @@ def disconnect_alpaca_account(request):
         AlpacaCredentials.objects.filter(user=request.user).delete()
     return redirect("connect_alpaca_account")
  
- 
-# ============================================================
-# REPLACE your existing `dashboard` view with this version.
-# Only the credential lookup at the top changed — everything
-# below it (account/positions fetching, context building) is
-# unchanged from what you already have.
-# ============================================================
- 
+
 @login_required
 def trading_account(request):
     try:
@@ -1181,6 +1176,168 @@ def option_strategy_detail(request, strategy_id):
         "win_rate": win_rate,
     }
     return render(request, "option_strategy_detail.html", context)
+
+
+def _manual_close_stock_trade(trade, trading_client, current_price):
+    """
+    Submits a market sell for a stock trade and updates its record.
+    Raises on order failure — caller decides how to handle that.
+    """
+    order_request = MarketOrderRequest(
+        symbol=trade.symbol,
+        qty=trade.quantity,
+        side=OrderSide.SELL,
+        time_in_force=TimeInForce.DAY,
+    )
+    trading_client.submit_order(order_request)  # raises on failure
+ 
+    trade.exit_price = current_price
+    trade.realized_pnl = (current_price - trade.entry_price) * trade.quantity
+    trade.status = "closed"
+    trade.exited_at = timezone.now()
+    trade.save()
+ 
+ 
+def _manual_close_option_trade(trade, trading_client, current_price):
+    """
+    Same as above, but for an option contract — includes the x100
+    multiplier for the contract's notional 100-share exposure.
+    """
+    order_request = MarketOrderRequest(
+        symbol=trade.symbol,
+        qty=trade.quantity,
+        side=OrderSide.SELL,
+        time_in_force=TimeInForce.DAY,
+    )
+    trading_client.submit_order(order_request)
+ 
+    trade.exit_price = current_price
+    trade.realized_pnl = (current_price - trade.entry_price) * trade.quantity * 100
+    trade.status = "closed"
+    trade.exited_at = timezone.now()
+    trade.save()
+ 
+ 
+# ============================================================
+# STOCK — close one position / close all positions in a strategy
+# ============================================================
+ 
+@login_required
+@require_POST
+def close_stock_position(request, trade_id):
+    trade = get_object_or_404(Trade, id=trade_id, strategy__user=request.user, status="open")
+    strategy = trade.strategy
+ 
+    try:
+        credentials = strategy.user.alpaca_credentials
+    except AlpacaCredentials.DoesNotExist:
+        return redirect("strategy_detail", strategy_id=strategy.id)
+ 
+    trading_client = TradingClient(
+        api_key=credentials.get_api_key(),
+        secret_key=credentials.get_secret_key(),
+        paper=credentials.is_paper,
+    )
+ 
+    current_price = get_current_prices([trade.symbol]).get(trade.symbol, trade.entry_price)
+ 
+    try:
+        _manual_close_stock_trade(trade, trading_client, current_price)
+    except Exception:
+        logger.exception("Manual close failed for trade %s (%s)", trade.id, strategy.name)
+ 
+    return redirect("strategy_detail", strategy_id=strategy.id)
+ 
+ 
+@login_required
+@require_POST
+def close_all_stock_positions(request, strategy_id):
+    strategy = get_object_or_404(Strategy, id=strategy_id, user=request.user)
+    open_trades = strategy.trades.filter(status="open")
+ 
+    try:
+        credentials = strategy.user.alpaca_credentials
+    except AlpacaCredentials.DoesNotExist:
+        return redirect("strategy_detail", strategy_id=strategy.id)
+ 
+    trading_client = TradingClient(
+        api_key=credentials.get_api_key(),
+        secret_key=credentials.get_secret_key(),
+        paper=credentials.is_paper,
+    )
+ 
+    current_prices = get_current_prices([t.symbol for t in open_trades])
+ 
+    for trade in open_trades:
+        current_price = current_prices.get(trade.symbol, trade.entry_price)
+        try:
+            _manual_close_stock_trade(trade, trading_client, current_price)
+        except Exception:
+            # One failed close-all order shouldn't stop the rest from
+            # being attempted — log it and keep going.
+            logger.exception("Manual close-all failed for trade %s (%s)", trade.id, strategy.name)
+ 
+    return redirect("strategy_detail", strategy_id=strategy.id)
+ 
+ 
+# ============================================================
+# OPTIONS — same pattern, own model
+# ============================================================
+ 
+@login_required
+@require_POST
+def close_option_position(request, trade_id):
+    trade = get_object_or_404(OptionTrade, id=trade_id, strategy__user=request.user, status="open")
+    strategy = trade.strategy
+ 
+    try:
+        credentials = strategy.user.alpaca_credentials
+    except AlpacaCredentials.DoesNotExist:
+        return redirect("option_strategy_detail", strategy_id=strategy.id)
+ 
+    trading_client = TradingClient(
+        api_key=credentials.get_api_key(),
+        secret_key=credentials.get_secret_key(),
+        paper=credentials.is_paper,
+    )
+ 
+    current_price = get_current_option_prices([trade.symbol]).get(trade.symbol, trade.entry_price)
+ 
+    try:
+        _manual_close_option_trade(trade, trading_client, current_price)
+    except Exception:
+        logger.exception("Manual close failed for option trade %s (%s)", trade.id, strategy.name)
+ 
+    return redirect("option_strategy_detail", strategy_id=strategy.id)
+ 
+ 
+@login_required
+@require_POST
+def close_all_option_positions(request, strategy_id):
+    strategy = get_object_or_404(OptionStrategy, id=strategy_id, user=request.user)
+    open_trades = strategy.trades.filter(status="open")
+ 
+    try:
+        credentials = strategy.user.alpaca_credentials
+    except AlpacaCredentials.DoesNotExist:
+        return redirect("option_strategy_detail", strategy_id=strategy.id)
+ 
+    trading_client = TradingClient(
+        api_key=credentials.get_api_key(),
+        secret_key=credentials.get_secret_key(),
+        paper=credentials.is_paper,
+    )
+ 
+    current_prices = get_current_option_prices([t.symbol for t in open_trades])
+ 
+    for trade in open_trades:
+        current_price = current_prices.get(trade.symbol, trade.entry_price)
+        try:
+            _manual_close_option_trade(trade, trading_client, current_price)
+        except Exception:
+            logger.exception("Manual close-all failed for option trade %s (%s)", trade.id, strategy.name)
+ 
+    return redirect("option_strategy_detail", strategy_id=strategy.id)
 
 def get_sp500_constituents():
     """

@@ -70,7 +70,19 @@
 
     <!-- Open positions -->
     <div class="card" style="margin-bottom: 20px;">
-        <div class="card__header"><span class="card__label">Open Positions</span></div>
+        <div class="card__header">
+            <span class="card__label">Open Positions</span>
+            {% if open_positions %}
+            <form
+                method="post"
+                action="{% url 'close_all_stock_positions' strategy_id=strategy.id %}"
+                onsubmit="return confirm('Close all {{ open_positions|length }} open position(s) in this strategy at market price?');"
+            >
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary" style="font-size: 0.75rem; padding: 6px 12px;">Close All</button>
+            </form>
+            {% endif %}
+        </div>
         {% if open_positions %}
         <div style="overflow-x: auto;">
         <table class="holdings">
@@ -83,6 +95,7 @@
                     <th class="num">Unrealized P&amp;L</th>
                     <th class="num hide-mobile">Peak Price</th>
                     <th class="hide-mobile">Entered</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -102,6 +115,16 @@
                     </td>
                     <td class="num hide-mobile">{% if pos.trade.peak_price %}${{ pos.trade.peak_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
                     <td class="hide-mobile">{{ pos.trade.entered_at|date:"M j, g:i A" }}</td>
+                    <td>
+                        <form
+                            method="post"
+                            action="{% url 'close_stock_position' trade_id=pos.trade.id %}"
+                            onsubmit="return confirm('Close the {{ pos.trade.symbol }} position at market price?');"
+                        >
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary" style="font-size: 0.6875rem; padding: 4px 10px;">Close</button>
+                        </form>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
