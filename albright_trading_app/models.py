@@ -267,6 +267,12 @@ class Trade(models.Model):
         return f"{self.strategy.name} — {self.side.upper()} {self.quantity} {self.symbol}"
 
 # Options Models
+OPTION_DIRECTION_CHOICES = [
+    ("bidirectional", "Bidirectional (buy signal \u2192 call, bearish signal \u2192 put)"),
+    ("calls_only", "Calls Only"),
+    ("puts_only", "Puts Only"),
+]
+
 OPTION_STRIKE_METHOD_CHOICES = [
     ("atm", "At-the-Money"),
 ]
@@ -334,6 +340,9 @@ class OptionStrategy(models.Model):
     # types OPEN positions rather than one closing the other, an
     # open position can ONLY be closed by risk management below —
     # never by an opposing signal.
+    option_direction = models.CharField(
+        max_length=20, choices=OPTION_DIRECTION_CHOICES, default="bidirectional"
+    )
     option_strike_method = models.CharField(
         max_length=20, choices=OPTION_STRIKE_METHOD_CHOICES, default="atm"
     )

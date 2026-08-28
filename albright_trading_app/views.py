@@ -9,7 +9,7 @@ from django.contrib.auth.models import auth
 from django.core.cache import cache
 from django.views.decorators.http import require_POST
 from .models import RedditDailyMentionCount, RedditSentimentSummary, Strategy, Trade, AlpacaCredentials, POSITION_SIZING_CHOICES
-from .models import OptionStrategy, OptionTrade, OPTION_STRIKE_METHOD_CHOICES, OPTION_DTE_CHOICES, OPTION_POSITION_SIZING_CHOICES
+from .models import OptionStrategy, OptionTrade, OPTION_STRIKE_METHOD_CHOICES, OPTION_DTE_CHOICES, OPTION_POSITION_SIZING_CHOICES, OPTION_DIRECTION_CHOICES
 from .options_trading import get_current_option_prices
 import requests
 import json
@@ -906,7 +906,12 @@ def _describe_option_entry_signal(strategy):
     else:
         base = strategy.get_strategy_type_display()
  
-    return f"{base} \u2192 Calls/Puts, ATM, ~{strategy.option_target_dte} DTE"
+    direction_label = {
+        "calls_only": "Calls Only",
+        "puts_only": "Puts Only",
+    }.get(strategy.option_direction, "Calls/Puts")
+ 
+    return f"{base} \u2192 {direction_label}, ATM, ~{strategy.option_target_dte} DTE"
  
  
 def _describe_option_universe(strategy):
@@ -1087,6 +1092,7 @@ def option_strategy_create(request):
             parameters=parameters,
  
             option_strike_method=request.POST.get("option_strike_method", "atm"),
+            option_direction=request.POST.get("option_direction", "bidirectional"),
             option_target_dte=_parse_optional_int(request.POST.get("option_target_dte")) or 30,
  
             position_sizing_method=request.POST.get("position_sizing_method", "fixed_contracts"),
@@ -1113,6 +1119,7 @@ def option_strategy_create(request):
     return render(request, "option_strategy_create.html", {
         "strategy_type_choices": OptionStrategy.STRATEGY_TYPE_CHOICES,
         "position_sizing_choices": OPTION_POSITION_SIZING_CHOICES,
+        "option_direction_choices": OPTION_DIRECTION_CHOICES,
         "option_strike_method_choices": OPTION_STRIKE_METHOD_CHOICES,
         "option_dte_choices": OPTION_DTE_CHOICES,
         "sectors": sectors,

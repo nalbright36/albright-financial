@@ -365,6 +365,13 @@ class Command(BaseCommand):
             if signal == "hold":
                 continue
 
+            if strategy.option_direction == "calls_only" and signal != "buy":
+                self.stdout.write(f"  -> skipped: {underlying_symbol} signal is '{signal}' but strategy is calls-only")
+                continue
+            if strategy.option_direction == "puts_only" and signal != "sell":
+                self.stdout.write(f"  -> skipped: {underlying_symbol} signal is '{signal}' but strategy is puts-only")
+                continue
+
             option_type = "call" if signal == "buy" else "put"
 
             existing = strategy.trades.filter(

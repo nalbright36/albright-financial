@@ -173,6 +173,15 @@
         <div class="card" style="margin-bottom: 20px;">
             <div class="card__header"><span class="card__label">Options Structure</span></div>
 
+            <div class="field">
+                <label for="option_direction">Direction</label>
+                <select name="option_direction" id="option_direction">
+                    {% for value, label in option_direction_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <div class="grid grid-2">
                 <div class="field">
                     <label for="option_strike_method">Strike Selection</label>
