@@ -1,0 +1,70 @@
+{% extends "index.html" %}
+{% load humanize %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <a href="{% url 'option_strategies' %}" style="display: inline-block; margin-bottom: 20px; color: var(--text-secondary); font-size: 0.875rem;">
+        &larr; Back to Options Strategies
+    </a>
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h2>Archived Options Strategies</h2>
+    </div>
+
+    {% if strategy_rows %}
+    <div class="grid grid-2">
+        {% for row in strategy_rows %}
+        <div class="card">
+            <div class="card__header">
+                <div>
+                    <span class="card__label">{{ row.strategy.get_strategy_type_display }}</span>
+                    <h3 style="margin-top: 4px;"><a href="{% url 'option_strategy_detail' strategy_id=row.strategy.id %}" style="color: inherit;">{{ row.strategy.name }}</a></h3>
+                </div>
+                <span class="badge neutral">Archived</span>
+            </div>
+
+            <div style="font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 14px;">
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Signal:</strong> {{ row.entry_signal_desc }}</div>
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Universe:</strong> {{ row.universe_desc }}</div>
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Sizing:</strong> {{ row.sizing_desc }}</div>
+                <div><strong style="color: var(--text-primary); font-weight: 600;">Risk:</strong> {{ row.risk_desc }}</div>
+            </div>
+
+            <div class="grid grid-2" style="gap: 12px;">
+                <div>
+                    <span class="card__label" style="font-size: 0.6875rem;">Realized P&amp;L</span>
+                    <div class="num" style="font-size: 1.25rem; font-weight: 500; margin-top: 2px; color: {% if row.is_gain %}var(--gain){% else %}var(--loss){% endif %};">
+                        {% if row.total_pnl >= 0 %}+{% endif %}${{ row.total_pnl|floatformat:2|intcomma }}
+                    </div>
+                </div>
+                <div>
+                    <span class="card__label" style="font-size: 0.6875rem;">Unrealized P&amp;L</span>
+                    <div class="num" style="font-size: 1.25rem; font-weight: 500; margin-top: 2px; color: {% if row.open_trades %}{% if row.is_unrealized_gain %}var(--gain){% else %}var(--loss){% endif %}{% else %}var(--text-tertiary){% endif %};">
+                        {% if row.open_trades %}{% if row.total_unrealized_pnl >= 0 %}+{% endif %}${{ row.total_unrealized_pnl|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="ledger-stat__delta" style="margin-top: 10px;">
+                <span class="num" style="color: var(--text-secondary);">{{ row.closed_trades }} closed trade{{ row.closed_trades|pluralize }}{% if row.open_trades %} &middot; {{ row.open_trades }} still open{% endif %}</span>
+            </div>
+
+            <form
+                method="post"
+                action="{% url 'option_strategy_unarchive' strategy_id=row.strategy.id %}"
+                style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);"
+            >
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary" style="font-size: 0.75rem; padding: 6px 12px;">Restore</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+        <div class="card">
+            <p style="color: var(--text-secondary);">No archived options strategies.</p>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

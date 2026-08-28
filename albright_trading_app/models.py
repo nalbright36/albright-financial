@@ -265,3 +265,146 @@ class Trade(models.Model):
 
     def __str__(self):
         return f"{self.strategy.name} — {self.side.upper()} {self.quantity} {self.symbol}"
+
+# Options Models
+OPTION_STRIKE_METHOD_CHOICES = [
+    ("atm", "At-the-Money"),
+]
+ 
+OPTION_DTE_CHOICES = [
+    (7, "7 days"),
+    (30, "30 days"),
+    (60, "60 days"),
+    (90, "90 days"),
+    (120, "120 days"),
+]
+ 
+OPTION_POSITION_SIZING_CHOICES = [
+    ("fixed_contracts", "Fixed number of contracts"),
+    ("fixed_dollar", "Fixed dollar amount"),
+    ("pct_buying_power", "% of buying power"),
+    ("pct_cash", "% of cash"),
+]
+ 
+ 
+class OptionStrategy(models.Model):
+    # Reuses the same entry-signal types as Strategy — the signal
+    # logic (moving averages, RSI, Reddit sentiment, etc.) just reads
+    # the underlying stock's price/sentiment data and is genuinely
+    # asset-class-agnostic, so there's no reason to duplicate
+    # strategy_framework.py itself.
+    STRATEGY_TYPE_CHOICES = [
+        ("moving_average_crossover", "Moving Average Crossover"),
+        ("reddit_sentiment_threshold", "Reddit Sentiment Threshold"),
+        ("rsi_threshold", "RSI Threshold"),
+        ("bollinger_reversion", "Bollinger Band Reversion"),
+        ("price_breakout", "Price Breakout"),
+    ]
+ 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="option_strategies",
+    )
+ 
+    name = models.CharField(max_length=100)
+    strategy_type = models.CharField(max_length=50, choices=STRATEGY_TYPE_CHOICES)
+    description = models.TextField(blank=True)
+ 
+    # ---- Stock universe (of underlyings) ----
+    symbols = models.CharField(
+        max_length=500, blank=True,
+        help_text="Optional manual override — comma-separated underlying symbols. Leave blank to use filters instead.",
+    )
+    filter_sectors = models.CharField(max_length=500, blank=True)
+    filter_min_price = models.FloatField(null=True, blank=True)
+    filter_max_price = models.FloatField(null=True, blank=True)
+    filter_min_day_change_pct = models.FloatField(null=True, blank=True)
+    filter_max_day_change_pct = models.FloatField(null=True, blank=True)
+    filter_min_reddit_mentions_24h = models.PositiveIntegerField(null=True, blank=True)
+    filter_min_reddit_positive_ratio = models.FloatField(null=True, blank=True)
+    filter_min_reddit_positive_vs_negative_ratio = models.FloatField(null=True, blank=True)
+ 
+    # ---- Entry signal ----
+    parameters = models.JSONField(default=dict, blank=True)
+ 
+    # ---- Options structure ----
+    # Bidirectional by design: a "buy" signal opens a long call, a
+    # "sell"/bearish signal opens a long put. Because both signal
+    # types OPEN positions rather than one closing the other, an
+    # open position can ONLY be closed by risk management below —
+    # never by an opposing signal.
+    option_strike_method = models.CharField(
+        max_length=20, choices=OPTION_STRIKE_METHOD_CHOICES, default="atm"
+    )
+    option_target_dte = models.PositiveIntegerField(
+        choices=OPTION_DTE_CHOICES, default=30,
+        help_text="Target days-to-expiration when selecting a contract.",
+    )
+ 
+    # ---- Position sizing ----
+    position_sizing_method = models.CharField(
+        max_length=20, choices=OPTION_POSITION_SIZING_CHOICES, default="fixed_contracts"
+    )
+    position_sizing_value = models.FloatField(default=1)
+ 
+    # ---- Risk management ----
+    take_profit_pct = models.FloatField(null=True, blank=True)
+    stop_loss_pct = models.FloatField(null=True, blank=True)
+    trailing_stop_pct = models.FloatField(null=True, blank=True)
+    max_hold_days = models.PositiveIntegerField(null=True, blank=True)
+    max_daily_entries_per_symbol = models.PositiveIntegerField(null=True, blank=True)
+ 
+    is_active = models.BooleanField(default=False)
+    is_paper = models.BooleanField(default=True)
+    is_archived = models.BooleanField(default=False)
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+ 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "name"], name="unique_option_strategy_name_per_user")
+        ]
+ 
+    @property
+    def symbols_list(self):
+        return [s.strip().upper() for s in self.symbols.split(",") if s.strip()]
+ 
+    @property
+    def filter_sectors_list(self):
+        return [s.strip() for s in self.filter_sectors.split(",") if s.strip()]
+ 
+    def __str__(self):
+        return f"{self.name} ({self.user.username})"
+ 
+ 
+class OptionTrade(models.Model):
+    STATUS_CHOICES = [("open", "Open"), ("closed", "Closed")]
+    OPTION_TYPE_CHOICES = [("call", "Call"), ("put", "Put")]
+ 
+    strategy = models.ForeignKey(OptionStrategy, on_delete=models.CASCADE, related_name="trades")
+ 
+    symbol = models.CharField(max_length=32, help_text="OCC contract symbol, e.g. AAPL260605C00315000")
+    underlying_symbol = models.CharField(max_length=10)
+    option_type = models.CharField(max_length=4, choices=OPTION_TYPE_CHOICES)
+    strike_price = models.FloatField()
+    expiration_date = models.DateField()
+ 
+    quantity = models.PositiveIntegerField(help_text="Number of contracts")
+    entry_price = models.FloatField(null=True, blank=True, help_text="Premium per share at entry")
+    exit_price = models.FloatField(null=True, blank=True, help_text="Premium per share at exit")
+    peak_price = models.FloatField(null=True, blank=True)
+    realized_pnl = models.FloatField(null=True, blank=True, help_text="Dollar P&L, already x100 for the contract multiplier")
+ 
+    alpaca_order_id = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="open")
+ 
+    entered_at = models.DateTimeField(auto_now_add=True)
+    exited_at = models.DateTimeField(null=True, blank=True)
+ 
+    class Meta:
+        ordering = ["-entered_at"]
+ 
+    def __str__(self):
+        return f"{self.strategy.name} — {self.option_type.upper()} {self.underlying_symbol} ${self.strike_price}"

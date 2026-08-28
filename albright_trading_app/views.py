@@ -9,6 +9,8 @@ from django.contrib.auth.models import auth
 from django.core.cache import cache
 from django.views.decorators.http import require_POST
 from .models import RedditDailyMentionCount, RedditSentimentSummary, Strategy, Trade, AlpacaCredentials, POSITION_SIZING_CHOICES
+from .models import OptionStrategy, OptionTrade, OPTION_STRIKE_METHOD_CHOICES, OPTION_DTE_CHOICES, OPTION_POSITION_SIZING_CHOICES
+from .options_trading import get_current_option_prices
 import requests
 import json
 import pandas as pd
@@ -832,6 +834,353 @@ def strategy_create(request):
         "position_sizing_choices": POSITION_SIZING_CHOICES,
         "sectors": sectors,
     })
+
+# Options Strategies
+def resolve_option_strategy_symbols(strategy):
+    """
+    Same purpose as resolve_strategy_symbols for stock strategies —
+    returns the underlying symbols this option strategy should
+    evaluate, either from a manual list or by filtering the S&P 500
+    using the same kind of price/sector/Reddit criteria.
+    """
+    if strategy.symbols.strip():
+        return strategy.symbols_list
+ 
+    from .views import get_sp500_constituents, get_snapshot_rows, attach_reddit_sentiment
+ 
+    constituents = get_sp500_constituents()
+    rows = get_snapshot_rows(constituents)
+    rows = attach_reddit_sentiment(rows)
+ 
+    sectors = strategy.filter_sectors_list
+    matches = []
+ 
+    for row in rows:
+        if sectors and row["sector"] not in sectors:
+            continue
+        if strategy.filter_min_price is not None and row["price"] < strategy.filter_min_price:
+            continue
+        if strategy.filter_max_price is not None and row["price"] > strategy.filter_max_price:
+            continue
+        if strategy.filter_min_day_change_pct is not None and row["change_pct"] < strategy.filter_min_day_change_pct:
+            continue
+        if strategy.filter_max_day_change_pct is not None and row["change_pct"] > strategy.filter_max_day_change_pct:
+            continue
+ 
+        total_mentions = row["reddit_positive"] + row["reddit_neutral"] + row["reddit_negative"]
+        if strategy.filter_min_reddit_mentions_24h is not None and total_mentions < strategy.filter_min_reddit_mentions_24h:
+            continue
+        if strategy.filter_min_reddit_positive_ratio is not None:
+            ratio = (row["reddit_positive"] / total_mentions) if total_mentions else 0
+            if ratio < strategy.filter_min_reddit_positive_ratio:
+                continue
+        if strategy.filter_min_reddit_positive_vs_negative_ratio is not None:
+            pos_neg_total = row["reddit_positive"] + row["reddit_negative"]
+            ratio_vs_negative = (row["reddit_positive"] / pos_neg_total) if pos_neg_total else 0
+            if ratio_vs_negative < strategy.filter_min_reddit_positive_vs_negative_ratio:
+                continue
+ 
+        matches.append(row["symbol"])
+ 
+    return matches
+ 
+ 
+def _describe_option_entry_signal(strategy):
+    p = strategy.parameters or {}
+    t = strategy.strategy_type
+ 
+    if t == "moving_average_crossover":
+        base = f"MA Crossover — {p.get('short_period', '?')}/{p.get('long_period', '?')} day"
+    elif t == "reddit_sentiment_threshold":
+        parts = [
+            f"\u2265{p.get('min_mentions_24h', '?')} mentions/24h",
+            f"\u2265{p.get('min_positive_ratio_24h', 0) * 100:.0f}% positive",
+        ]
+        if p.get("min_positive_acceleration_pct") is not None:
+            parts.append(f"+{p['min_positive_acceleration_pct']:.0f}% accel")
+        base = "Reddit Sentiment — " + ", ".join(parts)
+    elif t == "rsi_threshold":
+        base = (
+            f"RSI({p.get('rsi_period', '?')}) — buy <{p.get('oversold_threshold', '?')}, "
+            f"sell >{p.get('overbought_threshold', '?')}"
+        )
+    elif t == "bollinger_reversion":
+        base = f"Bollinger({p.get('period', '?')}, {p.get('std_dev', '?')}\u03c3)"
+    elif t == "price_breakout":
+        base = f"{p.get('breakout_period', '?')}-Day Breakout"
+    else:
+        base = strategy.get_strategy_type_display()
+ 
+    return f"{base} \u2192 Calls/Puts, ATM, ~{strategy.option_target_dte} DTE"
+ 
+ 
+def _describe_option_universe(strategy):
+    if strategy.symbols.strip():
+        return strategy.symbols
+ 
+    parts = []
+    if strategy.filter_sectors_list:
+        parts.append(", ".join(strategy.filter_sectors_list))
+    if strategy.filter_min_price is not None or strategy.filter_max_price is not None:
+        lo = f"${strategy.filter_min_price:.0f}" if strategy.filter_min_price is not None else "any"
+        hi = f"${strategy.filter_max_price:.0f}" if strategy.filter_max_price is not None else "any"
+        parts.append(f"Price {lo}\u2013{hi}")
+    if strategy.filter_min_day_change_pct is not None:
+        parts.append(f"Day change \u2265{strategy.filter_min_day_change_pct:.1f}%")
+    if strategy.filter_max_day_change_pct is not None:
+        parts.append(f"\u2264{strategy.filter_max_day_change_pct:.1f}%")
+    if strategy.filter_min_reddit_mentions_24h is not None:
+        parts.append(f"\u2265{strategy.filter_min_reddit_mentions_24h} Reddit mentions")
+    if strategy.filter_min_reddit_positive_ratio is not None:
+        parts.append(f"\u2265{strategy.filter_min_reddit_positive_ratio * 100:.0f}% positive (vs total)")
+    if strategy.filter_min_reddit_positive_vs_negative_ratio is not None:
+        parts.append(f"\u2265{strategy.filter_min_reddit_positive_vs_negative_ratio * 100:.0f}% positive (vs negative)")
+ 
+    return " \u00b7 ".join(parts) if parts else "All S&P 500 stocks"
+ 
+ 
+def _describe_option_sizing(strategy):
+    method = strategy.position_sizing_method
+    value = strategy.position_sizing_value
+ 
+    if method == "fixed_contracts":
+        return f"{int(value)} contract{'s' if value != 1 else ''} per trade"
+    if method == "fixed_dollar":
+        return f"${value:,.0f} per trade"
+    if method == "pct_buying_power":
+        return f"{value:.1f}% of buying power"
+    if method == "pct_cash":
+        return f"{value:.1f}% of cash"
+    return f"{value} ({method})"
+ 
+ 
+def _describe_option_risk_management(strategy):
+    parts = []
+    if strategy.take_profit_pct is not None:
+        parts.append(f"TP {strategy.take_profit_pct:.1f}%")
+    if strategy.stop_loss_pct is not None:
+        parts.append(f"SL {strategy.stop_loss_pct:.1f}%")
+    if strategy.trailing_stop_pct is not None:
+        parts.append(f"Trailing {strategy.trailing_stop_pct:.1f}%")
+    if strategy.max_hold_days is not None:
+        parts.append(f"Max hold {strategy.max_hold_days}d")
+    if strategy.max_daily_entries_per_symbol is not None:
+        n = strategy.max_daily_entries_per_symbol
+        parts.append(f"Max {n} entr{'y' if n == 1 else 'ies'}/symbol/day")
+    parts.append("Force-closed within 2 days of expiration")
+ 
+    return " \u00b7 ".join(parts) if parts else "No exit limits set"
+ 
+ 
+def _build_option_strategy_rows(queryset):
+    strategies_list = list(queryset)
+ 
+    all_open_trades = OptionTrade.objects.filter(strategy__in=strategies_list, status="open")
+    current_prices = get_current_option_prices([t.symbol for t in all_open_trades])
+ 
+    open_trades_by_strategy = {}
+    for trade in all_open_trades:
+        open_trades_by_strategy.setdefault(trade.strategy_id, []).append(trade)
+ 
+    strategy_rows = []
+    for strategy in strategies_list:
+        total_pnl = strategy.trades.filter(status="closed").aggregate(
+            total=Sum("realized_pnl")
+        )["total"] or 0
+        closed_trades = strategy.trades.filter(status="closed").count()
+        winning_trades = strategy.trades.filter(status="closed", realized_pnl__gt=0).count()
+        win_rate = (winning_trades / closed_trades * 100) if closed_trades else None
+ 
+        open_trades_for_strategy = open_trades_by_strategy.get(strategy.id, [])
+        total_unrealized_pnl = 0
+        for trade in open_trades_for_strategy:
+            current_price = current_prices.get(trade.symbol)
+            if current_price is not None and trade.entry_price:
+                total_unrealized_pnl += (current_price - trade.entry_price) * trade.quantity * 100
+ 
+        strategy_rows.append({
+            "strategy": strategy,
+            "total_pnl": total_pnl,
+            "total_unrealized_pnl": total_unrealized_pnl,
+            "open_trades": len(open_trades_for_strategy),
+            "closed_trades": closed_trades,
+            "win_rate": win_rate,
+            "is_gain": total_pnl >= 0,
+            "is_unrealized_gain": total_unrealized_pnl >= 0,
+            "entry_signal_desc": _describe_option_entry_signal(strategy),
+            "universe_desc": _describe_option_universe(strategy),
+            "sizing_desc": _describe_option_sizing(strategy),
+            "risk_desc": _describe_option_risk_management(strategy),
+        })
+    return strategy_rows
+ 
+ 
+@login_required
+def option_strategies(request):
+    user_strategies = OptionStrategy.objects.filter(
+        user=request.user, is_archived=False
+    ).order_by("name")
+    archived_count = OptionStrategy.objects.filter(user=request.user, is_archived=True).count()
+ 
+    context = {
+        "strategy_rows": _build_option_strategy_rows(user_strategies),
+        "archived_count": archived_count,
+    }
+    return render(request, "option_strategies.html", context)
+ 
+ 
+@login_required
+def option_archived_strategies(request):
+    user_strategies = OptionStrategy.objects.filter(
+        user=request.user, is_archived=True
+    ).order_by("-updated_at")
+    context = {"strategy_rows": _build_option_strategy_rows(user_strategies)}
+    return render(request, "option_archived_strategies.html", context)
+ 
+ 
+@login_required
+@require_POST
+def option_strategy_toggle(request, strategy_id):
+    strategy = get_object_or_404(OptionStrategy, id=strategy_id, user=request.user)
+    strategy.is_active = not strategy.is_active
+    strategy.save(update_fields=["is_active"])
+    return JsonResponse({"is_active": strategy.is_active})
+ 
+ 
+@login_required
+@require_POST
+def option_strategy_archive(request, strategy_id):
+    strategy = get_object_or_404(OptionStrategy, id=strategy_id, user=request.user)
+    strategy.is_archived = True
+    strategy.is_active = False
+    strategy.save(update_fields=["is_archived", "is_active"])
+    return redirect("option_strategies")
+ 
+ 
+@login_required
+@require_POST
+def option_strategy_unarchive(request, strategy_id):
+    strategy = get_object_or_404(OptionStrategy, id=strategy_id, user=request.user)
+    strategy.is_archived = False
+    strategy.save(update_fields=["is_archived"])
+    return redirect("option_archived_strategies")
+ 
+ 
+@login_required
+def option_strategy_create(request):
+    if request.method == "POST":
+        strategy_type = request.POST.get("strategy_type")
+        parameters = _build_parameters_from_post(strategy_type, request.POST)
+        selected_sectors = request.POST.getlist("filter_sectors")
+ 
+        OptionStrategy.objects.create(
+            user=request.user,
+            name=request.POST.get("name", "").strip(),
+            strategy_type=strategy_type,
+            description=request.POST.get("description", "").strip(),
+ 
+            symbols=request.POST.get("symbols", "").strip(),
+            filter_sectors=",".join(selected_sectors),
+            filter_min_price=_parse_optional_float(request.POST.get("filter_min_price")),
+            filter_max_price=_parse_optional_float(request.POST.get("filter_max_price")),
+            filter_min_day_change_pct=_parse_optional_float(request.POST.get("filter_min_day_change_pct")),
+            filter_max_day_change_pct=_parse_optional_float(request.POST.get("filter_max_day_change_pct")),
+            filter_min_reddit_mentions_24h=_parse_optional_int(request.POST.get("filter_min_reddit_mentions_24h")),
+            filter_min_reddit_positive_ratio=_parse_optional_float(request.POST.get("filter_min_reddit_positive_ratio")),
+            filter_min_reddit_positive_vs_negative_ratio=_parse_optional_float(request.POST.get("filter_min_reddit_positive_vs_negative_ratio")),
+ 
+            parameters=parameters,
+ 
+            option_strike_method=request.POST.get("option_strike_method", "atm"),
+            option_target_dte=_parse_optional_int(request.POST.get("option_target_dte")) or 30,
+ 
+            position_sizing_method=request.POST.get("position_sizing_method", "fixed_contracts"),
+            position_sizing_value=_parse_optional_float(request.POST.get("position_sizing_value")) or 1,
+ 
+            take_profit_pct=_parse_optional_float(request.POST.get("take_profit_pct")),
+            stop_loss_pct=_parse_optional_float(request.POST.get("stop_loss_pct")),
+            trailing_stop_pct=_parse_optional_float(request.POST.get("trailing_stop_pct")),
+            max_hold_days=_parse_optional_int(request.POST.get("max_hold_days")),
+            max_daily_entries_per_symbol=_parse_optional_int(request.POST.get("max_daily_entries_per_symbol")),
+ 
+            is_active=False,
+            is_paper=True,
+        )
+        return redirect("option_strategies")
+ 
+    try:
+        constituents = get_sp500_constituents()
+        sectors = sorted({c["sector"] for c in constituents})
+    except Exception:
+        logger.exception("Failed to load sectors for option strategy creation form")
+        sectors = []
+ 
+    return render(request, "option_strategy_create.html", {
+        "strategy_type_choices": OptionStrategy.STRATEGY_TYPE_CHOICES,
+        "position_sizing_choices": OPTION_POSITION_SIZING_CHOICES,
+        "option_strike_method_choices": OPTION_STRIKE_METHOD_CHOICES,
+        "option_dte_choices": OPTION_DTE_CHOICES,
+        "sectors": sectors,
+    })
+ 
+ 
+@login_required
+def option_strategy_detail(request, strategy_id):
+    strategy = get_object_or_404(OptionStrategy, id=strategy_id, user=request.user)
+ 
+    open_trades_qs = strategy.trades.filter(status="open").order_by("-entered_at")
+    closed_trades_qs = strategy.trades.filter(status="closed").order_by("-exited_at")
+ 
+    current_prices = get_current_option_prices([t.symbol for t in open_trades_qs])
+ 
+    open_positions = []
+    total_unrealized_pnl = 0
+    for trade in open_trades_qs:
+        current_price = current_prices.get(trade.symbol)
+ 
+        if current_price is not None and trade.entry_price:
+            unrealized_pnl = (current_price - trade.entry_price) * trade.quantity * 100
+            unrealized_pnl_pct = (current_price - trade.entry_price) / trade.entry_price * 100
+            total_unrealized_pnl += unrealized_pnl
+        else:
+            unrealized_pnl = None
+            unrealized_pnl_pct = None
+ 
+        days_to_expiration = (trade.expiration_date - dt.date.today()).days
+ 
+        open_positions.append({
+            "trade": trade,
+            "current_price": current_price,
+            "unrealized_pnl": unrealized_pnl,
+            "unrealized_pnl_pct": unrealized_pnl_pct,
+            "is_gain": (unrealized_pnl or 0) >= 0,
+            "days_to_expiration": days_to_expiration,
+        })
+ 
+    closed_trades = [
+        {"trade": trade, "is_gain": (trade.realized_pnl or 0) >= 0}
+        for trade in closed_trades_qs
+    ]
+ 
+    total_realized_pnl = closed_trades_qs.aggregate(total=Sum("realized_pnl"))["total"] or 0
+    closed_count = closed_trades_qs.count()
+    winning_count = closed_trades_qs.filter(realized_pnl__gt=0).count()
+    win_rate = (winning_count / closed_count * 100) if closed_count else None
+ 
+    context = {
+        "strategy": strategy,
+        "entry_signal_desc": _describe_option_entry_signal(strategy),
+        "universe_desc": _describe_option_universe(strategy),
+        "sizing_desc": _describe_option_sizing(strategy),
+        "risk_desc": _describe_option_risk_management(strategy),
+        "open_positions": open_positions,
+        "closed_trades": closed_trades,
+        "total_realized_pnl": total_realized_pnl,
+        "total_unrealized_pnl": total_unrealized_pnl,
+        "closed_count": closed_count,
+        "win_rate": win_rate,
+    }
+    return render(request, "option_strategy_detail.html", context)
 
 def get_sp500_constituents():
     """

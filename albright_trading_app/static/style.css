@@ -303,6 +303,63 @@ a:hover { color: var(--accent-hover); }
   color: var(--accent);
 }
 
+/* ---------- Nav dropdown (Strategies: Stock / Options) ---------- */
+.navbar__dropdown {
+  position: relative;
+}
+
+.navbar__dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.navbar__dropdown:hover .navbar__dropdown-trigger {
+  color: var(--accent);
+}
+
+.navbar__dropdown-caret {
+  font-size: 0.6875rem;
+  transition: transform 0.15s ease;
+}
+.navbar__dropdown:hover .navbar__dropdown-caret {
+  transform: rotate(180deg);
+}
+
+.navbar__dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 170px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 10px 6px 6px;
+  z-index: 30;
+}
+
+.navbar__dropdown:hover .navbar__dropdown-menu {
+  display: block;
+}
+
+.navbar__dropdown-menu a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+.navbar__dropdown-menu a:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
 /* ---------- Ticker rail (signature element) ----------
    A thin strip of live-looking symbols with a scanning glow
    line beneath it, like an instrument-panel readout. */
@@ -834,6 +891,32 @@ table.holdings th.sorted-desc::after {
   }
   .navbar__links a:last-child {
     border-bottom: none;
+  }
+
+  /* Hover doesn't exist on touch — collapse the dropdown into two
+     plain, always-visible links instead of a hover menu. */
+  .navbar__dropdown-trigger {
+    padding: 12px 0 4px;
+    font-size: 0.9375rem;
+    cursor: default;
+  }
+  .navbar__dropdown-caret {
+    display: none;
+  }
+  .navbar__dropdown-menu {
+    display: block;
+    position: static;
+    margin: 0;
+    padding: 0 0 4px 12px;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+  }
+  .navbar__dropdown-menu a {
+    padding: 8px 0;
+    border-bottom: none;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
   }
 
   #nav-toggle:checked ~ .navbar__links {

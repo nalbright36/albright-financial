@@ -14,7 +14,7 @@
     <body>
 
         <nav class="navbar">
-            <a href="/" class="navbar__brand">Albright Financial</a>
+            <a href="/" class="navbar__brand">Albright Trading</a>
 
             <input type="checkbox" id="nav-toggle" class="navbar__toggle-checkbox">
             <label for="nav-toggle" class="navbar__toggle" aria-label="Menu">
@@ -25,8 +25,16 @@
                 <a href="/">Home</a>
                 {% if user.is_authenticated %}
                 <a href="/trading_account">Trading Account</a>
-                <a href="/market_scanner">Market Screener</a>
-                <a href="/strategies">Strategies</a>
+                <a href="/market_scanner">Market Scanner</a>
+
+                <div class="navbar__dropdown">
+                    <span class="navbar__dropdown-trigger">Strategies <span class="navbar__dropdown-caret">&#9662;</span></span>
+                    <div class="navbar__dropdown-menu">
+                        <a href="{% url 'strategies' %}">Stock Strategies</a>
+                        <a href="{% url 'option_strategies' %}">Options Strategies</a>
+                    </div>
+                </div>
+
                 <a href="{% url 'user_logout' %}">Logout</a>
                 {% else %}
                 <a href="/user_login">Login</a>
