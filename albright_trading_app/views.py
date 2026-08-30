@@ -409,30 +409,57 @@ def _describe_entry_signal(strategy):
     t = strategy.strategy_type
  
     if t == "moving_average_crossover":
-        return f"MA Crossover — {p.get('short_period', '?')}/{p.get('long_period', '?')} day"
+        base = f"MA Crossover — {p.get('short_period', '?')}/{p.get('long_period', '?')} day"
  
-    if t == "reddit_sentiment_threshold":
+    elif t == "reddit_sentiment_threshold":
         parts = [
             f"\u2265{p.get('min_mentions_24h', '?')} mentions/24h",
             f"\u2265{p.get('min_positive_ratio_24h', 0) * 100:.0f}% positive",
         ]
         if p.get("min_positive_acceleration_pct") is not None:
             parts.append(f"+{p['min_positive_acceleration_pct']:.0f}% accel")
-        return "Reddit Sentiment — " + ", ".join(parts)
+        base = "Reddit Sentiment — " + ", ".join(parts)
  
-    if t == "rsi_threshold":
-        return (
+    elif t == "rsi_threshold":
+        base = (
             f"RSI({p.get('rsi_period', '?')}) — buy <{p.get('oversold_threshold', '?')}, "
             f"sell >{p.get('overbought_threshold', '?')}"
         )
  
-    if t == "bollinger_reversion":
-        return f"Bollinger({p.get('period', '?')}, {p.get('std_dev', '?')}\u03c3)"
+    elif t == "bollinger_reversion":
+        base = f"Bollinger({p.get('period', '?')}, {p.get('std_dev', '?')}\u03c3)"
  
-    if t == "price_breakout":
-        return f"{p.get('breakout_period', '?')}-Day Breakout"
+    elif t == "price_breakout":
+        base = f"{p.get('breakout_period', '?')}-Day Breakout"
  
-    return strategy.get_strategy_type_display()
+    elif t == "volume_spike":
+        base = f"Volume Spike — \u2265{p.get('spike_multiplier', '?')}x {p.get('lookback_period', '?')}-day avg"
+ 
+    elif t == "sector_relative_strength":
+        base = f"Sector Relative Strength — \u2265{p.get('min_outperformance_pct', '?')}% vs sector"
+ 
+    elif t == "confluence":
+        sub_signals = p.get("signals", [])
+        min_agree = p.get("min_agree") or len(sub_signals)
+        labels = {
+            "moving_average_crossover": "MA Crossover",
+            "reddit_sentiment_threshold": "Reddit Sentiment",
+            "rsi_threshold": "RSI",
+            "bollinger_reversion": "Bollinger",
+            "price_breakout": "Breakout",
+            "volume_spike": "Volume Spike",
+        }
+        names = [labels.get(s.get("type"), s.get("type")) for s in sub_signals]
+        base = f"Confluence — {min_agree} of [{', '.join(names)}] must agree" if names else "Confluence — no signals configured"
+ 
+    else:
+        base = strategy.get_strategy_type_display()
+ 
+    if strategy.market_regime_filter != "none":
+        regime_label = "SPY bullish" if strategy.market_regime_filter == "spy_bullish" else "SPY bearish"
+        base += f" (entries only while {regime_label})"
+ 
+    return base
  
  
 def _describe_universe(strategy):
@@ -494,20 +521,17 @@ def _describe_risk_management(strategy):
  
     return " \u00b7 ".join(parts) if parts else "No exit limits set"
  
- 
+
 def _build_strategy_rows(queryset):
     strategies_list = list(queryset)
- 
-    # One batched price fetch covering every open position across ALL
-    # these strategies, rather than a separate Alpaca call per
-    # strategy — stays fast regardless of how many strategies exist.
+
     all_open_trades = Trade.objects.filter(strategy__in=strategies_list, status="open")
     current_prices = get_current_prices([t.symbol for t in all_open_trades])
- 
+
     open_trades_by_strategy = {}
     for trade in all_open_trades:
         open_trades_by_strategy.setdefault(trade.strategy_id, []).append(trade)
- 
+
     strategy_rows = []
     for strategy in strategies_list:
         total_pnl = strategy.trades.filter(status="closed").aggregate(
@@ -516,14 +540,14 @@ def _build_strategy_rows(queryset):
         closed_trades = strategy.trades.filter(status="closed").count()
         winning_trades = strategy.trades.filter(status="closed", realized_pnl__gt=0).count()
         win_rate = (winning_trades / closed_trades * 100) if closed_trades else None
- 
+
         open_trades_for_strategy = open_trades_by_strategy.get(strategy.id, [])
         total_unrealized_pnl = 0
         for trade in open_trades_for_strategy:
             current_price = current_prices.get(trade.symbol)
             if current_price is not None and trade.entry_price:
                 total_unrealized_pnl += (current_price - trade.entry_price) * trade.quantity
- 
+
         strategy_rows.append({
             "strategy": strategy,
             "total_pnl": total_pnl,
@@ -539,22 +563,21 @@ def _build_strategy_rows(queryset):
             "risk_desc": _describe_risk_management(strategy),
         })
     return strategy_rows
- 
- 
+
+
 @login_required
 def strategies(request):
     user_strategies = Strategy.objects.filter(
         user=request.user, is_archived=False
     ).order_by("name")
- 
+
     archived_count = Strategy.objects.filter(user=request.user, is_archived=True).count()
- 
+
     context = {
         "strategy_rows": _build_strategy_rows(user_strategies),
         "archived_count": archived_count,
     }
     return render(request, 'strategies.html', context)
- 
  
 @login_required
 def archived_strategies(request):
@@ -775,7 +798,81 @@ def _build_parameters_from_post(strategy_type, post):
             "breakout_period": _parse_optional_int(post.get("breakout_period")) or 20,
         }
  
+    if strategy_type == "volume_spike":
+        return {
+            "lookback_period": _parse_optional_int(post.get("vs_lookback_period")) or 20,
+            "spike_multiplier": _parse_optional_float(post.get("vs_spike_multiplier")) or 3.0,
+        }
+ 
+    if strategy_type == "sector_relative_strength":
+        return {
+            "min_outperformance_pct": _parse_optional_float(post.get("srs_min_outperformance_pct")) or 2.0,
+        }
+ 
+    if strategy_type == "confluence":
+        return _build_confluence_parameters(post)
+ 
     return {}
+ 
+ 
+def _build_confluence_parameters(post):
+    checked = post.getlist("conf_signals")
+    signals = []
+ 
+    for sub_type in checked:
+        if sub_type == "moving_average_crossover":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "short_period": _parse_optional_int(post.get("conf_ma_short_period")) or 10,
+                    "long_period": _parse_optional_int(post.get("conf_ma_long_period")) or 30,
+                },
+            })
+        elif sub_type == "rsi_threshold":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "rsi_period": _parse_optional_int(post.get("conf_rsi_period")) or 14,
+                    "oversold_threshold": _parse_optional_float(post.get("conf_rsi_oversold")) or 30,
+                    "overbought_threshold": _parse_optional_float(post.get("conf_rsi_overbought")) or 70,
+                },
+            })
+        elif sub_type == "bollinger_reversion":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "period": _parse_optional_int(post.get("conf_bb_period")) or 20,
+                    "std_dev": _parse_optional_float(post.get("conf_bb_std_dev")) or 2.0,
+                },
+            })
+        elif sub_type == "price_breakout":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "breakout_period": _parse_optional_int(post.get("conf_breakout_period")) or 20,
+                },
+            })
+        elif sub_type == "volume_spike":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "lookback_period": _parse_optional_int(post.get("conf_vs_lookback_period")) or 20,
+                    "spike_multiplier": _parse_optional_float(post.get("conf_vs_spike_multiplier")) or 3.0,
+                },
+            })
+        elif sub_type == "reddit_sentiment_threshold":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "min_mentions_24h": _parse_optional_int(post.get("conf_rst_min_mentions_24h")) or 5,
+                    "min_positive_ratio_24h": _parse_optional_float(post.get("conf_rst_min_positive_ratio_24h")) or 0.6,
+                },
+            })
+ 
+    return {
+        "signals": signals,
+        "min_agree": _parse_optional_int(post.get("conf_min_agree")),  # None = require all checked
+    }
  
  
 @login_required
@@ -790,6 +887,7 @@ def strategy_create(request):
             name=request.POST.get("name", "").strip(),
             strategy_type=strategy_type,
             description=request.POST.get("description", "").strip(),
+            market_regime_filter=request.POST.get("market_regime_filter", "none"),
  
             symbols=request.POST.get("symbols", "").strip(),
             filter_sectors=",".join(selected_sectors),
@@ -827,8 +925,10 @@ def strategy_create(request):
     return render(request, "strategy_create.html", {
         "strategy_type_choices": Strategy.STRATEGY_TYPE_CHOICES,
         "position_sizing_choices": POSITION_SIZING_CHOICES,
+        "market_regime_choices": Strategy.MARKET_REGIME_CHOICES,
         "sectors": sectors,
     })
+
 
 # Options Strategies
 def resolve_option_strategy_symbols(strategy):
@@ -903,6 +1003,23 @@ def _describe_option_entry_signal(strategy):
         base = f"Bollinger({p.get('period', '?')}, {p.get('std_dev', '?')}\u03c3)"
     elif t == "price_breakout":
         base = f"{p.get('breakout_period', '?')}-Day Breakout"
+    elif t == "volume_spike":
+        base = f"Volume Spike — \u2265{p.get('spike_multiplier', '?')}x {p.get('lookback_period', '?')}-day avg"
+    elif t == "sector_relative_strength":
+        base = f"Sector Relative Strength — \u2265{p.get('min_outperformance_pct', '?')}% vs sector"
+    elif t == "confluence":
+        sub_signals = p.get("signals", [])
+        min_agree = p.get("min_agree") or len(sub_signals)
+        labels = {
+            "moving_average_crossover": "MA Crossover",
+            "reddit_sentiment_threshold": "Reddit Sentiment",
+            "rsi_threshold": "RSI",
+            "bollinger_reversion": "Bollinger",
+            "price_breakout": "Breakout",
+            "volume_spike": "Volume Spike",
+        }
+        names = [labels.get(s.get("type"), s.get("type")) for s in sub_signals]
+        base = f"Confluence — {min_agree} of [{', '.join(names)}] must agree" if names else "Confluence — no signals configured"
     else:
         base = strategy.get_strategy_type_display()
  
@@ -911,7 +1028,13 @@ def _describe_option_entry_signal(strategy):
         "puts_only": "Puts Only",
     }.get(strategy.option_direction, "Calls/Puts")
  
-    return f"{base} \u2192 {direction_label}, ATM, ~{strategy.option_target_dte} DTE"
+    result = f"{base} \u2192 {direction_label}, ATM, ~{strategy.option_target_dte} DTE"
+ 
+    if strategy.market_regime_filter != "none":
+        regime_label = "SPY bullish" if strategy.market_regime_filter == "spy_bullish" else "SPY bearish"
+        result += f" (entries only while {regime_label})"
+ 
+    return result
  
  
 def _describe_option_universe(strategy):
@@ -1078,6 +1201,7 @@ def option_strategy_create(request):
             name=request.POST.get("name", "").strip(),
             strategy_type=strategy_type,
             description=request.POST.get("description", "").strip(),
+            market_regime_filter=request.POST.get("market_regime_filter", "none"),
  
             symbols=request.POST.get("symbols", "").strip(),
             filter_sectors=",".join(selected_sectors),
@@ -1122,6 +1246,7 @@ def option_strategy_create(request):
         "option_direction_choices": OPTION_DIRECTION_CHOICES,
         "option_strike_method_choices": OPTION_STRIKE_METHOD_CHOICES,
         "option_dte_choices": OPTION_DTE_CHOICES,
+        "market_regime_choices": OptionStrategy.MARKET_REGIME_CHOICES,
         "sectors": sectors,
     })
  
@@ -1183,7 +1308,6 @@ def option_strategy_detail(request, strategy_id):
         "win_rate": win_rate,
     }
     return render(request, "option_strategy_detail.html", context)
-
 
 def _manual_close_stock_trade(trade, trading_client, current_price):
     """

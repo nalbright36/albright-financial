@@ -156,6 +156,15 @@ class Strategy(models.Model):
         ("rsi_threshold", "RSI Threshold"),
         ("bollinger_reversion", "Bollinger Band Reversion"),
         ("price_breakout", "Price Breakout"),
+        ("volume_spike", "Volume Spike"),
+        ("sector_relative_strength", "Sector Relative Strength"),
+        ("confluence", "Confluence (Multiple Signals)"),
+    ]
+ 
+    MARKET_REGIME_CHOICES = [
+        ("none", "No filter"),
+        ("spy_bullish", "Only when SPY is above its 50-day average"),
+        ("spy_bearish", "Only when SPY is below its 50-day average"),
     ]
  
     user = models.ForeignKey(
@@ -167,6 +176,10 @@ class Strategy(models.Model):
     name = models.CharField(max_length=100)
     strategy_type = models.CharField(max_length=50, choices=STRATEGY_TYPE_CHOICES)
     description = models.TextField(blank=True)
+    market_regime_filter = models.CharField(
+        max_length=20, choices=MARKET_REGIME_CHOICES, default="none",
+        help_text="Only allow NEW entries while this market condition holds. Doesn't affect exits.",
+    )
  
     symbols = models.CharField(
         max_length=500, blank=True,
@@ -179,7 +192,14 @@ class Strategy(models.Model):
     filter_min_day_change_pct = models.FloatField(null=True, blank=True)
     filter_max_day_change_pct = models.FloatField(null=True, blank=True)
     filter_min_reddit_mentions_24h = models.PositiveIntegerField(null=True, blank=True)
-    filter_min_reddit_positive_ratio = models.FloatField(null=True, blank=True)
+    filter_min_reddit_positive_ratio = models.FloatField(
+        null=True, blank=True,
+        help_text="Positive mentions as a fraction of ALL mentions today, including neutral.",
+    )
+    filter_min_reddit_positive_vs_negative_ratio = models.FloatField(
+        null=True, blank=True,
+        help_text="Positive mentions as a fraction of (positive + negative) only — neutral mentions excluded entirely.",
+    )
  
     parameters = models.JSONField(
         default=dict, blank=True,
@@ -197,28 +217,20 @@ class Strategy(models.Model):
         null=True, blank=True,
         help_text="Close if price falls this % from its highest point since entry",
     )
-
     max_hold_days = models.PositiveIntegerField(
         null=True, blank=True, help_text="Force-close after this many days regardless of signal"
     )
-
     max_daily_entries_per_symbol = models.PositiveIntegerField(
         null=True, blank=True,
         help_text="Limit new entries into the same symbol per day. Leave blank for unlimited.",
     )
-
-    filter_min_reddit_positive_vs_negative_ratio = models.FloatField(
-        null=True, blank=True,
-        help_text="Positive mentions as a fraction of (positive + negative) only — neutral mentions excluded entirely.",
-    )
-
+ 
+    is_active = models.BooleanField(default=False)
+    is_paper = models.BooleanField(default=True)
     is_archived = models.BooleanField(
         default=False,
         help_text="Hidden from the main Strategies page but not deleted. Always inactive while archived.",
     )
- 
-    is_active = models.BooleanField(default=False)
-    is_paper = models.BooleanField(default=True)
  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -272,7 +284,7 @@ OPTION_DIRECTION_CHOICES = [
     ("calls_only", "Calls Only"),
     ("puts_only", "Puts Only"),
 ]
-
+ 
 OPTION_STRIKE_METHOD_CHOICES = [
     ("atm", "At-the-Money"),
 ]
@@ -305,6 +317,15 @@ class OptionStrategy(models.Model):
         ("rsi_threshold", "RSI Threshold"),
         ("bollinger_reversion", "Bollinger Band Reversion"),
         ("price_breakout", "Price Breakout"),
+        ("volume_spike", "Volume Spike"),
+        ("sector_relative_strength", "Sector Relative Strength"),
+        ("confluence", "Confluence (Multiple Signals)"),
+    ]
+ 
+    MARKET_REGIME_CHOICES = [
+        ("none", "No filter"),
+        ("spy_bullish", "Only when SPY is above its 50-day average"),
+        ("spy_bearish", "Only when SPY is below its 50-day average"),
     ]
  
     user = models.ForeignKey(
@@ -316,6 +337,10 @@ class OptionStrategy(models.Model):
     name = models.CharField(max_length=100)
     strategy_type = models.CharField(max_length=50, choices=STRATEGY_TYPE_CHOICES)
     description = models.TextField(blank=True)
+    market_regime_filter = models.CharField(
+        max_length=20, choices=MARKET_REGIME_CHOICES, default="none",
+        help_text="Only allow NEW entries (calls or puts) while this market condition holds. Doesn't affect exits.",
+    )
  
     # ---- Stock universe (of underlyings) ----
     symbols = models.CharField(
@@ -335,11 +360,15 @@ class OptionStrategy(models.Model):
     parameters = models.JSONField(default=dict, blank=True)
  
     # ---- Options structure ----
-    # Bidirectional by design: a "buy" signal opens a long call, a
-    # "sell"/bearish signal opens a long put. Because both signal
-    # types OPEN positions rather than one closing the other, an
-    # open position can ONLY be closed by risk management below —
-    # never by an opposing signal.
+    # Bidirectional by default: a "buy" signal opens a long call, a
+    # "sell"/bearish signal opens a long put. option_direction lets
+    # you restrict a strategy to only ever trade one side — the
+    # signal type not matching the configured direction is simply
+    # skipped, not converted to the other side.
+    #
+    # Regardless of direction: because entries only ever OPEN a
+    # position, an open position can ONLY be closed by risk
+    # management below — never by an opposing signal.
     option_direction = models.CharField(
         max_length=20, choices=OPTION_DIRECTION_CHOICES, default="bidirectional"
     )

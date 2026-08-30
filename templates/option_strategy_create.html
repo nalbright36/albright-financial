@@ -101,6 +101,19 @@
                 </select>
             </div>
 
+            <div class="field">
+                <label for="market_regime_filter">Market Regime Filter</label>
+                <select name="market_regime_filter" id="market_regime_filter">
+                    {% for value, label in market_regime_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px; margin-bottom: 16px;">
+                Only blocks NEW entries (calls or puts) when the market doesn't meet this condition —
+                never blocks exits.
+            </p>
+
             <div class="param-group" data-strategy-type="moving_average_crossover">
                 <div class="grid grid-2">
                     <div class="field">
@@ -165,6 +178,160 @@
                 <div class="field">
                     <label for="breakout_period">Breakout Lookback (days)</label>
                     <input type="number" name="breakout_period" id="breakout_period" value="20" min="2">
+                </div>
+            </div>
+
+            <!-- Volume Spike -->
+            <div class="param-group" data-strategy-type="volume_spike">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label for="vs_lookback_period">Average Lookback (days)</label>
+                        <input type="number" name="vs_lookback_period" id="vs_lookback_period" value="20" min="2">
+                    </div>
+                    <div class="field">
+                        <label for="vs_spike_multiplier">Spike Multiplier (x average)</label>
+                        <input type="number" step="0.1" name="vs_spike_multiplier" id="vs_spike_multiplier" value="3.0" min="1">
+                    </div>
+                </div>
+                <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                    Direction comes from today's own open-to-close move on the spike day.
+                </p>
+            </div>
+
+            <!-- Sector Relative Strength -->
+            <div class="param-group" data-strategy-type="sector_relative_strength">
+                <div class="field">
+                    <label for="srs_min_outperformance_pct">Min Outperformance vs Sector (%)</label>
+                    <input type="number" step="0.1" name="srs_min_outperformance_pct" id="srs_min_outperformance_pct" value="2.0" min="0">
+                </div>
+                <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                    Buy when the underlying is beating its own sector's average move today by at
+                    least this much; sell when it's lagging by that much.
+                </p>
+            </div>
+
+            <!-- Confluence -->
+            <div class="param-group" data-strategy-type="confluence">
+                <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-top: -8px; margin-bottom: 14px;">
+                    Check two or more signals below. A "buy" or "sell" only fires once at least the
+                    minimum number of checked signals agree on the same direction.
+                </p>
+
+                <div class="field">
+                    <label for="conf_min_agree">Minimum Signals Required to Agree</label>
+                    <input type="number" name="conf_min_agree" id="conf_min_agree" min="1" placeholder="Leave blank to require ALL checked signals">
+                </div>
+
+                <div class="field" style="margin-top: 16px;">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="moving_average_crossover" class="conf-signal-checkbox" data-conf-target="conf-ma" style="width: auto;">
+                        Moving Average Crossover
+                    </label>
+                    <div class="conf-sub-params" id="conf-ma" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="grid grid-2">
+                            <div class="field">
+                                <label for="conf_ma_short_period">Short Period</label>
+                                <input type="number" name="conf_ma_short_period" id="conf_ma_short_period" value="10" min="1">
+                            </div>
+                            <div class="field">
+                                <label for="conf_ma_long_period">Long Period</label>
+                                <input type="number" name="conf_ma_long_period" id="conf_ma_long_period" value="30" min="1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="rsi_threshold" class="conf-signal-checkbox" data-conf-target="conf-rsi" style="width: auto;">
+                        RSI Threshold
+                    </label>
+                    <div class="conf-sub-params" id="conf-rsi" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="grid grid-2">
+                            <div class="field">
+                                <label for="conf_rsi_period">RSI Period</label>
+                                <input type="number" name="conf_rsi_period" id="conf_rsi_period" value="14" min="2">
+                            </div>
+                            <div class="field">
+                                <label for="conf_rsi_oversold">Oversold Threshold</label>
+                                <input type="number" name="conf_rsi_oversold" id="conf_rsi_oversold" value="30" min="0" max="100">
+                            </div>
+                            <div class="field">
+                                <label for="conf_rsi_overbought">Overbought Threshold</label>
+                                <input type="number" name="conf_rsi_overbought" id="conf_rsi_overbought" value="70" min="0" max="100">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="bollinger_reversion" class="conf-signal-checkbox" data-conf-target="conf-bb" style="width: auto;">
+                        Bollinger Band Reversion
+                    </label>
+                    <div class="conf-sub-params" id="conf-bb" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="grid grid-2">
+                            <div class="field">
+                                <label for="conf_bb_period">Period</label>
+                                <input type="number" name="conf_bb_period" id="conf_bb_period" value="20" min="2">
+                            </div>
+                            <div class="field">
+                                <label for="conf_bb_std_dev">Std Dev Multiplier</label>
+                                <input type="number" step="0.1" name="conf_bb_std_dev" id="conf_bb_std_dev" value="2.0" min="0.1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="price_breakout" class="conf-signal-checkbox" data-conf-target="conf-breakout" style="width: auto;">
+                        Price Breakout
+                    </label>
+                    <div class="conf-sub-params" id="conf-breakout" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="field">
+                            <label for="conf_breakout_period">Breakout Lookback (days)</label>
+                            <input type="number" name="conf_breakout_period" id="conf_breakout_period" value="20" min="2">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="volume_spike" class="conf-signal-checkbox" data-conf-target="conf-vs" style="width: auto;">
+                        Volume Spike
+                    </label>
+                    <div class="conf-sub-params" id="conf-vs" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="grid grid-2">
+                            <div class="field">
+                                <label for="conf_vs_lookback_period">Average Lookback (days)</label>
+                                <input type="number" name="conf_vs_lookback_period" id="conf_vs_lookback_period" value="20" min="2">
+                            </div>
+                            <div class="field">
+                                <label for="conf_vs_spike_multiplier">Spike Multiplier</label>
+                                <input type="number" step="0.1" name="conf_vs_spike_multiplier" id="conf_vs_spike_multiplier" value="3.0" min="1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="reddit_sentiment_threshold" class="conf-signal-checkbox" data-conf-target="conf-reddit" style="width: auto;">
+                        Reddit Sentiment Threshold
+                    </label>
+                    <div class="conf-sub-params" id="conf-reddit" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="grid grid-2">
+                            <div class="field">
+                                <label for="conf_rst_min_mentions_24h">Min Mentions (24h)</label>
+                                <input type="number" name="conf_rst_min_mentions_24h" id="conf_rst_min_mentions_24h" value="5" min="0">
+                            </div>
+                            <div class="field">
+                                <label for="conf_rst_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
+                                <input type="number" step="0.05" min="0" max="1" name="conf_rst_min_positive_ratio_24h" id="conf_rst_min_positive_ratio_24h" value="0.6">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -279,5 +446,12 @@ function updateParamGroups() {
 
 strategyTypeSelect.addEventListener('change', updateParamGroups);
 updateParamGroups();
+
+document.querySelectorAll('.conf-signal-checkbox').forEach(function (checkbox) {
+    const target = document.getElementById(checkbox.dataset.confTarget);
+    checkbox.addEventListener('change', function () {
+        if (target) target.style.display = checkbox.checked ? 'block' : 'none';
+    });
+});
 </script>
 {% endblock %}

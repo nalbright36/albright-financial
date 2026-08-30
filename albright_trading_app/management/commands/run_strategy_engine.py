@@ -13,7 +13,12 @@ from alpaca.trading.requests import MarketOrderRequest
 from albright_trading_app.models import AlpacaCredentials, Strategy, Trade, OptionStrategy, OptionTrade
 from albright_trading_app.strategy_framework import STRATEGY_REGISTRY
 from albright_trading_app.strategy_filters import resolve_strategy_symbols, get_sentiment_for_symbol
-from albright_trading_app.views import get_bars_for_symbol, resolve_option_strategy_symbols
+from albright_trading_app.views import (
+    get_bars_for_symbol,
+    resolve_option_strategy_symbols,
+    get_sp500_constituents,
+    get_snapshot_rows,
+)
 from albright_trading_app.options_trading import (
     get_atm_option_contract,
     get_current_option_prices,
@@ -62,13 +67,61 @@ class Command(BaseCommand):
     # ============================================================
 
     def _run_stock_pass(self):
+        market_regime = self._get_market_regime()
+        relative_strength_by_symbol, sector_averages = self._get_relative_strength_data()
+
         for strategy in Strategy.objects.filter(is_active=True).select_related("user"):
             try:
-                self._evaluate_strategy(strategy)
+                self._evaluate_strategy(strategy, market_regime, relative_strength_by_symbol, sector_averages)
             except Exception:
                 logger.exception("Error evaluating stock strategy '%s'", strategy.name)
 
-    def _evaluate_strategy(self, strategy):
+    def _get_market_regime(self):
+        """
+        Returns "bullish" if SPY is above its own 50-day SMA,
+        "bearish" if below, or None if it couldn't be computed.
+        Computed once per pass, reused across every strategy with a
+        regime filter configured — not recomputed per strategy.
+        """
+        try:
+            spy_bars = get_bars_for_symbol("SPY", "1D")
+        except Exception:
+            logger.exception("Failed to fetch SPY bars for market regime check")
+            return None
+
+        if len(spy_bars) < 50:
+            return None
+
+        closes = [b["close"] for b in spy_bars]
+        sma_50 = sum(closes[-50:]) / 50
+        return "bullish" if closes[-1] > sma_50 else "bearish"
+
+    def _get_relative_strength_data(self):
+        """
+        Returns ({symbol: {"change_pct", "sector"}}, {sector: avg_change_pct}),
+        computed once per pass from the full S&P 500 snapshot — reused
+        across every symbol/strategy that needs sector-relative-
+        strength context, rather than recomputed per symbol.
+        """
+        try:
+            constituents = get_sp500_constituents()
+            rows = get_snapshot_rows(constituents)
+        except Exception:
+            logger.exception("Failed to compute relative strength data")
+            return {}, {}
+
+        by_symbol = {}
+        by_sector = {}
+        for row in rows:
+            by_symbol[row["symbol"]] = {"change_pct": row["change_pct"], "sector": row["sector"]}
+            by_sector.setdefault(row["sector"], []).append(row["change_pct"])
+
+        sector_averages = {
+            sector: sum(changes) / len(changes) for sector, changes in by_sector.items()
+        }
+        return by_symbol, sector_averages
+
+    def _evaluate_strategy(self, strategy, market_regime=None, relative_strength_by_symbol=None, sector_averages=None):
         try:
             credentials = strategy.user.alpaca_credentials
         except AlpacaCredentials.DoesNotExist:
@@ -123,7 +176,21 @@ class Command(BaseCommand):
                 continue
 
             sentiment = get_sentiment_for_symbol(symbol)
-            signal = strategy_instance.generate_signal(symbol, bars, sentiment=sentiment)
+
+            relative_strength = None
+            if relative_strength_by_symbol and symbol in relative_strength_by_symbol:
+                sym_data = relative_strength_by_symbol[symbol]
+                sector_avg = (sector_averages or {}).get(sym_data["sector"])
+                if sector_avg is not None:
+                    relative_strength = {
+                        "symbol_change_pct": sym_data["change_pct"],
+                        "sector_avg_change_pct": sector_avg,
+                        "sector": sym_data["sector"],
+                    }
+
+            signal = strategy_instance.generate_signal(
+                symbol, bars, sentiment=sentiment, relative_strength=relative_strength
+            )
 
             self.stdout.write(
                 f"[{strategy.user.username}] {strategy.name}: {symbol} -> {signal} "
@@ -142,6 +209,17 @@ class Command(BaseCommand):
             if signal == "sell" and open_trade is None:
                 self.stdout.write(f"  -> skipped: sell signal but no open position in {symbol}")
                 continue
+
+            # Market regime gate — only blocks NEW entries, never exits.
+            # A "sell" here always means closing an existing position
+            # (see the check above), so this only ever applies to "buy".
+            if signal == "buy" and strategy.market_regime_filter != "none":
+                required = "bullish" if strategy.market_regime_filter == "spy_bullish" else "bearish"
+                if market_regime != required:
+                    self.stdout.write(
+                        f"  -> skipped: market regime is '{market_regime}', strategy requires '{required}'"
+                    )
+                    continue
 
             if signal == "buy" and strategy.max_daily_entries_per_symbol is not None:
                 today = timezone.localdate()
@@ -298,13 +376,16 @@ class Command(BaseCommand):
     # ============================================================
 
     def _run_option_pass(self):
+        market_regime = self._get_market_regime()
+        relative_strength_by_symbol, sector_averages = self._get_relative_strength_data()
+
         for strategy in OptionStrategy.objects.filter(is_active=True).select_related("user"):
             try:
-                self._evaluate_option_strategy(strategy)
+                self._evaluate_option_strategy(strategy, market_regime, relative_strength_by_symbol, sector_averages)
             except Exception:
                 logger.exception("Error evaluating option strategy '%s'", strategy.name)
 
-    def _evaluate_option_strategy(self, strategy):
+    def _evaluate_option_strategy(self, strategy, market_regime=None, relative_strength_by_symbol=None, sector_averages=None):
         try:
             credentials = strategy.user.alpaca_credentials
         except AlpacaCredentials.DoesNotExist:
@@ -359,7 +440,21 @@ class Command(BaseCommand):
                 continue
 
             sentiment = get_sentiment_for_symbol(underlying_symbol)
-            signal = strategy_instance.generate_signal(underlying_symbol, bars, sentiment=sentiment)
+
+            relative_strength = None
+            if relative_strength_by_symbol and underlying_symbol in relative_strength_by_symbol:
+                sym_data = relative_strength_by_symbol[underlying_symbol]
+                sector_avg = (sector_averages or {}).get(sym_data["sector"])
+                if sector_avg is not None:
+                    relative_strength = {
+                        "symbol_change_pct": sym_data["change_pct"],
+                        "sector_avg_change_pct": sector_avg,
+                        "sector": sym_data["sector"],
+                    }
+
+            signal = strategy_instance.generate_signal(
+                underlying_symbol, bars, sentiment=sentiment, relative_strength=relative_strength
+            )
             self.stdout.write(f"[{strategy.user.username}] {strategy.name}: {underlying_symbol} -> {signal}")
 
             if signal == "hold":
@@ -371,6 +466,16 @@ class Command(BaseCommand):
             if strategy.option_direction == "puts_only" and signal != "sell":
                 self.stdout.write(f"  -> skipped: {underlying_symbol} signal is '{signal}' but strategy is puts-only")
                 continue
+
+            # Market regime gate — blocks ALL new entries (calls and
+            # puts alike) when the condition isn't met, never exits.
+            if strategy.market_regime_filter != "none":
+                required = "bullish" if strategy.market_regime_filter == "spy_bullish" else "bearish"
+                if market_regime != required:
+                    self.stdout.write(
+                        f"  -> skipped: market regime is '{market_regime}', strategy requires '{required}'"
+                    )
+                    continue
 
             option_type = "call" if signal == "buy" else "put"
 
