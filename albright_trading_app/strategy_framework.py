@@ -13,7 +13,7 @@ class BaseStrategy(ABC):
         self.params = params or {}
 
     @abstractmethod
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         """
         bars: list of dicts, oldest-first, each with
         'time', 'open', 'high', 'low', 'close', 'volume' keys —
@@ -48,7 +48,7 @@ class MovingAverageCrossoverStrategy(BaseStrategy):
       long_period  (default 30)
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         short_period = self.params.get("short_period", 10)
         long_period = self.params.get("long_period", 30)
 
@@ -103,7 +103,7 @@ class RedditSentimentThresholdStrategy(BaseStrategy):
     settings, or they'll stay open indefinitely.
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         if not sentiment or sentiment["mentions_24h"] == 0:
             return "hold"
 
@@ -159,7 +159,7 @@ class RSIThresholdStrategy(BaseStrategy):
       overbought_threshold (default 70)
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         period = self.params.get("rsi_period", 14)
         oversold = self.params.get("oversold_threshold", 30)
         overbought = self.params.get("overbought_threshold", 70)
@@ -186,7 +186,7 @@ class BollingerReversionStrategy(BaseStrategy):
       std_dev (default 2.0) — band width as a multiple of standard deviation
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         period = self.params.get("period", 20)
         std_dev_mult = self.params.get("std_dev", 2.0)
 
@@ -220,7 +220,7 @@ class PriceBreakoutStrategy(BaseStrategy):
       breakout_period (default 20)
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         period = self.params.get("breakout_period", 20)
 
         closes = [b["close"] for b in bars]
@@ -254,7 +254,7 @@ class VolumeSpikeStrategy(BaseStrategy):
       spike_multiplier (default 3.0)
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         lookback = self.params.get("lookback_period", 20)
         multiplier = self.params.get("spike_multiplier", 3.0)
 
@@ -289,7 +289,7 @@ class SectorRelativeStrengthStrategy(BaseStrategy):
       min_outperformance_pct (default 2.0)
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         if not relative_strength:
             return "hold"
 
@@ -317,7 +317,7 @@ class ConfluenceStrategy(BaseStrategy):
                  (default: all of them)
     """
 
-    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None):
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
         sub_signal_configs = self.params.get("signals", [])
         if not sub_signal_configs:
             return "hold"
@@ -332,7 +332,9 @@ class ConfluenceStrategy(BaseStrategy):
                 continue
             sub_instance = sub_class(params=config.get("params", {}))
             results.append(
-                sub_instance.generate_signal(symbol, bars, sentiment=sentiment, relative_strength=relative_strength)
+                sub_instance.generate_signal(
+                    symbol, bars, sentiment=sentiment, relative_strength=relative_strength, news_sentiment=news_sentiment
+                )
             )
 
         buy_count = results.count("buy")
@@ -348,6 +350,39 @@ class ConfluenceStrategy(BaseStrategy):
 # Add every new strategy class here, and add a matching entry to
 # Strategy.STRATEGY_TYPE_CHOICES / OptionStrategy.STRATEGY_TYPE_CHOICES
 # in models.py.
+class NewsSentimentThresholdStrategy(BaseStrategy):
+    """
+    Entry based on news sentiment strength over the last 24 hours —
+    parallel to RedditSentimentThresholdStrategy, but reading from
+    OpenAI-classified news headlines instead of Reddit mentions.
+    Like its Reddit counterpart, this only ever returns "buy" or
+    "hold" — no concept of an exit — so positions it opens MUST rely
+    on take_profit_pct / stop_loss_pct / trailing_stop_pct /
+    max_hold_days, or they'll stay open indefinitely.
+
+    Params:
+      min_mentions_24h (default 3)
+      min_positive_ratio_24h (default 0.6)
+    """
+
+    def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
+        if not news_sentiment or news_sentiment["mentions_24h"] == 0:
+            return "hold"
+
+        min_mentions = self.params.get("min_mentions_24h", 3)
+        min_ratio = self.params.get("min_positive_ratio_24h", 0.6)
+
+        if news_sentiment["mentions_24h"] < min_mentions:
+            return "hold"
+        if news_sentiment["positive_ratio_24h"] < min_ratio:
+            return "hold"
+
+        return "buy"
+
+
+# Add every new strategy class here, and add a matching entry to
+# Strategy.STRATEGY_TYPE_CHOICES / OptionStrategy.STRATEGY_TYPE_CHOICES
+# in models.py.
 STRATEGY_REGISTRY = {
     "moving_average_crossover": MovingAverageCrossoverStrategy,
     "reddit_sentiment_threshold": RedditSentimentThresholdStrategy,
@@ -357,4 +392,5 @@ STRATEGY_REGISTRY = {
     "volume_spike": VolumeSpikeStrategy,
     "sector_relative_strength": SectorRelativeStrengthStrategy,
     "confluence": ConfluenceStrategy,
+    "news_sentiment_threshold": NewsSentimentThresholdStrategy,
 }

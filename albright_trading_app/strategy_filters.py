@@ -48,6 +48,54 @@ def get_sentiment_for_symbol(symbol):
     }
 
 
+def get_news_sentiment_for_symbol(symbol):
+    """
+    Returns a news sentiment dict for one symbol, built from
+    NewsSentimentSummary — parallel structure to
+    get_sentiment_for_symbol, same safe-default behavior when the
+    scheduled news command hasn't produced a row for this symbol yet.
+    """
+    from .models import NewsSentimentSummary
+
+    summary = NewsSentimentSummary.objects.filter(symbol=symbol).first()
+
+    if summary is None:
+        return {
+            "mentions_24h": 0, "positive_24h": 0, "neutral_24h": 0, "negative_24h": 0,
+            "positive_ratio_24h": 0,
+            "mentions_7d": 0, "positive_7d": 0, "neutral_7d": 0, "negative_7d": 0,
+            "mentions_30d": 0, "positive_30d": 0, "neutral_30d": 0, "negative_30d": 0,
+            "positive_change_24h_vs_7d_avg": None,
+            "negative_change_24h_vs_7d_avg": None,
+            "positive_change_7d_vs_30d_avg": None,
+            "negative_change_7d_vs_30d_avg": None,
+        }
+
+    positive_ratio_24h = (
+        summary.positive_24h / summary.mentions_24h if summary.mentions_24h else 0
+    )
+
+    return {
+        "mentions_24h": summary.mentions_24h,
+        "positive_24h": summary.positive_24h,
+        "neutral_24h": summary.neutral_24h,
+        "negative_24h": summary.negative_24h,
+        "positive_ratio_24h": positive_ratio_24h,
+        "mentions_7d": summary.mentions_7d,
+        "positive_7d": summary.positive_7d,
+        "neutral_7d": summary.neutral_7d,
+        "negative_7d": summary.negative_7d,
+        "mentions_30d": summary.mentions_30d,
+        "positive_30d": summary.positive_30d,
+        "neutral_30d": summary.neutral_30d,
+        "negative_30d": summary.negative_30d,
+        "positive_change_24h_vs_7d_avg": summary.positive_change_24h_vs_7d_avg,
+        "negative_change_24h_vs_7d_avg": summary.negative_change_24h_vs_7d_avg,
+        "positive_change_7d_vs_30d_avg": summary.positive_change_7d_vs_30d_avg,
+        "negative_change_7d_vs_30d_avg": summary.negative_change_7d_vs_30d_avg,
+    }
+
+
 def resolve_strategy_symbols(strategy):
     """
     Returns the list of symbols this strategy should evaluate this
@@ -62,11 +110,12 @@ def resolve_strategy_symbols(strategy):
 
     # Imported here (not at module level) to avoid a circular import,
     # since views.py may import from this module too.
-    from .views import get_sp500_constituents, get_snapshot_rows, attach_reddit_sentiment
+    from .views import get_sp500_constituents, get_snapshot_rows, attach_reddit_sentiment, attach_news_sentiment
 
     constituents = get_sp500_constituents()
     rows = get_snapshot_rows(constituents)
     rows = attach_reddit_sentiment(rows)
+    rows = attach_news_sentiment(rows)
 
     sectors = strategy.filter_sectors_list
     matches = []
@@ -97,6 +146,16 @@ def resolve_strategy_symbols(strategy):
             pos_neg_total = row["reddit_positive"] + row["reddit_negative"]
             ratio_vs_negative = (row["reddit_positive"] / pos_neg_total) if pos_neg_total else 0
             if ratio_vs_negative < strategy.filter_min_reddit_positive_vs_negative_ratio:
+                continue
+
+        news_total = row["news_positive"] + row["news_neutral"] + row["news_negative"]
+
+        if strategy.filter_min_news_mentions_24h is not None and news_total < strategy.filter_min_news_mentions_24h:
+            continue
+
+        if strategy.filter_min_news_positive_ratio is not None:
+            news_ratio = (row["news_positive"] / news_total) if news_total else 0
+            if news_ratio < strategy.filter_min_news_positive_ratio:
                 continue
 
         matches.append(row["symbol"])

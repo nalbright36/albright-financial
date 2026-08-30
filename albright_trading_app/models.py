@@ -159,6 +159,7 @@ class Strategy(models.Model):
         ("volume_spike", "Volume Spike"),
         ("sector_relative_strength", "Sector Relative Strength"),
         ("confluence", "Confluence (Multiple Signals)"),
+        ("news_sentiment_threshold", "News Sentiment Threshold"),
     ]
  
     MARKET_REGIME_CHOICES = [
@@ -199,6 +200,11 @@ class Strategy(models.Model):
     filter_min_reddit_positive_vs_negative_ratio = models.FloatField(
         null=True, blank=True,
         help_text="Positive mentions as a fraction of (positive + negative) only — neutral mentions excluded entirely.",
+    )
+    filter_min_news_mentions_24h = models.PositiveIntegerField(null=True, blank=True)
+    filter_min_news_positive_ratio = models.FloatField(
+        null=True, blank=True,
+        help_text="Positive news mentions as a fraction of all news mentions today.",
     )
  
     parameters = models.JSONField(
@@ -320,6 +326,7 @@ class OptionStrategy(models.Model):
         ("volume_spike", "Volume Spike"),
         ("sector_relative_strength", "Sector Relative Strength"),
         ("confluence", "Confluence (Multiple Signals)"),
+        ("news_sentiment_threshold", "News Sentiment Threshold"),
     ]
  
     MARKET_REGIME_CHOICES = [
@@ -355,6 +362,8 @@ class OptionStrategy(models.Model):
     filter_min_reddit_mentions_24h = models.PositiveIntegerField(null=True, blank=True)
     filter_min_reddit_positive_ratio = models.FloatField(null=True, blank=True)
     filter_min_reddit_positive_vs_negative_ratio = models.FloatField(null=True, blank=True)
+    filter_min_news_mentions_24h = models.PositiveIntegerField(null=True, blank=True)
+    filter_min_news_positive_ratio = models.FloatField(null=True, blank=True)
  
     # ---- Entry signal ----
     parameters = models.JSONField(default=dict, blank=True)
@@ -420,29 +429,92 @@ class OptionStrategy(models.Model):
 class OptionTrade(models.Model):
     STATUS_CHOICES = [("open", "Open"), ("closed", "Closed")]
     OPTION_TYPE_CHOICES = [("call", "Call"), ("put", "Put")]
- 
+
     strategy = models.ForeignKey(OptionStrategy, on_delete=models.CASCADE, related_name="trades")
- 
+
     symbol = models.CharField(max_length=32, help_text="OCC contract symbol, e.g. AAPL260605C00315000")
     underlying_symbol = models.CharField(max_length=10)
     option_type = models.CharField(max_length=4, choices=OPTION_TYPE_CHOICES)
     strike_price = models.FloatField()
     expiration_date = models.DateField()
- 
+
     quantity = models.PositiveIntegerField(help_text="Number of contracts")
     entry_price = models.FloatField(null=True, blank=True, help_text="Premium per share at entry")
     exit_price = models.FloatField(null=True, blank=True, help_text="Premium per share at exit")
     peak_price = models.FloatField(null=True, blank=True)
     realized_pnl = models.FloatField(null=True, blank=True, help_text="Dollar P&L, already x100 for the contract multiplier")
- 
+
     alpaca_order_id = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="open")
- 
+
     entered_at = models.DateTimeField(auto_now_add=True)
     exited_at = models.DateTimeField(null=True, blank=True)
- 
+
     class Meta:
         ordering = ["-entered_at"]
- 
+
     def __str__(self):
         return f"{self.strategy.name} — {self.option_type.upper()} {self.underlying_symbol} ${self.strike_price}"
+
+# News Sentiment
+class NewsDailyMentionCount(models.Model):
+    """
+    One row per (symbol, date) — the raw daily ledger the scheduled
+    news command writes to each morning, mirroring
+    RedditDailyMentionCount's structure exactly.
+    """
+    symbol = models.CharField(max_length=10, db_index=True)
+    date = models.DateField(db_index=True)
+ 
+    positive_count = models.PositiveIntegerField(default=0)
+    neutral_count = models.PositiveIntegerField(default=0)
+    negative_count = models.PositiveIntegerField(default=0)
+    total_count = models.PositiveIntegerField(default=0)
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+ 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["symbol", "date"], name="unique_news_symbol_per_day")
+        ]
+        indexes = [models.Index(fields=["symbol", "date"])]
+        ordering = ["-date", "symbol"]
+ 
+    def __str__(self):
+        return f"{self.symbol} — {self.date} ({self.total_count} news mentions)"
+ 
+ 
+class NewsSentimentSummary(models.Model):
+    """
+    One row per symbol, fully recomputed on every command run —
+    same 24h/7d/30d + trend structure as RedditSentimentSummary.
+    """
+    symbol = models.CharField(max_length=10, unique=True, db_index=True)
+    computed_at = models.DateTimeField(auto_now=True)
+ 
+    mentions_24h = models.PositiveIntegerField(default=0)
+    positive_24h = models.PositiveIntegerField(default=0)
+    neutral_24h = models.PositiveIntegerField(default=0)
+    negative_24h = models.PositiveIntegerField(default=0)
+ 
+    mentions_7d = models.PositiveIntegerField(default=0)
+    positive_7d = models.PositiveIntegerField(default=0)
+    neutral_7d = models.PositiveIntegerField(default=0)
+    negative_7d = models.PositiveIntegerField(default=0)
+ 
+    mentions_30d = models.PositiveIntegerField(default=0)
+    positive_30d = models.PositiveIntegerField(default=0)
+    neutral_30d = models.PositiveIntegerField(default=0)
+    negative_30d = models.PositiveIntegerField(default=0)
+ 
+    positive_change_24h_vs_7d_avg = models.FloatField(null=True, blank=True)
+    negative_change_24h_vs_7d_avg = models.FloatField(null=True, blank=True)
+    positive_change_7d_vs_30d_avg = models.FloatField(null=True, blank=True)
+    negative_change_7d_vs_30d_avg = models.FloatField(null=True, blank=True)
+ 
+    class Meta:
+        ordering = ["-mentions_24h"]
+ 
+    def __str__(self):
+        return f"{self.symbol} news sentiment summary (as of {self.computed_at:%Y-%m-%d})"

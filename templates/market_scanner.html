@@ -51,6 +51,9 @@
                         <th class="num" data-sort-key="redditPositive">Reddit +</th>
                         <th class="num hide-mobile" data-sort-key="redditNeutral">Reddit Neu</th>
                         <th class="num" data-sort-key="redditNegative">Reddit &minus;</th>
+                        <th class="num" data-sort-key="newsPositive">News +</th>
+                        <th class="num hide-mobile" data-sort-key="newsNeutral">News Neu</th>
+                        <th class="num" data-sort-key="newsNegative">News &minus;</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -68,6 +71,9 @@
                         data-reddit-positive="{{ r.reddit_positive }}"
                         data-reddit-neutral="{{ r.reddit_neutral }}"
                         data-reddit-negative="{{ r.reddit_negative }}"
+                        data-news-positive="{{ r.news_positive }}"
+                        data-news-neutral="{{ r.news_neutral }}"
+                        data-news-negative="{{ r.news_negative }}"
                     >
                         <td class="symbol"><a href="{% url 'stock_detail' symbol=r.symbol %}">{{ r.symbol }}</a></td>
                         <td>{{ r.name }}</td>
@@ -84,6 +90,9 @@
                         <td class="num"><span class="badge gain">{{ r.reddit_positive }}</span></td>
                         <td class="num hide-mobile"><span class="badge neutral">{{ r.reddit_neutral }}</span></td>
                         <td class="num"><span class="badge loss">{{ r.reddit_negative }}</span></td>
+                        <td class="num"><span class="badge gain">{{ r.news_positive }}</span></td>
+                        <td class="num hide-mobile"><span class="badge neutral">{{ r.news_neutral }}</span></td>
+                        <td class="num"><span class="badge loss">{{ r.news_negative }}</span></td>
                     </tr>
                     {% endfor %}
                 </tbody>

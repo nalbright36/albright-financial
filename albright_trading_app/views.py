@@ -9,6 +9,7 @@ from django.contrib.auth.models import auth
 from django.core.cache import cache
 from django.views.decorators.http import require_POST
 from .models import RedditDailyMentionCount, RedditSentimentSummary, Strategy, Trade, AlpacaCredentials, POSITION_SIZING_CHOICES
+from .models import NewsDailyMentionCount
 from .models import OptionStrategy, OptionTrade, OPTION_STRIKE_METHOD_CHOICES, OPTION_DTE_CHOICES, OPTION_POSITION_SIZING_CHOICES, OPTION_DIRECTION_CHOICES
 from .options_trading import get_current_option_prices
 import requests
@@ -448,9 +449,16 @@ def _describe_entry_signal(strategy):
             "bollinger_reversion": "Bollinger",
             "price_breakout": "Breakout",
             "volume_spike": "Volume Spike",
+            "news_sentiment_threshold": "News Sentiment",
         }
         names = [labels.get(s.get("type"), s.get("type")) for s in sub_signals]
         base = f"Confluence — {min_agree} of [{', '.join(names)}] must agree" if names else "Confluence — no signals configured"
+ 
+    elif t == "news_sentiment_threshold":
+        base = (
+            f"News Sentiment — \u2265{p.get('min_mentions_24h', '?')} mentions/24h, "
+            f"\u2265{p.get('min_positive_ratio_24h', 0) * 100:.0f}% positive"
+        )
  
     else:
         base = strategy.get_strategy_type_display()
@@ -521,7 +529,6 @@ def _describe_risk_management(strategy):
  
     return " \u00b7 ".join(parts) if parts else "No exit limits set"
  
-
 def _build_strategy_rows(queryset):
     strategies_list = list(queryset)
 
@@ -812,6 +819,12 @@ def _build_parameters_from_post(strategy_type, post):
     if strategy_type == "confluence":
         return _build_confluence_parameters(post)
  
+    if strategy_type == "news_sentiment_threshold":
+        return {
+            "min_mentions_24h": _parse_optional_int(post.get("news_min_mentions_24h")) or 3,
+            "min_positive_ratio_24h": _parse_optional_float(post.get("news_min_positive_ratio_24h")) or 0.6,
+        }
+ 
     return {}
  
  
@@ -866,6 +879,14 @@ def _build_confluence_parameters(post):
                 "params": {
                     "min_mentions_24h": _parse_optional_int(post.get("conf_rst_min_mentions_24h")) or 5,
                     "min_positive_ratio_24h": _parse_optional_float(post.get("conf_rst_min_positive_ratio_24h")) or 0.6,
+                },
+            })
+        elif sub_type == "news_sentiment_threshold":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "min_mentions_24h": _parse_optional_int(post.get("conf_news_min_mentions_24h")) or 3,
+                    "min_positive_ratio_24h": _parse_optional_float(post.get("conf_news_min_positive_ratio_24h")) or 0.6,
                 },
             })
  
@@ -929,7 +950,6 @@ def strategy_create(request):
         "sectors": sectors,
     })
 
-
 # Options Strategies
 def resolve_option_strategy_symbols(strategy):
     """
@@ -941,11 +961,12 @@ def resolve_option_strategy_symbols(strategy):
     if strategy.symbols.strip():
         return strategy.symbols_list
  
-    from .views import get_sp500_constituents, get_snapshot_rows, attach_reddit_sentiment
+    from .views import get_sp500_constituents, get_snapshot_rows, attach_reddit_sentiment, attach_news_sentiment
  
     constituents = get_sp500_constituents()
     rows = get_snapshot_rows(constituents)
     rows = attach_reddit_sentiment(rows)
+    rows = attach_news_sentiment(rows)
  
     sectors = strategy.filter_sectors_list
     matches = []
@@ -973,6 +994,14 @@ def resolve_option_strategy_symbols(strategy):
             pos_neg_total = row["reddit_positive"] + row["reddit_negative"]
             ratio_vs_negative = (row["reddit_positive"] / pos_neg_total) if pos_neg_total else 0
             if ratio_vs_negative < strategy.filter_min_reddit_positive_vs_negative_ratio:
+                continue
+ 
+        news_total = row["news_positive"] + row["news_neutral"] + row["news_negative"]
+        if strategy.filter_min_news_mentions_24h is not None and news_total < strategy.filter_min_news_mentions_24h:
+            continue
+        if strategy.filter_min_news_positive_ratio is not None:
+            news_ratio = (row["news_positive"] / news_total) if news_total else 0
+            if news_ratio < strategy.filter_min_news_positive_ratio:
                 continue
  
         matches.append(row["symbol"])
@@ -1309,6 +1338,7 @@ def option_strategy_detail(request, strategy_id):
     }
     return render(request, "option_strategy_detail.html", context)
 
+
 def _manual_close_stock_trade(trade, trading_client, current_price):
     """
     Submits a market sell for a stock trade and updates its record.
@@ -1603,6 +1633,28 @@ def attach_reddit_sentiment(rows):
         row["reddit_negative"] = counts["negative_count"] if counts else 0
  
     return rows
+
+def attach_news_sentiment(rows):
+    """
+    Merges today's news mention counts (positive/neutral/negative)
+    into each scanner row — same pattern as attach_reddit_sentiment,
+    reading NewsDailyMentionCount instead. Symbols with no news
+    today default to 0 across the board.
+    """
+    today = dt.datetime.now(dt.timezone.utc).date()
+ 
+    today_counts = NewsDailyMentionCount.objects.filter(date=today).values(
+        "symbol", "positive_count", "neutral_count", "negative_count"
+    )
+    counts_by_symbol = {c["symbol"]: c for c in today_counts}
+ 
+    for row in rows:
+        counts = counts_by_symbol.get(row["symbol"])
+        row["news_positive"] = counts["positive_count"] if counts else 0
+        row["news_neutral"] = counts["neutral_count"] if counts else 0
+        row["news_negative"] = counts["negative_count"] if counts else 0
+ 
+    return rows
  
  
 @login_required
@@ -1628,6 +1680,7 @@ def market_scanner(request):
         return render(request, "market_scanner.html", context)
  
     rows = attach_reddit_sentiment(rows)
+    rows = attach_news_sentiment(rows)
  
     context["rows"] = rows
     context["sectors"] = sorted({r["sector"] for r in rows})

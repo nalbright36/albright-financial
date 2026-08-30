@@ -79,6 +79,14 @@
                     <label for="filter_min_reddit_positive_vs_negative_ratio">Min Positive Ratio &mdash; vs Negative Only (0&ndash;1)</label>
                     <input type="number" step="0.05" min="0" max="1" name="filter_min_reddit_positive_vs_negative_ratio" id="filter_min_reddit_positive_vs_negative_ratio" placeholder="e.g. 0.7">
                 </div>
+                <div class="field">
+                    <label for="filter_min_news_mentions_24h">Min News Mentions (24h)</label>
+                    <input type="number" name="filter_min_news_mentions_24h" id="filter_min_news_mentions_24h" placeholder="Optional">
+                </div>
+                <div class="field">
+                    <label for="filter_min_news_positive_ratio">Min Positive News Ratio (0&ndash;1)</label>
+                    <input type="number" step="0.05" min="0" max="1" name="filter_min_news_positive_ratio" id="filter_min_news_positive_ratio" placeholder="e.g. 0.6">
+                </div>
             </div>
         </div>
 
@@ -142,6 +150,30 @@
                         <input type="number" step="1" name="rst_min_positive_acceleration_pct" id="rst_min_positive_acceleration_pct" placeholder="e.g. 30">
                     </div>
                 </div>
+                <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                    This only ever signals "buy" — it has no opposite signal, so it only ever opens
+                    calls. If Direction above is set to "Puts Only," this strategy will never
+                    trigger anything at all. Rely on Risk Management below to exit.
+                </p>
+            </div>
+
+            <!-- News Sentiment Threshold -->
+            <div class="param-group" data-strategy-type="news_sentiment_threshold">
+                <div class="grid grid-2">
+                    <div class="field">
+                        <label for="news_min_mentions_24h">Min Mentions (24h)</label>
+                        <input type="number" name="news_min_mentions_24h" id="news_min_mentions_24h" value="3" min="0">
+                    </div>
+                    <div class="field">
+                        <label for="news_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
+                        <input type="number" step="0.05" min="0" max="1" name="news_min_positive_ratio_24h" id="news_min_positive_ratio_24h" value="0.6">
+                    </div>
+                </div>
+                <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                    Like Reddit Sentiment, this only ever signals "buy" — it has no opposite signal,
+                    so it only ever opens calls. If Direction above is set to "Puts Only," this
+                    strategy will never trigger anything at all. Rely on Risk Management below to exit.
+                </p>
             </div>
 
             <div class="param-group" data-strategy-type="rsi_threshold">
@@ -329,6 +361,25 @@
                             <div class="field">
                                 <label for="conf_rst_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
                                 <input type="number" step="0.05" min="0" max="1" name="conf_rst_min_positive_ratio_24h" id="conf_rst_min_positive_ratio_24h" value="0.6">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="news_sentiment_threshold" class="conf-signal-checkbox" data-conf-target="conf-news" style="width: auto;">
+                        News Sentiment Threshold
+                    </label>
+                    <div class="conf-sub-params" id="conf-news" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="grid grid-2">
+                            <div class="field">
+                                <label for="conf_news_min_mentions_24h">Min Mentions (24h)</label>
+                                <input type="number" name="conf_news_min_mentions_24h" id="conf_news_min_mentions_24h" value="3" min="0">
+                            </div>
+                            <div class="field">
+                                <label for="conf_news_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
+                                <input type="number" step="0.05" min="0" max="1" name="conf_news_min_positive_ratio_24h" id="conf_news_min_positive_ratio_24h" value="0.6">
                             </div>
                         </div>
                     </div>

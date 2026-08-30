@@ -12,7 +12,7 @@ from alpaca.trading.requests import MarketOrderRequest
 
 from albright_trading_app.models import AlpacaCredentials, Strategy, Trade, OptionStrategy, OptionTrade
 from albright_trading_app.strategy_framework import STRATEGY_REGISTRY
-from albright_trading_app.strategy_filters import resolve_strategy_symbols, get_sentiment_for_symbol
+from albright_trading_app.strategy_filters import resolve_strategy_symbols, get_sentiment_for_symbol, get_news_sentiment_for_symbol
 from albright_trading_app.views import (
     get_bars_for_symbol,
     resolve_option_strategy_symbols,
@@ -176,6 +176,7 @@ class Command(BaseCommand):
                 continue
 
             sentiment = get_sentiment_for_symbol(symbol)
+            news_sentiment = get_news_sentiment_for_symbol(symbol)
 
             relative_strength = None
             if relative_strength_by_symbol and symbol in relative_strength_by_symbol:
@@ -189,7 +190,7 @@ class Command(BaseCommand):
                     }
 
             signal = strategy_instance.generate_signal(
-                symbol, bars, sentiment=sentiment, relative_strength=relative_strength
+                symbol, bars, sentiment=sentiment, relative_strength=relative_strength, news_sentiment=news_sentiment
             )
 
             self.stdout.write(
@@ -440,6 +441,7 @@ class Command(BaseCommand):
                 continue
 
             sentiment = get_sentiment_for_symbol(underlying_symbol)
+            news_sentiment = get_news_sentiment_for_symbol(underlying_symbol)
 
             relative_strength = None
             if relative_strength_by_symbol and underlying_symbol in relative_strength_by_symbol:
@@ -453,7 +455,7 @@ class Command(BaseCommand):
                     }
 
             signal = strategy_instance.generate_signal(
-                underlying_symbol, bars, sentiment=sentiment, relative_strength=relative_strength
+                underlying_symbol, bars, sentiment=sentiment, relative_strength=relative_strength, news_sentiment=news_sentiment
             )
             self.stdout.write(f"[{strategy.user.username}] {strategy.name}: {underlying_symbol} -> {signal}")
 
