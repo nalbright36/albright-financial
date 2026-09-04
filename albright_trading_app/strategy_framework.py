@@ -89,18 +89,27 @@ class RedditSentimentThresholdStrategy(BaseStrategy):
       min_positive_ratio_24h (default 0.6)
         Positive mentions as a fraction of today's total mentions.
         0.6 means at least 60% of today's mentions were positive.
+        Triggers "buy" (a call, for options strategies).
 
       min_positive_acceleration_pct (default None — off unless set)
         If set, ALSO requires today's positive mention rate to be up
-        at least this % versus the trailing 7-day daily average —
-        catches sentiment that's actively building, not just
-        steadily positive. Maps to positive_change_24h_vs_7d_avg,
-        which the Reddit sentiment command already computes.
+        at least this % versus the trailing 7-day daily average.
 
-    This strategy only ever returns "buy" or "hold" — it has no
-    concept of an exit. Positions opened by it MUST be closed via
-    this strategy's take_profit_pct / stop_loss_pct / max_hold_days
-    settings, or they'll stay open indefinitely.
+      min_negative_ratio_24h (default None — off unless set)
+        Negative mentions as a fraction of today's total mentions.
+        Triggers "sell" (a put, for options strategies). Leave unset
+        to keep this strategy buy-only, matching its original
+        behavior — this is purely additive.
+
+      min_negative_acceleration_pct (default None — off unless set)
+        Same idea as the positive acceleration check, applied to the
+        negative side.
+
+    Buy and sell are evaluated independently — the buy-side logic is
+    unchanged from before this option existed. Positions opened by
+    this strategy MUST be closed via take_profit_pct / stop_loss_pct
+    / trailing_stop_pct / max_hold_days, since sentiment alone has no
+    natural exit signal.
     """
 
     def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
@@ -108,21 +117,31 @@ class RedditSentimentThresholdStrategy(BaseStrategy):
             return "hold"
 
         min_mentions = self.params.get("min_mentions_24h", 5)
-        min_ratio = self.params.get("min_positive_ratio_24h", 0.6)
-        min_acceleration = self.params.get("min_positive_acceleration_pct")
-
         if sentiment["mentions_24h"] < min_mentions:
             return "hold"
 
-        if sentiment["positive_ratio_24h"] < min_ratio:
-            return "hold"
+        # ---- Buy side — unchanged from before the negative option existed ----
+        min_positive_ratio = self.params.get("min_positive_ratio_24h", 0.6)
+        min_positive_acceleration = self.params.get("min_positive_acceleration_pct")
 
-        if min_acceleration is not None:
+        if sentiment["positive_ratio_24h"] >= min_positive_ratio:
+            if min_positive_acceleration is None:
+                return "buy"
             acceleration = sentiment.get("positive_change_24h_vs_7d_avg")
-            if acceleration is None or acceleration < min_acceleration:
-                return "hold"
+            if acceleration is not None and acceleration >= min_positive_acceleration:
+                return "buy"
 
-        return "buy"
+        # ---- Sell side — new, off by default ----
+        min_negative_ratio = self.params.get("min_negative_ratio_24h")
+        if min_negative_ratio is not None and sentiment.get("negative_ratio_24h", 0) >= min_negative_ratio:
+            min_negative_acceleration = self.params.get("min_negative_acceleration_pct")
+            if min_negative_acceleration is None:
+                return "sell"
+            acceleration = sentiment.get("negative_change_24h_vs_7d_avg")
+            if acceleration is not None and acceleration >= min_negative_acceleration:
+                return "sell"
+
+        return "hold"
 
 
 def _compute_rsi(closes, period):
@@ -353,16 +372,18 @@ class ConfluenceStrategy(BaseStrategy):
 class NewsSentimentThresholdStrategy(BaseStrategy):
     """
     Entry based on news sentiment strength over the last 24 hours —
-    parallel to RedditSentimentThresholdStrategy, but reading from
+    parallel to RedditSentimentThresholdStrategy, reading from
     OpenAI-classified news headlines instead of Reddit mentions.
-    Like its Reddit counterpart, this only ever returns "buy" or
-    "hold" — no concept of an exit — so positions it opens MUST rely
-    on take_profit_pct / stop_loss_pct / trailing_stop_pct /
-    max_hold_days, or they'll stay open indefinitely.
+    Positions opened by this strategy MUST rely on take_profit_pct /
+    stop_loss_pct / trailing_stop_pct / max_hold_days, since
+    sentiment alone has no natural exit signal.
 
     Params:
       min_mentions_24h (default 3)
-      min_positive_ratio_24h (default 0.6)
+      min_positive_ratio_24h (default 0.6) — triggers "buy" (a call)
+      min_negative_ratio_24h (default None — off unless set) —
+        triggers "sell" (a put). Leave unset to keep this strategy
+        buy-only, matching its original behavior.
     """
 
     def generate_signal(self, symbol, bars, sentiment=None, relative_strength=None, news_sentiment=None):
@@ -370,14 +391,18 @@ class NewsSentimentThresholdStrategy(BaseStrategy):
             return "hold"
 
         min_mentions = self.params.get("min_mentions_24h", 3)
-        min_ratio = self.params.get("min_positive_ratio_24h", 0.6)
-
         if news_sentiment["mentions_24h"] < min_mentions:
             return "hold"
-        if news_sentiment["positive_ratio_24h"] < min_ratio:
-            return "hold"
 
-        return "buy"
+        min_positive_ratio = self.params.get("min_positive_ratio_24h", 0.6)
+        if news_sentiment["positive_ratio_24h"] >= min_positive_ratio:
+            return "buy"
+
+        min_negative_ratio = self.params.get("min_negative_ratio_24h")
+        if min_negative_ratio is not None and news_sentiment.get("negative_ratio_24h", 0) >= min_negative_ratio:
+            return "sell"
+
+        return "hold"
 
 
 # Add every new strategy class here, and add a matching entry to

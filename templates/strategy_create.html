@@ -87,8 +87,26 @@
                     <label for="filter_min_news_positive_ratio">Min Positive News Ratio (0&ndash;1)</label>
                     <input type="number" step="0.05" min="0" max="1" name="filter_min_news_positive_ratio" id="filter_min_news_positive_ratio" placeholder="e.g. 0.6">
                 </div>
+                <div class="field">
+                    <label for="filter_min_reddit_negative_ratio">Min Negative Ratio &mdash; vs Total (0&ndash;1)</label>
+                    <input type="number" step="0.05" min="0" max="1" name="filter_min_reddit_negative_ratio" id="filter_min_reddit_negative_ratio" placeholder="e.g. 0.5">
+                </div>
+                <div class="field">
+                    <label for="filter_min_reddit_negative_vs_positive_ratio">Min Negative Ratio &mdash; vs Positive Only (0&ndash;1)</label>
+                    <input type="number" step="0.05" min="0" max="1" name="filter_min_reddit_negative_vs_positive_ratio" id="filter_min_reddit_negative_vs_positive_ratio" placeholder="e.g. 0.6">
+                </div>
+                <div class="field">
+                    <label for="filter_min_news_negative_ratio">Min Negative News Ratio &mdash; vs Total (0&ndash;1)</label>
+                    <input type="number" step="0.05" min="0" max="1" name="filter_min_news_negative_ratio" id="filter_min_news_negative_ratio" placeholder="e.g. 0.5">
+                </div>
+                <div class="field">
+                    <label for="filter_min_news_negative_vs_positive_ratio">Min Negative News Ratio &mdash; vs Positive Only (0&ndash;1)</label>
+                    <input type="number" step="0.05" min="0" max="1" name="filter_min_news_negative_vs_positive_ratio" id="filter_min_news_negative_vs_positive_ratio" placeholder="e.g. 0.6">
+                </div>
             </div>
             <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                Negative filters narrow the candidate pool toward bearish-sentiment stocks — useful
+                for strategies configured to enter sell/put positions on negative sentiment.
                 "vs Total Mentions" divides positive by every mention today, including neutral —
                 lots of neutral chatter dilutes the requirement. "vs Negative Only" ignores neutral
                 entirely and measures how positive-leaning the non-neutral conversation is.
@@ -141,14 +159,28 @@
                         <input type="number" name="rst_min_mentions_24h" id="rst_min_mentions_24h" value="5" min="0">
                     </div>
                     <div class="field">
-                        <label for="rst_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
+                        <label for="rst_min_positive_ratio_24h">Min Positive Ratio &mdash; Entry (0&ndash;1)</label>
                         <input type="number" step="0.05" min="0" max="1" name="rst_min_positive_ratio_24h" id="rst_min_positive_ratio_24h" value="0.6">
                     </div>
                     <div class="field">
                         <label for="rst_min_positive_acceleration_pct">Min Positive Acceleration % (optional)</label>
                         <input type="number" step="1" name="rst_min_positive_acceleration_pct" id="rst_min_positive_acceleration_pct" placeholder="e.g. 30">
                     </div>
+                    <div class="field">
+                        <label for="rst_min_negative_ratio_24h">Min Negative Ratio &mdash; Sell/Put (optional)</label>
+                        <input type="number" step="0.05" min="0" max="1" name="rst_min_negative_ratio_24h" id="rst_min_negative_ratio_24h" placeholder="Leave blank to stay buy-only">
+                    </div>
+                    <div class="field">
+                        <label for="rst_min_negative_acceleration_pct">Min Negative Acceleration % (optional)</label>
+                        <input type="number" step="1" name="rst_min_negative_acceleration_pct" id="rst_min_negative_acceleration_pct" placeholder="e.g. 30">
+                    </div>
                 </div>
+                <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
+                    Leave the negative fields blank to keep this buy-only, relying entirely on
+                    Risk Management below to exit. Set Min Negative Ratio to also close an existing
+                    position when negative sentiment spikes — this strategy never opens a short, so
+                    the negative side only ever exits a position it already holds.
+                </p>
             </div>
 
             <!-- News Sentiment Threshold -->
@@ -159,14 +191,19 @@
                         <input type="number" name="news_min_mentions_24h" id="news_min_mentions_24h" value="3" min="0">
                     </div>
                     <div class="field">
-                        <label for="news_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
+                        <label for="news_min_positive_ratio_24h">Min Positive Ratio &mdash; Entry (0&ndash;1)</label>
                         <input type="number" step="0.05" min="0" max="1" name="news_min_positive_ratio_24h" id="news_min_positive_ratio_24h" value="0.6">
+                    </div>
+                    <div class="field">
+                        <label for="news_min_negative_ratio_24h">Min Negative Ratio &mdash; Exit (optional)</label>
+                        <input type="number" step="0.05" min="0" max="1" name="news_min_negative_ratio_24h" id="news_min_negative_ratio_24h" placeholder="Leave blank to rely on Risk Management only">
                     </div>
                 </div>
                 <p style="color: var(--text-tertiary); font-size: 0.75rem; margin-top: -8px;">
-                    Like Reddit Sentiment, this only ever returns "buy" or "hold" — there's no
-                    natural sell signal from sentiment alone. Set Take Profit, Stop Loss, Trailing
-                    Stop, or Max Hold below, or a position this opens will stay open indefinitely.
+                    Leave Min Negative Ratio blank to keep this buy-only, relying entirely on Risk
+                    Management to exit. Set it to also close an existing position when negative news
+                    sentiment spikes — this strategy never opens a short, so the negative side only
+                    ever exits a position it already holds.
                 </p>
             </div>
 
@@ -359,6 +396,10 @@
                                 <label for="conf_rst_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
                                 <input type="number" step="0.05" min="0" max="1" name="conf_rst_min_positive_ratio_24h" id="conf_rst_min_positive_ratio_24h" value="0.6">
                             </div>
+                            <div class="field">
+                                <label for="conf_rst_min_negative_ratio_24h">Min Negative Ratio (optional)</label>
+                                <input type="number" step="0.05" min="0" max="1" name="conf_rst_min_negative_ratio_24h" id="conf_rst_min_negative_ratio_24h" placeholder="Optional">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -377,6 +418,10 @@
                             <div class="field">
                                 <label for="conf_news_min_positive_ratio_24h">Min Positive Ratio (0&ndash;1)</label>
                                 <input type="number" step="0.05" min="0" max="1" name="conf_news_min_positive_ratio_24h" id="conf_news_min_positive_ratio_24h" value="0.6">
+                            </div>
+                            <div class="field">
+                                <label for="conf_news_min_negative_ratio_24h">Min Negative Ratio (optional)</label>
+                                <input type="number" step="0.05" min="0" max="1" name="conf_news_min_negative_ratio_24h" id="conf_news_min_negative_ratio_24h" placeholder="Optional">
                             </div>
                         </div>
                     </div>
