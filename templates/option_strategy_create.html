@@ -383,6 +383,19 @@
 
                 <div class="field">
                     <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
+                        <input type="checkbox" name="conf_signals" value="sector_relative_strength" class="conf-signal-checkbox" data-conf-target="conf-srs" style="width: auto;">
+                        Sector Relative Strength
+                    </label>
+                    <div class="conf-sub-params" id="conf-srs" style="display: none; margin-top: 8px; padding-left: 24px;">
+                        <div class="field">
+                            <label for="conf_srs_min_outperformance_pct">Min Outperformance vs Sector (%)</label>
+                            <input type="number" step="0.1" name="conf_srs_min_outperformance_pct" id="conf_srs_min_outperformance_pct" value="2.0" min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-primary);">
                         <input type="checkbox" name="conf_signals" value="reddit_sentiment_threshold" class="conf-signal-checkbox" data-conf-target="conf-reddit" style="width: auto;">
                         Reddit Sentiment Threshold
                     </label>

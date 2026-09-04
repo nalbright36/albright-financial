@@ -449,6 +449,7 @@ def _describe_entry_signal(strategy):
             "bollinger_reversion": "Bollinger",
             "price_breakout": "Breakout",
             "volume_spike": "Volume Spike",
+            "sector_relative_strength": "Sector Relative Strength",
             "news_sentiment_threshold": "News Sentiment",
         }
         names = [labels.get(s.get("type"), s.get("type")) for s in sub_signals]
@@ -541,65 +542,37 @@ def _describe_risk_management(strategy):
         parts.append(f"Max {n} entr{'y' if n == 1 else 'ies'}/symbol/day")
  
     return " \u00b7 ".join(parts) if parts else "No exit limits set"
- 
-def _build_strategy_rows(queryset):
-    strategies_list = list(queryset)
- 
-    # One batched price fetch covering every open position across ALL
-    # these strategies, rather than a separate Alpaca call per
-    # strategy — stays fast regardless of how many strategies exist.
-    all_open_trades = Trade.objects.filter(strategy__in=strategies_list, status="open")
-    current_prices = get_current_prices([t.symbol for t in all_open_trades])
- 
-    open_trades_by_strategy = {}
-    for trade in all_open_trades:
-        open_trades_by_strategy.setdefault(trade.strategy_id, []).append(trade)
+
+
+@login_required
+def strategies(request):
+    user_strategies = Strategy.objects.filter(user=request.user).order_by("name")
  
     strategy_rows = []
-    for strategy in strategies_list:
+    for strategy in user_strategies:
         total_pnl = strategy.trades.filter(status="closed").aggregate(
             total=Sum("realized_pnl")
         )["total"] or 0
+        open_trades = strategy.trades.filter(status="open").count()
         closed_trades = strategy.trades.filter(status="closed").count()
         winning_trades = strategy.trades.filter(status="closed", realized_pnl__gt=0).count()
         win_rate = (winning_trades / closed_trades * 100) if closed_trades else None
  
-        open_trades_for_strategy = open_trades_by_strategy.get(strategy.id, [])
-        total_unrealized_pnl = 0
-        for trade in open_trades_for_strategy:
-            current_price = current_prices.get(trade.symbol)
-            if current_price is not None and trade.entry_price:
-                total_unrealized_pnl += (current_price - trade.entry_price) * trade.quantity
- 
         strategy_rows.append({
             "strategy": strategy,
             "total_pnl": total_pnl,
-            "total_unrealized_pnl": total_unrealized_pnl,
-            "open_trades": len(open_trades_for_strategy),
+            "open_trades": open_trades,
             "closed_trades": closed_trades,
             "win_rate": win_rate,
             "is_gain": total_pnl >= 0,
-            "is_unrealized_gain": total_unrealized_pnl >= 0,
             "entry_signal_desc": _describe_entry_signal(strategy),
             "universe_desc": _describe_universe(strategy),
             "sizing_desc": _describe_sizing(strategy),
             "risk_desc": _describe_risk_management(strategy),
         })
-    return strategy_rows
-
-@login_required
-def strategies(request):
-    user_strategies = Strategy.objects.filter(
-        user=request.user, is_archived=False
-    ).order_by("name")
  
-    archived_count = Strategy.objects.filter(user=request.user, is_archived=True).count()
- 
-    context = {
-        "strategy_rows": _build_strategy_rows(user_strategies),
-        "archived_count": archived_count,
-    }
-    return render(request, 'strategies.html', context)
+    context = {"strategy_rows": strategy_rows}
+    return render(request, 'strategies.html', context=context)
  
 @login_required
 def archived_strategies(request):
@@ -900,6 +873,13 @@ def _build_confluence_parameters(post):
                     "spike_multiplier": _parse_optional_float(post.get("conf_vs_spike_multiplier")) or 3.0,
                 },
             })
+        elif sub_type == "sector_relative_strength":
+            signals.append({
+                "type": sub_type,
+                "params": {
+                    "min_outperformance_pct": _parse_optional_float(post.get("conf_srs_min_outperformance_pct")) or 2.0,
+                },
+            })
         elif sub_type == "reddit_sentiment_threshold":
             sub_params = {
                 "min_mentions_24h": _parse_optional_int(post.get("conf_rst_min_mentions_24h")) or 5,
@@ -1099,6 +1079,7 @@ def _describe_option_entry_signal(strategy):
             "bollinger_reversion": "Bollinger",
             "price_breakout": "Breakout",
             "volume_spike": "Volume Spike",
+            "sector_relative_strength": "Sector Relative Strength",
         }
         names = [labels.get(s.get("type"), s.get("type")) for s in sub_signals]
         base = f"Confluence — {min_agree} of [{', '.join(names)}] must agree" if names else "Confluence — no signals configured"
