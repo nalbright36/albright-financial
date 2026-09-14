@@ -1,0 +1,63 @@
+{% extends "index.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin-bottom: 20px;">Ledger</h1>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        <div class="card" style="padding: 0;">
+            <table class="holdings">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="num">Cost</th>
+                        <th class="num">Fees</th>
+                        <th class="num">Shipping</th>
+                        <th class="num">Total</th>
+                        <th class="num">Sold For</th>
+                        <th class="num">Profit</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in formset %}
+                    <tr>
+                        {{ form.id }}
+                        <td>{{ form.item }}</td>
+                        <td class="num">{{ form.cost }}</td>
+                        <td class="num">{{ form.fees }}</td>
+                        <td class="num">{{ form.shipping }}</td>
+                        <td class="num">
+                            {% if form.instance.pk %}{{ form.instance.total|floatformat:2 }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td class="num">{{ form.sold_for }}</td>
+                        <td class="num {% if form.instance.pk %}{% if form.instance.profit >= 0 %}gain{% else %}loss{% endif %}{% endif %}">
+                            {% if form.instance.pk %}{{ form.instance.profit|floatformat:2 }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td>{% if form.instance.pk %}{{ form.DELETE }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
+                        <td>Totals</td>
+                        <td class="num">{{ totals.cost|floatformat:2 }}</td>
+                        <td class="num">{{ totals.fees|floatformat:2 }}</td>
+                        <td class="num">{{ totals.shipping|floatformat:2 }}</td>
+                        <td class="num">{{ totals.total|floatformat:2 }}</td>
+                        <td class="num">{{ totals.sold_for|floatformat:2 }}</td>
+                        <td class="num {% if totals.profit >= 0 %}gain{% else %}loss{% endif %}">{{ totals.profit|floatformat:2 }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Save Ledger</button>
+    </form>
+</div>
+{% endblock %}

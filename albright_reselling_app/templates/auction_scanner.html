@@ -1,0 +1,49 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin-bottom: 20px;">Auction Scanner</h1>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">New Scan</span></div>
+        <form method="post" style="display: flex; gap: 12px; align-items: flex-end;">
+            {% csrf_token %}
+            <div class="field" style="flex: 1; margin-bottom: 0;">
+                <label>HiBid Auction or Search URL</label>
+                {{ form.source_url }}
+            </div>
+            <button type="submit" class="btn btn-primary">Start Scan</button>
+        </form>
+    </div>
+
+    <div class="card" style="padding: 0;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scan in scans %}
+                <tr>
+                    <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ scan.source_url }}</td>
+                    <td>
+                        <span class="badge {% if scan.status == 'complete' %}gain{% elif scan.status == 'failed' %}loss{% else %}neutral{% endif %}">
+                            {{ scan.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ scan.created_at|date:"M j, g:i A" }}</td>
+                    <td>
+                        {% if scan.status == 'complete' %}
+                        <a href="{% url 'albright_reselling_app:scan_detail' scan.id %}">View Results</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

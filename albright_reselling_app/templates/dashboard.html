@@ -1,0 +1,158 @@
+{% extends 'index.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <!-- Hero summary -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">Scanner Summary</span>
+            <span class="badge gain">3 Active Scans</span>
+        </div>
+        <p style="font-size: 1.0625rem; line-height: 1.65; color: var(--text-primary); margin: 0;">
+            Your last scan of "Estate &amp; Collectibles &mdash; Sept Auction" flagged 6 lots worth a closer
+            look, led by a hand-tooled leather saddle listed under "misc tack box" with an estimated
+            resale value well above its $12 current bid.
+        </p>
+        <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 14px; margin-bottom: 0;">
+            Sample data &mdash; scanner not yet connected.
+        </p>
+    </div>
+
+    <!-- Scanner stats -->
+    <div class="grid grid-4" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Lots Scanned</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">412</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Flagged 60+</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">17</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Avg Interest Score</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">34</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Est. Opportunity</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">$2,140</span>
+        </div>
+    </div>
+
+    <!-- Business-health stats: the numbers that matter once items are actually
+         bought, listed, and sold, not just scanned -->
+    <div class="grid grid-4" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">In Inventory</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">23</span>
+            <div class="ledger-stat__delta" style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">$1,860 cost basis</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Active Listings</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">14</span>
+            <div class="ledger-stat__delta" style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">$3,410 listed value</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Sold (30d)</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">9</span>
+            <div class="ledger-stat__delta gain" style="margin-top: 6px; font-size: 0.75rem;">$612 profit</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Avg Days to Sell</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">18</span>
+        </div>
+    </div>
+
+    <!-- Top flagged lots / recent scans -->
+    <div class="grid grid-2" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Top Flagged Lots</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Lot #142</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">"Misc tack box" &mdash; leather saddle, hand-tooled</span>
+                </div>
+                <span class="badge gain">92</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Lot #087</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Costume jewelry lot, one piece marked 925</span>
+                </div>
+                <span class="badge gain">81</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Lot #256</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Box of "old tools" &mdash; Starrett caliper visible in photo</span>
+                </div>
+                <span class="badge gain">76</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__header"><span class="card__label">Recent Scans</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Estate &amp; Collectibles</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Sept auction &mdash; 210 lots</span>
+                </div>
+                <span class="badge neutral">Complete</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Jewelry Keyword Search</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Site-wide &mdash; 156 lots</span>
+                </div>
+                <span class="badge neutral">Complete</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Tool &amp; Garage Liquidation</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">46 lots scanned so far</span>
+                </div>
+                <span class="badge loss">Running</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upcoming pickups / auction deadlines -->
+    <div class="grid grid-2" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Upcoming Pickups &amp; Deadlines</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Estate &amp; Collectibles</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">4 lots won</span>
+                </div>
+                <span class="badge loss">Pickup Sat 9am&ndash;2pm</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <div>
+                    <span class="symbol num" style="font-weight: 600;">Tool &amp; Garage Liquidation</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Bidding closes</span>
+                </div>
+                <span class="badge neutral">Tomorrow, 7:00 PM</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__header"><span class="card__label">Expenses (This Month)</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">Buyer's premiums</span>
+                <span class="num" style="font-weight: 600;">$186</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">Shipping supplies</span>
+                <span class="num" style="font-weight: 600;">$42</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">eBay/PayPal fees</span>
+                <span class="num" style="font-weight: 600;">$97</span>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

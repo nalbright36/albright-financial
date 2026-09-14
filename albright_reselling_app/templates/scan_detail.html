@@ -1,0 +1,34 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin-bottom: 20px;">Scan Results</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">{{ scan.source_url }}</p>
+
+    <div class="card" style="padding: 0;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Score</th>
+                    <th>Title</th>
+                    <th class="num">Bid</th>
+                    <th>Category</th>
+                    <th>Why Flagged</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lot in lots %}
+                <tr>
+                    <td class="num" style="font-weight: 600; color: {% if lot.interest_score >= 60 %}var(--gain){% else %}var(--text-secondary){% endif %};">
+                        {{ lot.interest_score }}
+                    </td>
+                    <td><a href="{{ lot.lot_url }}" target="_blank">{{ lot.title }}</a></td>
+                    <td class="num">{{ lot.current_bid|default:"—" }}</td>
+                    <td>{{ lot.category }}</td>
+                    <td style="max-width: 350px;">{{ lot.score_reasons }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

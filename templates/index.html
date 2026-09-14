@@ -11,35 +11,51 @@
         <link rel="icon" type="image/x-icon" href="{% static 'images/Favicon2.png' %}">
     </head>
 
-    <body>
+    <body class="{% if in_reselling_app %}theme-reselling{% endif %}">
 
         <nav class="navbar">
-            <a href="/" class="navbar__brand">Albright Trading</a>
-
-            <input type="checkbox" id="nav-toggle" class="navbar__toggle-checkbox">
-            <label for="nav-toggle" class="navbar__toggle" aria-label="Menu">
-                <span></span><span></span><span></span>
-            </label>
-
-            <div class="navbar__links">
-                <a href="/">Home</a>
-                {% if user.is_authenticated %}
-                <a href="/trading_account">Trading Account</a>
-                <a href="/market_scanner">Market Scanner</a>
-
-                <div class="navbar__dropdown">
-                    <span class="navbar__dropdown-trigger">Strategies <span class="navbar__dropdown-caret">&#9662;</span></span>
-                    <div class="navbar__dropdown-menu">
-                        <a href="{% url 'strategies' %}">Stock Strategies</a>
-                        <a href="{% url 'option_strategies' %}">Options Strategies</a>
-                    </div>
-                </div>
-
-                <a href="{% url 'user_logout' %}">Logout</a>
+            <div class="navbar__switch-row">
+                {% if in_reselling_app %}
+                    <a href="/" class="app-switch-btn app-switch-btn--trading">Trading</a>
                 {% else %}
-                <a href="/user_login">Login</a>
-                <a href="/registration">Register</a>
+                    <a href="{% url 'albright_reselling_app:dashboard' %}" class="app-switch-btn app-switch-btn--reselling">Reselling</a>
                 {% endif %}
+            </div>
+
+            <div class="navbar__main-row">
+                <a href="/" class="navbar__brand">Albright Financial</a>
+
+                <input type="checkbox" id="nav-toggle" class="navbar__toggle-checkbox">
+                <label for="nav-toggle" class="navbar__toggle" aria-label="Menu">
+                    <span></span><span></span><span></span>
+                </label>
+
+                <div class="navbar__links">
+                    {% if user.is_authenticated %}
+                        {% if in_reselling_app %}
+                        <a href="{% url 'albright_reselling_app:dashboard' %}">Dashboard</a>
+                        <a href="{% url 'albright_reselling_app:ledger' %}">Ledger</a>
+                        <a href="{% url 'albright_reselling_app:auction_scanner' %}">Auction Scanner</a>
+                        {% else %}
+                        <a href="/">Home</a>
+                        <a href="/trading_account">Trading Account</a>
+                        <a href="/market_scanner">Market Scanner</a>
+
+                        <div class="navbar__dropdown">
+                            <span class="navbar__dropdown-trigger">Strategies <span class="navbar__dropdown-caret">&#9662;</span></span>
+                            <div class="navbar__dropdown-menu">
+                                <a href="{% url 'strategies' %}">Stock Strategies</a>
+                                <a href="{% url 'option_strategies' %}">Options Strategies</a>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    <a href="{% url 'user_logout' %}">Logout</a>
+                    {% else %}
+                    <a href="/user_login">Login</a>
+                    <a href="/registration">Register</a>
+                    {% endif %}
+                </div>
             </div>
         </nav>
 

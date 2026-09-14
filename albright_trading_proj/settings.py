@@ -27,7 +27,7 @@ TEMPLATE_DIR = os.path.join(BASE_DIR,"templates")
 SECRET_KEY = 'django-insecure-s%$41@b03e!rmoxdxnxctjw4y^u17skbo^0t$(c@mih6b*)r-+'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ["www.sportslabalgo.com",
                  "127.0.0.1"]
@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'albright_trading_app',
+    'albright_reselling_app',
     'django.contrib.humanize',
 ]
 
@@ -69,6 +70,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'albright_trading_app.context_processors.current_app',
             ],
         },
     },
@@ -130,7 +132,7 @@ STATIC_URL = 'static/'
 MEDIA_URL ='/images/'
 
 STATICFILES_DIRS = [
-os.path.join(BASE_DIR, 'static')
+    BASE_DIR / "albright_trading_app" / "static",
 ]
 
 # SMTP Configuration
