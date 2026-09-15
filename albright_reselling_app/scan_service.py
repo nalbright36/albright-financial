@@ -1,6 +1,11 @@
 """
 scan_service.py — scrapes a HiBid URL and scores each lot, returning a list
 of dicts ready to pass into ScannedLot.objects.create(scan_request=scan, **lot).
+
+NOTE: This file currently has TEMPORARY DEBUG LOGGING in _scrape() to help
+figure out HiBid's actual JSON field names, since the first real scan came
+back with 0 lots matched. Once we've corrected _looks_like_lot/_normalize_lot
+based on what the debug output shows, the debug prints should be removed.
 """
 
 import base64
@@ -83,15 +88,37 @@ def _scrape(url, max_lots=300):
             payload = response.json()
         except Exception:
             return
+
+        # --- TEMPORARY DEBUG: log every JSON response's shape ---
+        print(f"DEBUG: JSON response from {response.url}")
+        if isinstance(payload, dict):
+            print(f"DEBUG: top-level keys: {list(payload.keys())}")
+            # If any top-level value is a list of dicts, show the first
+            # item's keys too, since that's usually where the actual lots
+            # live (e.g. payload["results"][0]).
+            for k, v in payload.items():
+                if isinstance(v, list) and v and isinstance(v[0], dict):
+                    print(f"DEBUG:   payload['{k}'] is a list of {len(v)} dicts, "
+                          f"first item keys: {list(v[0].keys())}")
+        elif isinstance(payload, list) and payload:
+            first = payload[0]
+            if isinstance(first, dict):
+                print(f"DEBUG: list of {len(payload)} items, first item keys: {list(first.keys())}")
+            else:
+                print(f"DEBUG: list of {len(payload)} items, first item type: {type(first)}")
+        # --- end debug ---
+
         for lot in _extract_lots(payload):
             key = lot["lot_id"] or lot["lot_url"] or lot["title"]
             if key and key not in collected:
                 collected[key] = lot
+        print(f"DEBUG: {len(collected)} lots matched so far")
 
     with sync_playwright() as p:
-        # PythonAnywhere-specific: don't call playwright install / default
-        # launch() — use the Chromium PythonAnywhere already has installed,
-        # with these extra args.
+        # PythonAnywhere-specific: playwright install doesn't work here, so
+        # point at the Chromium PythonAnywhere already has installed, with
+        # these extra launch args. See:
+        # https://help.pythonanywhere.com/pages/Playwright
         browser = p.chromium.launch(
             executable_path="/usr/bin/chromium",
             headless=True,
