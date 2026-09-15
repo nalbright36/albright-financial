@@ -93,6 +93,7 @@ def _scrape(url, max_lots=300):
         # launch() — use the Chromium PythonAnywhere already has installed,
         # with these extra args.
         browser = p.chromium.launch(
+            executable_path="/usr/bin/chromium",
             headless=True,
             args=["--disable-gpu", "--no-sandbox", "--headless"],
         )
