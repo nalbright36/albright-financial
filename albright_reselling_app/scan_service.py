@@ -69,6 +69,29 @@ def _normalize_lot(item):
     }
 
 
+def _find_first_raw_lot(payload):
+    """Like _extract_lots, but returns the first raw matching dict as-is
+    (not run through _normalize_lot) so we can inspect fields our current
+    normalization doesn't know about yet."""
+    result = {"node": None}
+
+    def walk(node):
+        if result["node"] is not None:
+            return
+        if isinstance(node, dict):
+            if _looks_like_lot(node):
+                result["node"] = node
+                return
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(payload)
+    return result["node"]
+
+
 def _extract_lots(payload):
     found = []
 
@@ -89,6 +112,7 @@ def _extract_lots(payload):
 
 def _scrape(url, max_lots=300):
     collected = {}
+    debug_state = {"printed": False}
 
     def handle_response(response):
         ct = response.headers.get("content-type", "")
@@ -103,6 +127,19 @@ def _scrape(url, max_lots=300):
             key = lot["lot_id"] or lot["lot_url"] or lot["title"]
             if key and key not in collected:
                 collected[key] = lot
+
+        # --- TEMPORARY DEBUG: category-browse pages seem to return a
+        # different lot shape than the catalog page we originally mapped
+        # (bid/category/resale are coming back empty on this page type).
+        # Print the first raw matched lot object once, so we can see
+        # exactly what this page type's lot objects actually contain.
+        if not debug_state["printed"]:
+            raw = _find_first_raw_lot(payload)
+            if raw:
+                print("DEBUG: FIRST RAW LOT OBJECT (category-browse page):")
+                print(json.dumps(raw, indent=2, default=str)[:3000])
+                debug_state["printed"] = True
+        # --- end debug ---
 
     with sync_playwright() as p:
         # PythonAnywhere-specific: playwright install doesn't work here, so
