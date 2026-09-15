@@ -1094,3 +1094,19 @@ body.theme-reselling {
     font-family: var(--font-mono);
     text-align: center;
 }
+
+.ledger-table {
+    table-layout: fixed;
+}
+.ledger-table th:nth-child(1),
+.ledger-table td:nth-child(1) {
+    width: 34%;
+}
+.ledger-table th:nth-child(n+2),
+.ledger-table td:nth-child(n+2) {
+    width: 11%;
+}
+.ledger-table td:nth-child(1) {
+    white-space: normal;
+    word-break: break-word;
+}

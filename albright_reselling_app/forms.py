@@ -19,7 +19,7 @@ class LedgerEntryForm(forms.ModelForm):
 LedgerEntryFormSet = modelformset_factory(
     LedgerEntry,
     form=LedgerEntryForm,
-    extra=3,       # 3 blank rows always ready to fill in, spreadsheet-style
+    extra=0,       # 3 blank rows always ready to fill in, spreadsheet-style
     can_delete=True,
 )
 

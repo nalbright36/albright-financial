@@ -11,9 +11,10 @@ hibid.com/graphql, query "lotSearch" -> pagedResults.results):
   - bid_count    <- lotState.bidCount
   - category     <- category.categoryName (category can be dict or string)
   - image_url    <- featuredPicture.thumbnailLocation
-  - lot_url      <- best-guess https://hibid.com/lot/{itemId}; HiBid's
-                     links/linkTypes fields came back empty, so this is
-                     unverified — confirm it resolves to the right page.
+  - lot_url      <- https://hibid.com/lot/{id} — confirmed real HiBid URL
+                     pattern (slug after the id is optional); note this
+                     uses the top-level "id" field, NOT "itemId" (they are
+                     different HiBid identifiers — id is the lot page id).
 """
 
 import base64
@@ -59,10 +60,11 @@ def _normalize_lot(item):
         "bid_count": lot_state.get("bidCount"),
         "category": _category_name(item.get("category")),
         "image_url": featured.get("thumbnailLocation") or featured.get("fullSizeLocation") or "",
-        # Best-guess deep link based on itemId — HiBid didn't return a
-        # direct URL for this lot (links/linkTypes came back empty).
-        # Verify this actually resolves to the right lot page once live.
-        "lot_url": f"https://hibid.com/lot/{item_id}" if item_id else "",
+        # Best-guess deep link based on lot id — HiBid didn't return a
+        # direct URL for this lot (links/linkTypes came back empty), but
+        # https://hibid.com/lot/{id} is HiBid's confirmed real URL pattern
+        # (the slug after the id is optional).
+        "lot_url": f"https://hibid.com/lot/{lot_id}" if lot_id else "",
     }
 
 

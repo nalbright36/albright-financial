@@ -1,6 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from .forms import LedgerEntryFormSet, ScanRequestForm
+from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm
 from .models import LedgerEntry, ScanRequest
 
 
@@ -12,19 +12,27 @@ def dashboard(request):
 @login_required
 def ledger(request):
     queryset = LedgerEntry.objects.filter(owner=request.user)
+    add_form = LedgerEntryForm(prefix="add")
+    formset = LedgerEntryFormSet(queryset=queryset)
 
     if request.method == "POST":
-        formset = LedgerEntryFormSet(request.POST, queryset=queryset)
-        if formset.is_valid():
-            instances = formset.save(commit=False)
-            for instance in instances:
-                instance.owner = request.user
-                instance.save()
-            for obj in formset.deleted_objects:
-                obj.delete()
-            return redirect("albright_reselling_app:ledger")
-    else:
-        formset = LedgerEntryFormSet(queryset=queryset)
+        if "add_entry" in request.POST:
+            add_form = LedgerEntryForm(request.POST, prefix="add")
+            if add_form.is_valid():
+                entry = add_form.save(commit=False)
+                entry.owner = request.user
+                entry.save()
+                return redirect("albright_reselling_app:ledger")
+        elif "save_ledger" in request.POST:
+            formset = LedgerEntryFormSet(request.POST, queryset=queryset)
+            if formset.is_valid():
+                instances = formset.save(commit=False)
+                for instance in instances:
+                    instance.owner = request.user
+                    instance.save()
+                for obj in formset.deleted_objects:
+                    obj.delete()
+                return redirect("albright_reselling_app:ledger")
 
     entries = list(queryset)
     totals = {
@@ -37,6 +45,7 @@ def ledger(request):
     }
 
     return render(request, "ledger.html", {
+        "add_form": add_form,
         "formset": formset,
         "totals": totals,
     })
