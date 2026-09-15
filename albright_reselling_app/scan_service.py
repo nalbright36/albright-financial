@@ -116,8 +116,8 @@ def _scrape(url, max_lots=300):
         )
         page = browser.new_page()
         page.on("response", handle_response)
-        page.goto(url, wait_until="networkidle", timeout=60000)
-        time.sleep(1.2)
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        time.sleep(2)  # give the page's initial JS a moment to fire its first data fetch
 
         stagnant = 0
         last_count = 0
