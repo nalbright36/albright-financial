@@ -77,7 +77,7 @@ def _extract_lots(payload):
     return found
 
 
-def _debug_dump(payload, prefix="payload", max_depth=3):
+def _debug_dump(payload, prefix="payload", max_depth=6):
     """Recursively prints the shape of a JSON blob, up to max_depth levels,
     so we can find where lot arrays live even when nested inside wrapper
     keys like {"data": {...}} (GraphQL / general API envelopes)."""
