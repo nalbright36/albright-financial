@@ -131,13 +131,16 @@ def _scrape(url, max_lots=300):
         # --- TEMPORARY DEBUG: category-browse pages seem to return a
         # different lot shape than the catalog page we originally mapped
         # (bid/category/resale are coming back empty on this page type).
-        # Print the first raw matched lot object once, so we can see
-        # exactly what this page type's lot objects actually contain.
+        # Print just the top-level keys plus the specific fields we care
+        # about, skipping the bulky nested "auction" object that ate the
+        # whole output budget last time.
         if not debug_state["printed"]:
             raw = _find_first_raw_lot(payload)
             if raw:
-                print("DEBUG: FIRST RAW LOT OBJECT (category-browse page):")
-                print(json.dumps(raw, indent=2, default=str)[:3000])
+                print("DEBUG: raw lot top-level keys:", list(raw.keys()))
+                for field in ("category", "lotState", "bidAmount", "bidCount", "lead", "lotNumber", "site"):
+                    if field in raw:
+                        print(f"DEBUG:   raw['{field}'] = {json.dumps(raw[field], default=str)[:500]}")
                 debug_state["printed"] = True
         # --- end debug ---
 
