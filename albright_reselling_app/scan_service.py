@@ -2,10 +2,18 @@
 scan_service.py — scrapes a HiBid URL and scores each lot, returning a list
 of dicts ready to pass into ScannedLot.objects.create(scan_request=scan, **lot).
 
-NOTE: This file currently has TEMPORARY DEBUG LOGGING in _scrape() to help
-figure out HiBid's actual JSON field names, since the first real scan came
-back with 0 lots matched. Once we've corrected _looks_like_lot/_normalize_lot
-based on what the debug output shows, the debug prints should be removed.
+Field mapping notes (reverse-engineered from HiBid's GraphQL response at
+hibid.com/graphql, query "lotSearch" -> pagedResults.results):
+  - title        <- lead
+  - description  <- description
+  - current_bid  <- lotState.highBid  (NOT the top-level bidAmount field,
+                     which doesn't match the real current price)
+  - bid_count    <- lotState.bidCount
+  - category     <- category.categoryName (category can be dict or string)
+  - image_url    <- featuredPicture.thumbnailLocation
+  - lot_url      <- best-guess https://hibid.com/lot/{itemId}; HiBid's
+                     links/linkTypes fields came back empty, so this is
+                     unverified — confirm it resolves to the right page.
 """
 
 import base64
@@ -20,42 +28,41 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 TEXT_MODEL = "claude-haiku-4-5-20251001"
 
-LOT_ID_KEYS = ("lotId", "lotID", "id", "lotNumber")
-TITLE_KEYS = ("lotTitle", "title", "name")
-DESC_KEYS = ("lotDescription", "description", "desc")
-BID_KEYS = ("currentBid", "currentPrice", "bidAmount", "highBid")
-IMAGE_KEYS = ("images", "image", "imageUrl", "thumbnail", "photoUrl")
-URL_KEYS = ("lotUrl", "url", "permalink")
-CATEGORY_KEYS = ("category", "categoryName", "breadcrumb")
-BIDCOUNT_KEYS = ("bidCount", "numBids", "bids")
-
-
-def _first(d, keys, default=None):
-    for k in keys:
-        if k in d and d[k] not in (None, ""):
-            return d[k]
-    return default
+LOT_MARKER_KEYS = ("bidList", "lotNumber", "lead")  # unique enough to real lot records
 
 
 def _looks_like_lot(item):
     if not isinstance(item, dict):
         return False
-    return any(k in item for k in TITLE_KEYS) and any(k in item for k in BID_KEYS + ("lotNumber",))
+    return all(k in item for k in LOT_MARKER_KEYS)
+
+
+def _category_name(category):
+    if isinstance(category, dict):
+        return category.get("categoryName") or category.get("fullCategory") or ""
+    if isinstance(category, str):
+        return category
+    return ""
 
 
 def _normalize_lot(item):
-    image = _first(item, IMAGE_KEYS)
-    if isinstance(image, list) and image:
-        image = image[0]
+    lot_state = item.get("lotState") or {}
+    featured = item.get("featuredPicture") or {}
+    lot_id = item.get("id")
+    item_id = item.get("itemId")
+
     return {
-        "lot_id": str(_first(item, LOT_ID_KEYS, "")),
-        "title": (_first(item, TITLE_KEYS, "") or "").strip(),
-        "description": (_first(item, DESC_KEYS, "") or "").strip(),
-        "current_bid": _first(item, BID_KEYS),
-        "bid_count": _first(item, BIDCOUNT_KEYS),
-        "category": _first(item, CATEGORY_KEYS, "") or "",
-        "image_url": image or "",
-        "lot_url": _first(item, URL_KEYS, "") or "",
+        "lot_id": str(lot_id or item_id or ""),
+        "title": (item.get("lead") or "").strip(),
+        "description": (item.get("description") or "").strip(),
+        "current_bid": lot_state.get("highBid"),
+        "bid_count": lot_state.get("bidCount"),
+        "category": _category_name(item.get("category")),
+        "image_url": featured.get("thumbnailLocation") or featured.get("fullSizeLocation") or "",
+        # Best-guess deep link based on itemId — HiBid didn't return a
+        # direct URL for this lot (links/linkTypes came back empty).
+        # Verify this actually resolves to the right lot page once live.
+        "lot_url": f"https://hibid.com/lot/{item_id}" if item_id else "",
     }
 
 
@@ -77,30 +84,6 @@ def _extract_lots(payload):
     return found
 
 
-def _debug_dump(payload, prefix="payload", max_depth=6):
-    """Recursively prints the shape of a JSON blob, up to max_depth levels,
-    so we can find where lot arrays live even when nested inside wrapper
-    keys like {"data": {...}} (GraphQL / general API envelopes)."""
-    if max_depth <= 0 or not isinstance(payload, dict):
-        return
-    for k, v in payload.items():
-        path = f"{prefix}['{k}']"
-        if isinstance(v, list):
-            if v and isinstance(v[0], dict):
-                print(f"DEBUG:   {path} = list of {len(v)} dicts, first item keys: {list(v[0].keys())}")
-            else:
-                print(f"DEBUG:   {path} = list of {len(v)} items")
-        elif isinstance(v, dict):
-            print(f"DEBUG:   {path} = dict with keys: {list(v.keys())}")
-            _debug_dump(v, path, max_depth - 1)
-
-
-# Only these URL fragments get the verbose debug dump — everything else
-# (language files, analytics beacons, etc.) is skipped to keep the log
-# readable while we're still figuring out HiBid's real API shape.
-DEBUG_URL_FILTERS = ("hibid-api.io", "hibid.com/graphql")
-
-
 def _scrape(url, max_lots=300):
     collected = {}
 
@@ -113,35 +96,10 @@ def _scrape(url, max_lots=300):
         except Exception:
             return
 
-        # --- TEMPORARY DEBUG: dump the shape of the interesting responses ---
-        if any(f in response.url for f in DEBUG_URL_FILTERS):
-            print(f"DEBUG: JSON response from {response.url}")
-            if isinstance(payload, dict):
-                print(f"DEBUG: top-level keys: {list(payload.keys())}")
-                _debug_dump(payload)
-                # We now know real lots live at this exact path (found via
-                # the last debug pass) — dump one full lot object so we can
-                # see the actual values of nested fields (category,
-                # featuredPicture, links) instead of just their key names.
-                try:
-                    results = payload["data"]["lotSearch"]["pagedResults"]["results"]
-                    if results:
-                        print("DEBUG: FIRST FULL LOT OBJECT:")
-                        print(json.dumps(results[0], indent=2, default=str)[:3000])
-                except Exception:
-                    pass
-            elif isinstance(payload, list) and payload:
-                first = payload[0]
-                if isinstance(first, dict):
-                    print(f"DEBUG: list of {len(payload)} items, first item keys: {list(first.keys())}")
-        # --- end debug ---
-
         for lot in _extract_lots(payload):
             key = lot["lot_id"] or lot["lot_url"] or lot["title"]
             if key and key not in collected:
                 collected[key] = lot
-        if any(f in response.url for f in DEBUG_URL_FILTERS):
-            print(f"DEBUG: {len(collected)} lots matched so far")
 
     with sync_playwright() as p:
         # PythonAnywhere-specific: playwright install doesn't work here, so
