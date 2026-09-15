@@ -8,6 +8,8 @@ from albright_reselling_app.scan_service import scrape_and_score  # adapted logi
 class Command(BaseCommand):
     help = "Persistent worker: polls for pending ScanRequests and processes them."
 
+    requires_system_checks = []
+
     def handle(self, *args, **options):
         self.stdout.write("Scan worker started.")
         while True:
