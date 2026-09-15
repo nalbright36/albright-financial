@@ -77,6 +77,30 @@ def _extract_lots(payload):
     return found
 
 
+def _debug_dump(payload, prefix="payload", max_depth=3):
+    """Recursively prints the shape of a JSON blob, up to max_depth levels,
+    so we can find where lot arrays live even when nested inside wrapper
+    keys like {"data": {...}} (GraphQL / general API envelopes)."""
+    if max_depth <= 0 or not isinstance(payload, dict):
+        return
+    for k, v in payload.items():
+        path = f"{prefix}['{k}']"
+        if isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                print(f"DEBUG:   {path} = list of {len(v)} dicts, first item keys: {list(v[0].keys())}")
+            else:
+                print(f"DEBUG:   {path} = list of {len(v)} items")
+        elif isinstance(v, dict):
+            print(f"DEBUG:   {path} = dict with keys: {list(v.keys())}")
+            _debug_dump(v, path, max_depth - 1)
+
+
+# Only these URL fragments get the verbose debug dump — everything else
+# (language files, analytics beacons, etc.) is skipped to keep the log
+# readable while we're still figuring out HiBid's real API shape.
+DEBUG_URL_FILTERS = ("hibid-api.io", "hibid.com/graphql")
+
+
 def _scrape(url, max_lots=300):
     collected = {}
 
@@ -89,30 +113,24 @@ def _scrape(url, max_lots=300):
         except Exception:
             return
 
-        # --- TEMPORARY DEBUG: log every JSON response's shape ---
-        print(f"DEBUG: JSON response from {response.url}")
-        if isinstance(payload, dict):
-            print(f"DEBUG: top-level keys: {list(payload.keys())}")
-            # If any top-level value is a list of dicts, show the first
-            # item's keys too, since that's usually where the actual lots
-            # live (e.g. payload["results"][0]).
-            for k, v in payload.items():
-                if isinstance(v, list) and v and isinstance(v[0], dict):
-                    print(f"DEBUG:   payload['{k}'] is a list of {len(v)} dicts, "
-                          f"first item keys: {list(v[0].keys())}")
-        elif isinstance(payload, list) and payload:
-            first = payload[0]
-            if isinstance(first, dict):
-                print(f"DEBUG: list of {len(payload)} items, first item keys: {list(first.keys())}")
-            else:
-                print(f"DEBUG: list of {len(payload)} items, first item type: {type(first)}")
+        # --- TEMPORARY DEBUG: dump the shape of the interesting responses ---
+        if any(f in response.url for f in DEBUG_URL_FILTERS):
+            print(f"DEBUG: JSON response from {response.url}")
+            if isinstance(payload, dict):
+                print(f"DEBUG: top-level keys: {list(payload.keys())}")
+                _debug_dump(payload)
+            elif isinstance(payload, list) and payload:
+                first = payload[0]
+                if isinstance(first, dict):
+                    print(f"DEBUG: list of {len(payload)} items, first item keys: {list(first.keys())}")
         # --- end debug ---
 
         for lot in _extract_lots(payload):
             key = lot["lot_id"] or lot["lot_url"] or lot["title"]
             if key and key not in collected:
                 collected[key] = lot
-        print(f"DEBUG: {len(collected)} lots matched so far")
+        if any(f in response.url for f in DEBUG_URL_FILTERS):
+            print(f"DEBUG: {len(collected)} lots matched so far")
 
     with sync_playwright() as p:
         # PythonAnywhere-specific: playwright install doesn't work here, so
