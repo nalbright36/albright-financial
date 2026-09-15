@@ -23,7 +23,7 @@
                         {{ lot.interest_score }}
                     </td>
                     <td><a href="{{ lot.lot_url }}" target="_blank">{{ lot.title }}</a></td>
-                    <td class="num">{{ lot.current_bid|default:"—" }}</td>
+                    <td class="num">{% if lot.current_bid is not None %}{{ lot.current_bid }}{% else %}—{% endif %}</td>
                     <td class="num">
                         {% if lot.estimated_resale_low %}${{ lot.estimated_resale_low|floatformat:0 }}&ndash;${{ lot.estimated_resale_high|floatformat:0 }}{% else %}&mdash;{% endif %}
                     </td>
