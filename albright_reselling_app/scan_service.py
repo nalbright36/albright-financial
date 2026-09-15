@@ -159,14 +159,20 @@ Look for a vague/generic title hiding something valuable, details in the descrip
 (maker's marks, materials, hallmarks, brand names, "sterling", "14k", signed, vintage) \
 not reflected in the title/category, or a category mismatch.
 
-Respond ONLY with compact JSON: {{"interest_score": <0-100>, "reason": "<one sentence>"}}
+Also give a rough estimated resale range (used-item resale, not retail) based on what \
+this item typically sells for, if you have any reasonable basis to estimate one. If \
+there's truly not enough information to estimate (e.g. a vague "misc box lot" with no \
+identifiable contents), return null for both bounds rather than guessing.
+
+Respond ONLY with compact JSON: {{"interest_score": <0-100>, "reason": "<one sentence>", \
+"resale_low": <number or null>, "resale_high": <number or null>}}
 """
     headers = {
         "x-api-key": os.environ["ANTHROPIC_API_KEY"],
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
-    body = {"model": TEXT_MODEL, "max_tokens": 150, "messages": [{"role": "user", "content": prompt}]}
+    body = {"model": TEXT_MODEL, "max_tokens": 200, "messages": [{"role": "user", "content": prompt}]}
     try:
         resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=body, timeout=30)
         resp.raise_for_status()
@@ -175,9 +181,14 @@ Respond ONLY with compact JSON: {{"interest_score": <0-100>, "reason": "<one sen
         if text.startswith("```"):
             text = text.strip("`").split("\n", 1)[-1]
         parsed = json.loads(text)
-        return int(parsed.get("interest_score", 0)), str(parsed.get("reason", ""))
+        return {
+            "interest_score": int(parsed.get("interest_score", 0)),
+            "reason": str(parsed.get("reason", "")),
+            "resale_low": parsed.get("resale_low"),
+            "resale_high": parsed.get("resale_high"),
+        }
     except Exception as e:
-        return 0, f"scoring failed: {e}"
+        return {"interest_score": 0, "reason": f"scoring failed: {e}", "resale_low": None, "resale_high": None}
 
 
 def scrape_and_score(url, max_lots=300):
@@ -186,9 +197,11 @@ def scrape_and_score(url, max_lots=300):
     lots = _scrape(url, max_lots=max_lots)
     results = []
     for lot in lots:
-        score, reason = _score_lot_text(lot)
-        lot["interest_score"] = score
-        lot["score_reasons"] = reason
+        scored = _score_lot_text(lot)
+        lot["interest_score"] = scored["interest_score"]
+        lot["score_reasons"] = scored["reason"]
+        lot["estimated_resale_low"] = scored["resale_low"]
+        lot["estimated_resale_high"] = scored["resale_high"]
         results.append(lot)
         time.sleep(0.3)  # light rate-limit pacing
     return results

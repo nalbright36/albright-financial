@@ -63,6 +63,8 @@ class ScannedLot(models.Model):
     lot_url = models.URLField(blank=True)
     interest_score = models.IntegerField(default=0)
     score_reasons = models.TextField(blank=True)
+    estimated_resale_low = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    estimated_resale_high = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     class Meta:
         ordering = ["-interest_score"]

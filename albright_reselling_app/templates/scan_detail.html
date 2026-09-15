@@ -11,6 +11,7 @@
                     <th>Score</th>
                     <th>Title</th>
                     <th class="num">Bid</th>
+                    <th class="num">Est. Resale</th>
                     <th>Category</th>
                     <th>Why Flagged</th>
                 </tr>
@@ -23,6 +24,9 @@
                     </td>
                     <td><a href="{{ lot.lot_url }}" target="_blank">{{ lot.title }}</a></td>
                     <td class="num">{{ lot.current_bid|default:"—" }}</td>
+                    <td class="num">
+                        {% if lot.estimated_resale_low %}${{ lot.estimated_resale_low|floatformat:0 }}&ndash;${{ lot.estimated_resale_high|floatformat:0 }}{% else %}&mdash;{% endif %}
+                    </td>
                     <td>{{ lot.category }}</td>
                     <td style="max-width: 350px;">{{ lot.score_reasons }}</td>
                 </tr>
