@@ -119,6 +119,17 @@ def _scrape(url, max_lots=300):
             if isinstance(payload, dict):
                 print(f"DEBUG: top-level keys: {list(payload.keys())}")
                 _debug_dump(payload)
+                # We now know real lots live at this exact path (found via
+                # the last debug pass) — dump one full lot object so we can
+                # see the actual values of nested fields (category,
+                # featuredPicture, links) instead of just their key names.
+                try:
+                    results = payload["data"]["lotSearch"]["pagedResults"]["results"]
+                    if results:
+                        print("DEBUG: FIRST FULL LOT OBJECT:")
+                        print(json.dumps(results[0], indent=2, default=str)[:3000])
+                except Exception:
+                    pass
             elif isinstance(payload, list) and payload:
                 first = payload[0]
                 if isinstance(first, dict):
