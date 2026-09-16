@@ -12,6 +12,7 @@
                     <th>Title</th>
                     <th class="num">Bid</th>
                     <th class="num">Est. Resale</th>
+                    <th class="num">Max Hammer</th>
                     <th>Category</th>
                     <th>Why Flagged</th>
                 </tr>
@@ -26,6 +27,9 @@
                     <td class="num">{% if lot.current_bid is not None %}{{ lot.current_bid }}{% else %}—{% endif %}</td>
                     <td class="num">
                         {% if lot.estimated_resale_low %}${{ lot.estimated_resale_low|floatformat:0 }}&ndash;${{ lot.estimated_resale_high|floatformat:0 }}{% else %}&mdash;{% endif %}
+                    </td>
+                    <td class="num">
+                        {% if lot.max_hammer is not None %}${{ lot.max_hammer|floatformat:0 }}{% else %}&mdash;{% endif %}
                     </td>
                     <td>{{ lot.category }}</td>
                     <td style="max-width: 350px;">{{ lot.score_reasons }}</td>

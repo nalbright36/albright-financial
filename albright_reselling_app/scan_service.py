@@ -31,6 +31,18 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 TEXT_MODEL = "claude-haiku-4-5-20251001"
 
+# --- Max hammer assumptions (shared constants so they're easy to tune later) ---
+AUCTION_PREMIUM_RATE = 0.20   # buyer's premium assumption
+CC_FEE_RATE = 0.03            # credit card processing fee assumption
+EBAY_FEE_RATE = 0.14          # eBay final value fee, applied to resale price
+MIN_PROFIT_MARGIN = 0.10      # required net profit as a fraction of resale price
+SMALL_ITEM_SHIPPING = 12.00
+STANDARD_SHIPPING = 20.00
+# Keyword match against category (or title, if category is blank — some
+# HiBid page types don't return a category at all) to guess small-item
+# shipping vs standard. Rough heuristic, not exact.
+SMALL_ITEM_KEYWORDS = ("jewelry", "coin", "watch", "stamp", "gem", "currency", "ring", "earring")
+
 LOT_MARKER_KEYS = ("bidList", "lotNumber", "lead")  # unique enough to real lot records
 
 
@@ -282,6 +294,40 @@ Respond ONLY with compact JSON, in exactly this field order: \
         return {"interest_score": 0, "reason": f"scoring failed: {e}", "resale_low": None, "resale_high": None}
 
 
+def _estimate_shipping(lot):
+    """Rough $12 vs $20 shipping guess based on keyword match against
+    category (falling back to title, since some page types don't return
+    category at all)."""
+    haystack = f"{lot.get('category', '')} {lot.get('title', '')}".lower()
+    if any(kw in haystack for kw in SMALL_ITEM_KEYWORDS):
+        return SMALL_ITEM_SHIPPING
+    return STANDARD_SHIPPING
+
+
+def _calc_max_hammer(resale_low, shipping):
+    """Solves for the highest hammer (winning bid) price that still leaves
+    at least MIN_PROFIT_MARGIN net profit (as a fraction of resale_low)
+    after buyer's premium, credit card fee, shipping, and eBay's final
+    value fee are all deducted from the resale price.
+
+    profit = resale - (hammer*(1+AUCTION_PREMIUM_RATE+CC_FEE_RATE)
+                        + shipping + resale*EBAY_FEE_RATE)
+    profit >= MIN_PROFIT_MARGIN * resale
+    => hammer <= (resale*(1 - EBAY_FEE_RATE - MIN_PROFIT_MARGIN) - shipping)
+                 / (1 + AUCTION_PREMIUM_RATE + CC_FEE_RATE)
+
+    Returns None if resale_low is None (nothing to base the estimate on),
+    or 0 if fixed costs alone already exceed what the margin allows (i.e.
+    this item isn't profitable at any bid under these assumptions).
+    """
+    if resale_low is None:
+        return None
+    numerator = resale_low * (1 - EBAY_FEE_RATE - MIN_PROFIT_MARGIN) - shipping
+    denominator = 1 + AUCTION_PREMIUM_RATE + CC_FEE_RATE
+    max_hammer = numerator / denominator
+    return round(max(max_hammer, 0), 2)
+
+
 def scrape_and_score(url, max_lots=300, max_pages=40):
     """Main entry point called by the worker. Returns a list of dicts matching
     the ScannedLot model's fields (minus scan_request, which the caller sets).
@@ -297,6 +343,8 @@ def scrape_and_score(url, max_lots=300, max_pages=40):
         lot["score_reasons"] = scored["reason"]
         lot["estimated_resale_low"] = scored["resale_low"]
         lot["estimated_resale_high"] = scored["resale_high"]
+        shipping = _estimate_shipping(lot)
+        lot["max_hammer"] = _calc_max_hammer(scored["resale_low"], shipping)
         results.append(lot)
         time.sleep(0.3)  # light rate-limit pacing
     return results

@@ -66,6 +66,7 @@ class ScannedLot(models.Model):
     score_reasons = models.TextField(blank=True)
     estimated_resale_low = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     estimated_resale_high = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    max_hammer = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     class Meta:
         ordering = ["-interest_score"]
