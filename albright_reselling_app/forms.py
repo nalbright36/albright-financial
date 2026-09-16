@@ -26,10 +26,14 @@ LedgerEntryFormSet = modelformset_factory(
 class ScanRequestForm(forms.ModelForm):
     class Meta:
         model = ScanRequest
-        fields = ["source_url"]
+        fields = ["source_url", "max_pages"]
         widgets = {
             "source_url": forms.URLInput(attrs={
                 "class": "ledger-input",
                 "placeholder": "https://hibid.com/catalog/.../some-auction",
+            }),
+            "max_pages": forms.NumberInput(attrs={
+                "class": "ledger-input num",
+                "min": "1",
             }),
         }

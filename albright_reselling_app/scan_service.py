@@ -22,6 +22,7 @@ import json
 import os
 import re
 import time
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import requests
 from playwright.sync_api import sync_playwright
@@ -69,29 +70,6 @@ def _normalize_lot(item):
     }
 
 
-def _find_first_raw_lot(payload):
-    """Like _extract_lots, but returns the first raw matching dict as-is
-    (not run through _normalize_lot) so we can inspect fields our current
-    normalization doesn't know about yet."""
-    result = {"node": None}
-
-    def walk(node):
-        if result["node"] is not None:
-            return
-        if isinstance(node, dict):
-            if _looks_like_lot(node):
-                result["node"] = node
-                return
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-
-    walk(payload)
-    return result["node"]
-
-
 def _extract_lots(payload):
     found = []
 
@@ -110,9 +88,44 @@ def _extract_lots(payload):
     return found
 
 
-def _scrape(url, max_lots=300):
+def _find_paging_info(payload):
+    """Finds a pagedResults-shaped node ({pageNumber, totalPages, results})
+    anywhere in the payload, so we can tell how many pages a category-browse
+    or search-style URL actually has. Returns (page_number, total_pages) or
+    None if this response doesn't carry paging info (e.g. a single-auction
+    catalog page, which doesn't paginate this way)."""
+    result = {"info": None}
+
+    def walk(node):
+        if result["info"] is not None:
+            return
+        if isinstance(node, dict):
+            if "totalPages" in node and "pageNumber" in node and "results" in node:
+                result["info"] = (node.get("pageNumber"), node.get("totalPages"))
+                return
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(payload)
+    return result["info"]
+
+
+def _set_apage(url, page_number):
+    """Returns url with its apage query param set to page_number, adding
+    the param if it wasn't already present."""
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    qs["apage"] = [str(page_number)]
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
+
+
+def _scrape(url, max_lots=300, max_pages=40):
     collected = {}
-    debug_state = {"printed": False}
+    paging_state = {"total_pages": None}
 
     def handle_response(response):
         ct = response.headers.get("content-type", "")
@@ -128,21 +141,9 @@ def _scrape(url, max_lots=300):
             if key and key not in collected:
                 collected[key] = lot
 
-        # --- TEMPORARY DEBUG: category-browse pages seem to return a
-        # different lot shape than the catalog page we originally mapped
-        # (bid/category/resale are coming back empty on this page type).
-        # Print just the top-level keys plus the specific fields we care
-        # about, skipping the bulky nested "auction" object that ate the
-        # whole output budget last time.
-        if not debug_state["printed"]:
-            raw = _find_first_raw_lot(payload)
-            if raw:
-                print("DEBUG: raw lot top-level keys:", list(raw.keys()))
-                for field in ("category", "lotState", "bidAmount", "bidCount", "lead", "lotNumber", "site"):
-                    if field in raw:
-                        print(f"DEBUG:   raw['{field}'] = {json.dumps(raw[field], default=str)[:500]}")
-                debug_state["printed"] = True
-        # --- end debug ---
+        info = _find_paging_info(payload)
+        if info and info[1]:
+            paging_state["total_pages"] = info[1]
 
     with sync_playwright() as p:
         # PythonAnywhere-specific: playwright install doesn't work here, so
@@ -156,31 +157,57 @@ def _scrape(url, max_lots=300):
         )
         page = browser.new_page()
         page.on("response", handle_response)
-        page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        time.sleep(2)  # give the page's initial JS a moment to fire its first data fetch
 
-        stagnant = 0
-        last_count = 0
-        for _ in range(60):
+        current_page_num = 1
+        current_url = url
+        pages_visited = 0
+
+        while True:
+            page.goto(current_url, wait_until="domcontentloaded", timeout=60000)
+            time.sleep(2)  # give the page's initial JS a moment to fire its first data fetch
+
+            # Existing scroll/"Load More" handling — still needed for
+            # single-auction catalog pages, which use infinite scroll
+            # within one page rather than an apage query param.
+            stagnant = 0
+            last_count = 0
+            for _ in range(60):
+                if len(collected) >= max_lots:
+                    break
+                page.mouse.wheel(0, 4000)
+                time.sleep(1.2)
+                for label in ("Load More", "Next", "Show More"):
+                    try:
+                        btn = page.get_by_text(label, exact=False)
+                        if btn.count() > 0 and btn.first.is_visible():
+                            btn.first.click(timeout=2000)
+                            time.sleep(1.2)
+                    except Exception:
+                        pass
+                if len(collected) == last_count:
+                    stagnant += 1
+                else:
+                    stagnant = 0
+                last_count = len(collected)
+                if stagnant >= 5:
+                    break
+
+            pages_visited += 1
+
             if len(collected) >= max_lots:
                 break
-            page.mouse.wheel(0, 4000)
-            time.sleep(1.2)
-            for label in ("Load More", "Next", "Show More"):
-                try:
-                    btn = page.get_by_text(label, exact=False)
-                    if btn.count() > 0 and btn.first.is_visible():
-                        btn.first.click(timeout=2000)
-                        time.sleep(1.2)
-                except Exception:
-                    pass
-            if len(collected) == last_count:
-                stagnant += 1
-            else:
-                stagnant = 0
-            last_count = len(collected)
-            if stagnant >= 5:
+            if pages_visited >= max_pages:
                 break
+
+            total_pages = paging_state["total_pages"]
+            if not total_pages or current_page_num >= total_pages:
+                # Either this URL type doesn't paginate via apage at all
+                # (single-auction catalog — nothing more to do), or we've
+                # already reached the last page.
+                break
+
+            current_page_num += 1
+            current_url = _set_apage(url, current_page_num)
 
         browser.close()
 
@@ -255,10 +282,14 @@ Respond ONLY with compact JSON, in exactly this field order: \
         return {"interest_score": 0, "reason": f"scoring failed: {e}", "resale_low": None, "resale_high": None}
 
 
-def scrape_and_score(url, max_lots=300):
+def scrape_and_score(url, max_lots=300, max_pages=40):
     """Main entry point called by the worker. Returns a list of dicts matching
-    the ScannedLot model's fields (minus scan_request, which the caller sets)."""
-    lots = _scrape(url, max_lots=max_lots)
+    the ScannedLot model's fields (minus scan_request, which the caller sets).
+
+    max_pages caps how many apage=N pages a category-browse/search URL will
+    walk through (single-auction catalog URLs ignore this — they don't
+    paginate via apage, so they just run once as before)."""
+    lots = _scrape(url, max_lots=max_lots, max_pages=max_pages)
     results = []
     for lot in lots:
         scored = _score_lot_text(lot)

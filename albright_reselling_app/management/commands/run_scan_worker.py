@@ -21,7 +21,7 @@ class Command(BaseCommand):
             scan.status = "running"
             scan.save(update_fields=["status"])
             try:
-                lots_data = scrape_and_score(scan.source_url)
+                lots_data = scrape_and_score(scan.source_url, max_pages=scan.max_pages)
                 for lot in lots_data:
                     ScannedLot.objects.create(scan_request=scan, **lot)
                 scan.status = "complete"

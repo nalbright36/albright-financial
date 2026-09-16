@@ -39,6 +39,7 @@ class ScanRequest(models.Model):
     ]
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="scan_requests")
     source_url = models.URLField()
+    max_pages = models.PositiveIntegerField(default=40)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
