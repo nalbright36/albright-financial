@@ -187,17 +187,21 @@ def _set_apage(url, page_number):
 def _find_top_level_auction_info(payload):
     """Single-auction catalog pages return auction info once, separately,
     at payload.data.auction — not nested inside each lot the way
-    category-browse pages do. Returns (auctioneer_name, close_datetime)
-    or (None, None) if this response isn't that shape."""
+    category-browse pages do. Returns (auctioneer_name, close_datetime,
+    auction_text) or (None, None, "") if this response isn't that shape.
+    auction_text is the auction's own eventName + description, used as a
+    fallback signal for guessing a category on page types (like this one)
+    that don't expose per-lot category at all."""
     try:
         auction = payload["data"]["auction"]
         auctioneer = (auction.get("auctioneer") or {}).get("name", "")
         close_dt = auction.get("bidCloseDateTime")
-        if auctioneer or close_dt:
-            return auctioneer, close_dt
+        text = " ".join(filter(None, [auction.get("eventName", ""), auction.get("description", "")]))
+        if auctioneer or close_dt or text:
+            return auctioneer, close_dt, text
     except (KeyError, TypeError, AttributeError):
         pass
-    return None, None
+    return None, None, ""
 
 
 def _collect_raw_lots(url, max_lots=300, max_pages=40):
@@ -212,7 +216,7 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
     or risking drift between two copies of this code."""
     collected = {}
     paging_state = {"total_pages": None}
-    top_level_auction = {"name": None, "close_dt": None}
+    top_level_auction = {"name": None, "close_dt": None, "text": ""}
 
     def handle_response(response):
         ct = response.headers.get("content-type", "")
@@ -236,10 +240,11 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
                   f"collected so far={len(collected)}")
             # --- end debug ---
 
-        name, close_dt = _find_top_level_auction_info(payload)
-        if name or close_dt:
+        name, close_dt, auction_text = _find_top_level_auction_info(payload)
+        if name or close_dt or auction_text:
             top_level_auction["name"] = name
             top_level_auction["close_dt"] = close_dt
+            top_level_auction["text"] = auction_text
 
     with sync_playwright() as p:
         # PythonAnywhere-specific: playwright install doesn't work here, so
@@ -378,6 +383,41 @@ def _normalize_historical_lot(item):
     }
 
 
+CATEGORY_KEYWORDS = [
+    ("Coins & Currency", ("coin", "currency", "morgan", "silver dollar", "numismatic")),
+    ("Jewelry", ("jewelry", "jewellery", "gemstone", "diamond", "ring", "earring", "necklace", "pendant")),
+    ("Watches", ("watch", "timepiece", "rolex")),
+    ("Sports Memorabilia", ("sports memorabilia", "trading card", "autograph")),
+    ("Antiques & Collectibles", ("antique", "collectible", "vintage")),
+    ("Tools", ("tool", "machinery", "equipment")),
+    ("Electronics", ("electronic", "computer", "camera")),
+    ("Firearms", ("firearm", "ammunition", "ammo")),
+    ("Art", ("painting", "sculpture", "artwork")),
+    ("Furniture", ("furniture",)),
+    ("Toys & Games", ("toy", "pokemon", "yu gi oh", "one piece", "trading card game")),
+    ("Stamps", ("stamp collection", "philately")),
+    ("Vehicles", ("automobile", "motorcycle", "vehicle")),
+]
+
+
+def _guess_category_from_text(text):
+    """Best-effort category guess by keyword match against the auction's
+    own title/description — used as a fallback ONLY when a lot has no
+    per-lot category at all (single-auction catalog pages don't expose
+    one, a known HiBid data gap confirmed during live-scanner work, not a
+    bug in our matching). Coarse by nature: applies one whole auction's
+    theme to every lot in it, so it can mislabel a stray off-theme lot
+    within an otherwise single-category auction — better than a blank
+    category, not a substitute for a real per-lot one."""
+    if not text:
+        return ""
+    lowered = text.lower()
+    for label, keywords in CATEGORY_KEYWORDS:
+        if any(kw in lowered for kw in keywords):
+            return label
+    return ""
+
+
 def harvest_closed_lots(url, max_lots=1000, max_pages=100):
     """Bulk-harvests raw closed-auction data — no AI scoring, pure hard
     data (price, bids, category, auctioneer) — from a HiBid search or
@@ -394,10 +434,23 @@ def harvest_closed_lots(url, max_lots=1000, max_pages=100):
     raw_lots, top_level_auction = _collect_raw_lots(url, max_lots=max_lots, max_pages=max_pages)
 
     results = []
+    debug_printed = False
     for raw in raw_lots:
         normalized = _normalize_historical_lot(raw)
         if normalized is None:
             continue  # not actually closed — skip
+
+        # --- TEMPORARY DEBUG: bid count isn't coming through on catalog
+        # harvests — dump one raw closed lot's lotState to see whether the
+        # field is genuinely missing here too (same root cause as category)
+        # or named/shaped differently than expected.
+        if not debug_printed:
+            print(f"DEBUG: raw lotState for first closed lot: {json.dumps(raw.get('lotState'), default=str)}")
+            debug_printed = True
+        # --- end debug ---
+
+        if not normalized.get("category"):
+            normalized["category"] = _guess_category_from_text(top_level_auction.get("text", ""))
         results.append(normalized)
 
     return _apply_top_level_auction_fallback(results, top_level_auction)
