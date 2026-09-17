@@ -379,6 +379,9 @@ def harvest_closed_lots(url, max_lots=1000, max_pages=100):
         results.append(normalized)
 
     return _apply_top_level_auction_fallback(results, top_level_auction)
+
+
+def fetch_lot_status(lot_url):
     """Loads a single HiBid lot page and reports whether it has closed and,
     if so, its final realized price. Used by the reconciliation feature to
     check back on lots after their auction ends, comparing the actual
