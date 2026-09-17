@@ -231,6 +231,10 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
         info = _find_paging_info(payload)
         if info and info[1]:
             paging_state["total_pages"] = info[1]
+            # --- TEMPORARY DEBUG: figure out why harvesting isn't paginating ---
+            print(f"DEBUG: paging info seen — pageNumber={info[0]}, totalPages={info[1]}, "
+                  f"collected so far={len(collected)}")
+            # --- end debug ---
 
         name, close_dt = _find_top_level_auction_info(payload)
         if name or close_dt:
@@ -285,21 +289,25 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
                     break
 
             pages_visited += 1
+            print(f"DEBUG: finished page {current_page_num} (visit #{pages_visited}) — "
+                  f"collected={len(collected)}, stagnant_rounds={stagnant}")
 
             if len(collected) >= max_lots:
+                print(f"DEBUG: stopping — hit max_lots ({max_lots})")
                 break
             if pages_visited >= max_pages:
+                print(f"DEBUG: stopping — hit max_pages ({max_pages})")
                 break
 
             total_pages = paging_state["total_pages"]
             if not total_pages or current_page_num >= total_pages:
-                # Either this URL type doesn't paginate via apage at all
-                # (single-auction catalog — nothing more to do), or we've
-                # already reached the last page.
+                print(f"DEBUG: stopping — total_pages={total_pages}, current_page_num={current_page_num} "
+                      f"(either this page type never reported paging info, or we've reached the last page)")
                 break
 
             current_page_num += 1
             current_url = _set_apage(url, current_page_num)
+            print(f"DEBUG: advancing to page {current_page_num}: {current_url}")
 
         browser.close()
 
