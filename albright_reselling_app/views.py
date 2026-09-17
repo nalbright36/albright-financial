@@ -94,7 +94,7 @@ def historical_data(request):
 
     harvests = HarvestRequest.objects.filter(owner=request.user)
     total_lots = HistoricalLot.objects.filter(owner=request.user).count()
-    return render(request, "albright_reselling_app/historical_data.html", {
+    return render(request, "historical_data.html", {
         "form": form,
         "harvests": harvests,
         "total_lots": total_lots,
@@ -122,7 +122,7 @@ def sleeper_segments(request):
         .order_by("avg_bid_count")
     )
 
-    return render(request, "albright_reselling_app/sleeper_segments.html", {
+    return render(request, "sleeper_segments.html", {
         "by_category": by_category,
         "by_auctioneer": by_auctioneer,
         "total_historical": historical.count(),
