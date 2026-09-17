@@ -30,6 +30,7 @@ class LedgerEntry(models.Model):
     def __str__(self):
         return self.item
 
+
 class ScanRequest(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
@@ -68,8 +69,60 @@ class ScannedLot(models.Model):
     estimated_resale_high = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     max_hammer = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
+    # --- Reconciliation fields (populated after the auction closes) ---
+    actual_price_realized = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    is_closed = models.BooleanField(default=False)
+    reconciled_at = models.DateTimeField(null=True, blank=True)
+    auctioneer_name = models.CharField(max_length=255, blank=True)
+    auction_close_datetime = models.DateTimeField(null=True, blank=True)
+    final_bid_count = models.IntegerField(null=True, blank=True)
+
     class Meta:
         ordering = ["-interest_score"]
+
+    def __str__(self):
+        return self.title
+
+
+class ReconciliationRequest(models.Model):
+    STATUS_CHOICES = ScanRequest.STATUS_CHOICES
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reconciliation_requests"
+    )
+    scan_request = models.ForeignKey(ScanRequest, on_delete=models.CASCADE, related_name="reconciliation_requests")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Reconcile scan #{self.scan_request_id} ({self.status})"
+
+
+class DeepDiveRequest(models.Model):
+    STATUS_CHOICES = ScanRequest.STATUS_CHOICES
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="deep_dive_requests")
+    lot = models.ForeignKey(ScannedLot, on_delete=models.CASCADE, related_name="deep_dives")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    error_message = models.TextField(blank=True)
+    resale_low = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    resale_high = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    max_hammer = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    confidence = models.CharField(max_length=10, blank=True)
+    analysis = models.TextField(blank=True)
+    images_analyzed = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Deep dive: {self.lot.title} ({self.status})"
+
 
 class HarvestRequest(models.Model):
     STATUS_CHOICES = ScanRequest.STATUS_CHOICES
@@ -110,3 +163,6 @@ class HistoricalLot(models.Model):
             models.Index(fields=["category"]),
             models.Index(fields=["auctioneer_name"]),
         ]
+
+    def __str__(self):
+        return self.title
