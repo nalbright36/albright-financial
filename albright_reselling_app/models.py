@@ -70,3 +70,43 @@ class ScannedLot(models.Model):
 
     class Meta:
         ordering = ["-interest_score"]
+
+class HarvestRequest(models.Model):
+    STATUS_CHOICES = ScanRequest.STATUS_CHOICES
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="harvest_requests")
+    source_url = models.URLField()
+    max_pages = models.PositiveIntegerField(default=100)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    error_message = models.TextField(blank=True)
+    lots_harvested = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.source_url} ({self.status})"
+
+
+class HistoricalLot(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="historical_lots")
+    harvest_request = models.ForeignKey(HarvestRequest, on_delete=models.CASCADE, related_name="lots")
+    lot_id = models.CharField(max_length=100, blank=True)
+    title = models.CharField(max_length=500)
+    description = models.TextField(blank=True)
+    category = models.CharField(max_length=200, blank=True)
+    auctioneer_name = models.CharField(max_length=255, blank=True)
+    final_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    final_bid_count = models.IntegerField(null=True, blank=True)
+    auction_close_datetime = models.DateTimeField(null=True, blank=True)
+    image_url = models.URLField(blank=True)
+    lot_url = models.URLField(blank=True)
+    harvested_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-harvested_at"]
+        indexes = [
+            models.Index(fields=["category"]),
+            models.Index(fields=["auctioneer_name"]),
+        ]

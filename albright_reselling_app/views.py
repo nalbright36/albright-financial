@@ -1,7 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm
-from .models import LedgerEntry, ScanRequest
+from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm, HarvestRequestForm
+from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot
+from django.db.models import Avg, Count
 
 
 @login_required
@@ -77,4 +78,53 @@ def scan_detail(request, scan_id):
     return render(request, "scan_detail.html", {
         "scan": scan,
         "lots": lots,
+    })
+
+@login_required
+def historical_data(request):
+    if request.method == "POST":
+        form = HarvestRequestForm(request.POST)
+        if form.is_valid():
+            harvest = form.save(commit=False)
+            harvest.owner = request.user
+            harvest.save()
+            return redirect("albright_reselling_app:historical_data")
+    else:
+        form = HarvestRequestForm()
+
+    harvests = HarvestRequest.objects.filter(owner=request.user)
+    total_lots = HistoricalLot.objects.filter(owner=request.user).count()
+    return render(request, "albright_reselling_app/historical_data.html", {
+        "form": form,
+        "harvests": harvests,
+        "total_lots": total_lots,
+    })
+
+MIN_SAMPLE_SIZE = 3  # minimum lots before a segment counts as a real pattern, not noise
+
+@login_required
+def sleeper_segments(request):
+    historical = HistoricalLot.objects.filter(owner=request.user, final_price__isnull=False)
+
+    by_category = list(
+        historical.exclude(category="")
+        .values("category")
+        .annotate(lot_count=Count("id"), avg_price=Avg("final_price"), avg_bid_count=Avg("final_bid_count"))
+        .filter(lot_count__gte=MIN_SAMPLE_SIZE)
+        .order_by("avg_bid_count")  # lowest competition first
+    )
+
+    by_auctioneer = list(
+        historical.exclude(auctioneer_name="")
+        .values("auctioneer_name")
+        .annotate(lot_count=Count("id"), avg_price=Avg("final_price"), avg_bid_count=Avg("final_bid_count"))
+        .filter(lot_count__gte=MIN_SAMPLE_SIZE)
+        .order_by("avg_bid_count")
+    )
+
+    return render(request, "albright_reselling_app/sleeper_segments.html", {
+        "by_category": by_category,
+        "by_auctioneer": by_auctioneer,
+        "total_historical": historical.count(),
+        "min_sample_size": MIN_SAMPLE_SIZE,
     })

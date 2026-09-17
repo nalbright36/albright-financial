@@ -1,0 +1,56 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin-bottom: 8px;">Sleeper Segments</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 24px;">
+        Based on {{ total_historical }} harvested closed lot{{ total_historical|pluralize }}. Segments need at least
+        {{ min_sample_size }} lots before showing up here — small samples are noise, not a pattern.
+    </p>
+
+    {% if total_historical == 0 %}
+    <div class="card">
+        <p style="color: var(--text-secondary);">
+            No historical data yet. Run a harvest on the Historical Data page first.
+        </p>
+    </div>
+    {% else %}
+    <div class="grid grid-2">
+        <div class="card">
+            <div class="card__header"><span class="card__label">By Category (lowest competition first)</span></div>
+            {% for row in by_category %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span style="font-weight: 600;">{{ row.category }}</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">{{ row.lot_count }} lots</span>
+                </div>
+                <div style="text-align: right;">
+                    <div class="num">${{ row.avg_price|floatformat:0 }} avg</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ row.avg_bid_count|floatformat:1 }} avg bids</div>
+                </div>
+            </div>
+            {% empty %}
+            <p style="color: var(--text-secondary);">Not enough data yet.</p>
+            {% endfor %}
+        </div>
+
+        <div class="card">
+            <div class="card__header"><span class="card__label">By Auctioneer (lowest competition first)</span></div>
+            {% for row in by_auctioneer %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span style="font-weight: 600;">{{ row.auctioneer_name }}</span>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">{{ row.lot_count }} lots</span>
+                </div>
+                <div style="text-align: right;">
+                    <div class="num">${{ row.avg_price|floatformat:0 }} avg</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ row.avg_bid_count|floatformat:1 }} avg bids</div>
+                </div>
+            </div>
+            {% empty %}
+            <p style="color: var(--text-secondary);">Not enough data yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

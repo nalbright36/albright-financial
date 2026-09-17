@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import modelformset_factory
-from .models import LedgerEntry, ScanRequest
+from .models import LedgerEntry, ScanRequest, HarvestRequest
 
 
 class LedgerEntryForm(forms.ModelForm):
@@ -36,4 +36,16 @@ class ScanRequestForm(forms.ModelForm):
                 "class": "ledger-input num",
                 "min": "1",
             }),
+        }
+
+class HarvestRequestForm(forms.ModelForm):
+    class Meta:
+        model = HarvestRequest
+        fields = ["source_url", "max_pages"]
+        widgets = {
+            "source_url": forms.URLInput(attrs={
+                "class": "ledger-input",
+                "placeholder": "https://hibid.com/lots/... with status=CLOSED",
+            }),
+            "max_pages": forms.NumberInput(attrs={"class": "ledger-input num", "min": "1"}),
         }

@@ -1,0 +1,55 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin-bottom: 8px;">Historical Data</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">
+        {{ total_lots }} closed lots harvested so far — pure hard data, no AI scoring yet. Feeds the Sleeper Segments analysis.
+    </p>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">New Harvest</span></div>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 12px;">
+            Use a HiBid search/category URL with a closed-status filter (e.g. add <code>&status=CLOSED</code> to the URL).
+        </p>
+        <form method="post" style="display: flex; gap: 12px; align-items: flex-end;">
+            {% csrf_token %}
+            <div class="field" style="flex: 1; margin-bottom: 0;">
+                <label>Closed-Auction Search URL</label>
+                {{ form.source_url }}
+            </div>
+            <div class="field" style="width: 120px; margin-bottom: 0;">
+                <label>Max Pages</label>
+                {{ form.max_pages }}
+            </div>
+            <button type="submit" class="btn btn-primary">Start Harvest</button>
+        </form>
+    </div>
+
+    <div class="card" style="padding: 0;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th class="num">Lots Harvested</th>
+                    <th>Submitted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in harvests %}
+                <tr>
+                    <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ h.source_url }}</td>
+                    <td>
+                        <span class="badge {% if h.status == 'complete' %}gain{% elif h.status == 'failed' %}loss{% else %}neutral{% endif %}">
+                            {{ h.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="num">{{ h.lots_harvested }}</td>
+                    <td>{{ h.created_at|date:"M j, g:i A" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
