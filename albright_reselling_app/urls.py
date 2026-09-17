@@ -10,4 +10,5 @@ urlpatterns = [
     path("auction-scanner/<int:scan_id>/", views.scan_detail, name="scan_detail"),
     path("sleeper-segments/", views.sleeper_segments, name="sleeper_segments"),
     path("historical-data/", views.historical_data, name="historical_data"),
+    path("sleeper-segments/analysis/<int:analysis_id>/", views.analysis_results, name="analysis_results"),
 ]

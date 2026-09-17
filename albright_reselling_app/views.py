@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm, HarvestRequestForm
-from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot
+from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm, HarvestRequestForm, AnalysisRequestForm
+from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot, AnalysisRequest
 from django.db.models import Avg, Count
 
 
@@ -104,6 +104,16 @@ MIN_SAMPLE_SIZE = 3  # minimum lots before a segment counts as a real pattern, n
 
 @login_required
 def sleeper_segments(request):
+    if request.method == "POST":
+        form = AnalysisRequestForm(request.POST)
+        if form.is_valid():
+            analysis = form.save(commit=False)
+            analysis.owner = request.user
+            analysis.save()
+            return redirect("albright_reselling_app:sleeper_segments")
+    else:
+        form = AnalysisRequestForm()
+
     historical = HistoricalLot.objects.filter(owner=request.user, final_price__isnull=False)
 
     by_category = list(
@@ -111,9 +121,8 @@ def sleeper_segments(request):
         .values("category")
         .annotate(lot_count=Count("id"), avg_price=Avg("final_price"), avg_bid_count=Avg("final_bid_count"))
         .filter(lot_count__gte=MIN_SAMPLE_SIZE)
-        .order_by("avg_bid_count")  # lowest competition first
+        .order_by("avg_bid_count")
     )
-
     by_auctioneer = list(
         historical.exclude(auctioneer_name="")
         .values("auctioneer_name")
@@ -122,9 +131,21 @@ def sleeper_segments(request):
         .order_by("avg_bid_count")
     )
 
+    analyses = AnalysisRequest.objects.filter(owner=request.user)
+
     return render(request, "sleeper_segments.html", {
         "by_category": by_category,
         "by_auctioneer": by_auctioneer,
         "total_historical": historical.count(),
         "min_sample_size": MIN_SAMPLE_SIZE,
+        "form": form,
+        "analyses": analyses,
     })
+
+
+@login_required
+def analysis_results(request, analysis_id):
+    analysis = AnalysisRequest.objects.filter(owner=request.user).get(pk=analysis_id)
+    lots = list(analysis.analyzed_lots.filter(estimated_resale_low__isnull=False))
+    lots.sort(key=lambda l: (l.margin if l.margin is not None else -999999), reverse=True)
+    return render(request, "analysis_results.html", {"analysis": analysis, "lots": lots})

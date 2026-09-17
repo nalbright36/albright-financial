@@ -779,3 +779,63 @@ def scrape_and_score(url, max_lots=300, max_pages=40):
         results.append(lot)
         time.sleep(0.3)  # light rate-limit pacing
     return results
+
+
+def estimate_historical_resale(title, description, category):
+    """Asks for a CONSERVATIVE resale-value estimate for an already-sold
+    historical lot — used by the Sleeper Segments analysis to find lots
+    that closed for far less than they were reasonably worth. This is a
+    general-knowledge AI estimate, not verified eBay data (eBay no longer
+    allows unauthenticated access to sold-listing data), so "conservative"
+    is doing real work here: the prompt explicitly asks the model to err
+    low rather than produce an optimistic number that inflates apparent
+    margins.
+    """
+    prompt = f"""Give a CONSERVATIVE estimated resale value range (used-item resale on eBay, not \
+retail — and err LOW rather than high if uncertain) for this already-sold auction item, based on \
+its title and description alone.
+
+Title: {title}
+Description: {description or '(no description given)'}
+Category: {category or '(none listed)'}
+
+If there truly isn't enough information to estimate (e.g. a vague "misc box lot" with no \
+identifiable contents), return null for both bounds rather than guessing.
+
+Respond ONLY with compact JSON: {{"resale_low": <number or null>, "resale_high": <number or null>, \
+"reasoning": "<one sentence>"}}
+"""
+    headers = {
+        "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+        "anthropic-version": ANTHROPIC_VERSION,
+        "content-type": "application/json",
+    }
+    body = {"model": TEXT_MODEL, "max_tokens": 200, "messages": [{"role": "user", "content": prompt}]}
+    try:
+        resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=body, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+        if text.startswith("```"):
+            text = text.strip("`").split("\n", 1)[-1]
+        parsed = json.loads(text)
+
+        resale_low = parsed.get("resale_low")
+        resale_high = parsed.get("resale_high")
+        reasoning = str(parsed.get("reasoning", ""))
+
+        # Same regex safety net used for the live scanner: if the model
+        # states a range in the reasoning text but left the JSON fields
+        # null, recover it rather than losing the estimate entirely.
+        if resale_low is None or resale_high is None:
+            match = re.search(
+                r"\$\s?([\d,]+(?:\.\d+)?)\s*(?:-|to|\u2013)\s*\$?\s?([\d,]+(?:\.\d+)?)",
+                reasoning,
+            )
+            if match:
+                resale_low = resale_low if resale_low is not None else float(match.group(1).replace(",", ""))
+                resale_high = resale_high if resale_high is not None else float(match.group(2).replace(",", ""))
+
+        return {"resale_low": resale_low, "resale_high": resale_high, "reasoning": reasoning}
+    except Exception as e:
+        return {"resale_low": None, "resale_high": None, "reasoning": f"estimate failed: {e}"}

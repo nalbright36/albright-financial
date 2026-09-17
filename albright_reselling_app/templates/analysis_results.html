@@ -1,0 +1,36 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin-bottom: 20px;">Analysis Results</h1>
+    <div class="card" style="padding: 0;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th class="num">Final Price</th>
+                    <th class="num">Est. Resale</th>
+                    <th class="num">Margin</th>
+                    <th>Category</th>
+                    <th>Reasoning</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lot in lots %}
+                <tr>
+                    <td><a href="{{ lot.lot_url }}" target="_blank">{{ lot.title }}</a></td>
+                    <td class="num">${{ lot.final_price|floatformat:0 }}</td>
+                    <td class="num">${{ lot.estimated_resale_low|floatformat:0 }}&ndash;${{ lot.estimated_resale_high|floatformat:0 }}</td>
+                    <td class="num {% if lot.margin > 0 %}gain{% else %}loss{% endif %}">
+                        ${{ lot.margin|floatformat:0 }} ({{ lot.margin_pct|floatformat:0 }}%)
+                    </td>
+                    <td>{{ lot.category }}</td>
+                    <td style="max-width: 350px;">{{ lot.analysis_reasoning }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" style="color: var(--text-secondary);">No analyzed lots yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -7,6 +7,49 @@
         {{ min_sample_size }} lots before showing up here — small samples are noise, not a pattern.
     </p>
 
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">Run Resale Analysis</span></div>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 16px;">
+            All filters are optional — leave blank to include everything. Only lots matching every filter you set get analyzed, up to Max Lots.
+        </p>
+        <form method="post" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+            {% csrf_token %}
+            <div class="field" style="margin-bottom: 0;"><label>Category</label>{{ form.category }}</div>
+            <div class="field" style="margin-bottom: 0;"><label>Auctioneer</label>{{ form.auctioneer_name }}</div>
+            <div class="field" style="margin-bottom: 0;"><label>Keyword</label>{{ form.keyword }}</div>
+            <div class="field" style="margin-bottom: 0;"><label>Min Final Price</label>{{ form.min_final_price }}</div>
+            <div class="field" style="margin-bottom: 0;"><label>Max Final Price</label>{{ form.max_final_price }}</div>
+            <div class="field" style="margin-bottom: 0;"><label>Max Lots to Analyze</label>{{ form.max_lots }}</div>
+            <div style="grid-column: 1 / -1;">
+                <button type="submit" class="btn btn-primary">Run Analysis</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card" style="padding: 0; margin-bottom: 24px;">
+        <table class="holdings">
+            <thead>
+                <tr><th>Filters</th><th>Status</th><th class="num">Lots Analyzed</th><th>Submitted</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for a in analyses %}
+                <tr>
+                    <td style="font-size: 0.8125rem; color: var(--text-secondary);">
+                        {% if a.category %}category: {{ a.category }}{% endif %}
+                        {% if a.auctioneer_name %} | auctioneer: {{ a.auctioneer_name }}{% endif %}
+                        {% if a.keyword %} | keyword: {{ a.keyword }}{% endif %}
+                        {% if not a.category and not a.auctioneer_name and not a.keyword %}(no filters — all lots){% endif %}
+                    </td>
+                    <td><span class="badge {% if a.status == 'complete' %}gain{% elif a.status == 'failed' %}loss{% else %}neutral{% endif %}">{{ a.get_status_display }}</span></td>
+                    <td class="num">{{ a.lots_analyzed }}</td>
+                    <td>{{ a.created_at|date:"M j, g:i A" }}</td>
+                    <td>{% if a.status == 'complete' %}<a href="{% url 'albright_reselling_app:analysis_results' a.id %}">View Results</a>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     {% if total_historical == 0 %}
     <div class="card">
         <p style="color: var(--text-secondary);">

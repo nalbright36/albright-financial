@@ -2,6 +2,7 @@ import time
 import traceback
 
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -12,19 +13,21 @@ from albright_reselling_app.models import (
     DeepDiveRequest,
     HarvestRequest,
     HistoricalLot,
+    AnalysisRequest,
 )
 from albright_reselling_app.scan_service import (
     scrape_and_score,
     fetch_lot_status,
     run_deep_dive,
     harvest_closed_lots,
+    estimate_historical_resale,
 )
 
 
 class Command(BaseCommand):
     help = (
         "Persistent worker: polls for pending ScanRequests, ReconciliationRequests, "
-        "DeepDiveRequests, and HarvestRequests, and processes them one at a time."
+        "DeepDiveRequests, HarvestRequests, and AnalysisRequests, processing one at a time."
     )
     requires_system_checks = []
 
@@ -49,6 +52,11 @@ class Command(BaseCommand):
             harvest = HarvestRequest.objects.filter(status="pending").order_by("created_at").first()
             if harvest:
                 self._process_harvest(harvest)
+                continue
+
+            analysis = AnalysisRequest.objects.filter(status="pending").order_by("created_at").first()
+            if analysis:
+                self._process_analysis(analysis)
                 continue
 
             time.sleep(5)
@@ -141,3 +149,40 @@ class Command(BaseCommand):
             traceback.print_exc()
         harvest.completed_at = timezone.now()
         harvest.save()
+
+    def _process_analysis(self, analysis):
+        analysis.status = "running"
+        analysis.save(update_fields=["status"])
+        try:
+            qs = HistoricalLot.objects.filter(owner=analysis.owner, final_price__isnull=False)
+            if analysis.category:
+                qs = qs.filter(category__icontains=analysis.category)
+            if analysis.auctioneer_name:
+                qs = qs.filter(auctioneer_name__icontains=analysis.auctioneer_name)
+            if analysis.keyword:
+                qs = qs.filter(Q(title__icontains=analysis.keyword) | Q(description__icontains=analysis.keyword))
+            if analysis.min_final_price is not None:
+                qs = qs.filter(final_price__gte=analysis.min_final_price)
+            if analysis.max_final_price is not None:
+                qs = qs.filter(final_price__lte=analysis.max_final_price)
+
+            lots = list(qs.order_by("-harvested_at")[: analysis.max_lots])
+            count = 0
+            for lot in lots:
+                result = estimate_historical_resale(lot.title, lot.description, lot.category)
+                lot.estimated_resale_low = result["resale_low"]
+                lot.estimated_resale_high = result["resale_high"]
+                lot.analysis_reasoning = result["reasoning"]
+                lot.analyzed_at = timezone.now()
+                lot.last_analysis_request = analysis
+                lot.save()
+                count += 1
+                time.sleep(0.3)  # light rate-limit pacing
+            analysis.lots_analyzed = count
+            analysis.status = "complete"
+        except Exception as e:
+            analysis.status = "failed"
+            analysis.error_message = str(e)
+            traceback.print_exc()
+        analysis.completed_at = timezone.now()
+        analysis.save()

@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import modelformset_factory
-from .models import LedgerEntry, ScanRequest, HarvestRequest
+from .models import LedgerEntry, ScanRequest, HarvestRequest, AnalysisRequest
 
 
 class LedgerEntryForm(forms.ModelForm):
@@ -48,4 +48,17 @@ class HarvestRequestForm(forms.ModelForm):
                 "placeholder": "https://hibid.com/lots/... with status=CLOSED",
             }),
             "max_pages": forms.NumberInput(attrs={"class": "ledger-input num", "min": "1"}),
+        }
+
+class AnalysisRequestForm(forms.ModelForm):
+    class Meta:
+        model = AnalysisRequest
+        fields = ["category", "auctioneer_name", "keyword", "min_final_price", "max_final_price", "max_lots"]
+        widgets = {
+            "category": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "leave blank for all"}),
+            "auctioneer_name": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "leave blank for all"}),
+            "keyword": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "title/description contains..."}),
+            "min_final_price": forms.NumberInput(attrs={"class": "ledger-input num"}),
+            "max_final_price": forms.NumberInput(attrs={"class": "ledger-input num"}),
+            "max_lots": forms.NumberInput(attrs={"class": "ledger-input num", "min": "1"}),
         }
