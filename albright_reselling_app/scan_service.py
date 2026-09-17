@@ -259,6 +259,7 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
         pages_visited = 0
 
         while True:
+            count_before_page = len(collected)
             page.goto(current_url, wait_until="domcontentloaded", timeout=60000)
             time.sleep(2)  # give the page's initial JS a moment to fire its first data fetch
 
@@ -289,8 +290,9 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
                     break
 
             pages_visited += 1
+            new_this_page = len(collected) - count_before_page
             print(f"DEBUG: finished page {current_page_num} (visit #{pages_visited}) — "
-                  f"collected={len(collected)}, stagnant_rounds={stagnant}")
+                  f"collected={len(collected)}, new_this_page={new_this_page}, stagnant_rounds={stagnant}")
 
             if len(collected) >= max_lots:
                 print(f"DEBUG: stopping — hit max_lots ({max_lots})")
@@ -300,9 +302,21 @@ def _collect_raw_lots(url, max_lots=300, max_pages=40):
                 break
 
             total_pages = paging_state["total_pages"]
-            if not total_pages or current_page_num >= total_pages:
-                print(f"DEBUG: stopping — total_pages={total_pages}, current_page_num={current_page_num} "
-                      f"(either this page type never reported paging info, or we've reached the last page)")
+            if total_pages and current_page_num >= total_pages:
+                print(f"DEBUG: stopping — reached known total_pages ({total_pages})")
+                break
+
+            # We don't require totalPages to be known before trying the next
+            # apage — some page types (this catalog type, apparently) never
+            # report it via GraphQL even though apage navigation still
+            # works. Instead: always attempt the next page once, and only
+            # stop if that attempt genuinely added nothing new — meaning
+            # either we've gone past the real last page, or apage isn't
+            # respected at all for this URL shape (in which case one wasted
+            # extra page load is a small cost for correctness elsewhere).
+            if pages_visited > 1 and new_this_page == 0:
+                print(f"DEBUG: stopping — apage={current_page_num} added 0 new lots "
+                      f"(either past the last real page, or apage isn't supported for this URL)")
                 break
 
             current_page_num += 1
