@@ -7,6 +7,7 @@
             <thead>
                 <tr>
                     <th>Title</th>
+                    <th>Auctioneer</th>
                     <th class="num">Final Price</th>
                     <th class="num">Est. Resale</th>
                     <th class="num">Margin</th>
@@ -18,6 +19,7 @@
                 {% for lot in lots %}
                 <tr>
                     <td><a href="{{ lot.lot_url }}" target="_blank">{{ lot.title }}</a></td>
+                    <td>{{ lot.auctioneer_name|default:"—" }}</td>
                     <td class="num">${{ lot.final_price|floatformat:0 }}</td>
                     <td class="num">${{ lot.estimated_resale_low|floatformat:0 }}&ndash;${{ lot.estimated_resale_high|floatformat:0 }}</td>
                     <td class="num {% if lot.margin > 0 %}gain{% else %}loss{% endif %}">
@@ -27,7 +29,7 @@
                     <td style="max-width: 350px;">{{ lot.analysis_reasoning }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" style="color: var(--text-secondary);">No analyzed lots yet.</td></tr>
+                <tr><td colspan="7" style="color: var(--text-secondary);">No analyzed lots yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
