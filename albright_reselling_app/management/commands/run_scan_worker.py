@@ -81,7 +81,7 @@ class Command(BaseCommand):
         for lot in lots:
             margin = lot.margin
             is_hit = margin is not None and margin > 0
-            margin_pct = lot.margin_pct or 0
+            margin_pct = float(lot.margin_pct) if lot.margin_pct is not None else 0.0
 
             historical_items.append({"title": lot.title, "is_hit": is_hit, "margin_pct": margin_pct})
 
