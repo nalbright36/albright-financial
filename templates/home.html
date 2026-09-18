@@ -6,7 +6,7 @@
 
     {% if outlook %}
 
-        <!-- AI-generated outlook hero -->
+        <!-- Market status header (real data — session state, date/time) -->
         <div class="card" style="margin-bottom: 24px;">
             <div class="card__header">
                 <span class="card__label">Market Outlook</span>
@@ -19,19 +19,6 @@
                     {% endif %}
                 </span>
             </div>
-
-            {% if outlook.outlook_text %}
-                <p style="font-size: 1.0625rem; line-height: 1.65; color: var(--text-primary); margin: 0;">
-                    {{ outlook.outlook_text }}
-                </p>
-                <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 14px; margin-bottom: 0;">
-                    Automatically generated from market data. Not financial advice.
-                </p>
-            {% else %}
-                <p style="color: var(--text-secondary); margin: 0;">
-                    Today's summary isn't available right now — the numbers below are still current.
-                </p>
-            {% endif %}
         </div>
 
         <!-- Market breadth -->
