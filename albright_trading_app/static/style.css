@@ -383,33 +383,22 @@ a:hover { color: var(--accent-hover); }
 
 /* ---------- App switch button (Trading <-> Reselling) ---------- */
 .app-switch-btn {
-  display: inline-block;
-  padding: 4px 14px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-decoration: none;
-  background: transparent;
-  border-radius: 999px;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    display: inline-block;
+    padding: 4px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    color: #ffffff;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 999px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-
-.app-switch-btn--trading {
-  color: var(--trading-color);
-  border: 1px solid var(--trading-color);
-}
-.app-switch-btn--trading:hover {
-  background: var(--trading-color);
-  color: #051019;
-}
-
-.app-switch-btn--reselling {
-  color: var(--reselling-color);
-  border: 1px solid var(--reselling-color);
-}
-.app-switch-btn--reselling:hover {
-  background: var(--reselling-color);
-  color: #06231A;
+.app-switch-btn:hover {
+    background: #ffffff;
+    color: #0a0e1a;
+    border-color: #ffffff;
 }
 
 /* ---------- Ticker rail (signature element) ----------

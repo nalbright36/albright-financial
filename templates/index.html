@@ -16,9 +16,9 @@
         <nav class="navbar">
             <div class="navbar__switch-row">
                 {% if in_reselling_app %}
-                    <a href="/" class="app-switch-btn app-switch-btn--trading">Trading</a>
+                    <a href="/" class="app-switch-btn">Trading</a>
                 {% else %}
-                    <a href="{% url 'albright_reselling_app:dashboard' %}" class="app-switch-btn app-switch-btn--reselling">Reselling</a>
+                    <a href="{% url 'albright_reselling_app:dashboard' %}" class="app-switch-btn">Reselling</a>
                 {% endif %}
             </div>
 
