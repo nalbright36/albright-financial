@@ -21,6 +21,7 @@ from albright_reselling_app.scan_service import (
     run_deep_dive,
     harvest_closed_lots,
     estimate_historical_resale,
+    score_discount_likelihood,
 )
 
 
@@ -61,15 +62,77 @@ class Command(BaseCommand):
 
             time.sleep(5)
 
+    def _build_historical_data(self, analysis_request):
+        """Pulls the referenced AnalysisRequest's analyzed HistoricalLot rows
+        into plain data for score_discount_likelihood: a flat list of
+        {"title", "is_hit", "margin_pct"} dicts (used for item-to-item
+        similarity matching — the PRIMARY signal) plus per-auctioneer
+        aggregate stats (the SECONDARY, fallback signal). Category is
+        deliberately not aggregated here anymore — on catalog-sourced
+        harvests it's often a coarse whole-auction guess, not a real
+        per-item label, so it doesn't discriminate well between different
+        kinds of items within one auction.
+        """
+        lots = analysis_request.analyzed_lots.filter(estimated_resale_low__isnull=False, final_price__isnull=False)
+
+        historical_items = []
+        auctioneer_agg = {}
+
+        for lot in lots:
+            margin = lot.margin
+            is_hit = margin is not None and margin > 0
+            margin_pct = lot.margin_pct or 0
+
+            historical_items.append({"title": lot.title, "is_hit": is_hit, "margin_pct": margin_pct})
+
+            if lot.auctioneer_name:
+                entry = auctioneer_agg.setdefault(
+                    lot.auctioneer_name, {"count": 0, "hits": 0, "margin_pct_sum": 0.0}
+                )
+                entry["count"] += 1
+                if is_hit:
+                    entry["hits"] += 1
+                entry["margin_pct_sum"] += margin_pct
+
+        auctioneer_stats = {
+            name: {
+                "count": v["count"],
+                "hit_rate": v["hits"] / v["count"],
+                "avg_margin_pct": v["margin_pct_sum"] / v["count"],
+            }
+            for name, v in auctioneer_agg.items()
+            if v["count"]
+        }
+
+        return historical_items, auctioneer_stats
+
     def _process_scan(self, scan):
         scan.status = "running"
         scan.save(update_fields=["status"])
         try:
             lots_data = scrape_and_score(scan.source_url, max_pages=scan.max_pages)
+
+            historical_items, auctioneer_stats = [], {}
+            if scan.reference_analysis_id:
+                historical_items, auctioneer_stats = self._build_historical_data(scan.reference_analysis)
+
             for lot in lots_data:
                 close_dt_str = lot.pop("auction_close_datetime", None)
                 close_dt = parse_datetime(close_dt_str) if close_dt_str else None
-                ScannedLot.objects.create(scan_request=scan, auction_close_datetime=close_dt, **lot)
+
+                discount_score, discount_reasoning = None, ""
+                if scan.reference_analysis_id:
+                    discount_score, discount_reasoning = score_discount_likelihood(
+                        lot.get("title"), lot.get("auctioneer_name"), historical_items, auctioneer_stats
+                    )
+
+                ScannedLot.objects.create(
+                    scan_request=scan,
+                    auction_close_datetime=close_dt,
+                    discount_likelihood_score=discount_score,
+                    discount_likelihood_reasoning=discount_reasoning,
+                    **lot,
+                )
             scan.status = "complete"
         except Exception as e:
             scan.status = "failed"

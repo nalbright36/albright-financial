@@ -45,6 +45,9 @@ class ScanRequest(models.Model):
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    reference_analysis = models.ForeignKey(
+        "AnalysisRequest", on_delete=models.SET_NULL, null=True, blank=True, related_name="scans_scored_against"
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -68,6 +71,8 @@ class ScannedLot(models.Model):
     estimated_resale_low = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     estimated_resale_high = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     max_hammer = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount_likelihood_score = models.IntegerField(null=True, blank=True)
+    discount_likelihood_reasoning = models.TextField(blank=True)
 
     # --- Reconciliation fields (populated after the auction closes) ---
     actual_price_realized = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)

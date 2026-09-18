@@ -23,6 +23,11 @@
                     <td class="num" style="font-weight: 600; color: {% if lot.interest_score >= 60 %}var(--gain){% else %}var(--text-secondary){% endif %};">
                         {{ lot.interest_score }}
                     </td>
+                    <td class="num" title="{{ lot.discount_likelihood_reasoning }}">
+                        {% if lot.discount_likelihood_score is not None %}
+                            <span style="color: {% if lot.discount_likelihood_score >= 60 %}var(--gain){% else %}var(--text-secondary){% endif %};">{{ lot.discount_likelihood_score }}</span>
+                        {% else %}&mdash;{% endif %}
+                    </td>
                     <td><a href="{{ lot.lot_url }}" target="_blank">{{ lot.title }}</a></td>
                     <td class="num">{% if lot.current_bid is not None %}{{ lot.current_bid }}{% else %}—{% endif %}</td>
                     <td class="num">

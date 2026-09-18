@@ -839,3 +839,98 @@ Respond ONLY with compact JSON: {{"resale_low": <number or null>, "resale_high":
         return {"resale_low": resale_low, "resale_high": resale_high, "reasoning": reasoning}
     except Exception as e:
         return {"resale_low": None, "resale_high": None, "reasoning": f"estimate failed: {e}"}
+
+
+_SIMILARITY_STOPWORDS = {
+    "the", "and", "with", "for", "in", "of", "a", "an", "to", "on", "by", "or",
+    "new", "lot", "set", "pc", "pcs", "piece", "pieces", "item", "items",
+    "vintage", "antique", "used", "nice", "great", "beautiful", "lovely",
+    "great", "large", "small", "misc", "various",
+}
+
+
+def _keywords(text):
+    """Lowercased, stopword-filtered significant words from a title, used
+    for simple item-to-item similarity matching. No external embeddings
+    API involved — this project has no dependency on one, and this is
+    fast enough in pure Python for the volumes involved here."""
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {w for w in words if len(w) > 2 and w not in _SIMILARITY_STOPWORDS}
+
+
+def _item_similarity(keywords_a, keywords_b):
+    if not keywords_a or not keywords_b:
+        return 0.0
+    intersection = keywords_a & keywords_b
+    union = keywords_a | keywords_b
+    return len(intersection) / len(union) if union else 0.0
+
+
+def score_discount_likelihood(
+    title, auctioneer_name, historical_items, auctioneer_stats,
+    similarity_threshold=0.2, min_sample=3,
+):
+    """Scores how likely a live lot is to close at a discount, based on a
+    specific historical AnalysisRequest's track record — NOT based on its
+    current live bid, which sniping makes an unreliable signal close to
+    auction end.
+
+    PRIMARY signal: item-to-item title similarity against historical_items
+    (a list of {"title": str, "is_hit": bool, "margin_pct": float} dicts,
+    precomputed by the caller from a specific AnalysisRequest's analyzed
+    HistoricalLot rows). Category is deliberately NOT used here — on
+    catalog-sourced harvests, category is often a coarse whole-auction
+    guess rather than a real per-item label, so it doesn't discriminate
+    well between different kinds of items within one auction.
+
+    SECONDARY signal: auctioneer_stats (dict keyed by auctioneer name,
+    each value {"count", "hit_rate", "avg_margin_pct"}), used as a
+    fallback only when there isn't a strong enough item-level match.
+
+    This function has no DB access, by design, matching the rest of this
+    module — the caller (the worker) does the Django ORM query once per
+    scan and passes the results in as plain data.
+
+    Returns (score 0-100 or None, reasoning string).
+    """
+    live_keywords = _keywords(title)
+
+    matches = []
+    for item in historical_items:
+        sim = _item_similarity(live_keywords, _keywords(item["title"]))
+        if sim >= similarity_threshold:
+            matches.append((sim, item))
+
+    if len(matches) >= min_sample:
+        hits = sum(1 for _, item in matches if item["is_hit"])
+        avg_margin_pct = sum(item["margin_pct"] for _, item in matches) / len(matches)
+        hit_rate = hits / len(matches)
+        confidence = min(1.0, len(matches) / min_sample)
+        score = round(hit_rate * 100 * confidence)
+
+        top_examples = sorted(matches, key=lambda m: -m[0])[:3]
+        example_titles = ", ".join(f"\"{item['title'][:40]}\"" for _, item in top_examples)
+        reasoning = (
+            f"Based on {len(matches)} similar historical item(s) (e.g. {example_titles}): "
+            f"{hit_rate * 100:.0f}% closed under the conservative resale estimate, "
+            f"avg margin {avg_margin_pct:.0f}%."
+        )
+        return score, reasoning
+
+    # Not enough item-level matches — fall back to auctioneer as the
+    # secondary signal instead of returning nothing.
+    auc_stat = auctioneer_stats.get(auctioneer_name) if auctioneer_name else None
+    if auc_stat and auc_stat["count"] >= 1:
+        confidence = min(1.0, auc_stat["count"] / min_sample)
+        score = round(auc_stat["hit_rate"] * 100 * confidence)
+        reasoning = (
+            f"No closely similar items found in the historical data; falling back to "
+            f"auctioneer '{auctioneer_name}' history: {auc_stat['count']} lot(s), "
+            f"{auc_stat['hit_rate'] * 100:.0f}% closed under estimate, "
+            f"avg margin {auc_stat['avg_margin_pct']:.0f}%."
+        )
+        if auc_stat["count"] < min_sample:
+            reasoning += " Small sample — treat with caution."
+        return score, reasoning
+
+    return None, "No similar historical items or auctioneer history found in the selected analysis."

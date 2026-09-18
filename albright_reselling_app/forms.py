@@ -26,17 +26,19 @@ LedgerEntryFormSet = modelformset_factory(
 class ScanRequestForm(forms.ModelForm):
     class Meta:
         model = ScanRequest
-        fields = ["source_url", "max_pages"]
+        fields = ["source_url", "max_pages", "reference_analysis"]
         widgets = {
-            "source_url": forms.URLInput(attrs={
-                "class": "ledger-input",
-                "placeholder": "https://hibid.com/catalog/.../some-auction",
-            }),
-            "max_pages": forms.NumberInput(attrs={
-                "class": "ledger-input num",
-                "min": "1",
-            }),
+            "source_url": forms.URLInput(attrs={"class": "ledger-input", "placeholder": "https://hibid.com/catalog/.../some-auction"}),
+            "max_pages": forms.NumberInput(attrs={"class": "ledger-input num", "min": "1"}),
+            "reference_analysis": forms.Select(attrs={"class": "ledger-input"}),
         }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["reference_analysis"].queryset = AnalysisRequest.objects.filter(owner=user, status="complete")
+        self.fields["reference_analysis"].required = False
+        self.fields["reference_analysis"].empty_label = "None (title-mismatch scoring only)"
 
 class HarvestRequestForm(forms.ModelForm):
     class Meta:

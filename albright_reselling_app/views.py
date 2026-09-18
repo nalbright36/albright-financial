@@ -55,30 +55,24 @@ def ledger(request):
 @login_required
 def auction_scanner(request):
     if request.method == "POST":
-        form = ScanRequestForm(request.POST)
+        form = ScanRequestForm(request.POST, user=request.user)
         if form.is_valid():
             scan = form.save(commit=False)
             scan.owner = request.user
             scan.save()
             return redirect("albright_reselling_app:auction_scanner")
     else:
-        form = ScanRequestForm()
+        form = ScanRequestForm(user=request.user)
 
     scans = ScanRequest.objects.filter(owner=request.user)
-    return render(request, "auction_scanner.html", {
-        "form": form,
-        "scans": scans,
-    })
+    return render(request, "auction_scanner.html", {"form": form, "scans": scans})
 
 
 @login_required
 def scan_detail(request, scan_id):
     scan = ScanRequest.objects.filter(owner=request.user).get(pk=scan_id)
-    lots = scan.lots.all()
-    return render(request, "scan_detail.html", {
-        "scan": scan,
-        "lots": lots,
-    })
+    lots = scan.lots.order_by("-discount_likelihood_score") if scan.reference_analysis_id else scan.lots.all()
+    return render(request, "scan_detail.html", {"scan": scan, "lots": lots})
 
 @login_required
 def historical_data(request):
