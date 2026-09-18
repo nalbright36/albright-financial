@@ -4,152 +4,145 @@
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
 
-    <!-- Hero summary -->
+    <!-- Plain, computed overview line — no AI call, just real numbers -->
     <div class="card" style="margin-bottom: 24px;">
         <div class="card__header">
-            <span class="card__label">Scanner Summary</span>
-            <span class="badge gain">3 Active Scans</span>
+            <span class="card__label">Overview</span>
         </div>
         <p style="font-size: 1.0625rem; line-height: 1.65; color: var(--text-primary); margin: 0;">
-            Your last scan of "Estate &amp; Collectibles &mdash; Sept Auction" flagged 6 lots worth a closer
-            look, led by a hand-tooled leather saddle listed under "misc tack box" with an estimated
-            resale value well above its $12 current bid.
-        </p>
-        <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 14px; margin-bottom: 0;">
-            Sample data &mdash; scanner not yet connected.
+            {{ total_scanned }} lot{{ total_scanned|pluralize }} scanned live,
+            {{ total_harvested }} historical lot{{ total_harvested|pluralize }} harvested,
+            {{ total_analyzed }} analyzed for resale value.
+            {% if pending_jobs %}{{ pending_jobs|length }} job{{ pending_jobs|length|pluralize }} currently running.{% endif %}
         </p>
     </div>
 
-    <!-- Scanner stats -->
+    <!-- Research pipeline: scanning -> harvesting -> analysis -->
     <div class="grid grid-4" style="margin-bottom: 24px;">
         <div class="card">
             <div class="card__header"><span class="card__label">Lots Scanned</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">412</span>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ total_scanned }}</span>
         </div>
         <div class="card">
             <div class="card__header"><span class="card__label">Flagged 60+</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">17</span>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">{{ flagged_60 }}</span>
         </div>
         <div class="card">
-            <div class="card__header"><span class="card__label">Avg Interest Score</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">34</span>
+            <div class="card__header"><span class="card__label">Historical Harvested</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ total_harvested }}</span>
         </div>
         <div class="card">
-            <div class="card__header"><span class="card__label">Est. Opportunity</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">$2,140</span>
+            <div class="card__header"><span class="card__label">Lots Analyzed</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ total_analyzed }}</span>
         </div>
     </div>
 
-    <!-- Business-health stats: the numbers that matter once items are actually
-         bought, listed, and sold, not just scanned -->
+    <!-- Business health: what's actually in inventory, sold, and how the
+         research is holding up against real outcomes -->
     <div class="grid grid-4" style="margin-bottom: 24px;">
         <div class="card">
             <div class="card__header"><span class="card__label">In Inventory</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">23</span>
-            <div class="ledger-stat__delta" style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">$1,860 cost basis</div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ in_inventory_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ in_inventory_cost|floatformat:0 }} cost basis</div>
         </div>
         <div class="card">
-            <div class="card__header"><span class="card__label">Active Listings</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">14</span>
-            <div class="ledger-stat__delta" style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">$3,410 listed value</div>
+            <div class="card__header"><span class="card__label">Sold (All-Time)</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: {% if sold_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %}; border-bottom: none; padding-bottom: 0;">{{ sold_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: {% if sold_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ sold_profit|floatformat:0 }} profit</div>
         </div>
         <div class="card">
-            <div class="card__header"><span class="card__label">Sold (30d)</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">9</span>
-            <div class="ledger-stat__delta gain" style="margin-top: 6px; font-size: 0.75rem;">$612 profit</div>
+            <div class="card__header"><span class="card__label">Avg Sleeper Margin</span></div>
+            {% if avg_margin_pct is not None %}
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: {% if avg_margin_pct >= 0 %}var(--gain){% else %}var(--loss){% endif %}; border-bottom: none; padding-bottom: 0;">{{ avg_margin_pct|floatformat:0 }}%</span>
+            {% else %}
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0; color: var(--text-tertiary);">&mdash;</span>
+            {% endif %}
         </div>
         <div class="card">
-            <div class="card__header"><span class="card__label">Avg Days to Sell</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">18</span>
+            <div class="card__header"><span class="card__label">Reconciled Accuracy</span></div>
+            {% if reconciled_count %}
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ under_max_hammer }}/{{ reconciled_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">closed at/under Max Hammer</div>
+            {% else %}
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0; color: var(--text-tertiary);">&mdash;</span>
+            {% endif %}
         </div>
     </div>
+
+    {% if top_segment %}
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">Top Sleeper Segment</span>
+            <a href="{% url 'albright_reselling_app:sleeper_segments' %}" style="font-size: 0.8125rem;">View all &rarr;</a>
+        </div>
+        <p style="margin: 0; color: var(--text-primary);">
+            <strong>{{ top_segment.name }}</strong> &mdash; {{ top_segment.hit_rate|floatformat:0 }}% of
+            {{ top_segment.count }} analyzed lots closed under conservative resale estimate.
+        </p>
+    </div>
+    {% endif %}
 
     <!-- Top flagged lots / recent scans -->
     <div class="grid grid-2" style="margin-bottom: 24px;">
         <div class="card">
             <div class="card__header"><span class="card__label">Top Flagged Lots</span></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+            {% for lot in top_flagged %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
                 <div>
-                    <span class="symbol num" style="font-weight: 600;">Lot #142</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">"Misc tack box" &mdash; leather saddle, hand-tooled</span>
+                    <a href="{% url 'albright_reselling_app:scan_detail' lot.scan_request_id %}" style="font-weight: 600;">{{ lot.title|truncatechars:45 }}</a>
                 </div>
-                <span class="badge gain">92</span>
+                <span class="badge {% if lot.interest_score >= 60 %}gain{% else %}neutral{% endif %}">{{ lot.interest_score }}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <div>
-                    <span class="symbol num" style="font-weight: 600;">Lot #087</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Costume jewelry lot, one piece marked 925</span>
-                </div>
-                <span class="badge gain">81</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
-                <div>
-                    <span class="symbol num" style="font-weight: 600;">Lot #256</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Box of "old tools" &mdash; Starrett caliper visible in photo</span>
-                </div>
-                <span class="badge gain">76</span>
-            </div>
+            {% empty %}
+            <p style="color: var(--text-secondary);">No lots scanned yet.</p>
+            {% endfor %}
         </div>
 
         <div class="card">
             <div class="card__header"><span class="card__label">Recent Scans</span></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+            {% for scan in recent_scans %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
                 <div>
-                    <span class="symbol num" style="font-weight: 600;">Estate &amp; Collectibles</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Sept auction &mdash; 210 lots</span>
+                    <a href="{% url 'albright_reselling_app:scan_detail' scan.id %}" style="font-weight: 600;">{{ scan.source_url|truncatechars:40 }}</a>
+                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">{{ scan.lots.count }} lots</span>
                 </div>
-                <span class="badge neutral">Complete</span>
+                <span class="badge {% if scan.status == 'complete' %}gain{% elif scan.status == 'failed' %}loss{% else %}neutral{% endif %}">
+                    {{ scan.get_status_display }}
+                </span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <div>
-                    <span class="symbol num" style="font-weight: 600;">Jewelry Keyword Search</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Site-wide &mdash; 156 lots</span>
-                </div>
-                <span class="badge neutral">Complete</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
-                <div>
-                    <span class="symbol num" style="font-weight: 600;">Tool &amp; Garage Liquidation</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">46 lots scanned so far</span>
-                </div>
-                <span class="badge loss">Running</span>
-            </div>
+            {% empty %}
+            <p style="color: var(--text-secondary);">No scans yet.</p>
+            {% endfor %}
         </div>
     </div>
 
-    <!-- Upcoming pickups / auction deadlines -->
-    <div class="grid grid-2" style="margin-bottom: 24px;">
+    <!-- Pending jobs across the async pipeline / this month's ledger costs -->
+    <div class="grid grid-2">
         <div class="card">
-            <div class="card__header"><span class="card__label">Upcoming Pickups &amp; Deadlines</span></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <div>
-                    <span class="symbol num" style="font-weight: 600;">Estate &amp; Collectibles</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">4 lots won</span>
-                </div>
-                <span class="badge loss">Pickup Sat 9am&ndash;2pm</span>
+            <div class="card__header"><span class="card__label">Running Background Jobs</span></div>
+            {% for job in pending_jobs %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">{{ job.label }}</span>
+                <span class="badge neutral">{{ job.status }}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
-                <div>
-                    <span class="symbol num" style="font-weight: 600;">Tool &amp; Garage Liquidation</span>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">Bidding closes</span>
-                </div>
-                <span class="badge neutral">Tomorrow, 7:00 PM</span>
-            </div>
+            {% empty %}
+            <p style="color: var(--text-secondary);">Nothing running right now.</p>
+            {% endfor %}
         </div>
 
         <div class="card">
-            <div class="card__header"><span class="card__label">Expenses (This Month)</span></div>
+            <div class="card__header"><span class="card__label">Ledger Costs This Month</span></div>
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">Buyer's premiums</span>
-                <span class="num" style="font-weight: 600;">$186</span>
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">Item cost</span>
+                <span class="num" style="font-weight: 600;">${{ month_cost|floatformat:0 }}</span>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">Shipping supplies</span>
-                <span class="num" style="font-weight: 600;">$42</span>
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">Fees</span>
+                <span class="num" style="font-weight: 600;">${{ month_fees|floatformat:0 }}</span>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">eBay/PayPal fees</span>
-                <span class="num" style="font-weight: 600;">$97</span>
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">Shipping</span>
+                <span class="num" style="font-weight: 600;">${{ month_shipping|floatformat:0 }}</span>
             </div>
         </div>
     </div>

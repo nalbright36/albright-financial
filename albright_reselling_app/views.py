@@ -7,7 +7,95 @@ from django.db.models import Avg, Count
 
 @login_required
 def dashboard(request):
-    return render(request, "dashboard.html")
+    user = request.user
+
+    # --- Ledger / business health ---
+    ledger_entries = LedgerEntry.objects.filter(owner=user)
+    in_inventory = list(ledger_entries.filter(sold_for__isnull=True))
+    sold_entries = list(ledger_entries.filter(sold_for__isnull=False))
+
+    in_inventory_count = len(in_inventory)
+    in_inventory_cost = sum(e.total for e in in_inventory)
+    sold_count = len(sold_entries)
+    sold_profit = sum(e.profit for e in sold_entries)
+
+    now = timezone.now()
+    this_month = ledger_entries.filter(created_at__year=now.year, created_at__month=now.month)
+    month_totals = this_month.aggregate(fees=Sum("fees"), shipping=Sum("shipping"), cost=Sum("cost"))
+
+    # --- Scanner ---
+    scanned_lots = ScannedLot.objects.filter(scan_request__owner=user)
+    total_scanned = scanned_lots.count()
+    flagged_60 = scanned_lots.filter(interest_score__gte=60).count()
+    top_flagged = scanned_lots.order_by("-interest_score")[:3]
+    recent_scans = ScanRequest.objects.filter(owner=user)[:3]
+
+    # --- Historical data ---
+    historical_lots = HistoricalLot.objects.filter(owner=user)
+    total_harvested = historical_lots.count()
+    total_harvests = HarvestRequest.objects.filter(owner=user).count()
+
+    # --- Sleeper analysis ---
+    analyzed_lots = list(historical_lots.filter(estimated_resale_low__isnull=False, final_price__isnull=False))
+    total_analyzed = len(analyzed_lots)
+    margins = [l.margin_pct for l in analyzed_lots if l.margin_pct is not None]
+    avg_margin_pct = sum(margins) / len(margins) if margins else None
+
+    top_segment = None
+    auctioneer_agg = {}
+    for lot in analyzed_lots:
+        if not lot.auctioneer_name:
+            continue
+        entry = auctioneer_agg.setdefault(lot.auctioneer_name, {"count": 0, "hits": 0})
+        entry["count"] += 1
+        if lot.margin and lot.margin > 0:
+            entry["hits"] += 1
+    candidates = [(name, v["hits"] / v["count"], v["count"]) for name, v in auctioneer_agg.items() if v["count"] >= 3]
+    if candidates:
+        candidates.sort(key=lambda c: -c[1])
+        top_segment = {"name": candidates[0][0], "hit_rate": candidates[0][1] * 100, "count": candidates[0][2]}
+
+    # --- Reconciliation accuracy ---
+    reconciled_lots = scanned_lots.filter(actual_price_realized__isnull=False)
+    reconciled_count = reconciled_lots.count()
+    under_max_hammer = reconciled_lots.filter(
+        max_hammer__isnull=False, actual_price_realized__lte=F("max_hammer")
+    ).count() if reconciled_count else 0
+
+    # --- Pending background jobs, across all five queues ---
+    pending_jobs = []
+    for qs, label in [
+        (ScanRequest.objects.filter(owner=user, status__in=["pending", "running"]), "Scan"),
+        (HarvestRequest.objects.filter(owner=user, status__in=["pending", "running"]), "Harvest"),
+        (ReconciliationRequest.objects.filter(owner=user, status__in=["pending", "running"]), "Reconciliation"),
+        (DeepDiveRequest.objects.filter(owner=user, status__in=["pending", "running"]), "Deep Dive"),
+        (AnalysisRequest.objects.filter(owner=user, status__in=["pending", "running"]), "Analysis"),
+    ]:
+        for obj in qs:
+            pending_jobs.append({"label": label, "status": obj.get_status_display(), "created_at": obj.created_at})
+    pending_jobs.sort(key=lambda j: j["created_at"], reverse=True)
+
+    return render(request, "dashboard.html", {
+        "in_inventory_count": in_inventory_count,
+        "in_inventory_cost": in_inventory_cost,
+        "sold_count": sold_count,
+        "sold_profit": sold_profit,
+        "month_fees": month_totals["fees"] or 0,
+        "month_shipping": month_totals["shipping"] or 0,
+        "month_cost": month_totals["cost"] or 0,
+        "total_scanned": total_scanned,
+        "flagged_60": flagged_60,
+        "top_flagged": top_flagged,
+        "recent_scans": recent_scans,
+        "total_harvested": total_harvested,
+        "total_harvests": total_harvests,
+        "total_analyzed": total_analyzed,
+        "avg_margin_pct": avg_margin_pct,
+        "top_segment": top_segment,
+        "reconciled_count": reconciled_count,
+        "under_max_hammer": under_max_hammer,
+        "pending_jobs": pending_jobs[:5],
+    })
 
 
 @login_required
