@@ -658,6 +658,23 @@ Respond ONLY with compact JSON in this exact shape:
 
 
 def _score_lot_text(lot):
+    # Adds ~150-400 image tokens per lot (negligible cost) — a deliberate
+    # cheap upgrade over web search, which was evaluated and rejected here
+    # as too expensive/slow for bulk live scanning.
+    image_block = None
+    photo_instructions = ""
+    try:
+        b64, media_type = _image_to_b64(lot['image_url'])
+        image_block = {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
+        photo_instructions = """
+
+Also look at the attached photo for anything the text might be hiding: visible wear, damage, or \
+condition issues not mentioned in the description; hallmarks, stamps, or maker's marks; whether the \
+materials look consistent with what the title/description claims; and any visual signs the item \
+might be lab-grown, synthetic, or a reproduction rather than what's claimed."""
+    except Exception:
+        pass  # no usable photo for this lot — fall back to text-only scoring
+
     prompt = f"""You are helping a reseller spot auction lots that are worth a closer look \
 because the listing undersells or mislabels what's actually there.
 
@@ -668,23 +685,27 @@ Current bid: {lot['current_bid'] or 'unknown'}
 
 Look for a vague/generic title hiding something valuable, details in the description \
 (maker's marks, materials, hallmarks, brand names, "sterling", "14k", signed, vintage) \
-not reflected in the title/category, or a category mismatch.
+not reflected in the title/category, or a category mismatch.{photo_instructions}
 
 Also give a rough estimated resale range (used-item resale, not retail) based on what \
-this item typically sells for, if you have any reasonable basis to estimate one. If \
-there's truly not enough information to estimate (e.g. a vague "misc box lot" with no \
-identifiable contents), return null for both bounds rather than guessing.
+this item typically sells for, if you have any reasonable basis to estimate one. Distinguish \
+asking prices (what sellers list items for) from actual sold prices (what they really go for) — \
+sold prices are the real signal for a resale estimate, and asking prices tend to run higher and \
+inflate the estimate if relied on. If there's truly not enough information to estimate (e.g. a \
+vague "misc box lot" with no identifiable contents), return null for both bounds rather than guessing.
 
 Respond ONLY with compact JSON, in exactly this field order: \
 {{"resale_low": <number or null>, "resale_high": <number or null>, \
 "interest_score": <0-100>}}
 """
+    content = [image_block, {"type": "text", "text": prompt}] if image_block else prompt
+
     headers = {
         "x-api-key": os.environ["ANTHROPIC_API_KEY"],
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
-    body = {"model": TEXT_MODEL, "max_tokens": 200, "messages": [{"role": "user", "content": prompt}]}
+    body = {"model": TEXT_MODEL, "max_tokens": 200, "messages": [{"role": "user", "content": content}]}
     try:
         resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=body, timeout=30)
         resp.raise_for_status()
