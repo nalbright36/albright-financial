@@ -675,14 +675,9 @@ this item typically sells for, if you have any reasonable basis to estimate one.
 there's truly not enough information to estimate (e.g. a vague "misc box lot" with no \
 identifiable contents), return null for both bounds rather than guessing.
 
-CRITICAL: resale_low and resale_high are the ONLY place the resale range is recorded —
-nothing reads your reason text for numbers. If your reason mentions any specific price
-or price range, that exact range MUST also appear in resale_low/resale_high. Never
-describe a resale value in the reason while leaving resale_low/resale_high null.
-
 Respond ONLY with compact JSON, in exactly this field order: \
 {{"resale_low": <number or null>, "resale_high": <number or null>, \
-"interest_score": <0-100>, "reason": "<one sentence>"}}
+"interest_score": <0-100>}}
 """
     headers = {
         "x-api-key": os.environ["ANTHROPIC_API_KEY"],
@@ -698,31 +693,16 @@ Respond ONLY with compact JSON, in exactly this field order: \
         if text.startswith("```"):
             text = text.strip("`").split("\n", 1)[-1]
         parsed = json.loads(text)
-        reason = str(parsed.get("reason", ""))
         resale_low = parsed.get("resale_low")
         resale_high = parsed.get("resale_high")
 
-        # Safety net: if the model still left these null but the reason
-        # text contains a dollar range (e.g. "$800-1200" or "$800 to
-        # $1,200"), pull it out with a regex rather than losing the
-        # estimate the model clearly already formed.
-        if resale_low is None or resale_high is None:
-            match = re.search(
-                r"\$\s?([\d,]+(?:\.\d+)?)\s*(?:-|to|\u2013)\s*\$?\s?([\d,]+(?:\.\d+)?)",
-                reason,
-            )
-            if match:
-                resale_low = resale_low if resale_low is not None else float(match.group(1).replace(",", ""))
-                resale_high = resale_high if resale_high is not None else float(match.group(2).replace(",", ""))
-
         return {
             "interest_score": int(parsed.get("interest_score", 0)),
-            "reason": reason,
             "resale_low": resale_low,
             "resale_high": resale_high,
         }
-    except Exception as e:
-        return {"interest_score": 0, "reason": f"scoring failed: {e}", "resale_low": None, "resale_high": None}
+    except Exception:
+        return {"interest_score": 0, "resale_low": None, "resale_high": None}
 
 
 def _estimate_shipping(lot):
@@ -771,7 +751,7 @@ def scrape_and_score(url, max_lots=300, max_pages=40):
     for lot in lots:
         scored = _score_lot_text(lot)
         lot["interest_score"] = scored["interest_score"]
-        lot["score_reasons"] = scored["reason"]
+        lot["score_reasons"] = scored.get("reason", "")
         lot["estimated_resale_low"] = scored["resale_low"]
         lot["estimated_resale_high"] = scored["resale_high"]
         shipping = _estimate_shipping(lot)

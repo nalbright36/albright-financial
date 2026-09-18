@@ -4,23 +4,62 @@
     <h1 style="margin-bottom: 20px;">Scan Results</h1>
     <p style="color: var(--text-secondary); margin-bottom: 20px;">{{ scan.source_url }}</p>
 
-    <div class="card" style="padding: 0;">
-        <table class="holdings">
+    <div class="card">
+        {% if lots %}
+        <div class="scanner-controls">
+            <input
+                type="text"
+                id="scan-search"
+                placeholder="Search lot title..."
+                autocomplete="off"
+            >
+            <input
+                type="number"
+                id="scan-min-score"
+                placeholder="Min score"
+                min="0"
+                max="100"
+                step="1"
+            >
+            <input
+                type="number"
+                id="scan-min-discount"
+                placeholder="Min discount score"
+                min="0"
+                max="100"
+                step="1"
+            >
+            <input
+                type="number"
+                id="scan-max-hammer"
+                placeholder="Max hammer $"
+                min="0"
+                step="1"
+            >
+        </div>
+
+        <div style="overflow-x: auto;">
+        <table class="holdings" id="scan-table">
             <thead>
                 <tr>
-                    <th>Score</th>
-                    <th>Discount Score</th>
+                    <th data-sort-key="score">Score</th>
+                    <th class="num" data-sort-key="discount">Discount Score</th>
                     <th>Title</th>
-                    <th class="num">Bid</th>
-                    <th class="num">Est. Resale</th>
-                    <th class="num">Max Hammer</th>
-                    <th>Category</th>
-                    <th>Why Flagged</th>
+                    <th class="num" data-sort-key="bid">Bid</th>
+                    <th class="num" data-sort-key="resale">Est. Resale</th>
+                    <th class="num" data-sort-key="hammer">Max Hammer</th>
                 </tr>
             </thead>
             <tbody>
                 {% for lot in lots %}
-                <tr>
+                <tr
+                    data-title="{{ lot.title }}"
+                    data-score="{{ lot.interest_score }}"
+                    data-discount="{% if lot.discount_likelihood_score is not None %}{{ lot.discount_likelihood_score }}{% endif %}"
+                    data-bid="{% if lot.current_bid is not None %}{{ lot.current_bid }}{% endif %}"
+                    data-resale="{% if lot.estimated_resale_low is not None %}{{ lot.estimated_resale_low }}{% endif %}"
+                    data-hammer="{% if lot.max_hammer is not None %}{{ lot.max_hammer }}{% endif %}"
+                >
                     <td class="num" style="font-weight: 600; color: {% if lot.interest_score >= 60 %}var(--gain){% else %}var(--text-secondary){% endif %};">
                         {{ lot.interest_score }}
                     </td>
@@ -37,12 +76,93 @@
                     <td class="num">
                         {% if lot.max_hammer is not None %}${{ lot.max_hammer|floatformat:0 }}{% else %}&mdash;{% endif %}
                     </td>
-                    <td>{{ lot.category }}</td>
-                    <td style="max-width: 350px;">{{ lot.score_reasons }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
+        {% else %}
+            <p style="color: var(--text-secondary);">No lots found for this scan.</p>
+        {% endif %}
     </div>
 </div>
+
+<script>
+(function () {
+    const table = document.getElementById('scan-table');
+    if (!table) return; // no rows to wire up (empty scan)
+
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const searchInput = document.getElementById('scan-search');
+    const minScoreInput = document.getElementById('scan-min-score');
+    const minDiscountInput = document.getElementById('scan-min-discount');
+    const maxHammerInput = document.getElementById('scan-max-hammer');
+    const headers = Array.from(table.querySelectorAll('th[data-sort-key]'));
+
+    // Start as if we'd just sorted ascending, so the first real call
+    // to sortRows('score') below toggles to descending (highest
+    // interest first, which is what you want to see first here).
+    let sortKey = 'score';
+    let sortAsc = true;
+
+    function applyFilters() {
+        const query = searchInput.value.trim().toLowerCase();
+        const minScore = parseFloat(minScoreInput.value);
+        const hasMinScore = !isNaN(minScore);
+        const minDiscount = parseFloat(minDiscountInput.value);
+        const hasMinDiscount = !isNaN(minDiscount);
+        const maxHammer = parseFloat(maxHammerInput.value);
+        const hasMaxHammer = !isNaN(maxHammer);
+
+        rows.forEach(function (row) {
+            const title = row.dataset.title.toLowerCase();
+            const score = parseFloat(row.dataset.score);
+            const discount = parseFloat(row.dataset.discount);
+            const hammer = parseFloat(row.dataset.hammer);
+
+            const matchesQuery = !query || title.includes(query);
+            const matchesMinScore = !hasMinScore || (!isNaN(score) && score >= minScore);
+            const matchesMinDiscount = !hasMinDiscount || (!isNaN(discount) && discount >= minDiscount);
+            const matchesMaxHammer = !hasMaxHammer || (!isNaN(hammer) && hammer <= maxHammer);
+            const visible = matchesQuery && matchesMinScore && matchesMinDiscount && matchesMaxHammer;
+
+            row.style.display = visible ? '' : 'none';
+        });
+    }
+
+    function sortRows(key) {
+        sortAsc = sortKey === key ? !sortAsc : true;
+        sortKey = key;
+
+        const sorted = rows.slice().sort(function (a, b) {
+            const rawA = a.dataset[key];
+            const rawB = b.dataset[key];
+            const numA = parseFloat(rawA);
+            const numB = parseFloat(rawB);
+            const isNumeric = !isNaN(numA) && !isNaN(numB);
+
+            const cmp = isNumeric ? (numA - numB) : rawA.localeCompare(rawB);
+            return sortAsc ? cmp : -cmp;
+        });
+
+        sorted.forEach(function (row) { tbody.appendChild(row); });
+
+        headers.forEach(function (h) { h.classList.remove('sorted-asc', 'sorted-desc'); });
+        const activeHeader = headers.find(function (h) { return h.dataset.sortKey === key; });
+        if (activeHeader) activeHeader.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+    }
+
+    searchInput.addEventListener('input', applyFilters);
+    minScoreInput.addEventListener('input', applyFilters);
+    minDiscountInput.addEventListener('input', applyFilters);
+    maxHammerInput.addEventListener('input', applyFilters);
+    headers.forEach(function (h) {
+        h.addEventListener('click', function () { sortRows(h.dataset.sortKey); });
+    });
+
+    // Default sort: score, descending
+    sortRows('score');
+})();
+</script>
 {% endblock %}

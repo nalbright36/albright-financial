@@ -381,24 +381,73 @@ a:hover { color: var(--accent-hover); }
   color: var(--accent);
 }
 
-/* ---------- App switch button (Trading <-> Reselling) ---------- */
+/* ---------- App switch button (Trading <-> Reselling) ----------
+   Deliberately hue-neutral: starlight silver only, never var(--accent),
+   so the same pill sits correctly in the cyan trading theme and the
+   green reselling theme. The space read comes from texture rather
+   than color — a deep-space fill, a few stars inside the capsule, a
+   horizon glow along the top edge, and a comet sweep on hover. */
 .app-switch-btn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: inline-block;
     padding: 4px 14px;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-decoration: none;
-    color: #ffffff;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #C9D6E5;
+    background-color: rgba(18, 26, 42, 0.5);
+    background-image:
+      /* stars, positioned in % so they track the pill's size */
+      radial-gradient(1px 1px at 18% 34%, rgba(255, 255, 255, 0.55), transparent),
+      radial-gradient(1px 1px at 63% 22%, rgba(255, 255, 255, 0.38), transparent),
+      radial-gradient(1px 1px at 83% 66%, rgba(255, 255, 255, 0.5),  transparent),
+      radial-gradient(1px 1px at 37% 76%, rgba(255, 255, 255, 0.3),  transparent),
+      /* light falling from above, like a planet limb */
+      linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 60%);
+    border: 1px solid rgba(190, 215, 240, 0.28);
     border-radius: 999px;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    transition: color 0.2s ease, background-color 0.2s ease,
+                border-color 0.2s ease, box-shadow 0.2s ease;
 }
+
+/* The comet. Parked off the left edge at rest (left + width both stay
+   negative of 0%), so it costs nothing until hover animates it across. */
+.app-switch-btn::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    left: -60%;
+    width: 45%;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+    transform: translateX(0) skewX(-18deg);
+}
+
 .app-switch-btn:hover {
-    background: #ffffff;
-    color: #0a0e1a;
-    border-color: #ffffff;
+    color: #F2F7FC;
+    background-color: rgba(30, 42, 64, 0.66);
+    border-color: rgba(215, 232, 248, 0.6);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      0 0 14px -2px rgba(210, 230, 250, 0.35);
+}
+.app-switch-btn:hover::before {
+    animation: app-switch-comet 0.9s ease-out;
+}
+
+@keyframes app-switch-comet {
+    from { transform: translateX(0) skewX(-18deg); }
+    to   { transform: translateX(340%) skewX(-18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-switch-btn:hover::before { animation: none; }
 }
 
 /* ---------- Ticker rail (signature element) ----------
@@ -736,6 +785,7 @@ table.holdings td.symbol a:hover {
 }
 
 .scanner-controls input[type="text"],
+.scanner-controls input[type="number"],
 .scanner-controls select {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
@@ -750,15 +800,21 @@ table.holdings td.symbol a:hover {
   flex: 1 1 240px;
 }
 
+.scanner-controls input[type="number"] {
+  flex: 0 1 140px;
+}
+
 .scanner-controls select {
   flex: 0 1 200px;
 }
 
-.scanner-controls input[type="text"]::placeholder {
+.scanner-controls input[type="text"]::placeholder,
+.scanner-controls input[type="number"]::placeholder {
   color: var(--text-tertiary);
 }
 
 .scanner-controls input[type="text"]:focus,
+.scanner-controls input[type="number"]:focus,
 .scanner-controls select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(79, 224, 255, 0.12);
@@ -1032,6 +1088,7 @@ table.holdings th.sorted-desc::after {
     flex-direction: column;
   }
   .scanner-controls input[type="text"],
+  .scanner-controls input[type="number"],
   .scanner-controls select {
     flex: 1 1 auto;
     width: 100%;
