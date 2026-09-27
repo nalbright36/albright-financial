@@ -223,3 +223,6 @@ class HistoricalLot(models.Model):
         if m is not None and self.final_price:
             return (m / self.final_price) * 100
         return None
+
+
+from .scanner_models import SourcedLot, LotEvaluation, SpotPrice  # noqa: E402,F401

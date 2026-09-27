@@ -174,3 +174,31 @@ ALLOWED_HOSTS = ["www.sportslabalgo.com", "127.0.0.1", "natealbright36.pythonany
 
 # OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# Reselling: Auction Scanner (coins & bullion) - see albright_reselling_app/scanner/
+RESELLING_SCANNER = {
+    "SOURCES": {
+        "shopgoodwill": {
+            "buyer_premium_pct": 0.0,        # verify on a ShopGoodwill invoice
+            "sales_tax_pct": 0.07,           # use the rate on your actual invoice
+            "default_inbound_shipping": 10.0,  # small-package estimate until we pull real quotes
+            "timezone": "America/Los_Angeles",  # verify: compare one lot's end time vs the site
+        },
+    },
+    "KEYWORDS": {
+        "coins": ["morgan dollar", "peace dollar", "silver eagle", "90% silver", "junk silver",
+                  "silver half dollar", "walking liberty", "franklin half", "kennedy half 1964",
+                  "mercury dime", "silver quarter", "war nickel", "silver bar", "silver round",
+                  "troy oz", "gold coin", "krugerrand"],
+    },
+    "FEES": {"ebay_fee_pct": 0.1325, "ebay_fixed_fee": 0.40, "outbound_shipping": 5.00,
+             "packaging": 0.50, "min_profit": 10.00, "min_profit_pct": 0.20},
+    "RESALE_MULTIPLIERS": {   # expected eBay sale as a multiple of melt; calibrate from your Ledger
+        "default": 1.00, "junk_silver_face": 1.00, "silver_eagle": 1.08,
+        "morgan_dollar": 1.00, "peace_dollar": 1.00,   # melt floor only; upside is flagged for you
+        "generic_silver": 0.97, "generic_gold": 0.97,
+    },
+    "CANDIDATE_CONFIDENCE": ["high", "medium"],
+    "LLM": {"enabled": True, "model": "gpt-4o-mini", "max_calls_per_run": 25},
+    "SPOT": {"monthly_api_limit": 90, "max_age_days": 3, "manual": {"silver": None, "gold": None}},
+}

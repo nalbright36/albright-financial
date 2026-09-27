@@ -445,38 +445,6 @@ class OptionStrategy(models.Model):
     def __str__(self):
         return f"{self.name} ({self.user.username})"
  
- 
-class OptionTrade(models.Model):
-    STATUS_CHOICES = [("open", "Open"), ("closed", "Closed")]
-    OPTION_TYPE_CHOICES = [("call", "Call"), ("put", "Put")]
- 
-    strategy = models.ForeignKey(OptionStrategy, on_delete=models.CASCADE, related_name="trades")
- 
-    symbol = models.CharField(max_length=32, help_text="OCC contract symbol, e.g. AAPL260605C00315000")
-    underlying_symbol = models.CharField(max_length=10)
-    option_type = models.CharField(max_length=4, choices=OPTION_TYPE_CHOICES)
-    strike_price = models.FloatField()
-    expiration_date = models.DateField()
- 
-    quantity = models.PositiveIntegerField(help_text="Number of contracts")
-    entry_price = models.FloatField(null=True, blank=True, help_text="Premium per share at entry")
-    exit_price = models.FloatField(null=True, blank=True, help_text="Premium per share at exit")
-    peak_price = models.FloatField(null=True, blank=True)
-    realized_pnl = models.FloatField(null=True, blank=True, help_text="Dollar P&L, already x100 for the contract multiplier")
- 
-    alpaca_order_id = models.CharField(max_length=100, blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="open")
- 
-    entered_at = models.DateTimeField(auto_now_add=True)
-    exited_at = models.DateTimeField(null=True, blank=True)
- 
-    class Meta:
-        ordering = ["-entered_at"]
- 
-    def __str__(self):
-        return f"{self.strategy.name} — {self.option_type.upper()} {self.underlying_symbol} ${self.strike_price}"
- 
- 
 class OptionTrade(models.Model):
     STATUS_CHOICES = [("open", "Open"), ("closed", "Closed")]
     OPTION_TYPE_CHOICES = [("call", "Call"), ("put", "Put")]
