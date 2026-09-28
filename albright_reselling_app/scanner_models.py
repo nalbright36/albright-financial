@@ -1,6 +1,6 @@
 """Scanner models. Add to the bottom of albright_reselling_app/models.py:
 
-    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice  # noqa: E402,F401
+    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice, ScanRun  # noqa: E402,F401
 """
 from django.db import models
 
@@ -58,3 +58,23 @@ class SpotPrice(models.Model):
 
     class Meta:
         ordering = ["-fetched_at"]
+
+
+class ScanRun(models.Model):
+    """One run of the scan_lots command - a log so the dashboard (and
+    admin) can show whether the scheduled task is actually running."""
+    source = models.CharField(max_length=40)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    lots_seen = models.IntegerField(default=0)
+    candidates = models.IntegerField(default=0)
+    llm_calls = models.IntegerField(default=0)
+    failed_keywords = models.JSONField(default=list, blank=True)
+    stopped_early = models.BooleanField(default=False)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.source} @ {self.started_at}"

@@ -26,6 +26,13 @@ class SourceBlocked(Exception):
     """The site refused us (403/429). We stop - we do NOT retry around blocks."""
 
 
+class SourceUnavailable(Exception):
+    """The site timed out or refused the connection, even after one polite
+    retry. Unlike SourceBlocked, this isn't necessarily a block - just a
+    request that didn't get a response - so callers may reasonably move on
+    to the next keyword instead of stopping the whole scan."""
+
+
 class BaseAdapter:
     source = "base"
     request_delay_seconds = 3.0   # be polite: one request every few seconds

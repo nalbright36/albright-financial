@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm, HarvestRequestForm, AnalysisRequestForm
 from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot, ScannedLot, AnalysisRequest, ReconciliationRequest, DeepDiveRequest
+from .scanner.dashboard import get_scanner_dashboard_context
 from django.db.models import Avg, Count, Sum, F
 from django.utils import timezone
 
@@ -76,7 +77,7 @@ def dashboard(request):
             pending_jobs.append({"label": label, "status": obj.get_status_display(), "created_at": obj.created_at})
     pending_jobs.sort(key=lambda j: j["created_at"], reverse=True)
 
-    return render(request, "dashboard.html", {
+    context = {
         "in_inventory_count": in_inventory_count,
         "in_inventory_cost": in_inventory_cost,
         "sold_count": sold_count,
@@ -96,7 +97,9 @@ def dashboard(request):
         "reconciled_count": reconciled_count,
         "under_max_hammer": under_max_hammer,
         "pending_jobs": pending_jobs[:5],
-    })
+    }
+    context.update(get_scanner_dashboard_context())
+    return render(request, "dashboard.html", context)
 
 
 @login_required

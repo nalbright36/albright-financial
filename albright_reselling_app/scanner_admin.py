@@ -3,9 +3,27 @@
     from .scanner_admin import *  # noqa: E402,F401,F403
 """
 from django.contrib import admin
+from django.db.models import Q
+from django.utils import timezone
 from django.utils.html import format_html
 
-from .scanner_models import LotEvaluation, SourcedLot, SpotPrice
+from .scanner_models import LotEvaluation, ScanRun, SourcedLot, SpotPrice
+
+
+class AuctionStatusFilter(admin.SimpleListFilter):
+    title = "Auction status"
+    parameter_name = "auction_status"
+
+    def lookups(self, request, model_admin):
+        return (("live", "Live"), ("ended", "Ended"))
+
+    def queryset(self, request, queryset):
+        now = timezone.now()
+        if self.value() == "live":
+            return queryset.filter(lot__end_time__gt=now)
+        if self.value() == "ended":
+            return queryset.filter(Q(lot__end_time__lte=now) | Q(lot__end_time__isnull=True))
+        return queryset
 
 
 class EvaluationInline(admin.StackedInline):
@@ -30,7 +48,7 @@ class SourcedLotAdmin(admin.ModelAdmin):
 class LotEvaluationAdmin(admin.ModelAdmin):
     list_display = ("lot_title", "current", "max_bid", "headroom", "confidence",
                     "coin_keys", "silver_oz", "gold_oz", "method", "is_candidate", "ends", "link")
-    list_filter = ("is_candidate", "confidence", "method")
+    list_filter = (AuctionStatusFilter, "is_candidate", "confidence", "method")
     search_fields = ("lot__title",)
     list_select_related = ("lot",)
 
@@ -40,6 +58,7 @@ class LotEvaluationAdmin(admin.ModelAdmin):
     def current(self, obj):
         return obj.lot.current_price
 
+    @admin.display(description="Ends", ordering="lot__end_time")
     def ends(self, obj):
         return obj.lot.end_time
 
@@ -49,6 +68,22 @@ class LotEvaluationAdmin(admin.ModelAdmin):
 
 
 admin.site.register(SpotPrice)
+
+
+@admin.register(ScanRun)
+class ScanRunAdmin(admin.ModelAdmin):
+    """Read-only: these rows are the scan_lots command's own run log, not
+    something to hand-edit."""
+    list_display = ("started_at", "source", "lots_seen", "candidates", "failed_keywords", "error")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 # ---------------------------------------------------------------------------

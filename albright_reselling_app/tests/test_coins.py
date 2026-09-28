@@ -65,6 +65,59 @@ class CoinParserTests(TestCase):
         self.assertFalse(r.excluded_reason)
         self.assertAlmostEqual(r.total_oz("silver"), 0.925)
 
+    # Real false positives from the first full ShopGoodwill scan
+    def test_non_coin_goods_excluded(self):
+        for t in ["Vintage Astatic Silver Eagle Microphone",
+                  "Kodak PIXPRO FZ45 Digital Camera Silver Eagle Creek Green Case Bundle",
+                  "Eyes of Night Silver Eagle Figurine by Cynthie Fisher 2004 Bradford Ex",
+                  "American Eagle Neon Yellow Hoodie M Medium Silver Eagle Graphic Fleece",
+                  "Harley-Davidson 3XL Black Cotton T-Shirt Silver Eagle Palm Tree Logo",
+                  "Silver Eagle Waterloo Iowa Graphic Tee Gray"]:
+            r = parse_coin_text(t)
+            self.assertEqual(r.items, [], t)
+
+    def test_jewelry_excluded(self):
+        for t in ["925 Sterling Silver Round Lab Created Sapphire Stud Earrings .78g No B",
+                  "14k gold round button style earrings w/ small coins 2.8 grams"]:
+            self.assertTrue(parse_coin_text(t).excluded_reason, t)
+
+    def test_fineness_is_not_quantity(self):
+        r = parse_coin_text("400 Silver Kennedy 1966 & 1967 Half Dollar Trio 34.34g")
+        self.assertEqual((r.items[0].coin_key, r.items[0].quantity), ("kennedy_40", 3))
+
+    def test_weight_sets_quantity(self):
+        r = parse_coin_text("Kennedy Half Dollars 1964 lot 125.0g")
+        self.assertEqual(r.items[0].quantity, 10)
+
+    def test_weight_mismatch_is_low(self):
+        r = parse_coin_text("1921 Morgan Silver Dollar 20.1g")
+        self.assertEqual(r.confidence, "low")
+        self.assertIn("weight_mismatch", r.flags)
+
+    def test_key_date_is_low(self):
+        r = parse_coin_text("Worn U.s 1916 30 Silver (90%) Standing Liberty Quarter")
+        self.assertEqual((r.items[0].quantity, r.confidence), (1, "low"))
+
+    def test_modern_gold_valued_conservatively(self):
+        r = parse_coin_text("US 1991 $5 Gold Coin")
+        self.assertEqual(r.items[0].coin_key, "modern_5_gold")
+        self.assertAlmostEqual(r.total_oz("gold"), 0.1)
+        self.assertEqual(parse_coin_text("1908 $5 Gold Coin Indian").items[0].coin_key, "half_eagle_5_gold")
+
+    def test_fractional_gold_eagle(self):
+        self.assertAlmostEqual(parse_coin_text("1/10 oz American Gold Eagle").total_oz("gold"), 0.1)
+        self.assertEqual(parse_coin_text("American Gold Eagle coin").confidence, "low")
+
+    def test_stated_percent_picks_composition(self):
+        r = parse_coin_text("Kennedy Half Dollar 40% Silver US Mint Coins Lot of 10")
+        self.assertEqual((r.items[0].coin_key, r.items[0].quantity), ("kennedy_40", 10))
+        self.assertEqual(parse_coin_text("Kennedy Half Dollars 90% Silver lot of 4").items[0].coin_key, "kennedy_90")
+
+    def test_year_range_is_not_key_date(self):
+        r = parse_coin_text("Lot of 10 Vintage US Mercury Dimes 1916-1946 90% Silver")
+        self.assertNotIn("key_date_verify", r.flags)
+        self.assertEqual(r.confidence, "high")
+
     def test_franklin_mint_not_a_half(self):
         self.assertEqual(parse_coin_text("Franklin Mint sterling ingot").items, [])
 

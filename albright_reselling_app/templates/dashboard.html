@@ -147,5 +147,161 @@
         </div>
     </div>
 
+    <!-- ShopGoodwill Coin Scanner: health, spot prices, live candidates,
+         closest calls, and the scan_lots run log. Read-only - scans only
+         run from the scheduled task, never from this page. -->
+    <div class="grid grid-2" style="margin-top: 24px; margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Coin Scanner Health</span></div>
+            {% for message in scanner_health.warnings %}
+            <div class="alert-warning">{{ message }}</div>
+            {% endfor %}
+            {% if scanner_health.last_run %}
+            <p style="margin: 0; color: var(--text-primary);">
+                Last run {{ scanner_health.last_run_started_at|date:"M j, g:i A" }}
+                &mdash; {{ scanner_health.last_run.lots_seen }} lot{{ scanner_health.last_run.lots_seen|pluralize }} seen,
+                {{ scanner_health.last_run.candidates }} candidate{{ scanner_health.last_run.candidates|pluralize }}.
+            </p>
+            {% else %}
+            <p style="margin: 0; color: var(--text-secondary);">No scans have run yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card__header"><span class="card__label">Spot Prices</span></div>
+            {% for metal, spot in spot_prices.items %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
+                <span style="color: var(--text-secondary); font-size: 0.875rem; text-transform: capitalize;">{{ metal }}</span>
+                {% if spot %}
+                <span class="num">
+                    ${{ spot.price|floatformat:2 }}
+                    <span style="color: var(--text-secondary); font-family: var(--font-body); margin-left: 6px;">({{ spot.fetched_at|date:"M j" }})</span>
+                    {% if spot.is_stale %}<span class="badge warn" style="margin-left: 6px;">stale</span>{% endif %}
+                </span>
+                {% else %}
+                <span class="badge warn">no price yet</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">Live Candidates</span></div>
+        {% if live_candidates %}
+        <div style="overflow-x: auto;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th class="num">Bid</th>
+                    <th class="num">Max Bid</th>
+                    <th class="num">Headroom</th>
+                    <th class="num">Confidence</th>
+                    <th class="hide-mobile">Coin Type</th>
+                    <th class="num hide-mobile">Ag oz</th>
+                    <th class="num hide-mobile">Au oz</th>
+                    <th class="num">Ends In</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in live_candidates %}
+                <tr>
+                    <td><a href="{{ row.lot_url }}" target="_blank" rel="noopener">{{ row.title|truncatechars:50 }}</a></td>
+                    <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                    <td class="num">${{ row.max_bid|floatformat:2 }}</td>
+                    <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
+                    <td class="num"><span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ row.confidence }}</span></td>
+                    <td class="hide-mobile">{{ row.coin_keys|default:"—" }}</td>
+                    <td class="num hide-mobile">{{ row.silver_oz|floatformat:4 }}</td>
+                    <td class="num hide-mobile">{{ row.gold_oz|floatformat:4 }}</td>
+                    <td class="num">{{ row.time_remaining }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">
+            No live candidates right now. Last scan checked {{ last_run_lots_seen }} lot{{ last_run_lots_seen|pluralize }}.
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">Closest Calls</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">Live lots nearest your max bid</span>
+        </div>
+        {% if closest_calls %}
+        <div style="overflow-x: auto;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th class="num">Bid</th>
+                    <th class="num">Max Bid</th>
+                    <th class="num">Headroom</th>
+                    <th class="num">Confidence</th>
+                    <th class="hide-mobile">Coin Type</th>
+                    <th class="num hide-mobile">Ag oz</th>
+                    <th class="num hide-mobile">Au oz</th>
+                    <th class="num">Ends In</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in closest_calls %}
+                <tr>
+                    <td><a href="{{ row.lot_url }}" target="_blank" rel="noopener">{{ row.title|truncatechars:50 }}</a></td>
+                    <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                    <td class="num">${{ row.max_bid|floatformat:2 }}</td>
+                    <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
+                    <td class="num"><span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ row.confidence }}</span></td>
+                    <td class="hide-mobile">{{ row.coin_keys|default:"—" }}</td>
+                    <td class="num hide-mobile">{{ row.silver_oz|floatformat:4 }}</td>
+                    <td class="num hide-mobile">{{ row.gold_oz|floatformat:4 }}</td>
+                    <td class="num">{{ row.time_remaining }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No close calls right now.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card__header"><span class="card__label">Recent Scanner Runs</span></div>
+        {% if recent_runs %}
+        <div style="overflow-x: auto;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th class="num">Lots Seen</th>
+                    <th class="num">Candidates</th>
+                    <th>Failed Keywords</th>
+                    <th class="num">Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in recent_runs %}
+                <tr>
+                    <td>{{ run.started_at|date:"M j, g:i A" }}</td>
+                    <td class="num">{{ run.lots_seen }}</td>
+                    <td class="num">{{ run.candidates }}</td>
+                    <td>{% if run.failed_keywords %}{{ run.failed_keywords|join:", " }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num"><span class="badge {% if run.has_error %}loss{% else %}gain{% endif %}">{% if run.has_error %}Yes{% else %}No{% endif %}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No runs recorded yet.</p>
+        {% endif %}
+    </div>
+
 </div>
 {% endblock %}

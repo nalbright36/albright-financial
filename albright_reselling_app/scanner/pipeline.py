@@ -8,7 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from ..scanner_models import LotEvaluation, SourcedLot
-from .adapters.base import SourceBlocked
+from .adapters.base import SourceBlocked, SourceUnavailable
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .coins import estimate_resale, parse_coin_text
 from .max_bid import BuyCosts, SellFees, max_bid
@@ -90,7 +90,8 @@ def run_scan(source: str, category: str = "coins", use_llm=True, keywords=None):
     spot = get_all_spot()
     llm_budget = cfg["LLM"]["max_calls_per_run"]
     tz_name = cfg["SOURCES"][source].get("timezone", "UTC")
-    seen, candidates = 0, []
+    seen, candidates, failed_keywords = 0, [], []
+    consecutive_failures = 0
 
     for keyword in keywords or cfg["KEYWORDS"][category]:
         try:
@@ -103,7 +104,19 @@ def run_scan(source: str, category: str = "coins", use_llm=True, keywords=None):
         except SourceBlocked as exc:
             log.error("Stopping scan: %s", exc)
             break
+        except SourceUnavailable as exc:
+            log.warning("Keyword %r failed, keeping lots found so far: %s", keyword, exc)
+            failed_keywords.append(keyword)
+            consecutive_failures += 1
+            if consecutive_failures >= 2:
+                log.error("Stopping scan: %s consecutive keywords failed with SourceUnavailable - "
+                          "the site is probably down or throttling us", consecutive_failures)
+                break
+            adapter.pause()
+            continue
+        else:
+            consecutive_failures = 0
         adapter.pause()
 
-    return {"seen": seen, "candidates": candidates, "spot": spot,
+    return {"seen": seen, "candidates": candidates, "spot": spot, "failed_keywords": failed_keywords,
             "llm_calls": cfg["LLM"]["max_calls_per_run"] - llm_budget}

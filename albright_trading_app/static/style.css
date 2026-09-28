@@ -44,6 +44,9 @@
   --loss-bg:       rgba(255, 110, 104, 0.10);
   --loss-glow:     rgba(255, 110, 104, 0.35);
   --neutral:       #8393AD;
+  --warn:          #F5A623;
+  --warn-bg:       rgba(245, 166, 35, 0.10);
+  --warn-glow:     rgba(245, 166, 35, 0.35);
 
   /* Type */
   --font-display: 'Space Grotesk', 'Inter', sans-serif;
@@ -623,7 +626,26 @@ a:hover { color: var(--accent-hover); }
 }
 .badge.gain { background: var(--gain-bg); color: var(--gain); border-color: rgba(92, 224, 166, 0.25); }
 .badge.loss { background: var(--loss-bg); color: var(--loss); border-color: rgba(255, 110, 104, 0.25); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); border-color: rgba(245, 166, 35, 0.25); }
 .badge.neutral { background: var(--surface-hover); color: var(--text-secondary); }
+
+/* ---------- Warning banner (stale data, missing runs, etc.) ----------
+   Same shape as the existing error-card convention (a card with a colored
+   left border) but amber for "worth a look" instead of red for "broken". */
+.alert-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--warn-bg);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+  color: var(--warn);
+  font-size: 0.875rem;
+}
+.alert-warning:last-child { margin-bottom: 0; }
 
 /* ---------- Holdings table ---------- */
 table.holdings {
