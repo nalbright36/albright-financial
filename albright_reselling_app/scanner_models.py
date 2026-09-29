@@ -19,6 +19,9 @@ class SourcedLot(models.Model):
     raw = models.JSONField(default=dict, blank=True)
     first_seen = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(auto_now=True)
+    final_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    is_closed = models.BooleanField(default=False)
+    final_checked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ("source", "external_id")
@@ -43,6 +46,8 @@ class LotEvaluation(models.Model):
     max_bid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     headroom = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # max_bid - current bid
     is_candidate = models.BooleanField(default=False)
+    is_lead = models.BooleanField(default=False)
+    lead_reason = models.CharField(max_length=300, blank=True)
     llm_title_hash = models.CharField(max_length=64, blank=True)  # avoid re-paying for the same text
     evaluated_at = models.DateTimeField(auto_now=True)
 
@@ -68,6 +73,7 @@ class ScanRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     lots_seen = models.IntegerField(default=0)
     candidates = models.IntegerField(default=0)
+    leads = models.IntegerField(default=0)
     llm_calls = models.IntegerField(default=0)
     failed_keywords = models.JSONField(default=list, blank=True)
     stopped_early = models.BooleanField(default=False)

@@ -84,10 +84,13 @@ class ShopGoodwillAdapter(BaseAdapter):
             except (requests.Timeout, requests.ConnectionError) as exc2:
                 raise SourceUnavailable(f"ShopGoodwill unavailable for keyword {keyword!r}: {exc2}") from exc2
 
-    def search(self, keyword: str):
+    def _search(self, keyword: str, extra_payload: dict):
+        """Shared pagination/request/retry loop for both open and closed
+        searches - extra_payload overrides just the fields that differ
+        between them (e.g. searchClosedAuctions)."""
         for page in range(1, self.max_pages_per_keyword + 1):
             today = datetime.now()
-            payload = {**SEARCH_PAYLOAD, "searchText": keyword, "page": str(page),
+            payload = {**SEARCH_PAYLOAD, **extra_payload, "searchText": keyword, "page": str(page),
                        "closedAuctionEndingDate": f"{today.month}/{today.day}/{today.year}"}
             resp = self._post(payload, keyword)
             if resp.status_code in (401, 403, 429):
@@ -103,6 +106,18 @@ class ShopGoodwillAdapter(BaseAdapter):
                 if lot:
                     yield lot
             self.pause()
+
+    def search(self, keyword: str):
+        yield from self._search(keyword, {})
+
+    def search_closed(self, keyword: str, days_back: int = 2):
+        """Closed (sold) auctions from the last days_back days. currentPrice
+        on a closed item is the final price it sold for - _parse_item()
+        already reads that field into RawLot.current_price, so no special
+        parsing is needed here."""
+        yield from self._search(keyword, {
+            "searchClosedAuctions": "true", "closedAuctionDaysBack": str(days_back),
+        })
 
     def _parse_item(self, item: dict) -> RawLot | None:
         item_id = _first(item, "itemId", "itemID", "id")

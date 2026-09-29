@@ -46,9 +46,9 @@ class SourcedLotAdmin(admin.ModelAdmin):
 
 @admin.register(LotEvaluation)
 class LotEvaluationAdmin(admin.ModelAdmin):
-    list_display = ("lot_title", "current", "max_bid", "headroom", "confidence",
-                    "coin_keys", "silver_oz", "gold_oz", "method", "is_candidate", "ends", "link")
-    list_filter = (AuctionStatusFilter, "is_candidate", "confidence", "method")
+    list_display = ("lot_title", "category", "current", "max_bid", "headroom", "confidence",
+                    "coin_keys", "silver_oz", "gold_oz", "method", "is_candidate", "is_lead", "ends", "link")
+    list_filter = (AuctionStatusFilter, "category", "is_candidate", "is_lead", "confidence", "method")
     search_fields = ("lot__title",)
     list_select_related = ("lot",)
 
@@ -74,7 +74,7 @@ admin.site.register(SpotPrice)
 class ScanRunAdmin(admin.ModelAdmin):
     """Read-only: these rows are the scan_lots command's own run log, not
     something to hand-edit."""
-    list_display = ("started_at", "source", "lots_seen", "candidates", "failed_keywords", "error")
+    list_display = ("started_at", "source", "lots_seen", "candidates", "leads", "failed_keywords", "error")
 
     def has_add_permission(self, request):
         return False

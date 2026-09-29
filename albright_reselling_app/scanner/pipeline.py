@@ -1,4 +1,4 @@
-"""fetch -> upsert lots -> parse (regex, then LLM if needed) -> value -> max bid -> save."""
+"""fetch -> upsert lots -> classify (coins/jewelry/games/cards/none) -> value or lead -> save."""
 import hashlib
 import logging
 from decimal import Decimal
@@ -9,13 +9,15 @@ from django.utils import timezone
 
 from ..scanner_models import LotEvaluation, SourcedLot
 from .adapters.base import SourceBlocked, SourceUnavailable
+from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
-from .coins import estimate_resale, parse_coin_text
+from .coins import estimate_resale
 from .max_bid import BuyCosts, SellFees, max_bid
 from .spot import get_all_spot
+from .valuers import classify
 
 log = logging.getLogger(__name__)
-ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter}
+ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter}
 
 
 def _d(x, places="0.01"):
@@ -24,6 +26,33 @@ def _d(x, places="0.01"):
 
 def _cfg():
     return settings.RESELLING_SCANNER
+
+
+def _categories_for(cfg, source):
+    """Every category in the source's own keyword dict, if it has one;
+    otherwise every category in the global KEYWORDS dict."""
+    keywords_dict = cfg["SOURCES"][source].get("keywords") or cfg["KEYWORDS"]
+    return list(keywords_dict.keys())
+
+
+def _keywords_for(cfg, source, category):
+    """Source-specific keywords (RESELLING_SCANNER["SOURCES"][source]["keywords"])
+    win when present; otherwise fall back to the global per-category list. This
+    keeps ShopGoodwill (no "keywords" key in its SOURCES entry) unchanged."""
+    return cfg["SOURCES"][source].get("keywords", {}).get(category) or cfg["KEYWORDS"][category]
+
+
+def _inbound_shipping(raw, src_cfg):
+    """Per-lot inbound cost. For a pickup lot with a known drive distance
+    (raw["_pickup"]["distance_miles"]) and a mileage rate configured for the
+    source, price the round trip (there and back) plus a flat per-trip cost.
+    Otherwise fall back to the source's flat default_inbound_shipping."""
+    pickup = (raw or {}).get("_pickup") or {}
+    distance = pickup.get("distance_miles")
+    mileage_rate = src_cfg.get("mileage_rate")
+    if distance is not None and mileage_rate:
+        return (2 * distance * mileage_rate) + src_cfg.get("pickup_fixed_cost", 0)
+    return src_cfg["default_inbound_shipping"]
 
 
 def _upsert(raw, keyword, tz_name):
@@ -39,26 +68,13 @@ def _upsert(raw, keyword, tz_name):
     return lot
 
 
-def evaluate(lot, spot, llm_budget, use_llm=True):
-    cfg = _cfg()
-    src = cfg["SOURCES"][lot.source]
-    evaluation, _ = LotEvaluation.objects.get_or_create(lot=lot)
-
-    text_hash = hashlib.sha256(f"{lot.title}|{lot.description}".encode()).hexdigest()
-    parse = parse_coin_text(lot.title, lot.description)
-
-    if parse.needs_llm and use_llm and cfg["LLM"]["enabled"]:
-        if evaluation.llm_title_hash == text_hash and evaluation.method == "llm":
-            return evaluation, llm_budget  # already paid for this exact text; keep prior result
-        if llm_budget > 0:
-            from .llm import llm_parse  # imported lazily so the scanner runs without openai installed
-            try:
-                parse = llm_parse(lot.title, lot.description)
-                evaluation.llm_title_hash = text_hash
-                llm_budget -= 1
-            except Exception as exc:  # noqa: BLE001
-                log.warning("LLM failed for %s: %s", lot, exc)
-
+def _apply_valuation(evaluation, parse, lot, spot, src, cfg):
+    """Coins & jewelry: metal valuation (estimate_resale + max_bid), plus
+    is_lead/lead_reason from the parser's own needs_review flag (e.g.
+    jewelry with no stated weight, or from a flagged designer). Fees are the
+    source's FEES merged with CATEGORY_FEES.get(category, {}) - a no-op
+    merge for coins (no "coins" key in CATEGORY_FEES), but drops eBay/
+    shipping fees for jewelry, which sells to scrap buyers instead."""
     evaluation.method = parse.method
     evaluation.flags = parse.flags
     evaluation.confidence = parse.confidence
@@ -69,8 +85,9 @@ def evaluate(lot, spot, llm_budget, use_llm=True):
 
     if parse.items and not parse.excluded_reason:
         melt, expected = estimate_resale(parse, spot, cfg["RESALE_MULTIPLIERS"])
-        buy = BuyCosts(src["buyer_premium_pct"], src["sales_tax_pct"], src["default_inbound_shipping"])
-        bid = max_bid(expected, SellFees(**cfg["FEES"]), buy)
+        fees = {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(evaluation.category, {})}
+        buy = BuyCosts(src["buyer_premium_pct"], src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
+        bid = max_bid(expected, SellFees(**fees), buy)
         evaluation.melt_value, evaluation.expected_sale, evaluation.max_bid = _d(melt), _d(expected), _d(bid)
         evaluation.headroom = _d(bid - float(lot.current_price))
         evaluation.is_candidate = (
@@ -80,27 +97,102 @@ def evaluate(lot, spot, llm_budget, use_llm=True):
         evaluation.melt_value = evaluation.expected_sale = evaluation.max_bid = evaluation.headroom = _d(0)
         evaluation.is_candidate = False
 
+    evaluation.is_lead = bool(parse.needs_review and not parse.excluded_reason)
+    evaluation.lead_reason = parse.review_reason
+
+
+def _apply_lead(evaluation, lead):
+    """Games & cards: no free price source, so no valuation - just a lead
+    flag for lots worth pricing by hand."""
+    evaluation.method = ""
+    evaluation.confidence = ""
+    evaluation.coin_keys = ""
+    evaluation.silver_oz = evaluation.gold_oz = _d(0, "0.0001")
+    evaluation.excluded_reason = ""
+    evaluation.melt_value = evaluation.expected_sale = evaluation.max_bid = evaluation.headroom = _d(0)
+    evaluation.is_candidate = False
+    evaluation.is_lead = lead.is_lead
+    evaluation.lead_reason = lead.reason
+    evaluation.flags = lead.signals
+
+
+def _apply_none(evaluation, reason):
+    """Doesn't fit any tracked category - nothing to value or lead on."""
+    evaluation.method = ""
+    evaluation.confidence = ""
+    evaluation.coin_keys = ""
+    evaluation.silver_oz = evaluation.gold_oz = _d(0, "0.0001")
+    evaluation.flags = []
+    evaluation.excluded_reason = reason
+    evaluation.melt_value = evaluation.expected_sale = evaluation.max_bid = evaluation.headroom = _d(0)
+    evaluation.is_candidate = False
+    evaluation.is_lead = False
+    evaluation.lead_reason = ""
+
+
+def evaluate(lot, spot, llm_budget, use_llm=True):
+    cfg = _cfg()
+    src = cfg["SOURCES"][lot.source]
+    evaluation, _ = LotEvaluation.objects.get_or_create(lot=lot)
+
+    classification = classify(lot.title, lot.description, float(lot.current_price), cfg["LEAD_LIMITS"])
+    evaluation.category = classification.category
+
+    if classification.category == "coins":
+        text_hash = hashlib.sha256(f"{lot.title}|{lot.description}".encode()).hexdigest()
+        parse = classification.parse
+
+        if parse.needs_llm and use_llm and cfg["LLM"]["enabled"]:
+            if evaluation.llm_title_hash == text_hash and evaluation.method == "llm":
+                return evaluation, llm_budget  # already paid for this exact text; keep prior result
+            if llm_budget > 0:
+                from .llm import llm_parse  # imported lazily so the scanner runs without openai installed
+                try:
+                    parse = llm_parse(lot.title, lot.description)
+                    evaluation.llm_title_hash = text_hash
+                    llm_budget -= 1
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("LLM failed for %s: %s", lot, exc)
+
+        _apply_valuation(evaluation, parse, lot, spot, src, cfg)
+
+    elif classification.category == "jewelry":
+        _apply_valuation(evaluation, classification.parse, lot, spot, src, cfg)
+
+    elif classification.category in ("games", "cards"):
+        _apply_lead(evaluation, classification.lead)
+
+    else:  # "none"
+        _apply_none(evaluation, classification.reason)
+
     evaluation.save()
     return evaluation, llm_budget
 
 
-def run_scan(source: str, category: str = "coins", use_llm=True, keywords=None):
+def run_scan(source: str, category: str | None = None, use_llm=True, keywords=None):
     cfg = _cfg()
     adapter = ADAPTERS[source]()
     spot = get_all_spot()
     llm_budget = cfg["LLM"]["max_calls_per_run"]
     tz_name = cfg["SOURCES"][source].get("timezone", "UTC")
-    seen, candidates, failed_keywords = 0, [], []
+    seen, failed_keywords = 0, []
+    latest_by_lot = {}  # lot_id -> most recent evaluation, so a lot matched by
+                        # several keywords is only counted/listed once
     consecutive_failures = 0
 
-    for keyword in keywords or cfg["KEYWORDS"][category]:
+    if keywords is not None:
+        keyword_list = list(keywords)
+    else:
+        categories = [category] if category else _categories_for(cfg, source)
+        keyword_list = [kw for cat in categories for kw in _keywords_for(cfg, source, cat)]
+
+    for keyword in keyword_list:
         try:
             for raw in adapter.search(keyword):
                 lot = _upsert(raw, keyword, tz_name)
                 ev, llm_budget = evaluate(lot, spot, llm_budget, use_llm)
                 seen += 1
-                if ev.is_candidate:
-                    candidates.append(ev)
+                latest_by_lot[ev.lot_id] = ev
         except SourceBlocked as exc:
             log.error("Stopping scan: %s", exc)
             break
@@ -118,5 +210,9 @@ def run_scan(source: str, category: str = "coins", use_llm=True, keywords=None):
             consecutive_failures = 0
         adapter.pause()
 
-    return {"seen": seen, "candidates": candidates, "spot": spot, "failed_keywords": failed_keywords,
+    candidates = [ev for ev in latest_by_lot.values() if ev.is_candidate]
+    leads = [ev for ev in latest_by_lot.values() if ev.is_lead]
+
+    return {"seen": seen, "candidates": candidates, "leads": leads, "spot": spot,
+            "failed_keywords": failed_keywords, "keywords_scanned": keyword_list,
             "llm_calls": cfg["LLM"]["max_calls_per_run"] - llm_budget}

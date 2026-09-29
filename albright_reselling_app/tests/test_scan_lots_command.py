@@ -15,8 +15,8 @@ class ScanLotsRunLogTests(TestCase):
     @mock.patch(RUN_SCAN_TARGET)
     def test_records_scan_run_on_success(self, mock_run_scan):
         mock_run_scan.return_value = {
-            "seen": 12, "candidates": [], "spot": {"silver": 30.0, "gold": 2500.0},
-            "failed_keywords": [], "llm_calls": 0,
+            "seen": 12, "candidates": [], "leads": [], "spot": {"silver": 30.0, "gold": 2500.0},
+            "failed_keywords": [], "keywords_scanned": ["morgan dollar"], "llm_calls": 0,
         }
 
         call_command("scan_lots", "--no-llm", stdout=StringIO())
@@ -25,6 +25,7 @@ class ScanLotsRunLogTests(TestCase):
         self.assertEqual(run.source, "shopgoodwill")
         self.assertEqual(run.lots_seen, 12)
         self.assertEqual(run.candidates, 0)
+        self.assertEqual(run.leads, 0)
         self.assertEqual(run.failed_keywords, [])
         self.assertFalse(run.stopped_early)
         self.assertEqual(run.error, "")

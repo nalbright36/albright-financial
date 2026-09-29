@@ -135,6 +135,8 @@ class ParseResult:
     excluded_reason: str = ""
     needs_llm: bool = False
     method: str = "regex"
+    needs_review: bool = False       # worth a human look even without a max bid
+    review_reason: str = ""
 
     def total_oz(self, metal: str) -> float:
         return round(sum(i.oz_each * i.quantity for i in self.items if i.metal == metal), 4)
@@ -308,5 +310,8 @@ def estimate_resale(parse: ParseResult, spot: dict, multipliers: dict) -> tuple[
             raise ValueError(f"No spot price for {item.metal}")
         item_melt = item.oz_each * item.quantity * price
         melt += item_melt
-        expected += item_melt * multipliers.get(item.coin_key, multipliers.get("default", 1.0))
+        # exact key first (e.g. "jewelry_gold_14k"), then its family ("jewelry_gold"), then default
+        family = item.coin_key.rsplit("_", 1)[0]
+        rate = multipliers.get(item.coin_key, multipliers.get(family, multipliers.get("default", 1.0)))
+        expected += item_melt * rate
     return round(melt, 2), round(expected, 2)
