@@ -61,6 +61,14 @@
             </div>
         </nav>
 
+        {% if messages %}
+        <div class="container" style="padding-top: 16px;">
+            {% for message in messages %}
+            <div class="alert-warning">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% block content %}
         {% endblock %}
 

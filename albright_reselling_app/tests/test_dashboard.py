@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_context
-from albright_reselling_app.scanner_models import LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from albright_reselling_app.scanner_models import AIReview, LotEvaluation, ScanRun, SourcedLot, SpotPrice
 
 
 def _make_lot(external_id, end_time, current_price=10.0, source="shopgoodwill", raw=None):
@@ -256,6 +256,38 @@ class ScannerDashboardContextTests(TestCase):
         self.assertEqual(row["item_label"], "14k gold jewelry")
         self.assertEqual(row["metal_label"], "0.64 oz Au")
 
+    def test_ai_review_badge_data_for_recent_successful_review(self):
+        lot = _make_lot("ai-badge-1", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+        AIReview.objects.create(
+            lot=lot, status="done", resale_low=Decimal("95.00"), resale_high=Decimal("130.00"),
+            confidence="high", cost_usd=Decimal("0.05"),
+        )
+
+        context = get_scanner_dashboard_context()
+
+        row = context["live_candidates_ending_soon"][0]
+        self.assertIsNotNone(row["ai_review"])
+        self.assertEqual(row["ai_review"].resale_low, Decimal("95.00"))
+
+    def test_no_ai_review_badge_without_a_review(self):
+        lot = _make_lot("no-ai-badge", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+
+        self.assertIsNone(context["live_candidates_ending_soon"][0]["ai_review"])
+
+    def test_ai_review_stats_reflect_todays_reviews(self):
+        lot = _make_lot("ai-stats-1", timezone.now() + timedelta(hours=3))
+        AIReview.objects.create(lot=lot, status="done", cost_usd=Decimal("0.05"))
+        AIReview.objects.create(lot=lot, status="error", cost_usd=Decimal("0"))
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["ai_review_stats"]["today_count"], 2)
+        self.assertEqual(context["ai_review_stats"]["month_cost"], Decimal("0.05"))
+
 
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
@@ -305,3 +337,25 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "Riverview")
         self.assertContains(response, "Estate of J. Smith")
         self.assertContains(response, "8.2")
+
+    def test_ai_review_badge_on_page(self):
+        lot = _make_lot("ai-badge-page", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+        AIReview.objects.create(
+            lot=lot, status="done", resale_low=Decimal("95.00"), resale_high=Decimal("130.00"),
+            confidence="high", cost_usd=Decimal("0.05"),
+        )
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "AI: $95")
+        self.assertContains(response, "AI review")  # the button is still offered too
+
+    def test_ai_review_button_without_existing_review(self):
+        lot = _make_lot("ai-button-only", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "AI review")
+        self.assertNotContains(response, "AI: $")

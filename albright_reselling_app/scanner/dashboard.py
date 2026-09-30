@@ -21,7 +21,8 @@ from decimal import Decimal
 from django.conf import settings
 from django.utils import timezone
 
-from ..scanner_models import LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from ..scanner_models import AIReview, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from .ai_review_service import months_review_cost, todays_review_count
 
 STALE_RUN_AFTER = timedelta(hours=2)
 CLOSEST_CALLS_LIMIT = 10
@@ -143,6 +144,7 @@ def _end_time_epoch_ms(lot):
 def _lot_row(evaluation, now):
     lot = evaluation.lot
     return {
+        "lot_id": lot.pk,
         "title": lot.title,
         "lot_url": lot.url,
         "source": lot.source,
@@ -169,6 +171,7 @@ def _lot_row(evaluation, now):
 def _lead_row(evaluation, now):
     lot = evaluation.lot
     return {
+        "lot_id": lot.pk,
         "category": evaluation.category,
         "title": lot.title,
         "lot_url": lot.url,
@@ -351,6 +354,37 @@ def _spot_price_status(now, max_age_days):
     return statuses
 
 
+def _latest_ai_reviews(lot_ids):
+    """Most recent successful AIReview per lot id, for the dashboard badge
+    ("AI: $95-$130"). One query regardless of how many rows need it."""
+    lot_ids = {lid for lid in lot_ids if lid is not None}
+    if not lot_ids:
+        return {}
+    latest = {}
+    reviews = AIReview.objects.filter(lot_id__in=lot_ids, status="done").order_by("lot_id", "-created_at")
+    for review in reviews:
+        latest.setdefault(review.lot_id, review)  # first hit per lot_id is the most recent (see order_by)
+    return latest
+
+
+def _attach_ai_reviews(*row_lists):
+    """Adds an "ai_review" key (an AIReview or None) to every row across all
+    the given lists, via one shared lookup query."""
+    all_rows = [row for rows in row_lists for row in rows]
+    latest = _latest_ai_reviews(row["lot_id"] for row in all_rows)
+    for row in all_rows:
+        row["ai_review"] = latest.get(row["lot_id"])
+
+
+def _ai_review_stats(cfg):
+    return {
+        "today_count": todays_review_count(),
+        "month_cost": months_review_cost(),
+        "monthly_budget": Decimal(str(cfg["monthly_budget_usd"])),
+        "daily_limit": cfg["daily_limit"],
+    }
+
+
 def get_scanner_dashboard_context():
     now = timezone.now()
     cfg = settings.RESELLING_SCANNER
@@ -403,6 +437,11 @@ def get_scanner_dashboard_context():
 
     closed_results_summary, closed_results_rows = _closed_results(now)
 
+    # AI review button/badge: only on the tables where you'd plausibly pay
+    # for a second opinion (not Closest Calls - those are already over your
+    # max bid regardless of what an AI review might say).
+    _attach_ai_reviews(live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review)
+
     return {
         "scanner_health": scanner_health,
         "spot_prices": _spot_price_status(now, max_age_days),
@@ -424,6 +463,7 @@ def get_scanner_dashboard_context():
         "closed_results_summary": closed_results_summary,
         "closed_results_rows": closed_results_rows,
         "closed_results_has_maxsold": _has_maxsold(closed_results_rows),
+        "ai_review_stats": _ai_review_stats(cfg["AI_REVIEW"]),
         "last_run_lots_seen": sum(
             h["last_run"].lots_seen for h in scanner_health.values() if h["last_run"]
         ),

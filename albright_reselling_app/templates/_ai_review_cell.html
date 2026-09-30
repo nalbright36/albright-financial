@@ -1,0 +1,20 @@
+{% comment %}
+Reused by every lot-row table that offers an AI review: the "AI: $X-$Y"
+badge (only if a successful review already exists for this lot) plus the
+"AI review" button, which is always available. Expects `row` (with
+`row.lot_id` and `row.ai_review`) in the current context - true inside any
+`{% for row in ... %}` loop.
+{% endcomment %}
+<td>
+    {% if row.ai_review %}
+    <a href="{% url 'albright_reselling_app:ai_review_detail' row.ai_review.pk %}"
+       class="badge {% if row.ai_review.confidence == 'high' %}gain{% elif row.ai_review.confidence == 'medium' %}neutral{% else %}warn{% endif %}"
+       style="margin-right: 6px; white-space: nowrap;">
+        AI: {% if row.ai_review.resale_low is not None %}${{ row.ai_review.resale_low|floatformat:0 }}&ndash;${{ row.ai_review.resale_high|floatformat:0 }}{% else %}no est.{% endif %}
+    </a>
+    {% endif %}
+    <form method="post" action="{% url 'albright_reselling_app:ai_review_request' row.lot_id %}" class="js-ai-review-form" style="display: inline-block;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary btn-sm">AI review</button>
+    </form>
+</td>

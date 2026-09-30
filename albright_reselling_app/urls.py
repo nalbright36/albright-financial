@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import scanner_views, views
 
 app_name = "albright_reselling_app"
 
@@ -11,4 +11,6 @@ urlpatterns = [
     path("sleeper-segments/", views.sleeper_segments, name="sleeper_segments"),
     path("historical-data/", views.historical_data, name="historical_data"),
     path("sleeper-segments/analysis/<int:analysis_id>/", views.analysis_results, name="analysis_results"),
+    path("scanner/review/<int:lot_id>/request/", scanner_views.request_review, name="ai_review_request"),
+    path("scanner/review/<int:review_id>/", scanner_views.review_detail, name="ai_review_detail"),
 ]

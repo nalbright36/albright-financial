@@ -1,0 +1,121 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">AI Review</span>
+            <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Back to dashboard</a>
+        </div>
+
+        <h2 style="margin-bottom: 6px;"><a href="{{ lot.url }}" target="_blank" rel="noopener">{{ lot.title }}</a></h2>
+        <p style="color: var(--text-secondary); margin: 0 0 20px;">
+            ${{ lot.current_price|floatformat:2 }} current bid
+            {% if evaluation %}&middot; scanner max bid ${{ evaluation.max_bid|floatformat:2 }}{% endif %}
+            &middot; ends in {{ time_remaining }}
+            &middot; reviewed {{ review.created_at|date:"M j, g:i A" }} ({{ review.model_name }})
+        </p>
+
+        {% if review.status == 'error' %}
+        <div class="alert-warning">Review failed: {{ review.error }}</div>
+        {% else %}
+
+        {% if identified_items %}
+        <div style="margin-bottom: 20px;">
+            <div class="card__label" style="margin-bottom: 8px;">Identified Items</div>
+            <ul style="margin: 0; padding-left: 20px; color: var(--text-primary);">
+                {% for item in identified_items %}
+                <li>{{ item.quantity }}&times; {{ item.name }}{% if item.notes %} &mdash; {{ item.notes }}{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-4" style="margin-bottom: 20px;">
+            <div class="card">
+                <div class="card__header"><span class="card__label">Resale Range</span></div>
+                {% if review.resale_low is not None %}
+                <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">${{ review.resale_low|floatformat:0 }}&ndash;${{ review.resale_high|floatformat:0 }}</span>
+                {% else %}
+                <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: var(--text-tertiary);">&mdash;</span>
+                {% endif %}
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Suggested Max Bid</span></div>
+                {% if review.suggested_max_bid is not None %}
+                <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">${{ review.suggested_max_bid|floatformat:2 }}</span>
+                {% else %}
+                <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: var(--text-tertiary);">&mdash;</span>
+                {% endif %}
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Confidence</span></div>
+                <span class="badge {% if review.confidence == 'high' %}gain{% elif review.confidence == 'medium' %}neutral{% else %}warn{% endif %}" style="font-size: 0.875rem;">{{ review.confidence|default:"—" }}</span>
+            </div>
+            <div class="card">
+                <div class="card__header"><span class="card__label">Cost of This Review</span></div>
+                <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">${{ review.cost_usd|floatformat:4 }}</span>
+            </div>
+        </div>
+
+        {% if red_flags %}
+        <div class="alert-warning" style="margin-bottom: 20px; display: block;">
+            <strong>Red flags</strong>
+            <ul style="margin: 6px 0 0; padding-left: 18px;">
+                {% for flag in red_flags %}<li>{{ flag }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if summary %}
+        <p style="color: var(--text-primary); line-height: 1.6; margin-bottom: 12px;">{{ summary }}</p>
+        {% endif %}
+
+        {% if notes %}
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 20px;">
+            {% for note in notes %}{{ note }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}
+            {% if dropped_comps %} &middot; {{ dropped_comps }} comp{{ dropped_comps|pluralize }} dropped (link not verified){% endif %}
+        </p>
+        {% endif %}
+
+        <div class="card__label" style="margin-bottom: 8px;">Comps</div>
+        {% if comps %}
+        <div style="overflow-x: auto; margin-bottom: 8px;">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th class="num">Price</th>
+                    <th>Type</th>
+                    <th>Date</th>
+                    <th>Source</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for comp in comps %}
+                <tr>
+                    <td><a href="{{ comp.url }}" target="_blank" rel="noopener" title="{{ comp.title }}">{{ comp.title|truncatechars:60 }}</a></td>
+                    <td class="num">${{ comp.price|floatformat:2 }}</td>
+                    <td><span class="badge {% if comp.type == 'sold' %}gain{% else %}neutral{% endif %}">{{ comp.type|default:"—" }}</span></td>
+                    <td>{{ comp.date|default:"—" }}</td>
+                    <td>{{ comp.source|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No verified comps - nothing the model cited could be confirmed against real search results.</p>
+        {% endif %}
+
+        {% endif %}
+
+        <form method="post" action="{% url 'albright_reselling_app:ai_review_request' lot.pk %}" style="margin-top: 12px;">
+            {% csrf_token %}
+            <input type="hidden" name="force" value="1">
+            <button type="submit" class="btn btn-secondary">Re-run review</button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

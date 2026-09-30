@@ -186,6 +186,10 @@
                 <option value="low">Low</option>
             </select>
         </div>
+        <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
+            AI reviews: {{ ai_review_stats.today_count }} today (of {{ ai_review_stats.daily_limit }})
+            &middot; cost this month ${{ ai_review_stats.month_cost|floatformat:2 }} of ${{ ai_review_stats.monthly_budget|floatformat:2 }} budget
+        </p>
     </div>
 
     <div class="grid grid-2" style="margin-bottom: 24px;">
@@ -267,6 +271,7 @@
                     <th class="num hide-mobile" data-sort-key="metal">Metal</th>
                     {% if live_candidates_ending_soon_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                     <th class="num" data-sort-key="endtime">Ends In</th>
+                    <th>AI Review</th>
                 </tr>
             </thead>
             <tbody>
@@ -293,6 +298,7 @@
                     </td>
                     {% endif %}
                     <td class="num">{{ row.time_remaining }}</td>
+                    {% include "_ai_review_cell.html" %}
                 </tr>
                 {% endfor %}
             </tbody>
@@ -326,6 +332,7 @@
                         <th class="num hide-mobile" data-sort-key="metal">Metal</th>
                         {% if live_candidates_ending_later_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                         <th class="num" data-sort-key="endtime">Ends In</th>
+                        <th>AI Review</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -352,6 +359,7 @@
                         </td>
                         {% endif %}
                         <td class="num">{{ row.time_remaining }}</td>
+                        {% include "_ai_review_cell.html" %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -393,6 +401,7 @@
                     <th data-sort-key="notes">Notes</th>
                     {% if check_by_hand_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                     <th class="num" data-sort-key="endtime">Ends In</th>
+                    <th>AI Review</th>
                 </tr>
             </thead>
             <tbody>
@@ -419,6 +428,7 @@
                     </td>
                     {% endif %}
                     <td class="num">{{ row.time_remaining }}</td>
+                    {% include "_ai_review_cell.html" %}
                 </tr>
                 {% endfor %}
             </tbody>
@@ -458,6 +468,7 @@
                     <th data-sort-key="reason">Reason</th>
                     {% if leads_to_review_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                     <th class="num" data-sort-key="endtime">Ends In</th>
+                    <th>AI Review</th>
                 </tr>
             </thead>
             <tbody>
@@ -478,6 +489,7 @@
                     </td>
                     {% endif %}
                     <td class="num">{{ row.time_remaining }}</td>
+                    {% include "_ai_review_cell.html" %}
                 </tr>
                 {% endfor %}
             </tbody>

@@ -1,6 +1,6 @@
 """Scanner models. Add to the bottom of albright_reselling_app/models.py:
 
-    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice, ScanRun  # noqa: E402,F401
+    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview  # noqa: E402,F401
 """
 from django.db import models
 
@@ -63,6 +63,31 @@ class SpotPrice(models.Model):
 
     class Meta:
         ordering = ["-fetched_at"]
+
+
+class AIReview(models.Model):
+    """One on-demand AI resale review of a single lot (scanner/ai_review.py's
+    run_review), run only when the user clicks the review button - never
+    from a scheduled task."""
+    STATUS_CHOICES = [("done", "Done"), ("error", "Error")]
+
+    lot = models.ForeignKey(SourcedLot, on_delete=models.CASCADE, related_name="ai_reviews")
+    created_at = models.DateTimeField(auto_now_add=True)
+    model_name = models.CharField(max_length=60, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="done")
+    result = models.JSONField(default=dict, blank=True)  # ReviewResult.to_dict()
+    resale_low = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    resale_high = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    suggested_max_bid = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    confidence = models.CharField(max_length=10, blank=True)
+    cost_usd = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"AIReview({self.lot_id}, {self.status}) @ {self.created_at}"
 
 
 class ScanRun(models.Model):

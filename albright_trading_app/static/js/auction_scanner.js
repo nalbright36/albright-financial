@@ -67,6 +67,23 @@
         });
     }
 
+    // ---------- AI review buttons: disable + "Reviewing..." on submit ----------
+    // The request itself can take up to a minute (web search + an LLM
+    // call), so this is just feedback for a real page navigation (POST ->
+    // redirect), not an AJAX call - no JS means the form still submits
+    // normally, just without this feedback.
+    function initAIReviewForms() {
+        var forms = document.querySelectorAll(".js-ai-review-form");
+        forms.forEach(function (form) {
+            form.addEventListener("submit", function () {
+                var button = form.querySelector("button");
+                if (!button) return;
+                button.disabled = true;
+                button.textContent = "Reviewing...";
+            });
+        });
+    }
+
     // ---------- Shared filter bar (source / category / confidence / search) ----------
     function initFilters() {
         var searchInput = document.getElementById("af-search");
@@ -137,6 +154,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         Array.prototype.slice.call(document.querySelectorAll("table.holdings")).forEach(initSortableTable);
         initCollapsible();
+        initAIReviewForms();
         initFilters();
     });
 })();
