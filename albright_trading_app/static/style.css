@@ -866,6 +866,50 @@ table.holdings th.sorted-desc::after {
   content: "\25BC";
 }
 
+/* ---------- Auction Scanner: title clamp, collapsible cards, row counts ----------
+   Titles get real width and wrap to at most two lines with an ellipsis,
+   instead of either blowing up row height or being hard-truncated server
+   side; title="" on the link gives the full text on hover. */
+th.lot-title-col {
+  min-width: 220px;
+}
+td.lot-title {
+  max-width: 320px;
+}
+td.lot-title a {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+/* Card headers that toggle their body on click (JS only - with JS
+   disabled the body is simply always visible, never hidden). */
+.js-collapsible-header {
+  cursor: pointer;
+  user-select: none;
+}
+.js-collapsible-header::before {
+  content: "\25BC";
+  display: inline-block;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  margin-right: 8px;
+  transition: transform 0.15s ease;
+}
+.js-collapsible-header.is-collapsed::before {
+  transform: rotate(-90deg);
+}
+
+.row-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
 /* ---------- Toggle switch (strategy on/off) ---------- */
 .toggle-switch {
   position: relative;

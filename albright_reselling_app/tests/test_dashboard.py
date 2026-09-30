@@ -52,6 +52,7 @@ class ScannerDashboardContextTests(TestCase):
 
         self.assertEqual(context["live_candidates_ending_soon"], [])
         self.assertEqual(context["live_candidates_ending_later"], [])
+        self.assertEqual(context["check_by_hand"], [])
         self.assertEqual(context["closest_calls"], [])
         self.assertEqual(context["recent_runs"], [])
         self.assertEqual(context["maxsold_estates"], [])
@@ -199,6 +200,62 @@ class ScannerDashboardContextTests(TestCase):
         self.assertEqual(context["leads_to_review"], [])
         self.assertEqual(context["lead_counts_by_category"], {})
 
+    def test_low_confidence_under_max_in_check_by_hand_not_closest_calls(self):
+        lot = _make_lot("low-conf-1", timezone.now() + timedelta(hours=5))
+        _make_evaluation(lot, is_candidate=False, max_bid=20.0, headroom=5.0, confidence="low")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual([r["title"] for r in context["check_by_hand"]], [lot.title])
+        self.assertEqual(context["closest_calls"], [])
+
+    def test_over_max_lot_only_in_closest_calls(self):
+        lot = _make_lot("over-max-1", timezone.now() + timedelta(hours=5))
+        _make_evaluation(lot, is_candidate=False, max_bid=20.0, headroom=-5.0, confidence="high")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual([r["title"] for r in context["closest_calls"]], [lot.title])
+        self.assertEqual(context["check_by_hand"], [])
+
+    def test_low_confidence_over_max_is_closest_call_not_check_by_hand(self):
+        """Closest Calls is purely about headroom (over max), independent of
+        confidence; Check by hand requires headroom >= 0 (affordable), so a
+        low-confidence, over-max lot lands in Closest Calls only."""
+        lot = _make_lot("low-conf-over-max", timezone.now() + timedelta(hours=5))
+        _make_evaluation(lot, is_candidate=False, max_bid=20.0, headroom=-5.0, confidence="low")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual([r["title"] for r in context["closest_calls"]], [lot.title])
+        self.assertEqual(context["check_by_hand"], [])
+
+    def test_item_and_metal_labels_for_coin(self):
+        lot = _make_lot("labels-coin", timezone.now() + timedelta(hours=5))
+        LotEvaluation.objects.create(
+            lot=lot, is_candidate=True, max_bid=Decimal("20.00"), headroom=Decimal("5.00"),
+            confidence="high", coin_keys="morgan_dollar", silver_oz=Decimal("0.7734"), gold_oz=Decimal("0"),
+        )
+
+        context = get_scanner_dashboard_context()
+
+        row = context["live_candidates_ending_soon"][0]
+        self.assertEqual(row["item_label"], "Morgan dollar")
+        self.assertEqual(row["metal_label"], "0.77 oz Ag")
+
+    def test_item_and_metal_labels_for_jewelry(self):
+        lot = _make_lot("labels-jewelry", timezone.now() + timedelta(hours=5))
+        LotEvaluation.objects.create(
+            lot=lot, is_candidate=True, max_bid=Decimal("20.00"), headroom=Decimal("5.00"),
+            confidence="high", coin_keys="jewelry_gold_14k", gold_oz=Decimal("0.6400"),
+        )
+
+        context = get_scanner_dashboard_context()
+
+        row = context["live_candidates_ending_soon"][0]
+        self.assertEqual(row["item_label"], "14k gold jewelry")
+        self.assertEqual(row["metal_label"], "0.64 oz Au")
+
 
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
@@ -213,6 +270,7 @@ class DashboardViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No scans have run yet")
         self.assertContains(response, "No live candidates right now")
+        self.assertContains(response, "Nothing low-confidence and affordable right now")
         self.assertContains(response, "No leads ending soon")
         self.assertContains(response, "No close calls right now")
         self.assertContains(response, "No runs recorded yet")

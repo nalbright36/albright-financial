@@ -13,6 +13,7 @@ schedules and have different staleness expectations.
 Read-only: nothing here starts a scan. Scans only run from the scheduled
 `scan_lots` task.
 """
+import re
 import statistics
 from datetime import timedelta
 from decimal import Decimal
@@ -29,6 +30,74 @@ LEADS_TO_REVIEW_LIMIT = 50
 RESULTS_WINDOW_DAYS = 7
 RECENT_RESULTS_LIMIT = 20
 
+# Human-readable labels for scanner/coins.py CoinType keys and the
+# jewelry_gold_{karat}k / jewelry_sterling keys from scanner/jewelry.py.
+# Kept here (not in coins.py/jewelry.py) since it's purely a display
+# concern - add an entry whenever a new coin type is added there.
+ITEM_LABELS = {
+    "double_eagle_20": "$20 gold double eagle",
+    "eagle_10_gold": "$10 gold eagle",
+    "modern_10_gold": "$10 gold eagle (modern)",
+    "half_eagle_5_gold": "$5 gold half eagle",
+    "modern_5_gold": "$5 gold eagle (modern)",
+    "quarter_eagle_gold": "$2.50 gold quarter eagle",
+    "krugerrand": "Krugerrand",
+    "gold_buffalo": "Gold buffalo",
+    "gold_eagle_1oz": "Gold eagle",
+    "morgan_dollar": "Morgan dollar",
+    "peace_dollar": "Peace dollar",
+    "silver_eagle": "Silver eagle",
+    "silver_maple": "Silver maple",
+    "eisenhower_40": "Eisenhower dollar (40% silver)",
+    "kennedy_90": "Kennedy half (90% silver)",
+    "kennedy_40": "Kennedy half (40% silver)",
+    "walking_liberty_half": "Walking Liberty half",
+    "franklin_half": "Franklin half",
+    "barber_half": "Barber half",
+    "washington_quarter_90": "Washington quarter (silver)",
+    "standing_liberty_quarter": "Standing Liberty quarter",
+    "barber_quarter": "Barber quarter",
+    "mercury_dime": "Mercury dime",
+    "roosevelt_dime_90": "Roosevelt dime (silver)",
+    "barber_dime": "Barber dime",
+    "war_nickel": "War nickel",
+    "junk_silver_face": "Junk silver (face value)",
+    "generic_silver": "Silver bar/round",
+    "generic_gold": "Gold bar/round",
+    "jewelry_sterling": "Sterling silver jewelry",
+}
+JEWELRY_GOLD_KEY_RE = re.compile(r"^jewelry_gold_(\d+)k$")
+
+
+def _item_label(coin_key):
+    if coin_key in ITEM_LABELS:
+        return ITEM_LABELS[coin_key]
+    match = JEWELRY_GOLD_KEY_RE.match(coin_key)
+    if match:
+        return f"{match.group(1)}k gold jewelry"
+    return coin_key.replace("_", " ").capitalize()  # unmapped key: best-effort fallback
+
+
+def _item_labels(coin_keys):
+    """coin_keys is the comma-joined LotEvaluation.coin_keys string (can
+    hold more than one key for a mixed lot)."""
+    if not coin_keys:
+        return ""
+    return ", ".join(_item_label(k) for k in coin_keys.split(","))
+
+
+def _metal_label(silver_oz, gold_oz):
+    """"1.09 oz Ag" / "0.64 oz Au" / "1.09 oz Ag, 0.64 oz Au" for the rare
+    mixed lot / "" when there's no metal content at all (games, cards,
+    "none")."""
+    parts = []
+    if silver_oz:
+        parts.append(f"{silver_oz:.2f} oz Ag")
+    if gold_oz:
+        parts.append(f"{gold_oz:.2f} oz Au")
+    return ", ".join(parts)
+
+
 # Sources whose staleness ("last run was over 2 hours ago") is checked on
 # the dashboard. MaxSold isn't on a firm enough schedule yet to flag it.
 STALENESS_CHECKED_SOURCES = {"shopgoodwill"}
@@ -38,6 +107,12 @@ SOURCE_DISPLAY_NAMES = {"shopgoodwill": "ShopGoodwill", "maxsold": "MaxSold"}
 
 def _source_display(source):
     return SOURCE_DISPLAY_NAMES.get(source, source.title())
+
+
+def _has_maxsold(rows):
+    """Whether a table's row list has any MaxSold lots - the template uses
+    this to only show the Pickup column on tables where it means anything."""
+    return any(row.get("source") == "maxsold" for row in rows)
 
 
 def _format_duration(delta):
@@ -61,6 +136,10 @@ def _time_remaining(lot, now):
     return _format_duration(remaining) if remaining.total_seconds() > 0 else "Ended"
 
 
+def _end_time_epoch_ms(lot):
+    return int(lot.end_time.timestamp() * 1000) if lot.end_time else None
+
+
 def _lot_row(evaluation, now):
     lot = evaluation.lot
     return {
@@ -74,9 +153,13 @@ def _lot_row(evaluation, now):
         "headroom": evaluation.headroom,
         "confidence": evaluation.confidence,
         "coin_keys": evaluation.coin_keys,
+        "item_label": _item_labels(evaluation.coin_keys),
         "silver_oz": evaluation.silver_oz,
         "gold_oz": evaluation.gold_oz,
+        "metal_label": _metal_label(evaluation.silver_oz, evaluation.gold_oz),
+        "flags": evaluation.flags,
         "time_remaining": _time_remaining(lot, now),
+        "end_time_epoch_ms": _end_time_epoch_ms(lot),
         # Pickup-based sources (MaxSold) carry drive/estate info here; other
         # sources (ShopGoodwill) simply have nothing under "_pickup".
         "pickup": (lot.raw or {}).get("_pickup"),
@@ -91,9 +174,11 @@ def _lead_row(evaluation, now):
         "lot_url": lot.url,
         "source": lot.source,
         "source_display": _source_display(lot.source),
+        "confidence": evaluation.confidence,
         "current_bid": lot.current_price,
         "lead_reason": evaluation.lead_reason,
         "time_remaining": _time_remaining(lot, now),
+        "end_time_epoch_ms": _end_time_epoch_ms(lot),
         "pickup": (lot.raw or {}).get("_pickup"),
     }
 
@@ -109,6 +194,19 @@ def _split_by_window(live_qs, now, window_hours):
         row = _lot_row(ev, now)
         (ending_soon if ev.lot.end_time <= cutoff else ending_later).append(row)
     return ending_soon, ending_later
+
+
+def _check_by_hand(now):
+    """Live, priced, affordable (headroom >= 0) lots the parser itself
+    flagged as low-confidence - not disqualified, just worth a human look
+    before bidding. evaluation.flags carries why (e.g. weight_mismatch,
+    key_date_verify, numismatic_upside)."""
+    check_qs = (
+        LotEvaluation.objects.select_related("lot")
+        .filter(confidence="low", max_bid__gt=0, headroom__gte=0, lot__end_time__gt=now)
+        .order_by("lot__end_time")
+    )
+    return [_lot_row(ev, now) for ev in check_qs]
 
 
 def _source_health(source, now, check_staleness):
@@ -223,7 +321,10 @@ def _closed_results(now):
         {
             "title": lot.title,
             "lot_url": lot.url,
+            "source": lot.source,
+            "source_display": _source_display(lot.source),
             "category": lot.evaluation.category,
+            "confidence": lot.evaluation.confidence,
             "final_price": lot.final_price,
             "max_bid": lot.evaluation.max_bid,
             "melt_value": lot.evaluation.melt_value,
@@ -266,12 +367,18 @@ def get_scanner_dashboard_context():
         live_qs, now, candidate_window_hours
     )
 
+    # "Closest calls": priced, live, over your max bid (headroom < 0) - the
+    # ones where the market is closest to matching what you'd pay. A live
+    # lot that's simply under-max-but-not-a-candidate (e.g. confidence too
+    # low) belongs in "Check by hand" instead, not here.
     closest_qs = (
         LotEvaluation.objects.select_related("lot")
-        .filter(is_candidate=False, max_bid__gt=0, lot__end_time__gt=now)
+        .filter(is_candidate=False, max_bid__gt=0, headroom__lt=0, lot__end_time__gt=now)
         .order_by("-headroom")[:CLOSEST_CALLS_LIMIT]
     )
     closest_calls = [_lot_row(ev, now) for ev in closest_qs]
+
+    check_by_hand = _check_by_hand(now)
 
     lead_window_hours = cfg["LEAD_WINDOW_HOURS"]
     leads_to_review, lead_counts_by_category = _leads_to_review(now, lead_window_hours)
@@ -301,15 +408,22 @@ def get_scanner_dashboard_context():
         "spot_prices": _spot_price_status(now, max_age_days),
         "live_candidates_ending_soon": live_candidates_ending_soon,
         "live_candidates_ending_later": live_candidates_ending_later,
+        "live_candidates_ending_soon_has_maxsold": _has_maxsold(live_candidates_ending_soon),
+        "live_candidates_ending_later_has_maxsold": _has_maxsold(live_candidates_ending_later),
         "candidate_window_hours": candidate_window_hours,
+        "check_by_hand": check_by_hand,
+        "check_by_hand_has_maxsold": _has_maxsold(check_by_hand),
         "closest_calls": closest_calls,
+        "closest_calls_has_maxsold": _has_maxsold(closest_calls),
         "leads_to_review": leads_to_review,
+        "leads_to_review_has_maxsold": _has_maxsold(leads_to_review),
         "lead_counts_by_category": lead_counts_by_category,
         "lead_window_hours": lead_window_hours,
         "recent_runs": recent_runs,
         "maxsold_estates": _maxsold_estates(now),
         "closed_results_summary": closed_results_summary,
         "closed_results_rows": closed_results_rows,
+        "closed_results_has_maxsold": _has_maxsold(closed_results_rows),
         "last_run_lots_seen": sum(
             h["last_run"].lots_seen for h in scanner_health.values() if h["last_run"]
         ),
