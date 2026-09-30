@@ -13,11 +13,26 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from .scanner.dashboard import _time_remaining
+from .scanner.review_history import (
+    CATEGORY_CHOICES,
+    CONFIDENCE_CHOICES,
+    OUTCOME_CHOICES,
+    PAGE_SIZE,
+    SOURCE_CHOICES,
+    filtered_reviews,
+    filters_from_params,
+    reviews_to_csv,
+    row_for,
+    summary_stats,
+    time_remaining_at_review,
+)
 from .scanner_models import AIReview, SourcedLot
 
 RECENT_REVIEW_WINDOW = timedelta(hours=24)
@@ -64,10 +79,47 @@ def review_detail(request, review_id):
         "lot": lot,
         "evaluation": evaluation,
         "time_remaining": time_remaining,
+        "time_remaining_at_review": time_remaining_at_review(review),
         "identified_items": result.get("identified_items") or [],
         "comps": result.get("comps") or [],
         "dropped_comps": result.get("dropped_comps") or 0,
         "notes": result.get("notes") or [],
         "red_flags": result.get("red_flags") or [],
         "summary": result.get("summary") or "",
+    })
+
+
+@login_required
+def review_history(request):
+    """Every past AI review, newest first, filterable/paginated via GET
+    params so a filtered view stays a bookmarkable/shareable link. Sorting
+    within the current page is handled client-side by the existing
+    static/js/auction_scanner.js (table.holdings + th[data-sort-key])."""
+    filters = filters_from_params(request.GET)
+    qs = filtered_reviews(filters)
+
+    if request.GET.get("export") == "csv":
+        response = HttpResponse(reviews_to_csv(qs), content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="ai_reviews.csv"'
+        return response
+
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    query_params.pop("export", None)
+    filter_querystring = query_params.urlencode()
+
+    page = Paginator(qs, PAGE_SIZE).get_page(request.GET.get("page"))
+    rows = [row_for(review) for review in page.object_list]
+
+    return render(request, "ai_review_history.html", {
+        "rows": rows,
+        "page": page,
+        "filters": filters,
+        "filter_querystring": filter_querystring,
+        "summary": summary_stats(),
+        "source_choices": SOURCE_CHOICES,
+        "category_choices": CATEGORY_CHOICES,
+        "confidence_choices": CONFIDENCE_CHOICES,
+        "status_choices": AIReview.STATUS_CHOICES,
+        "outcome_choices": OUTCOME_CHOICES,
     })

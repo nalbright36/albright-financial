@@ -5,15 +5,36 @@
     <div class="card" style="margin-bottom: 24px;">
         <div class="card__header">
             <span class="card__label">AI Review</span>
-            <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Back to dashboard</a>
+            <span>
+                <a href="{% url 'albright_reselling_app:ai_review_history' %}" style="font-size: 0.8125rem; margin-right: 14px;">&larr; Back to AI reviews</a>
+                <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Back to dashboard</a>
+            </span>
         </div>
 
         <h2 style="margin-bottom: 6px;"><a href="{{ lot.url }}" target="_blank" rel="noopener">{{ lot.title }}</a></h2>
-        <p style="color: var(--text-secondary); margin: 0 0 20px;">
+        <p style="color: var(--text-secondary); margin: 0 0 6px;">
             ${{ lot.current_price|floatformat:2 }} current bid
             {% if evaluation %}&middot; scanner max bid ${{ evaluation.max_bid|floatformat:2 }}{% endif %}
             &middot; ends in {{ time_remaining }}
             &middot; reviewed {{ review.created_at|date:"M j, g:i A" }} ({{ review.model_name }})
+        </p>
+        <p style="color: var(--text-secondary); margin: 0 0 20px; font-size: 0.8125rem;">
+            At review time:
+            {% if review.bid_at_review is not None %}${{ review.bid_at_review|floatformat:2 }} bid{% else %}bid &mdash;{% endif %}
+            &middot; {% if review.scanner_max_bid_at_review is not None %}${{ review.scanner_max_bid_at_review|floatformat:2 }} scanner max{% else %}scanner max &mdash;{% endif %}
+            &middot; {% if review.melt_at_review is not None %}${{ review.melt_at_review|floatformat:2 }} melt{% else %}melt &mdash;{% endif %}
+            &middot; {% if time_remaining_at_review %}{{ time_remaining_at_review }} remaining{% else %}time remaining &mdash;{% endif %}
+            {% if lot.is_closed %}
+            &middot; closed at
+            {% if lot.final_price is not None %}
+            ${{ lot.final_price|floatformat:2 }}
+            {% if review.suggested_max_bid is not None %}
+            ({% if lot.final_price <= review.suggested_max_bid %}<span style="color: var(--gain);">under AI max</span>{% else %}<span style="color: var(--loss);">over AI max</span>{% endif %})
+            {% endif %}
+            {% else %}unknown price{% endif %}
+            {% else %}
+            &middot; still live
+            {% endif %}
         </p>
 
         {% if review.status == 'error' %}

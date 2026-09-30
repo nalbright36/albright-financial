@@ -148,6 +148,35 @@ class ReviewLotTests(TestCase):
         mock_ebay_search.assert_called_once()
         self.assertEqual(mock_run_review.call_args.args[3], mock_ebay_search.return_value)
 
+    @mock.patch(EBAY_CONFIGURED, return_value=False)
+    @mock.patch(OPENAI_CLIENT)
+    @mock.patch(RUN_REVIEW)
+    def test_saves_snapshot_fields_from_lot_and_evaluation(self, mock_run_review, mock_client_cls, mock_ebay_cfg):
+        mock_run_review.return_value = _result()
+        lot = _make_lot(max_bid="25.00", melt_value="18.50")
+        lot.current_price = Decimal("12.34")
+        lot.save()
+
+        review = review_lot(lot)
+
+        self.assertEqual(review.bid_at_review, Decimal("12.34"))
+        self.assertEqual(review.scanner_max_bid_at_review, Decimal("25.00"))
+        self.assertEqual(review.melt_at_review, Decimal("18.50"))
+        self.assertEqual(review.lot_end_time_at_review, lot.end_time)
+
+    @mock.patch(EBAY_CONFIGURED, return_value=False)
+    @mock.patch(OPENAI_CLIENT)
+    @mock.patch(RUN_REVIEW)
+    def test_error_review_also_saves_snapshot_fields(self, mock_run_review, mock_client_cls, mock_ebay_cfg):
+        mock_run_review.side_effect = RuntimeError("boom")
+        lot = _make_lot(max_bid="25.00", melt_value="18.50")
+
+        review = review_lot(lot)
+
+        self.assertEqual(review.status, "error")
+        self.assertEqual(review.scanner_max_bid_at_review, Decimal("25.00"))
+        self.assertEqual(review.melt_at_review, Decimal("18.50"))
+
 
 class ProviderSelectionTests(TestCase):
     """The provider setting picks the right client, and a missing provider

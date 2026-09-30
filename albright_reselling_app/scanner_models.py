@@ -83,6 +83,15 @@ class AIReview(models.Model):
     cost_usd = models.DecimalField(max_digits=8, decimal_places=4, default=0)
     error = models.TextField(blank=True)
 
+    # Snapshot of the lot/evaluation as of when the review ran - the live
+    # values on SourcedLot/LotEvaluation move on (new bids, a re-scan), so
+    # without this the history page couldn't show what the AI was actually
+    # reacting to. Null on reviews saved before this field existed.
+    bid_at_review = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    scanner_max_bid_at_review = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    melt_at_review = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    lot_end_time_at_review = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
 

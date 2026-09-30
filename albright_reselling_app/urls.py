@@ -13,4 +13,5 @@ urlpatterns = [
     path("sleeper-segments/analysis/<int:analysis_id>/", views.analysis_results, name="analysis_results"),
     path("scanner/review/<int:lot_id>/request/", scanner_views.request_review, name="ai_review_request"),
     path("scanner/review/<int:review_id>/", scanner_views.review_detail, name="ai_review_detail"),
+    path("scanner/reviews/", scanner_views.review_history, name="ai_review_history"),
 ]

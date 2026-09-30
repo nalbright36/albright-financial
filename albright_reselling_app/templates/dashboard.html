@@ -189,6 +189,7 @@
         <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
             AI reviews: {{ ai_review_stats.today_count }} today (of {{ ai_review_stats.daily_limit }})
             &middot; cost this month ${{ ai_review_stats.month_cost|floatformat:2 }} of ${{ ai_review_stats.monthly_budget|floatformat:2 }} budget
+            &middot; <a href="{% url 'albright_reselling_app:ai_review_history' %}">View all reviews</a>
         </p>
     </div>
 

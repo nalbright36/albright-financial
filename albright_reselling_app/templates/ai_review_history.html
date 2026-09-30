@@ -1,0 +1,166 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <span class="card__label">AI Reviews</span>
+        <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Back to dashboard</a>
+    </div>
+
+    <div class="grid grid-4" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Total Reviews</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem;">{{ summary.total_reviews }}</span>
+            <p style="margin: 8px 0 0; color: var(--text-secondary); font-size: 0.8125rem;">{{ summary.reviews_this_month }} this month</p>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Total Cost</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem;">${{ summary.total_cost|floatformat:2 }}</span>
+            <p style="margin: 8px 0 0; color: var(--text-secondary); font-size: 0.8125rem;">
+                ${{ summary.month_cost|floatformat:2 }} this month of ${{ summary.monthly_budget|floatformat:2 }} budget
+            </p>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Avg Cost / Review</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem;">${{ summary.avg_cost|floatformat:4 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">By Confidence &middot; Status</span></div>
+            <p style="margin: 0 0 8px;">
+                <span class="badge gain">High {{ summary.by_confidence.high }}</span>
+                <span class="badge neutral">Medium {{ summary.by_confidence.medium }}</span>
+                <span class="badge warn">Low {{ summary.by_confidence.low }}</span>
+            </p>
+            <p style="margin: 0;">
+                <span class="badge gain">Done {{ summary.by_status.done }}</span>
+                <span class="badge loss">Error {{ summary.by_status.error }}</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">Filter Reviews</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">Filters are reflected in the URL, so a filtered view can be bookmarked</span>
+        </div>
+        <form method="get" class="scanner-controls">
+            <input type="text" name="q" placeholder="Search title..." value="{{ filters.q }}" autocomplete="off">
+            <select name="source">
+                <option value="">All sources</option>
+                {% for value, label in source_choices %}
+                <option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="category">
+                <option value="">All categories</option>
+                {% for value, label in category_choices %}
+                <option value="{{ value }}" {% if filters.category == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="confidence">
+                <option value="">All confidence</option>
+                {% for value, label in confidence_choices %}
+                <option value="{{ value }}" {% if filters.confidence == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="status">
+                <option value="">All statuses</option>
+                {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="outcome">
+                <option value="">Any outcome</option>
+                {% for value, label in outcome_choices %}
+                <option value="{{ value }}" {% if filters.outcome == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" name="from" value="{{ filters.date_from }}" title="From date">
+            <input type="date" name="to" value="{{ filters.date_to }}" title="To date">
+            <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+            <a href="{% url 'albright_reselling_app:ai_review_history' %}" class="btn btn-secondary btn-sm">Clear</a>
+            <a href="?{{ filter_querystring }}{% if filter_querystring %}&{% endif %}export=csv" class="btn btn-primary btn-sm">Export CSV</a>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="card__header">
+            <span class="card__label">Reviews</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">
+                {{ page.paginator.count }} match{{ page.paginator.count|pluralize:"es" }} &middot; page {{ page.number }} of {{ page.paginator.num_pages|default:1 }}
+            </span>
+        </div>
+
+        {% if rows %}
+        <div style="overflow-x: auto;">
+        <table class="holdings" id="table-ai-reviews">
+            <thead>
+                <tr>
+                    <th data-sort-key="reviewedat">Reviewed At</th>
+                    <th class="lot-title-col" data-sort-key="title">Lot Title</th>
+                    <th data-sort-key="source">Source</th>
+                    <th data-sort-key="category">Category</th>
+                    <th class="num" data-sort-key="bid">Bid</th>
+                    <th class="num" data-sort-key="maxbid">Scanner Max</th>
+                    <th class="num" data-sort-key="resalelow">AI Resale Range</th>
+                    <th class="num" data-sort-key="suggested">AI Suggested Max</th>
+                    <th class="num" data-sort-key="confidence">Confidence</th>
+                    <th class="num" data-sort-key="comps">Comps</th>
+                    <th class="num" data-sort-key="redflags">Red Flags</th>
+                    <th class="num" data-sort-key="cost">Cost</th>
+                    <th data-sort-key="status">Status</th>
+                    <th data-sort-key="outcome">Outcome</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr data-reviewedat="{{ row.reviewed_at_epoch_ms }}" data-title="{{ row.lot_title }}"
+                    data-source="{{ row.source }}" data-category="{{ row.category }}"
+                    data-bid="{{ row.bid_at_review|default_if_none:'' }}" data-maxbid="{{ row.scanner_max_bid_at_review|default_if_none:'' }}"
+                    data-resalelow="{{ row.resale_low|default_if_none:'' }}" data-suggested="{{ row.suggested_max_bid|default_if_none:'' }}"
+                    data-confidence="{{ row.confidence }}" data-comps="{{ row.comps_count }}" data-redflags="{{ row.red_flags_count }}"
+                    data-cost="{{ row.cost_usd }}" data-status="{{ row.status }}" data-outcome="{{ row.outcome.verdict }}">
+                    <td>{{ row.reviewed_at|date:"M j, g:i A" }}</td>
+                    <td class="lot-title"><a href="{% url 'albright_reselling_app:ai_review_detail' row.review.pk %}" title="{{ row.lot_title }}">{{ row.lot_title }}</a></td>
+                    <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                    <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                    <td class="num">{% if row.bid_at_review is not None %}${{ row.bid_at_review|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if row.scanner_max_bid_at_review is not None %}${{ row.scanner_max_bid_at_review|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if row.resale_low is not None %}${{ row.resale_low|floatformat:0 }}&ndash;${{ row.resale_high|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if row.suggested_max_bid is not None %}${{ row.suggested_max_bid|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num"><span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}">{{ row.confidence|default:"—" }}</span></td>
+                    <td class="num">{{ row.comps_count }}{% if row.dropped_comps %} <span style="color: var(--text-tertiary);">({{ row.dropped_comps }} dropped)</span>{% endif %}</td>
+                    <td class="num">{{ row.red_flags_count }}</td>
+                    <td class="num">${{ row.cost_usd|floatformat:4 }}</td>
+                    <td><span class="badge {% if row.status == 'done' %}gain{% else %}loss{% endif %}">{{ row.status }}</span></td>
+                    <td>
+                        {% if row.outcome.verdict == 'under' %}<span class="badge gain">Under AI max: ${{ row.outcome.final_price|floatformat:2 }}</span>
+                        {% elif row.outcome.verdict == 'over' %}<span class="badge loss">Over AI max: ${{ row.outcome.final_price|floatformat:2 }}</span>
+                        {% elif row.outcome.verdict == 'unknown' %}<span class="badge neutral">Unknown: ${{ row.outcome.final_price|floatformat:2 }}</span>
+                        {% else %}<span class="badge neutral">Live</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        {% if page.paginator.num_pages > 1 %}
+        <div style="display: flex; justify-content: center; gap: 8px; margin-top: 18px;">
+            {% if page.has_previous %}
+            <a class="btn btn-secondary btn-sm" href="?{{ filter_querystring }}{% if filter_querystring %}&{% endif %}page={{ page.previous_page_number }}">&larr; Prev</a>
+            {% endif %}
+            <span style="align-self: center; color: var(--text-secondary); font-size: 0.8125rem;">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+            {% if page.has_next %}
+            <a class="btn btn-secondary btn-sm" href="?{{ filter_querystring }}{% if filter_querystring %}&{% endif %}page={{ page.next_page_number }}">Next &rarr;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p style="color: var(--text-secondary);">No AI reviews match these filters.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

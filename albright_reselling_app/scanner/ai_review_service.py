@@ -104,6 +104,18 @@ def _lot_dict(lot, evaluation):
     }
 
 
+def _snapshot_fields(lot, evaluation):
+    """Bid/max-bid/melt/end-time as of right now, saved on the AIReview so
+    browsing the history later isn't confused by the lot's live values
+    having moved on since (new bids, a re-scan changing the evaluation)."""
+    return {
+        "bid_at_review": lot.current_price,
+        "scanner_max_bid_at_review": evaluation.max_bid if evaluation else None,
+        "melt_at_review": evaluation.melt_value if evaluation else None,
+        "lot_end_time_at_review": lot.end_time,
+    }
+
+
 def _ebay_listings(lot):
     if not ebay.is_configured():
         return []
@@ -135,6 +147,7 @@ def review_lot(lot):
     evaluation = getattr(lot, "evaluation", None)
     lot_dict = _lot_dict(lot, evaluation)
     ebay_listings = _ebay_listings(lot)
+    snapshot = _snapshot_fields(lot, evaluation)
 
     try:
         client = _make_client(cfg)
@@ -143,12 +156,14 @@ def review_lot(lot):
         log.error("AI review failed for lot %s: %s", lot.pk, exc)
         AIReview.objects.create(
             lot=lot, model_name=cfg.get("model", ""), status="error", error=str(exc), cost_usd=Decimal("0"),
+            **snapshot,
         )
         raise  # also let the view show this as an immediate dashboard message
     except Exception as exc:  # noqa: BLE001 - always save what happened, never crash the request
         log.error("AI review failed for lot %s: %s", lot.pk, exc)
         return AIReview.objects.create(
             lot=lot, model_name=cfg.get("model", ""), status="error", error=str(exc), cost_usd=Decimal("0"),
+            **snapshot,
         )
 
     suggested_max_bid = None
@@ -166,4 +181,5 @@ def review_lot(lot):
         suggested_max_bid=_to_decimal(suggested_max_bid),
         confidence=result.confidence,
         cost_usd=Decimal(str(result.cost_usd)),
+        **snapshot,
     )
