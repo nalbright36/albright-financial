@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from albright_reselling_app.scanner import ebay
 from albright_reselling_app.scanner.ai_review import run_review
 
-CFG = {"model": "test-model", "max_searches": 3, "input_usd_per_mtok": 1.0,
+CFG = {"provider": "anthropic", "model": "test-model", "max_searches": 3, "input_usd_per_mtok": 1.0,
        "output_usd_per_mtok": 5.0, "usd_per_search": 0.01}
 LOT = {"title": "Lot of 8 Nintendo 64 Games", "description": "", "category": "games",
        "source": "shopgoodwill", "current_bid": 25.0, "ends": "in 5h"}
@@ -83,6 +83,47 @@ class AIReviewTests(TestCase):
         run_review(client, LOT, dict(CFG, allowed_domains=["ebay.com"]))
         tool = client.messages.create.call_args.kwargs["tools"][0]
         self.assertEqual((tool["max_uses"], tool["allowed_domains"]), (3, ["ebay.com"]))
+
+
+def fake_openai_response(payload, source_urls, cited_urls=(), searches=2, text_override=None):
+    output = [NS(type="web_search_call", action=NS(sources=[NS(url=u) for u in source_urls]))
+              for _ in range(searches)]
+    text = text_override if text_override is not None else json.dumps(payload)
+    output.append(NS(type="message", content=[NS(type="output_text", text=text,
+                     annotations=[NS(type="url_citation", url=u) for u in cited_urls])]))
+    client = MagicMock()
+    client.responses.create.return_value = NS(output=output, usage=NS(input_tokens=15000, output_tokens=800))
+    return client
+
+
+OPENAI_CFG = dict(CFG, provider="openai")
+
+
+class OpenAIReviewTests(TestCase):
+    def test_sources_and_citations_verify_comps(self):
+        client = fake_openai_response(payload([SOLD_A, SOLD_B]), ["https://ebay.com/itm/111"],
+                                      cited_urls=["https://pricecharting.com/game/nintendo-64/x"])
+        r = run_review(client, LOT, OPENAI_CFG)
+        self.assertEqual((len(r.comps), r.resale_low, r.confidence), (2, 100.0, "high"))
+
+    def test_invented_url_dropped(self):
+        client = fake_openai_response(payload([SOLD_A, INVENTED]), ["https://ebay.com/itm/111"])
+        r = run_review(client, LOT, OPENAI_CFG)
+        self.assertEqual((len(r.comps), r.dropped_comps, r.resale_low), (1, 1, None))
+
+    def test_request_shape_and_cost(self):
+        client = fake_openai_response(payload([]), [], searches=3)
+        r = run_review(client, LOT, dict(OPENAI_CFG, allowed_domains=["ebay.com"]))
+        kwargs = client.responses.create.call_args.kwargs
+        self.assertEqual(kwargs["tools"], [{"type": "web_search", "filters": {"allowed_domains": ["ebay.com"]}}])
+        self.assertEqual((kwargs["max_tool_calls"], kwargs["include"]), (3, ["web_search_call.action.sources"]))
+        self.assertEqual(r.web_searches, 3)
+        self.assertAlmostEqual(r.cost_usd, 15000 / 1e6 * 1 + 800 / 1e6 * 5 + 0.03)
+
+    def test_default_provider_is_openai(self):
+        client = fake_openai_response(payload([]), [])
+        run_review(client, LOT, {k: v for k, v in CFG.items() if k != "provider"})
+        client.responses.create.assert_called_once()
 
 
 class EbayTests(TestCase):

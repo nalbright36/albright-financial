@@ -16,7 +16,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .scanner.ai_review_service import ReviewLimitExceeded, review_lot
+from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from .scanner.dashboard import _time_remaining
 from .scanner_models import AIReview, SourcedLot
 
@@ -42,7 +42,7 @@ def request_review(request, lot_id):
 
     try:
         review = review_lot(lot)
-    except ReviewLimitExceeded as exc:
+    except (ReviewLimitExceeded, ProviderUnavailable) as exc:
         messages.error(request, str(exc))
         return redirect("albright_reselling_app:dashboard")
 

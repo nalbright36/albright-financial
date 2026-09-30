@@ -1,7 +1,8 @@
 """On-demand AI resale review for ONE lot, run only when you click the button.
 
 Grounding rules (the point of this module):
-  - Claude searches the web for comparable sales (web search tool, capped per review).
+  - The model (OpenAI by default, or Claude) searches the web for comparable sales
+    with its built-in web search tool, capped per review.
   - Every comp must have a URL that actually appeared in the search results or in
     the eBay listings we supplied. Anything else is treated as invented and dropped.
   - With fewer than 2 verified comps, the resale estimate is withheld.
@@ -107,34 +108,79 @@ def build_user_message(lot: dict, ebay_listings: list) -> str:
     return "\n".join(lines)
 
 
-def run_review(client, lot: dict, cfg: dict, ebay_listings: list | None = None) -> ReviewResult:
-    """client: an anthropic.Anthropic() instance (or a test double).
-    cfg: settings RESELLING_SCANNER["AI_REVIEW"]."""
-    ebay_listings = ebay_listings or []
+def _call_anthropic(client, cfg: dict, user_message: str) -> dict:
     tool = {"type": "web_search_20250305", "name": "web_search", "max_uses": cfg.get("max_searches", 3)}
     if cfg.get("allowed_domains"):
         tool["allowed_domains"] = cfg["allowed_domains"]
-
     resp = client.messages.create(
-        model=cfg["model"],
-        max_tokens=cfg.get("max_tokens", 2000),
-        system=SYSTEM_PROMPT,
-        tools=[tool],
-        messages=[{"role": "user", "content": build_user_message(lot, ebay_listings)}],
+        model=cfg["model"], max_tokens=cfg.get("max_tokens", 2000), system=SYSTEM_PROMPT,
+        tools=[tool], messages=[{"role": "user", "content": user_message}],
     )
+    blocks = _get(resp, "content") or []
+    usage = _get(resp, "usage")
+    return {
+        "text": "\n".join(_get(b, "text", "") for b in blocks if _get(b, "type") == "text"),
+        "urls": _search_result_urls(blocks),
+        "input_tokens": _get(usage, "input_tokens", 0) or 0,
+        "output_tokens": _get(usage, "output_tokens", 0) or 0,
+        "searches": _get(_get(usage, "server_tool_use") or {}, "web_search_requests", 0) or 0,
+    }
+
+
+def _call_openai(client, cfg: dict, user_message: str) -> dict:
+    tool = {"type": "web_search"}
+    if cfg.get("allowed_domains"):
+        tool["filters"] = {"allowed_domains": cfg["allowed_domains"]}
+    resp = client.responses.create(
+        model=cfg["model"],
+        instructions=SYSTEM_PROMPT,
+        input=user_message,
+        tools=[tool],
+        max_tool_calls=cfg.get("max_searches", 3),
+        max_output_tokens=cfg.get("max_tokens", 2000),
+        include=["web_search_call.action.sources"],
+    )
+    texts, urls, searches = [], set(), 0
+    for item in _get(resp, "output") or []:
+        kind = _get(item, "type")
+        if kind == "web_search_call":
+            searches += 1
+            for src in _get(_get(item, "action") or {}, "sources") or []:
+                if _get(src, "url"):
+                    urls.add(_normalize_url(_get(src, "url")))
+        elif kind == "message":
+            for part in _get(item, "content") or []:
+                if _get(part, "type") == "output_text":
+                    texts.append(_get(part, "text", ""))
+                    for ann in _get(part, "annotations") or []:
+                        if _get(ann, "type") == "url_citation" and _get(ann, "url"):
+                            urls.add(_normalize_url(_get(ann, "url")))
+    usage = _get(resp, "usage")
+    return {
+        "text": "\n".join(texts),
+        "urls": urls,
+        "input_tokens": _get(usage, "input_tokens", 0) or 0,
+        "output_tokens": _get(usage, "output_tokens", 0) or 0,
+        "searches": searches,
+    }
+
+
+def run_review(client, lot: dict, cfg: dict, ebay_listings: list | None = None) -> ReviewResult:
+    """client: an openai.OpenAI() or anthropic.Anthropic() instance (or a test double),
+    matching cfg["provider"] ("openai" is the default). cfg: settings RESELLING_SCANNER["AI_REVIEW"]."""
+    ebay_listings = ebay_listings or []
+    call = _call_anthropic if cfg.get("provider") == "anthropic" else _call_openai
+    out = call(client, cfg, build_user_message(lot, ebay_listings))
 
     result = ReviewResult()
-    usage = _get(resp, "usage")
-    result.input_tokens = _get(usage, "input_tokens", 0) or 0
-    result.output_tokens = _get(usage, "output_tokens", 0) or 0
-    result.web_searches = _get(_get(usage, "server_tool_use") or {}, "web_search_requests", 0) or 0
+    result.input_tokens, result.output_tokens = out["input_tokens"], out["output_tokens"]
+    result.web_searches = out["searches"]
     result.cost_usd = round(
         result.input_tokens / 1e6 * cfg.get("input_usd_per_mtok", 0)
         + result.output_tokens / 1e6 * cfg.get("output_usd_per_mtok", 0)
         + result.web_searches * cfg.get("usd_per_search", 0.01), 4)
 
-    blocks = _get(resp, "content") or []
-    result.raw_text = "\n".join(_get(b, "text", "") for b in blocks if _get(b, "type") == "text")
+    result.raw_text = out["text"]
     try:
         data = _extract_json(result.raw_text)
     except (ValueError, json.JSONDecodeError) as exc:
@@ -143,7 +189,7 @@ def run_review(client, lot: dict, cfg: dict, ebay_listings: list | None = None) 
         return result
 
     # Only keep comps whose URL we can prove came from search results or our eBay data.
-    known = _search_result_urls(blocks) | {_normalize_url(i["url"]) for i in ebay_listings}
+    known = out["urls"] | {_normalize_url(i["url"]) for i in ebay_listings}
     for comp in data.get("comps") or []:
         url, price = _normalize_url(comp.get("url")), comp.get("price")
         if url and url in known and isinstance(price, (int, float)) and price > 0:

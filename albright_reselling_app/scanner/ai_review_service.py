@@ -1,6 +1,6 @@
 """Django-side wiring for scanner/ai_review.py: turns one SourcedLot into
 the plain dict run_review() expects, fetches optional eBay active listings,
-calls the Anthropic API, and saves the result as an AIReview.
+calls the configured provider's API, and saves the result as an AIReview.
 
 This is deliberately separate from ai_review.py itself (which has no Django
 imports and is unit tested with a mocked client) and from pipeline.py (which
@@ -10,7 +10,6 @@ user clicks the button, and are rate/cost limited accordingly.
 import logging
 from decimal import Decimal
 
-import anthropic
 from django.conf import settings
 from django.db.models import Sum
 from django.utils import timezone
@@ -30,6 +29,33 @@ class ReviewLimitExceeded(Exception):
     count or monthly budget is reached. Callers (the view) catch this
     specifically to redirect back with a message, rather than treating it
     as a review failure."""
+
+
+class ProviderUnavailable(Exception):
+    """The configured AI provider's SDK package isn't installed on this
+    server. Unlike a normal review failure, this is a server misconfiguration
+    that will fail identically on every future attempt - review_lot() both
+    saves it as an error review (for the record) AND re-raises it, so the
+    view can also surface it immediately as a dashboard message."""
+
+
+def _make_client(cfg):
+    """Imports the provider package INSIDE this function (not at module
+    load time), so the site still loads even if that package isn't
+    installed - only requesting a review with that provider fails."""
+    provider = cfg.get("provider", "openai")
+    if provider == "anthropic":
+        try:
+            import anthropic
+        except ImportError as exc:
+            raise ProviderUnavailable("The anthropic package is not installed on this server") from exc
+        return anthropic.Anthropic(timeout=120)
+
+    try:
+        import openai
+    except ImportError as exc:
+        raise ProviderUnavailable("The openai package is not installed on this server") from exc
+    return openai.OpenAI(timeout=120)
 
 
 def _to_decimal(value):
@@ -111,8 +137,14 @@ def review_lot(lot):
     ebay_listings = _ebay_listings(lot)
 
     try:
-        client = anthropic.Anthropic(timeout=120)
+        client = _make_client(cfg)
         result = run_review(client, lot_dict, cfg, ebay_listings)
+    except ProviderUnavailable as exc:
+        log.error("AI review failed for lot %s: %s", lot.pk, exc)
+        AIReview.objects.create(
+            lot=lot, model_name=cfg.get("model", ""), status="error", error=str(exc), cost_usd=Decimal("0"),
+        )
+        raise  # also let the view show this as an immediate dashboard message
     except Exception as exc:  # noqa: BLE001 - always save what happened, never crash the request
         log.error("AI review failed for lot %s: %s", lot.pk, exc)
         return AIReview.objects.create(

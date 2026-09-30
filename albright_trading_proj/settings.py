@@ -231,8 +231,8 @@ RESELLING_SCANNER = {
     "CANDIDATE_WINDOW_HOURS": 24,
     "CANDIDATE_CONFIDENCE": ["high", "medium"],
     "LLM": {"enabled": True, "model": "gpt-4o-mini", "max_calls_per_run": 25},
-    "AI_REVIEW": {"model": "claude-haiku-4-5-20251001", "max_searches": 3, "max_tokens": 2000, "allowed_domains": [],
-                  "input_usd_per_mtok": 1.0, "output_usd_per_mtok": 5.0, "usd_per_search": 0.01,
-                  "daily_limit": 20, "monthly_budget_usd": 10.0},
+    "AI_REVIEW": {"provider": "openai", "model": "gpt-4.1-mini", "max_searches": 3, "max_tokens": 2000,
+                  "allowed_domains": [], "input_usd_per_mtok": 0.40, "output_usd_per_mtok": 1.60,
+                  "usd_per_search": 0.01, "daily_limit": 20, "monthly_budget_usd": 10.0},
     "SPOT": {"monthly_api_limit": 90, "max_age_days": 3, "manual": {"silver": None, "gold": None}},
 }
