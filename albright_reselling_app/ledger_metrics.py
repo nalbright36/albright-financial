@@ -6,13 +6,16 @@ through a request/response cycle, the same pattern scanner/dashboard.py
 and scanner/review_history.py already use.
 """
 import statistics
+from datetime import timedelta
 from decimal import Decimal
 
 from django.utils import timezone
 
 from .models import LedgerEntry
+from .scanner_models import BidWatch
 
 UNSOLD_STATUSES = ("holding", "partially_sold")
+MARKDOWN_STEPS = (14, 30, 60)  # 90+ is handled separately below - it never "expires" back out
 
 
 def _mean(values):
@@ -96,6 +99,33 @@ def scorecard_context(owner):
     }
 
 
+def _is_sold_this_month(entry, month_start):
+    """Was this entry's outcome dated within the current calendar month -
+    by LedgerSale.sale_date for itemized sales, the legacy sold_date for a
+    plain sold_for entry, or updated_at's date for a write-off (which has
+    no sale date of its own). Factored out so the dashboard's Realized
+    block and its top-of-page tiles can't drift apart on the definition."""
+    if not entry.is_realized:
+        return False
+    if entry.has_itemized_sales:
+        return any(s.sale_date >= month_start for s in entry.sales.all())
+    if entry.sold_for is not None:
+        return bool(entry.sold_date and entry.sold_date >= month_start)
+    return entry.status == "written_off" and entry.updated_at.date() >= month_start
+
+
+def _needs_markdown_action(entry):
+    """Same step thresholds as LedgerEntry.aging_suggestion (14/30/60/90
+    days). There's no "action taken" flag on LedgerEntry to check against,
+    so this is the documented fallback: flagged for the 7 days after
+    crossing a step, or continuously once past 90 (nothing "undoes" that
+    one - you're always overdue until it sells or gets written off)."""
+    days = entry.days_held
+    if days >= 90:
+        return True
+    return any(step <= days < step + 7 for step in MARKDOWN_STEPS)
+
+
 def realized_summary(owner, now=None):
     """The dashboard's "Realized" block: a few headline numbers, not the
     full Scorecard breakdown."""
@@ -107,26 +137,57 @@ def realized_summary(owner, now=None):
         1 for e in entries if (e.purchase_date or e.created_at.date()) >= month_start
     )
 
-    sold_this_month_count = 0
-    sold_this_month_profit = Decimal("0")
-    for e in entries:
-        if not e.is_realized:
-            continue
-        sold_this_month = (
-            any(s.sale_date >= month_start for s in e.sales.all()) if e.has_itemized_sales
-            else (e.sold_date and e.sold_date >= month_start) if e.sold_for is not None
-            else (e.status == "written_off" and e.updated_at.date() >= month_start)
-        )
-        if sold_this_month:
-            sold_this_month_count += 1
-            sold_this_month_profit += e.profit
+    sold_this_month = [e for e in entries if _is_sold_this_month(e, month_start)]
+    sold_this_month_profit = sum((e.profit for e in sold_this_month), Decimal("0"))
 
     unsold = [e for e in entries if e.status in UNSOLD_STATUSES]
 
     return {
         "bought_this_month": bought_this_month,
-        "sold_this_month": sold_this_month_count,
+        "sold_this_month": len(sold_this_month),
         "realized_profit_this_month": sold_this_month_profit,
         "unsold_count": len(unsold),
         "unsold_value_at_cost": sum((e.buy_side_cost for e in unsold), Decimal("0")),
+    }
+
+
+def dashboard_tiles(owner, now=None):
+    """The reseller dashboard's top-of-page summary row: 5 ledger-focused
+    tiles (profit/sales this month, inventory, needs-action, my bids),
+    replacing the old pre-scanner-integration research-pipeline stats.
+    Reuses the same entry properties and the same "sold this month"/aging
+    rules the Scorecard and the Realized block already use, plus BidWatch
+    for the two bid-tracking tiles, so none of these numbers can silently
+    drift from what those other views already show."""
+    now = now or timezone.now()
+    month_start = timezone.localdate(now).replace(day=1)
+    week_ago = now - timedelta(days=7)
+
+    entries = list(LedgerEntry.objects.filter(owner=owner).prefetch_related("sales"))
+    realized = [e for e in entries if e.is_realized]
+    unsold = [e for e in entries if e.status in UNSOLD_STATUSES]
+    sold_this_month = [e for e in entries if _is_sold_this_month(e, month_start)]
+
+    revenue_this_month = sum(
+        (e.total_realized for e in sold_this_month if e.total_realized is not None), Decimal("0"),
+    )
+    rois_this_month = [e.roi_pct for e in sold_this_month if e.roi_pct is not None]
+
+    markdown_count = sum(1 for e in unsold if _needs_markdown_action(e))
+    logged_lot_ids = {e.scanner_lot_id for e in entries if e.scanner_lot_id is not None}
+    wins_to_log = BidWatch.objects.filter(status="likely_won").exclude(lot_id__in=logged_lot_ids).count()
+
+    return {
+        "profit_this_month": sum((e.profit for e in sold_this_month), Decimal("0")),
+        "all_time_profit": sum((e.profit for e in realized), Decimal("0")),
+        "sales_this_month_count": len(sold_this_month),
+        "revenue_this_month": revenue_this_month,
+        "avg_roi_this_month": _mean(rois_this_month),
+        "inventory_count": len(unsold),
+        "inventory_cost": sum((e.buy_side_cost for e in unsold), Decimal("0")),
+        "markdown_count": markdown_count,
+        "wins_to_log": wins_to_log,
+        "needs_action_count": markdown_count + wins_to_log,
+        "watching_count": BidWatch.objects.filter(status="watching").count(),
+        "likely_won_this_week": BidWatch.objects.filter(status="likely_won", resolved_at__gte=week_ago).count(),
     }

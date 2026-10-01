@@ -4,147 +4,44 @@
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
 
-    <!-- Plain, computed overview line — no AI call, just real numbers -->
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header">
-            <span class="card__label">Overview</span>
-        </div>
-        <p style="font-size: 1.0625rem; line-height: 1.65; color: var(--text-primary); margin: 0;">
-            {{ total_scanned }} lot{{ total_scanned|pluralize }} scanned live,
-            {{ total_harvested }} historical lot{{ total_harvested|pluralize }} harvested,
-            {{ total_analyzed }} analyzed for resale value.
-            {% if pending_jobs %}{{ pending_jobs|length }} job{{ pending_jobs|length|pluralize }} currently running.{% endif %}
-        </p>
-    </div>
+    <!-- Ledger summary: five linked tiles (profit/sales this month,
+         inventory, needs action, my bids). All numbers come from
+         ledger_metrics.dashboard_tiles() so they can't drift from the
+         Scorecard's own figures. -->
+    <div class="grid grid-5" style="margin-bottom: 24px;">
+        <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Profit This Month</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if ledger_tiles.profit_this_month >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{% if ledger_tiles.profit_this_month >= 0 %}+{% endif %}${{ ledger_tiles.profit_this_month|floatformat:2 }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">All-time: ${{ ledger_tiles.all_time_profit|floatformat:2 }}</div>
+        </a>
 
-    <!-- Research pipeline: scanning -> harvesting -> analysis -->
-    <div class="grid grid-4" style="margin-bottom: 24px;">
-        <div class="card">
-            <div class="card__header"><span class="card__label">Lots Scanned</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ total_scanned }}</span>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Flagged 60+</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: var(--gain); border-bottom: none; padding-bottom: 0;">{{ flagged_60 }}</span>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Historical Harvested</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ total_harvested }}</span>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Lots Analyzed</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ total_analyzed }}</span>
-        </div>
-    </div>
-
-    <!-- Business health: what's actually in inventory, sold, and how the
-         research is holding up against real outcomes -->
-    <div class="grid grid-4" style="margin-bottom: 24px;">
-        <div class="card">
-            <div class="card__header"><span class="card__label">In Inventory</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ in_inventory_count }}</span>
-            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ in_inventory_cost|floatformat:0 }} cost basis</div>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Sold (All-Time)</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: {% if sold_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %}; border-bottom: none; padding-bottom: 0;">{{ sold_count }}</span>
-            <div style="margin-top: 6px; font-size: 0.75rem; color: {% if sold_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ sold_profit|floatformat:0 }} profit</div>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Avg Sleeper Margin</span></div>
-            {% if avg_margin_pct is not None %}
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; color: {% if avg_margin_pct >= 0 %}var(--gain){% else %}var(--loss){% endif %}; border-bottom: none; padding-bottom: 0;">{{ avg_margin_pct|floatformat:0 }}%</span>
-            {% else %}
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0; color: var(--text-tertiary);">&mdash;</span>
-            {% endif %}
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Reconciled Accuracy</span></div>
-            {% if reconciled_count %}
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ under_max_hammer }}/{{ reconciled_count }}</span>
-            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">closed at/under Max Hammer</div>
-            {% else %}
-            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0; color: var(--text-tertiary);">&mdash;</span>
-            {% endif %}
-        </div>
-    </div>
-
-    {% if top_segment %}
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header">
-            <span class="card__label">Top Sleeper Segment</span>
-            <a href="{% url 'albright_reselling_app:sleeper_segments' %}" style="font-size: 0.8125rem;">View all &rarr;</a>
-        </div>
-        <p style="margin: 0; color: var(--text-primary);">
-            <strong>{{ top_segment.name }}</strong> &mdash; {{ top_segment.hit_rate|floatformat:0 }}% of
-            {{ top_segment.count }} analyzed lots closed under conservative resale estimate.
-        </p>
-    </div>
-    {% endif %}
-
-    <!-- Top flagged lots / recent scans -->
-    <div class="grid grid-2" style="margin-bottom: 24px;">
-        <div class="card">
-            <div class="card__header"><span class="card__label">Top Flagged Lots</span></div>
-            {% for lot in top_flagged %}
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
-                <div>
-                    <a href="{% url 'albright_reselling_app:scan_detail' lot.scan_request_id %}" style="font-weight: 600;">{{ lot.title|truncatechars:45 }}</a>
-                </div>
-                <span class="badge {% if lot.interest_score >= 60 %}gain{% else %}neutral{% endif %}">{{ lot.interest_score }}</span>
+        <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Sales This Month</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.sales_this_month_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+                ${{ ledger_tiles.revenue_this_month|floatformat:2 }} revenue{% if ledger_tiles.avg_roi_this_month is not None %} &middot; {{ ledger_tiles.avg_roi_this_month|floatformat:0 }}% avg ROI{% else %} &middot; &mdash; avg ROI{% endif %}
             </div>
-            {% empty %}
-            <p style="color: var(--text-secondary);">No lots scanned yet.</p>
-            {% endfor %}
-        </div>
+        </a>
 
-        <div class="card">
-            <div class="card__header"><span class="card__label">Recent Scans</span></div>
-            {% for scan in recent_scans %}
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
-                <div>
-                    <a href="{% url 'albright_reselling_app:scan_detail' scan.id %}" style="font-weight: 600;">{{ scan.source_url|truncatechars:40 }}</a>
-                    <span style="color: var(--text-secondary); font-size: 0.8125rem; margin-left: 8px;">{{ scan.lots.count }} lots</span>
-                </div>
-                <span class="badge {% if scan.status == 'complete' %}gain{% elif scan.status == 'failed' %}loss{% else %}neutral{% endif %}">
-                    {{ scan.get_status_display }}
-                </span>
-            </div>
-            {% empty %}
-            <p style="color: var(--text-secondary);">No scans yet.</p>
-            {% endfor %}
-        </div>
-    </div>
+        <a href="{% url 'albright_reselling_app:ledger' %}?status=unsold" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Inventory</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.inventory_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ ledger_tiles.inventory_cost|floatformat:2 }} at cost</div>
+        </a>
 
-    <!-- Pending jobs across the async pipeline / this month's ledger costs -->
-    <div class="grid grid-2">
-        <div class="card">
-            <div class="card__header"><span class="card__label">Running Background Jobs</span></div>
-            {% for job in pending_jobs %}
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">{{ job.label }}</span>
-                <span class="badge neutral">{{ job.status }}</span>
+        <a href="{% if ledger_tiles.markdown_count > 0 %}{% url 'albright_reselling_app:ledger' %}?status=unsold{% else %}{% url 'albright_reselling_app:dashboard' %}#my-bids{% endif %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Needs Action</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if ledger_tiles.needs_action_count > 0 %}var(--warn){% else %}var(--text-tertiary){% endif %};">{{ ledger_tiles.needs_action_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+                {% if ledger_tiles.needs_action_count > 0 %}{% if ledger_tiles.markdown_count %}{{ ledger_tiles.markdown_count }} markdown{{ ledger_tiles.markdown_count|pluralize }}{% endif %}{% if ledger_tiles.markdown_count and ledger_tiles.wins_to_log %}, {% endif %}{% if ledger_tiles.wins_to_log %}{{ ledger_tiles.wins_to_log }} win{{ ledger_tiles.wins_to_log|pluralize }} to log{% endif %}{% else %}Nothing pending{% endif %}
             </div>
-            {% empty %}
-            <p style="color: var(--text-secondary);">Nothing running right now.</p>
-            {% endfor %}
-        </div>
+        </a>
 
-        <div class="card">
-            <div class="card__header"><span class="card__label">Ledger Costs This Month</span></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">Item cost</span>
-                <span class="num" style="font-weight: 600;">${{ month_cost|floatformat:0 }}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">Fees</span>
-                <span class="num" style="font-weight: 600;">${{ month_fees|floatformat:0 }}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
-                <span style="color: var(--text-secondary); font-size: 0.875rem;">Shipping</span>
-                <span class="num" style="font-weight: 600;">${{ month_shipping|floatformat:0 }}</span>
-            </div>
-        </div>
+        <a href="{% url 'albright_reselling_app:dashboard' %}#my-bids" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">My Bids</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.watching_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ ledger_tiles.likely_won_this_week }} likely won this week</div>
+        </a>
     </div>
 
     <!-- ============================================================
@@ -294,6 +191,7 @@
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                            {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -348,6 +246,7 @@
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                            {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -408,6 +307,7 @@
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                            {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -423,6 +323,54 @@
             </div>
             {% else %}
             <p style="color: var(--text-secondary);">No leads ending within {{ lead_window_hours }}h right now.</p>
+            {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="my-bids">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">My Bids <span class="row-count">({{ watched_lots|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Lots you've actually bid on, not just scanner candidates</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if watched_lots %}
+            <div style="overflow-x: auto;">
+            <table class="holdings">
+                <thead>
+                    <tr>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="bid">Current Bid</th>
+                        <th class="num" data-sort-key="maxbid">My Max</th>
+                        {% if watched_lots_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
+                        <th class="num" data-sort-key="endtime">Ends In</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in watched_lots %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                        data-bid="{{ row.current_bid }}" data-maxbid="{{ row.my_max_bid }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                        <td class="num" style="color: {% if row.current_bid <= row.my_max_bid %}var(--gain){% else %}var(--loss){% endif %};">${{ row.my_max_bid|floatformat:2 }}</td>
+                        {% if watched_lots_has_maxsold %}
+                        <td class="hide-mobile">
+                            {% if row.pickup %}
+                            {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
+                            {% else %}&mdash;{% endif %}
+                        </td>
+                        {% endif %}
+                        <td class="num">{{ row.time_remaining }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">Not watching any live bids right now.</p>
             {% endif %}
             </div>
         </div>
@@ -466,6 +414,7 @@
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                            {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -520,6 +469,7 @@
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                            {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>

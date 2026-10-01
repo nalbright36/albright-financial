@@ -1,7 +1,7 @@
 """Scanner models. Add to the bottom of albright_reselling_app/models.py:
 
     from .scanner_models import (  # noqa: E402,F401
-        SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent,
+        SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent, BidWatch,
     )
 """
 from django.db import models
@@ -116,7 +116,10 @@ class AlertSent(models.Model):
     repeats one. unique_together is the actual dedup guarantee; the alert
     query also excludes already-sent lots so the common case never even
     reaches an IntegrityError."""
-    KIND_CHOICES = [("candidate", "Candidate"), ("lead", "Lead"), ("check_by_hand", "Check by Hand")]
+    KIND_CHOICES = [
+        ("candidate", "Candidate"), ("lead", "Lead"), ("check_by_hand", "Check by Hand"),
+        ("zero_bid", "Zero Bid"), ("relisted", "Relisted"),
+    ]
 
     lot = models.ForeignKey(SourcedLot, on_delete=models.CASCADE, related_name="alerts_sent")
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
@@ -146,6 +149,38 @@ class CriticalAlertSent(models.Model):
 
     def __str__(self):
         return f"CriticalAlertSent({self.source}, {self.alert_type}) @ {self.sent_at}"
+
+
+class BidWatch(models.Model):
+    """A lot the user has actually placed a bid on, as opposed to one the
+    scanner merely flagged as a candidate - watching/likely_won/lost/
+    unknown is the user's own real-world outcome, tracked independently of
+    (and alongside) the scanner's own evaluation. Created from the "I bid
+    on this" button (dashboard row / AI review page); resolved by the
+    scheduled scan's watch-resolution sweep (scanner/bid_watch.py)."""
+    STATUS_CHOICES = [
+        ("watching", "Watching"), ("likely_won", "Likely Won"),
+        ("lost", "Lost"), ("unknown", "Unknown"),
+    ]
+
+    lot = models.OneToOneField(SourcedLot, on_delete=models.CASCADE, related_name="bid_watch")
+    my_max_bid = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="watching")
+    closing_alert_sent = models.BooleanField(default=False)
+    result_alert_sent = models.BooleanField(default=False)
+    # Not in the original field list - added so the digest's "likely won/
+    # lost in the last 24h" (and the dashboard tile's "this week") can be
+    # windowed by when the watch was actually resolved, not just filtered
+    # by status with no time bound.
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"BidWatch({self.lot_id}, {self.status})"
 
 
 class ScanRun(models.Model):

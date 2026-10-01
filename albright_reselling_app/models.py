@@ -467,5 +467,5 @@ class HistoricalLot(models.Model):
 
 
 from .scanner_models import (  # noqa: E402,F401
-    SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent,
+    SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent, BidWatch,
 )

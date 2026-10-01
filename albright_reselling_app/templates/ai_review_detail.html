@@ -136,6 +136,13 @@
             <input type="hidden" name="force" value="1">
             <button type="submit" class="btn btn-secondary">Re-run review</button>
         </form>
+        {% if lot.bid_watch %}
+        <span class="badge {% if lot.bid_watch.status == 'watching' %}neutral{% elif lot.bid_watch.status == 'likely_won' %}gain{% elif lot.bid_watch.status == 'lost' %}loss{% else %}warn{% endif %}" style="margin-left: 8px;">
+            {% if lot.bid_watch.status == 'watching' %}Watching (max ${{ lot.bid_watch.my_max_bid|floatformat:2 }}){% else %}{{ lot.bid_watch.get_status_display }}{% endif %}
+        </span>
+        {% else %}
+        <a href="{% url 'albright_reselling_app:watch_lot' lot.pk %}?review={{ review.pk }}" class="btn btn-secondary" style="display: inline-block; margin-top: 12px;">I Bid On This</a>
+        {% endif %}
         <a href="{% url 'albright_reselling_app:ledger_win_lot' lot.pk %}?review={{ review.pk }}" class="btn btn-primary" style="display: inline-block; margin-top: 12px;">I Won This</a>
     </div>
 

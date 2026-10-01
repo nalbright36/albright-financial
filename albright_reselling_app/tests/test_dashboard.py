@@ -12,8 +12,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from albright_reselling_app.models import LedgerEntry, LedgerSale
 from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_context
-from albright_reselling_app.scanner_models import AIReview, AlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from albright_reselling_app.scanner_models import (
+    AIReview, AlertSent, BidWatch, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
+)
 
 
 def _make_lot(external_id, end_time, current_price=10.0, source="shopgoodwill", raw=None):
@@ -399,6 +402,24 @@ class ScannerDashboardContextTests(TestCase):
 
         self.assertEqual(context["tab_counts"], {"act_now": 0, "watch": 0, "performance": 0})
 
+    def test_is_relisted_true_on_row_when_features_flags_it(self):
+        lot = _make_lot("relisted-ctx-1", timezone.now() + timedelta(hours=3))
+        lot.features = {"relist_id": 99, "is_relisted": True}
+        lot.save()
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+
+        self.assertTrue(context["live_candidates_ending_soon"][0]["is_relisted"])
+
+    def test_is_relisted_false_by_default(self):
+        lot = _make_lot("relisted-ctx-2", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+
+        self.assertFalse(context["live_candidates_ending_soon"][0]["is_relisted"])
+
 
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
@@ -536,3 +557,124 @@ class DashboardViewTests(TestCase):
 
         self.assertContains(response, "AI review")
         self.assertNotContains(response, "AI: $")
+
+    def test_relisted_badge_shown_for_relisted_candidate(self):
+        lot = _make_lot("relisted-badge-1", timezone.now() + timedelta(hours=3))
+        lot.features = {"relist_id": 42, "is_relisted": True}
+        lot.save()
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Relisted")
+
+    def test_no_relisted_badge_for_non_relisted_candidate(self):
+        lot = _make_lot("relisted-badge-2", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertNotContains(response, "Relisted")
+
+
+class LedgerTilesDashboardTests(TestCase):
+    """The dashboard's top-of-page row of 5 ledger tiles that replaced the
+    old research-pipeline summary (Lots Scanned / Flagged 60+ / etc)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_old_tiles_no_longer_render(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertNotContains(response, "Lots Scanned")
+        self.assertNotContains(response, "Flagged 60+")
+        self.assertNotContains(response, "Historical Harvested")
+        self.assertNotContains(response, "Lots Analyzed")
+        self.assertNotContains(response, "In Inventory</span>")
+        self.assertNotContains(response, "Sold (All-Time)")
+        self.assertNotContains(response, "Avg Sleeper Margin")
+        self.assertNotContains(response, "Reconciled Accuracy")
+        self.assertNotContains(response, "Top Sleeper Segment")
+        self.assertNotContains(response, "Top Flagged Lots")
+        self.assertNotContains(response, "Running Background Jobs")
+        self.assertNotContains(response, "Ledger Costs This Month")
+
+    def test_new_tiles_render_with_labels(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Profit This Month")
+        self.assertContains(response, "Sales This Month")
+        self.assertContains(response, "Inventory")
+        self.assertContains(response, "Needs Action")
+        self.assertContains(response, "My Bids")
+
+    def test_empty_state_renders_without_errors(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "avg ROI")  # the "— avg ROI" fallback, not a crash
+
+    def test_profit_tile_numbers_and_colors(self):
+        today = timezone.localdate()
+        LedgerEntry.objects.create(
+            owner=self.user, item="Sold High", cost=Decimal("10.00"), sold_for=Decimal("40.00"),
+            status="sold_out", purchase_date=today, sold_date=today,
+        )
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "+$30.00")
+        self.assertContains(response, "All-time: $30.00")
+
+    def test_inventory_tile_counts_unsold_entries(self):
+        LedgerEntry.objects.create(
+            owner=self.user, item="Holding Item", cost=Decimal("15.00"), status="holding",
+            purchase_date=timezone.localdate(),
+        )
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "$15.00 at cost")
+
+    def test_my_bids_tile_links_to_my_bids_anchor(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, f'href="{reverse("albright_reselling_app:dashboard")}#my-bids"')
+
+    def test_inventory_tile_links_to_unsold_ledger_filter(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, reverse("albright_reselling_app:ledger") + "?status=unsold")
+
+    def test_profit_and_sales_tiles_link_to_scorecard(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, reverse("albright_reselling_app:ledger_scorecard"))
+
+    def test_needs_action_tile_links_to_unsold_ledger_when_markdowns_pending(self):
+        LedgerEntry.objects.create(
+            owner=self.user, item="Aged Item", cost=Decimal("10.00"), status="holding",
+            purchase_date=timezone.localdate() - timedelta(days=16),
+        )
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "1 markdown")
+
+    def test_needs_action_tile_shows_nothing_pending_when_empty(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Nothing pending")
+
+    def test_my_bids_watching_count_renders(self):
+        now = timezone.now()
+        lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="dash-watch-1", url="https://example.com/dash-watch-1",
+            title="Watched Lot", current_price=Decimal("10"), end_time=now + timedelta(hours=5),
+        )
+        BidWatch.objects.create(lot=lot, my_max_bid=Decimal("20.00"), status="watching")
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        self.assertContains(response, 'id="my-bids"')

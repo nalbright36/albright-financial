@@ -23,7 +23,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from .. import ledger_metrics
-from ..scanner_models import AIReview, AlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from ..scanner_models import AIReview, AlertSent, BidWatch, LotEvaluation, ScanRun, SourcedLot, SpotPrice
 from .ai_review_service import months_review_cost, todays_review_count
 
 STALE_RUN_AFTER = timedelta(hours=2)
@@ -175,6 +175,10 @@ def _lot_row(evaluation, now):
         # Pickup-based sources (MaxSold) carry drive/estate info here; other
         # sources (ShopGoodwill) simply have nothing under "_pickup".
         "pickup": (lot.raw or {}).get("_pickup"),
+        # ShopGoodwill "relistId" > 0 (scanner/features.py) - lots scanned
+        # before that field existed just have no "is_relisted" key, hence
+        # the default.
+        "is_relisted": (lot.features or {}).get("is_relisted", False),
     }
 
 
@@ -194,6 +198,7 @@ def _lead_row(evaluation, now):
         "time_remaining": _time_remaining(lot, now),
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
         "pickup": (lot.raw or {}).get("_pickup"),
+        "is_relisted": (lot.features or {}).get("is_relisted", False),
     }
 
 
@@ -399,6 +404,47 @@ def _attach_ai_reviews(*row_lists):
         row["ai_review"] = latest.get(row["lot_id"])
 
 
+def _attach_bid_watches(*row_lists):
+    """Adds a "bid_watch" key (a BidWatch or None) to every row across all
+    the given lists, via one shared lookup query - mirrors
+    _attach_ai_reviews above. Used to show a "Watching ($X)" badge instead
+    of the "I bid on this" button on a lot that's already watched."""
+    all_rows = [row for rows in row_lists for row in rows]
+    lot_ids = {row["lot_id"] for row in all_rows if row["lot_id"] is not None}
+    watches = {w.lot_id: w for w in BidWatch.objects.filter(lot_id__in=lot_ids)} if lot_ids else {}
+    for row in all_rows:
+        row["bid_watch"] = watches.get(row["lot_id"])
+
+
+def _watch_row(watch, now):
+    lot = watch.lot
+    evaluation = getattr(lot, "evaluation", None)
+    return {
+        "watch": watch,
+        "lot_id": lot.pk,
+        "title": lot.title,
+        "lot_url": lot.url,
+        "source": lot.source,
+        "source_display": _source_display(lot.source),
+        "category": evaluation.category if evaluation else "unknown",
+        "current_bid": lot.current_price,
+        "my_max_bid": watch.my_max_bid,
+        "time_remaining": _time_remaining(lot, now) if lot.end_time else "unknown",
+        "end_time_epoch_ms": _end_time_epoch_ms(lot),
+        "pickup": (lot.raw or {}).get("_pickup"),
+    }
+
+
+def _watched_lots(now):
+    """Live (still "watching") BidWatch rows, soonest-ending first - the
+    dashboard's "My Bids" card in the Act Now tab."""
+    watches = (
+        BidWatch.objects.filter(status="watching", lot__end_time__gt=now)
+        .select_related("lot", "lot__evaluation").order_by("lot__end_time")
+    )
+    return [_watch_row(w, now) for w in watches]
+
+
 def _alerts_status():
     """Status bar card: whether Telegram is actually configured (both env
     vars set - scanner/alerts.py silently no-ops otherwise) and how many
@@ -469,6 +515,7 @@ def get_scanner_dashboard_context(user=None):
 
     closed_results_summary, closed_results_rows = _closed_results(now)
     maxsold_estates = _maxsold_estates(now)
+    watched_lots = _watched_lots(now)
 
     # AI review button/badge on every lot table, Closest Calls included -
     # a lot sitting over the scanner's melt-based max is exactly the case
@@ -476,12 +523,17 @@ def get_scanner_dashboard_context(user=None):
     _attach_ai_reviews(
         live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
     )
+    # "I bid on this" button vs. a "Watching" badge - same tables, plus
+    # leads (you can bid on a lead you've priced by hand too).
+    _attach_bid_watches(
+        live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
+    )
 
     # Keys use underscores, not the "act-now" hyphenated form used in the
     # template's HTML ids/URL hash - Django template variable lookup
     # (tab_counts.act_now) can't parse a hyphen in the attribute name.
     tab_counts = {
-        "act_now": len(live_candidates_ending_soon) + len(check_by_hand) + len(leads_to_review),
+        "act_now": len(live_candidates_ending_soon) + len(check_by_hand) + len(leads_to_review) + len(watched_lots),
         "watch": len(live_candidates_ending_later) + len(closest_calls) + len(maxsold_estates),
         "performance": len(closed_results_rows) + len(recent_runs),
     }
@@ -507,6 +559,8 @@ def get_scanner_dashboard_context(user=None):
         "closed_results_summary": closed_results_summary,
         "closed_results_rows": closed_results_rows,
         "closed_results_has_maxsold": _has_maxsold(closed_results_rows),
+        "watched_lots": watched_lots,
+        "watched_lots_has_maxsold": _has_maxsold(watched_lots),
         "ai_review_stats": _ai_review_stats(cfg["AI_REVIEW"]),
         "alerts_status": _alerts_status(),
         "realized_summary": ledger_metrics.realized_summary(user) if user is not None else None,

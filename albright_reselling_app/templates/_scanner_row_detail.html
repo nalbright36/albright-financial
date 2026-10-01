@@ -30,6 +30,13 @@ Expects `row` and `colspan` in context.
             </span>
             {% endif %}
             <span>
+                {% if row.bid_watch %}
+                <span class="badge {% if row.bid_watch.status == 'watching' %}neutral{% elif row.bid_watch.status == 'likely_won' %}gain{% elif row.bid_watch.status == 'lost' %}loss{% else %}warn{% endif %}">
+                    {% if row.bid_watch.status == 'watching' %}Watching (max ${{ row.bid_watch.my_max_bid|floatformat:2 }}){% else %}{{ row.bid_watch.get_status_display }}{% endif %}
+                </span>
+                {% else %}
+                <a href="{% url 'albright_reselling_app:watch_lot' row.lot_id %}{% if row.ai_review %}?review={{ row.ai_review.pk }}{% endif %}" class="btn btn-secondary btn-sm">I Bid On This</a>
+                {% endif %}
                 <a href="{% url 'albright_reselling_app:ledger_win_lot' row.lot_id %}{% if row.ai_review %}?review={{ row.ai_review.pk }}{% endif %}" class="btn btn-secondary btn-sm">I Won This</a>
             </span>
         </div>

@@ -50,6 +50,17 @@ def _photo_count(raw, source):
     return 1 if _first(raw, "imageURL", "imageUrl") else 0
 
 
+def _relist_id(raw):
+    """ShopGoodwill's "relistId" on a raw item - None if absent or 0 (not
+    a relist). MaxSold raw dicts never carry this key, so this is a no-op
+    there (always None) without needing a source check."""
+    try:
+        value = int(raw.get("relistId"))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def extract_features(raw_lot_dict, title, description, source):
     raw = raw_lot_dict or {}
     title = title or ""
@@ -59,6 +70,7 @@ def extract_features(raw_lot_dict, title, description, source):
 
     has_weight = bool(WEIGHT_RE.search(title))
     has_quantity = bool(QUANTITY_RE.search(title_lower))
+    relist_id = _relist_id(raw)
 
     return {
         "title_length": len(title),
@@ -78,4 +90,6 @@ def extract_features(raw_lot_dict, title, description, source):
         "distance_miles": pickup.get("distance_miles"),
         "shipping_price": raw.get("shippingPrice"),
         "has_shipping": pickup.get("has_shipping"),
+        "relist_id": relist_id,
+        "is_relisted": relist_id is not None,
     }

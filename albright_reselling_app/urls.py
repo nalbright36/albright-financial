@@ -20,4 +20,5 @@ urlpatterns = [
     path("scanner/review/<int:review_id>/", scanner_views.review_detail, name="ai_review_detail"),
     path("scanner/reviews/", scanner_views.review_history, name="ai_review_history"),
     path("scanner/win/<int:lot_id>/", ledger_views.win_lot, name="ledger_win_lot"),
+    path("scanner/watch/<int:lot_id>/", scanner_views.watch_lot, name="watch_lot"),
 ]

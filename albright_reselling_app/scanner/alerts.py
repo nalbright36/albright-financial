@@ -1,8 +1,9 @@
 """Telegram alerting for the scanner.
 
 send_telegram() is the raw HTTP call. Three kinds of alert sit on top of it:
-  - run_alerts(): per-lot "worth a look" pushes (candidate/lead/check_by_hand),
-    run once at the end of every scan_lots command.
+  - run_alerts(): per-lot "worth a look" pushes (candidate/lead/check_by_hand/
+    zero_bid/relisted), run once at the end of every scan_lots command.
+    candidate/lead/zero_bid/relisted are held during ALERTS["quiet_hours"].
   - send_critical_alert() / check_stale_source() / check_zero_lots(): immediate,
     rate-limited, source-level problem alerts (blocked, zero lots, stale),
     called from scan_lots and alert_digest.
@@ -22,10 +23,12 @@ from decimal import Decimal
 
 import requests
 from django.conf import settings
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 from django.utils import timezone
 
-from ..scanner_models import AIReview, AlertSent, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from ..scanner_models import (
+    AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
+)
 from .ai_review_service import months_review_cost
 from .dashboard import _source_display, _time_remaining
 
@@ -70,11 +73,25 @@ def send_telegram(text):
         return False
 
 
+# First line of the Telegram message for the kinds that need a headline
+# the others don't - candidate/lead/check_by_hand are self-explanatory
+# from the category + bid lines that follow, these two aren't.
+KIND_HEADLINES = {"zero_bid": "No bids yet", "relisted": "Relisted"}
+
+
 def _format_message(ev, kind):
     lot = ev.lot
-    lines = [f"<b>{(ev.category or 'lot').title()}</b> · {_source_display(lot.source)}", lot.title[:120]]
+    lines = []
+    if kind in KIND_HEADLINES:
+        lines.append(f"<b>{KIND_HEADLINES[kind]}</b>")
+    lines.append(f"<b>{(ev.category or 'lot').title()}</b> · {_source_display(lot.source)}")
+    lines.append(lot.title[:120])
     lines.append(f"Bid: ${lot.current_price:.2f}")
-    if kind == "lead":
+    # A lead has no valuation (max_bid/headroom are always 0 - see
+    # pipeline._apply_lead), so show why it's a lead instead - true for
+    # kind="lead" itself, and for a zero_bid/relisted lot that qualified
+    # via the "or it's a lead" branch rather than an affordable max bid.
+    if ev.is_lead and not (ev.max_bid and ev.max_bid > 0):
         lines.append(f"Lead: {ev.lead_reason or '—'}")
     else:
         lines.append(f"Max bid: ${ev.max_bid:.2f} (headroom +${ev.headroom:.2f})")
@@ -121,6 +138,68 @@ def _check_by_hand_to_consider(now, cutoff):
     return [("check_by_hand", ev) for ev in qs]
 
 
+def _zero_bid_to_consider(now, cutoff):
+    """A live, priced lot nobody's bid on yet, worth flagging before it
+    closes with no competition: not "none" category, bid_count exactly 0
+    (not unknown/null), ending within the window, and either affordable
+    (a priced max bid at or above the current bid) or a lead (no price to
+    check against, but still worth a look at zero bids)."""
+    qs = (
+        LotEvaluation.objects.select_related("lot")
+        .exclude(category="none")
+        .filter(lot__bid_count=0, lot__end_time__gt=now, lot__end_time__lte=cutoff)
+        .exclude(lot_id__in=_already_alerted_lot_ids("zero_bid"))
+    )
+    qualifying = []
+    for ev in qs:
+        affordable = ev.max_bid > 0 and ev.lot.current_price <= ev.max_bid
+        if affordable or ev.is_lead:
+            qualifying.append(("zero_bid", ev))
+    return qualifying
+
+
+def _relisted_to_consider(now, cutoff):
+    """A live ShopGoodwill lot the seller has relisted (scanner/features.py's
+    is_relisted, from a positive "relistId" on the raw item) - not "none"
+    category, ending within the window, and either current bid <= max bid
+    or a lead. Checked in Python (not a JSONField query) since features is
+    a loosely-shaped JSONField and this keeps the same style as the
+    affordability check above."""
+    qs = (
+        LotEvaluation.objects.select_related("lot")
+        .exclude(category="none")
+        .filter(lot__source="shopgoodwill", lot__end_time__gt=now, lot__end_time__lte=cutoff)
+        .exclude(lot_id__in=_already_alerted_lot_ids("relisted"))
+    )
+    qualifying = []
+    for ev in qs:
+        if not (ev.lot.features or {}).get("is_relisted"):
+            continue
+        if ev.lot.current_price <= ev.max_bid or ev.is_lead:
+            qualifying.append(("relisted", ev))
+    return qualifying
+
+
+# Kinds held back during quiet hours (not sent, not marked AlertSent, so
+# they're reconsidered - and can still go out - on the next run_alerts()
+# call once quiet hours end). check_by_hand is deliberately not included -
+# BidWatch alerts (scanner/bid_watch.py) and critical alerts
+# (send_critical_alert) never go through run_alerts() at all, so they're
+# unaffected by this regardless.
+QUIET_HOURS_GATED_KINDS = {"candidate", "lead", "zero_bid", "relisted"}
+
+
+def _in_quiet_hours(now, cfg):
+    quiet = cfg.get("quiet_hours")
+    if not quiet:
+        return False
+    start_hour, end_hour = quiet
+    local_hour = timezone.localtime(now).hour
+    if start_hour <= end_hour:
+        return start_hour <= local_hour < end_hour
+    return local_hour >= start_hour or local_hour < end_hour  # wraps past midnight, e.g. 23 -> 7
+
+
 def run_alerts(now=None):
     """Called once at the end of every scan_lots run. Evaluates every kind
     listed in ALERTS["kinds"] against the whole live table - not just lots
@@ -129,7 +208,10 @@ def run_alerts(now=None):
     - sends the soonest-ending qualifying lots first up to max_per_run
     (a cap on this run's total sends, across all kinds combined), and
     records each send in AlertSent so it's never repeated for that kind.
-    Returns the list of (lot_id, kind) pairs actually sent."""
+    During ALERTS["quiet_hours"], candidate/lead/zero_bid/relisted are held
+    back entirely (not sent, not recorded) rather than sent silently or
+    dropped for good - see QUIET_HOURS_GATED_KINDS. Returns the list of
+    (lot_id, kind) pairs actually sent."""
     cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
     if not cfg.get("enabled"):
         return []
@@ -145,6 +227,13 @@ def run_alerts(now=None):
         candidates += _leads_to_consider(now, cutoff)
     if "check_by_hand" in kinds:
         candidates += _check_by_hand_to_consider(now, cutoff)
+    if "zero_bid" in kinds:
+        candidates += _zero_bid_to_consider(now, cutoff)
+    if "relisted" in kinds:
+        candidates += _relisted_to_consider(now, cutoff)
+
+    if _in_quiet_hours(now, cfg):
+        candidates = [pair for pair in candidates if pair[0] not in QUIET_HOURS_GATED_KINDS]
 
     candidates.sort(key=lambda pair: pair[1].lot.end_time)
     to_send = candidates[: cfg.get("max_per_run", 10)]
@@ -250,39 +339,15 @@ def _today_live_counts(now):
 
 
 def _my_bids_counts(now):
-    """"My bids": lots the scanner flagged as worth bidding on (candidate)
-    or that got an AI review (a deliberate second look) - this app has no
-    way to know whether a bid was actually placed on the auction site
-    itself, so engagement is the closest available signal.
-      - watching: still live
-      - likely won: closed in the last 24h at/under the best bid ceiling
-        on record for it (the AI's suggested max, if reviewed, else the
-        scanner's max bid)
-      - lost: closed in the last 24h over that ceiling
-    """
+    """"My bids": real BidWatch rows (created from the "I bid on this"
+    button), not scanner candidates - watching is a live snapshot count;
+    likely_won/lost are windowed by resolved_at, since a watch can stay
+    "watching" for a while after its lot closes (resolution needs a
+    search_closed() lookup, see scanner/bid_watch.py)."""
     cutoff = now - timedelta(hours=24)
-    my_bids_filter = Q(is_candidate=True) | Q(lot__ai_reviews__isnull=False)
-
-    watching = LotEvaluation.objects.filter(my_bids_filter, lot__end_time__gt=now).distinct().count()
-
-    closed_qs = (
-        LotEvaluation.objects.filter(
-            my_bids_filter, lot__is_closed=True, lot__final_price__isnull=False,
-            lot__end_time__gte=cutoff, lot__end_time__lte=now,
-        ).select_related("lot").distinct()
-    )
-
-    likely_won = lost = 0
-    for ev in closed_qs:
-        best_review = (
-            ev.lot.ai_reviews.filter(status="done", suggested_max_bid__isnull=False).order_by("-created_at").first()
-        )
-        ceiling = best_review.suggested_max_bid if best_review else ev.max_bid
-        if ceiling and ev.lot.final_price <= ceiling:
-            likely_won += 1
-        else:
-            lost += 1
-
+    watching = BidWatch.objects.filter(status="watching").count()
+    likely_won = BidWatch.objects.filter(status="likely_won", resolved_at__gte=cutoff).count()
+    lost = BidWatch.objects.filter(status="lost", resolved_at__gte=cutoff).count()
     return watching, likely_won, lost
 
 

@@ -17,12 +17,12 @@ from django.utils import timezone
 from albright_reselling_app.scanner.adapters.base import RawLot, SourceBlocked
 from albright_reselling_app.scanner.adapters.shopgoodwill import ShopGoodwillAdapter
 from albright_reselling_app.scanner.alerts import (
-    _ai_review_health_lines, _alerts_sent_lines, _my_bids_counts, _source_health_lines, _spot_fetch_health_lines,
-    _spot_section, _track_closed_health_lines, build_digest_message, check_stale_source, check_zero_lots,
-    run_alerts, send_critical_alert, send_daily_digest, send_telegram,
+    _ai_review_health_lines, _alerts_sent_lines, _in_quiet_hours, _my_bids_counts, _source_health_lines,
+    _spot_fetch_health_lines, _spot_section, _track_closed_health_lines, build_digest_message, check_stale_source,
+    check_zero_lots, run_alerts, send_critical_alert, send_daily_digest, send_telegram,
 )
 from albright_reselling_app.scanner_models import (
-    AIReview, AlertSent, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
+    AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
 
 TELEGRAM_POST = "albright_reselling_app.scanner.alerts.requests.post"
@@ -73,6 +73,40 @@ def _make_check_by_hand(external_id, end_time, headroom="2.00", max_bid="20.00",
         lot=lot, category=category, confidence="low", headroom=Decimal(headroom), max_bid=Decimal(max_bid),
     )
     return lot, ev
+
+
+def _make_zero_bid(external_id, end_time, max_bid="20.00", current_price="10.00", category="coins",
+                    is_lead=False, lead_reason=""):
+    lot = SourcedLot.objects.create(
+        source="shopgoodwill", external_id=external_id, url=f"https://example.com/{external_id}",
+        title=f"Zero Bid Lot {external_id}", current_price=Decimal(current_price), end_time=end_time,
+        bid_count=0, raw={},
+    )
+    ev = LotEvaluation.objects.create(
+        lot=lot, category=category, max_bid=Decimal(max_bid), is_lead=is_lead, lead_reason=lead_reason,
+    )
+    return lot, ev
+
+
+def _make_relisted(external_id, end_time, relist_id=777, max_bid="20.00", current_price="10.00",
+                    category="coins", is_lead=False, lead_reason="", source="shopgoodwill"):
+    lot = SourcedLot.objects.create(
+        source=source, external_id=external_id, url=f"https://example.com/{external_id}",
+        title=f"Relisted Lot {external_id}", current_price=Decimal(current_price), end_time=end_time,
+        features={"relist_id": relist_id, "is_relisted": True}, raw={"relistId": relist_id},
+    )
+    ev = LotEvaluation.objects.create(
+        lot=lot, category=category, max_bid=Decimal(max_bid), is_lead=is_lead, lead_reason=lead_reason,
+    )
+    return lot, ev
+
+
+def _at_local_hour(base, hour):
+    """A datetime near `base` whose local time (settings.TIME_ZONE) falls at
+    the given hour - quiet-hours tests need a concrete local hour, not just
+    "now whatever that happens to be"."""
+    local = timezone.localtime(base)
+    return base + timedelta(hours=(hour - local.hour) % 24)
 
 
 def _call_run_alerts(now, **cfg_overrides):
@@ -253,6 +287,264 @@ class RunAlertsTests(TestCase):
         text = mock_post.call_args.kwargs["json"]["text"]
         self.assertIn("Tampa", text)
         self.assertIn("9.3", text)
+
+
+class ZeroBidAlertTests(TestCase):
+    def test_sent_for_affordable_zero_bid_lot(self):
+        now = timezone.now()
+        lot, _ev = _make_zero_bid("zb-1", now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(now, kinds=["zero_bid"])
+
+        self.assertEqual(sent, [(lot.pk, "zero_bid")])
+        self.assertTrue(AlertSent.objects.filter(lot=lot, kind="zero_bid").exists())
+        text = mock_post.call_args.kwargs["json"]["text"]
+        self.assertIn("No bids yet", text)
+
+    def test_not_sent_when_bids_exist(self):
+        now = timezone.now()
+        lot, _ev = _make_zero_bid("zb-2", now + timedelta(minutes=30))
+        lot.bid_count = 3
+        lot.save()
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["zero_bid"])
+
+        self.assertEqual(sent, [])
+
+    def test_not_sent_when_bid_count_unknown(self):
+        now = timezone.now()
+        lot, _ev = _make_zero_bid("zb-3", now + timedelta(minutes=30))
+        lot.bid_count = None
+        lot.save()
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["zero_bid"])
+
+        self.assertEqual(sent, [])
+
+    def test_sent_for_lead_even_without_an_affordable_max_bid(self):
+        now = timezone.now()
+        lot, _ev = _make_zero_bid(
+            "zb-4", now + timedelta(minutes=30), max_bid="0", is_lead=True, lead_reason="n64: bulk lot",
+            category="games",
+        )
+
+        sent, mock_post = _call_run_alerts(now, kinds=["zero_bid"])
+
+        self.assertEqual(sent, [(lot.pk, "zero_bid")])
+        text = mock_post.call_args.kwargs["json"]["text"]
+        self.assertIn("Lead: n64: bulk lot", text)
+
+    def test_not_sent_when_not_affordable_and_not_a_lead(self):
+        now = timezone.now()
+        _make_zero_bid("zb-5", now + timedelta(minutes=30), max_bid="10.00", current_price="25.00")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["zero_bid"])
+
+        self.assertEqual(sent, [])
+
+    def test_none_category_excluded(self):
+        now = timezone.now()
+        _make_zero_bid("zb-6", now + timedelta(minutes=30), category="none")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["zero_bid"])
+
+        self.assertEqual(sent, [])
+
+    def test_excluded_unless_listed_in_kinds(self):
+        now = timezone.now()
+        _make_zero_bid("zb-7", now + timedelta(minutes=30))
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["candidate", "lead"])
+
+        self.assertEqual(sent, [])
+
+    def test_never_sent_twice(self):
+        now = timezone.now()
+        lot, _ev = _make_zero_bid("zb-8", now + timedelta(minutes=30))
+
+        first_sent, first_post = _call_run_alerts(now, kinds=["zero_bid"])
+        second_sent, second_post = _call_run_alerts(now + timedelta(minutes=5), kinds=["zero_bid"])
+
+        self.assertEqual(first_sent, [(lot.pk, "zero_bid")])
+        self.assertEqual(second_sent, [])
+        second_post.assert_not_called()
+
+
+class RelistedAlertTests(TestCase):
+    def test_sent_for_affordable_relisted_lot(self):
+        now = timezone.now()
+        lot, _ev = _make_relisted("rl-1", now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(now, kinds=["relisted"])
+
+        self.assertEqual(sent, [(lot.pk, "relisted")])
+        self.assertTrue(AlertSent.objects.filter(lot=lot, kind="relisted").exists())
+        text = mock_post.call_args.kwargs["json"]["text"]
+        self.assertIn("Relisted", text)
+
+    def test_not_sent_when_not_actually_relisted(self):
+        now = timezone.now()
+        lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="rl-2", url="https://example.com/rl-2", title="Not Relisted",
+            current_price=Decimal("10.00"), end_time=now + timedelta(minutes=30), features={},
+        )
+        LotEvaluation.objects.create(lot=lot, category="coins", max_bid=Decimal("20.00"))
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["relisted"])
+
+        self.assertEqual(sent, [])
+
+    def test_not_sent_for_non_shopgoodwill_source(self):
+        now = timezone.now()
+        _make_relisted("rl-3", now + timedelta(minutes=30), source="maxsold")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["relisted"])
+
+        self.assertEqual(sent, [])
+
+    def test_sent_for_lead_even_when_not_affordable(self):
+        now = timezone.now()
+        lot, _ev = _make_relisted(
+            "rl-4", now + timedelta(minutes=30), max_bid="0", current_price="10.00", is_lead=True,
+            lead_reason="n64: bulk lot", category="games",
+        )
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["relisted"])
+
+        self.assertEqual(sent, [(lot.pk, "relisted")])
+
+    def test_not_sent_when_over_max_and_not_a_lead(self):
+        now = timezone.now()
+        _make_relisted("rl-5", now + timedelta(minutes=30), max_bid="10.00", current_price="25.00")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["relisted"])
+
+        self.assertEqual(sent, [])
+
+    def test_none_category_excluded(self):
+        now = timezone.now()
+        _make_relisted("rl-6", now + timedelta(minutes=30), category="none")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["relisted"])
+
+        self.assertEqual(sent, [])
+
+    def test_excluded_unless_listed_in_kinds(self):
+        now = timezone.now()
+        _make_relisted("rl-7", now + timedelta(minutes=30))
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["candidate", "lead"])
+
+        self.assertEqual(sent, [])
+
+    def test_never_sent_twice(self):
+        now = timezone.now()
+        lot, _ev = _make_relisted("rl-8", now + timedelta(minutes=30))
+
+        first_sent, first_post = _call_run_alerts(now, kinds=["relisted"])
+        second_sent, second_post = _call_run_alerts(now + timedelta(minutes=5), kinds=["relisted"])
+
+        self.assertEqual(first_sent, [(lot.pk, "relisted")])
+        self.assertEqual(second_sent, [])
+        second_post.assert_not_called()
+
+
+class InQuietHoursTests(TestCase):
+    """Direct boundary tests for the pure _in_quiet_hours helper - 23 -> 7
+    wraps past midnight and is inclusive of 23:00, exclusive of 07:00."""
+
+    def test_no_quiet_hours_configured(self):
+        self.assertFalse(_in_quiet_hours(timezone.now(), {}))
+
+    def test_inside_wrapped_window_late_night(self):
+        now = _at_local_hour(timezone.now(), 23)
+        self.assertTrue(_in_quiet_hours(now, {"quiet_hours": [23, 7]}))
+
+    def test_inside_wrapped_window_early_morning(self):
+        now = _at_local_hour(timezone.now(), 6)
+        self.assertTrue(_in_quiet_hours(now, {"quiet_hours": [23, 7]}))
+
+    def test_boundary_hour_7_is_not_quiet(self):
+        now = _at_local_hour(timezone.now(), 7)
+        self.assertFalse(_in_quiet_hours(now, {"quiet_hours": [23, 7]}))
+
+    def test_boundary_hour_22_is_not_quiet(self):
+        now = _at_local_hour(timezone.now(), 22)
+        self.assertFalse(_in_quiet_hours(now, {"quiet_hours": [23, 7]}))
+
+    def test_midday_not_quiet(self):
+        now = _at_local_hour(timezone.now(), 14)
+        self.assertFalse(_in_quiet_hours(now, {"quiet_hours": [23, 7]}))
+
+    def test_non_wrapping_window(self):
+        # A same-day window (start < end) - not what quiet_hours is
+        # configured as, but the helper should handle it correctly too.
+        self.assertTrue(_in_quiet_hours(_at_local_hour(timezone.now(), 10), {"quiet_hours": [9, 17]}))
+        self.assertFalse(_in_quiet_hours(_at_local_hour(timezone.now(), 18), {"quiet_hours": [9, 17]}))
+
+
+class QuietHoursGatingTests(TestCase):
+    def test_candidate_held_during_quiet_hours_and_not_marked_sent(self):
+        quiet_now = _at_local_hour(timezone.now(), 2)
+        lot, _ev = _make_candidate("qh-cand-1", quiet_now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(quiet_now, quiet_hours=[23, 7])
+
+        self.assertEqual(sent, [])
+        mock_post.assert_not_called()
+        self.assertFalse(AlertSent.objects.filter(lot=lot).exists())
+
+    def test_held_candidate_sends_once_quiet_hours_end(self):
+        # window_minutes is widened so the same lot is still "ending soon"
+        # at both check times, which are hours apart (crossing the quiet
+        # hours boundary) - window_minutes=90 (the default) would make the
+        # lot stale by the second check for reasons having nothing to do
+        # with quiet hours.
+        quiet_now = _at_local_hour(timezone.now(), 2)
+        lot, _ev = _make_candidate("qh-cand-2", quiet_now + timedelta(hours=20))
+
+        held_sent, _ = _call_run_alerts(quiet_now, quiet_hours=[23, 7], window_minutes=1440)
+        awake_now = quiet_now + timedelta(hours=6)  # local hour 8 - past quiet hours
+        later_sent, mock_post = _call_run_alerts(awake_now, quiet_hours=[23, 7], window_minutes=1440)
+
+        self.assertEqual(held_sent, [])
+        self.assertEqual(later_sent, [(lot.pk, "candidate")])
+        mock_post.assert_called_once()
+
+    def test_lead_zero_bid_and_relisted_all_held_during_quiet_hours(self):
+        quiet_now = _at_local_hour(timezone.now(), 3)
+        _make_lead("qh-lead", quiet_now + timedelta(minutes=30))
+        _make_zero_bid("qh-zb", quiet_now + timedelta(minutes=30))
+        _make_relisted("qh-rl", quiet_now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(
+            quiet_now, kinds=["candidate", "lead", "zero_bid", "relisted"], quiet_hours=[23, 7],
+        )
+
+        self.assertEqual(sent, [])
+        mock_post.assert_not_called()
+
+    def test_check_by_hand_not_held_during_quiet_hours(self):
+        """Quiet hours only gates candidate/lead/zero_bid/relisted per the
+        spec - check_by_hand is deliberately left out."""
+        quiet_now = _at_local_hour(timezone.now(), 2)
+        lot, _ev = _make_check_by_hand("qh-cbh", quiet_now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(
+            quiet_now, kinds=["candidate", "lead", "check_by_hand"], quiet_hours=[23, 7],
+        )
+
+        self.assertEqual(sent, [(lot.pk, "check_by_hand")])
+        mock_post.assert_called_once()
+
+    def test_outside_quiet_hours_sends_normally(self):
+        awake_now = _at_local_hour(timezone.now(), 14)
+        lot, _ev = _make_candidate("qh-awake", awake_now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(awake_now, quiet_hours=[23, 7])
+
+        self.assertEqual(sent, [(lot.pk, "candidate")])
+        mock_post.assert_called_once()
 
 
 class DigestTests(TestCase):
@@ -551,23 +843,27 @@ class OtherHealthSectionTests(TestCase):
 
 
 class MyBidsTests(TestCase):
-    def test_watching_counts_live_candidates(self):
+    """_my_bids_counts now reads real BidWatch rows (created via the "I bid
+    on this" button), not a scanner-candidate heuristic - see
+    scanner/bid_watch.py and ledger_metrics.dashboard_tiles()."""
+
+    def test_watching_counts_live_watches(self):
         now = timezone.now()
-        _make_candidate("bid-watch-1", now + timedelta(hours=3))
+        lot = _make_lot("bid-watch-1", now + timedelta(hours=3))
+        BidWatch.objects.create(lot=lot, my_max_bid=Decimal("30.00"), status="watching")
 
         watching, likely_won, lost = _my_bids_counts(now)
 
         self.assertEqual(watching, 1)
         self.assertEqual((likely_won, lost), (0, 0))
 
-    def test_likely_won_when_closed_under_max(self):
+    def test_likely_won_within_last_24h(self):
         now = timezone.now()
-        lot = SourcedLot.objects.create(
-            source="shopgoodwill", external_id="bid-won-1", url="https://example.com/bid-won-1", title="Lot",
-            current_price=Decimal("10"), end_time=now - timedelta(hours=1),
-            is_closed=True, final_price=Decimal("15.00"),
+        lot = _make_lot("bid-won-1", now - timedelta(hours=1))
+        BidWatch.objects.create(
+            lot=lot, my_max_bid=Decimal("20.00"), status="likely_won",
+            resolved_at=now - timedelta(hours=2),
         )
-        LotEvaluation.objects.create(lot=lot, category="coins", is_candidate=True, max_bid=Decimal("20.00"))
 
         watching, likely_won, lost = _my_bids_counts(now)
 
@@ -575,43 +871,34 @@ class MyBidsTests(TestCase):
         self.assertEqual(likely_won, 1)
         self.assertEqual(lost, 0)
 
-    def test_lost_when_closed_over_max(self):
+    def test_lost_within_last_24h(self):
         now = timezone.now()
-        lot = SourcedLot.objects.create(
-            source="shopgoodwill", external_id="bid-lost-1", url="https://example.com/bid-lost-1", title="Lot",
-            current_price=Decimal("10"), end_time=now - timedelta(hours=1),
-            is_closed=True, final_price=Decimal("25.00"),
+        lot = _make_lot("bid-lost-1", now - timedelta(hours=1))
+        BidWatch.objects.create(
+            lot=lot, my_max_bid=Decimal("20.00"), status="lost",
+            resolved_at=now - timedelta(hours=2),
         )
-        LotEvaluation.objects.create(lot=lot, category="coins", is_candidate=True, max_bid=Decimal("20.00"))
 
         _watching, likely_won, lost = _my_bids_counts(now)
 
         self.assertEqual(likely_won, 0)
         self.assertEqual(lost, 1)
 
-    def test_ai_suggested_max_bid_preferred_over_scanner_max(self):
+    def test_resolved_outside_24h_window_not_counted(self):
         now = timezone.now()
-        lot = SourcedLot.objects.create(
-            source="shopgoodwill", external_id="bid-ai-1", url="https://example.com/bid-ai-1", title="Lot",
-            current_price=Decimal("10"), end_time=now - timedelta(hours=1),
-            is_closed=True, final_price=Decimal("22.00"),
+        lot = _make_lot("bid-old-1", now - timedelta(days=3))
+        BidWatch.objects.create(
+            lot=lot, my_max_bid=Decimal("20.00"), status="likely_won",
+            resolved_at=now - timedelta(hours=25),
         )
-        # scanner's own max (20) would call this a loss, but the AI review's
-        # higher ceiling (25) should win out and call it a likely-won.
-        LotEvaluation.objects.create(lot=lot, category="coins", is_candidate=False, max_bid=Decimal("20.00"))
-        AIReview.objects.create(lot=lot, status="done", suggested_max_bid=Decimal("25.00"), cost_usd=Decimal("0.05"))
 
-        _watching, likely_won, lost = _my_bids_counts(now)
+        _watching, likely_won, _lost = _my_bids_counts(now)
 
-        self.assertEqual(likely_won, 1)
-        self.assertEqual(lost, 0)
+        self.assertEqual(likely_won, 0)
 
-    def test_lots_without_engagement_not_counted(self):
+    def test_lots_without_a_watch_not_counted(self):
         now = timezone.now()
-        SourcedLot.objects.create(
-            source="shopgoodwill", external_id="bid-none-1", url="https://example.com/bid-none-1", title="Lot",
-            current_price=Decimal("10"), end_time=now + timedelta(hours=3),
-        )  # no evaluation at all -> not "my bids"
+        _make_candidate("bid-none-1", now + timedelta(hours=3))  # scanner candidate, never watched
 
         watching, likely_won, lost = _my_bids_counts(now)
 
@@ -629,6 +916,25 @@ class CriticalAlertTests(TestCase):
         self.assertTrue(result)
         mock_post.assert_called_once()
         self.assertTrue(CriticalAlertSent.objects.filter(source="shopgoodwill", alert_type="blocked").exists())
+
+    @mock.patch(TELEGRAM_POST)
+    @mock.patch.dict(os.environ, CREDS)
+    def test_sends_during_quiet_hours(self, mock_post):
+        """Critical system alerts always send - quiet_hours only gates
+        run_alerts()'s per-lot kinds, send_critical_alert never checks it.
+        Uses the real ALERTS config (which has critical_alerts=True) with
+        quiet_hours added, not the test-local _cfg() fixture - that fixture
+        doesn't set critical_alerts at all, which would make this a no-op
+        regardless of quiet hours and prove nothing."""
+        mock_post.return_value = _ok_response()
+        quiet_now = _at_local_hour(timezone.now(), 2)
+        real_alerts_cfg = {**settings.RESELLING_SCANNER["ALERTS"], "quiet_hours": [23, 7]}
+
+        with override_settings(RESELLING_SCANNER={**settings.RESELLING_SCANNER, "ALERTS": real_alerts_cfg}):
+            result = send_critical_alert("shopgoodwill", "blocked", "test message", now=quiet_now)
+
+        self.assertTrue(result)
+        mock_post.assert_called_once()
 
     @mock.patch(TELEGRAM_POST)
     @mock.patch.dict(os.environ, CREDS)

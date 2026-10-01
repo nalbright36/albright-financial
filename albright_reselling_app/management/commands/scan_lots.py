@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from albright_reselling_app.scanner.alerts import check_stale_source, check_zero_lots, run_alerts, \
     send_critical_alert
+from albright_reselling_app.scanner.bid_watch import resolve_watches, send_closing_soon_alerts
 from albright_reselling_app.scanner.pipeline import run_scan
 from albright_reselling_app.scanner_models import ScanRun
 
@@ -144,3 +145,20 @@ class Command(BaseCommand):
                 self.stdout.write(f"Alerts sent: {len(alerts_sent)}")
         except Exception as exc:  # noqa: BLE001 - alerting must never break the scan or lose its ScanRun record
             self.stderr.write(self.style.WARNING(f"Alert check failed: {exc}"))
+
+        # BidWatch sweeps are global (every source, every run) - a lot
+        # closing on another source still needs checking even if this
+        # particular invocation was --source scoped to a different one.
+        try:
+            closing_sent = send_closing_soon_alerts()
+            if closing_sent:
+                self.stdout.write(f"Closing-soon alerts sent: {len(closing_sent)}")
+        except Exception as exc:  # noqa: BLE001 - alerting must never break the scan
+            self.stderr.write(self.style.WARNING(f"Closing-soon alert check failed: {exc}"))
+
+        try:
+            resolved = resolve_watches()
+            if resolved:
+                self.stdout.write(f"Bid watches resolved: {len(resolved)}")
+        except Exception as exc:  # noqa: BLE001 - watch resolution must never break the scan
+            self.stderr.write(self.style.WARNING(f"Watch resolution failed: {exc}"))

@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from albright_reselling_app import ledger_metrics
 from albright_reselling_app.models import LedgerEntry, LedgerSale
-from albright_reselling_app.scanner_models import AIReview, LotEvaluation, SourcedLot
+from albright_reselling_app.scanner_models import AIReview, BidWatch, LotEvaluation, SourcedLot
 
 
 def _make_lot(external_id, source="shopgoodwill", title="Morgan Silver Dollar", current_price="10.00",
@@ -609,3 +609,161 @@ class RealizedSummaryTests(TestCase):
 
         self.assertContains(response, "Realized")
         self.assertContains(response, "Open Scorecard")
+
+
+def _make_watch(lot, my_max_bid="20.00", status="watching", resolved_at=None):
+    return BidWatch.objects.create(
+        lot=lot, my_max_bid=Decimal(my_max_bid), status=status, resolved_at=resolved_at,
+    )
+
+
+class DashboardTilesTests(TestCase):
+    """ledger_metrics.dashboard_tiles() - the reseller dashboard's 5-tile
+    summary row (profit/sales this month, inventory, needs action, my
+    bids). Exercises a legacy sold_for entry, a written-off item, and a
+    partially-sold item, per the feature's explicit test requirement."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+
+    def test_empty_state(self):
+        tiles = ledger_metrics.dashboard_tiles(self.user)
+
+        self.assertEqual(tiles["profit_this_month"], Decimal("0"))
+        self.assertEqual(tiles["all_time_profit"], Decimal("0"))
+        self.assertEqual(tiles["sales_this_month_count"], 0)
+        self.assertEqual(tiles["revenue_this_month"], Decimal("0"))
+        self.assertIsNone(tiles["avg_roi_this_month"])
+        self.assertEqual(tiles["inventory_count"], 0)
+        self.assertEqual(tiles["inventory_cost"], Decimal("0"))
+        self.assertEqual(tiles["needs_action_count"], 0)
+        self.assertEqual(tiles["watching_count"], 0)
+        self.assertEqual(tiles["likely_won_this_week"], 0)
+
+    def test_profit_this_month_includes_legacy_sold_for_and_itemized_sales(self):
+        now = timezone.now()
+        today = timezone.localdate()
+        # Legacy sold_for entry, sold today (this month).
+        _make_entry(
+            self.user, item="Legacy Sold", cost="10.00", sold_for="40.00", status="sold_out", sold_date=today,
+        )
+        # Itemized-sale entry, sold today.
+        itemized = _make_entry(self.user, item="Itemized Sold", cost="10.00", status="sold_out")
+        LedgerSale.objects.create(entry=itemized, sale_date=today, sale_price=Decimal("50.00"))
+        # Sold last month - must not count toward this month's profit.
+        last_month = (today.replace(day=1) - timedelta(days=1))
+        _make_entry(
+            self.user, item="Sold Last Month", cost="10.00", sold_for="999.00", status="sold_out",
+            sold_date=last_month,
+        )
+
+        tiles = ledger_metrics.dashboard_tiles(self.user, now=now)
+
+        # (40-10) + (50-10) = 70; last month's 999-10 excluded.
+        self.assertEqual(tiles["profit_this_month"], Decimal("70.00"))
+        self.assertEqual(tiles["sales_this_month_count"], 2)
+        self.assertEqual(tiles["revenue_this_month"], Decimal("90.00"))  # 40 + 50
+
+    def test_all_time_profit_includes_written_off_losses(self):
+        now = timezone.now()
+        today = timezone.localdate()
+        _make_entry(self.user, item="Sold", cost="10.00", sold_for="40.00", status="sold_out", sold_date=today)
+        _make_entry(self.user, item="Written Off", cost="15.00", status="written_off")
+
+        tiles = ledger_metrics.dashboard_tiles(self.user, now=now)
+
+        self.assertEqual(tiles["all_time_profit"], Decimal("15.00"))  # +30 - 15
+
+    def test_profit_negative_this_month(self):
+        today = timezone.localdate()
+        _make_entry(self.user, item="Sold At Loss", cost="50.00", sold_for="20.00", status="sold_out",
+                    sold_date=today)
+
+        tiles = ledger_metrics.dashboard_tiles(self.user)
+
+        self.assertEqual(tiles["profit_this_month"], Decimal("-30.00"))
+
+    def test_avg_roi_this_month(self):
+        today = timezone.localdate()
+        _make_entry(self.user, item="A", cost="50.00", sold_for="75.00", status="sold_out", sold_date=today)
+        _make_entry(self.user, item="B", cost="100.00", sold_for="125.00", status="sold_out", sold_date=today)
+
+        tiles = ledger_metrics.dashboard_tiles(self.user)
+
+        # ROI: 50% and 25% -> avg 37.5%
+        self.assertAlmostEqual(float(tiles["avg_roi_this_month"]), 37.5, places=4)
+
+    def test_inventory_counts_holding_and_partially_sold_not_sold_out(self):
+        _make_entry(self.user, item="Holding", cost="10.00", status="holding")
+        entry = _make_entry(self.user, item="Partial", cost="20.00", status="partially_sold")
+        LedgerSale.objects.create(entry=entry, sale_date=timezone.localdate(), sale_price=Decimal("5.00"))
+        _make_entry(self.user, item="Sold Out", cost="30.00", sold_for="50.00", status="sold_out")
+
+        tiles = ledger_metrics.dashboard_tiles(self.user)
+
+        self.assertEqual(tiles["inventory_count"], 2)
+        self.assertEqual(tiles["inventory_cost"], Decimal("30.00"))  # 10 + 20
+
+    def test_needs_action_counts_markdown_steps(self):
+        _make_entry(self.user, item="Fresh", cost="10.00", status="holding",
+                    purchase_date=timezone.localdate() - timedelta(days=5))
+        _make_entry(self.user, item="At 14 Days", cost="10.00", status="holding",
+                    purchase_date=timezone.localdate() - timedelta(days=16))
+        _make_entry(self.user, item="Past 90", cost="10.00", status="holding",
+                    purchase_date=timezone.localdate() - timedelta(days=200))
+
+        tiles = ledger_metrics.dashboard_tiles(self.user)
+
+        self.assertEqual(tiles["markdown_count"], 2)
+        self.assertEqual(tiles["needs_action_count"], 2)
+
+    def test_needs_action_includes_likely_won_wins_to_log(self):
+        now = timezone.now()
+        lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="needs-action-1", url="https://example.com/needs-action-1",
+            title="Lot", current_price=Decimal("10"), end_time=now - timedelta(hours=1),
+        )
+        _make_watch(lot, status="likely_won", resolved_at=now)
+
+        tiles = ledger_metrics.dashboard_tiles(self.user, now=now)
+
+        self.assertEqual(tiles["wins_to_log"], 1)
+        self.assertEqual(tiles["needs_action_count"], 1)
+
+    def test_likely_won_lot_already_logged_not_counted_as_win_to_log(self):
+        now = timezone.now()
+        lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="needs-action-2", url="https://example.com/needs-action-2",
+            title="Lot", current_price=Decimal("10"), end_time=now - timedelta(hours=1),
+        )
+        _make_watch(lot, status="likely_won", resolved_at=now)
+        _make_entry(self.user, item="Already Logged", scanner_lot=lot)
+
+        tiles = ledger_metrics.dashboard_tiles(self.user, now=now)
+
+        self.assertEqual(tiles["wins_to_log"], 0)
+
+    def test_my_bids_tile_counts_watching_and_recent_likely_won(self):
+        now = timezone.now()
+        watching_lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="mybids-1", url="https://example.com/mybids-1",
+            title="Lot", current_price=Decimal("10"), end_time=now + timedelta(hours=3),
+        )
+        _make_watch(watching_lot, status="watching")
+
+        won_lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="mybids-2", url="https://example.com/mybids-2",
+            title="Lot", current_price=Decimal("10"), end_time=now - timedelta(hours=1),
+        )
+        _make_watch(won_lot, status="likely_won", resolved_at=now - timedelta(days=2))
+
+        old_won_lot = SourcedLot.objects.create(
+            source="shopgoodwill", external_id="mybids-3", url="https://example.com/mybids-3",
+            title="Lot", current_price=Decimal("10"), end_time=now - timedelta(days=20),
+        )
+        _make_watch(old_won_lot, status="likely_won", resolved_at=now - timedelta(days=20))
+
+        tiles = ledger_metrics.dashboard_tiles(self.user, now=now)
+
+        self.assertEqual(tiles["watching_count"], 1)
+        self.assertEqual(tiles["likely_won_this_week"], 1)  # only the 2-days-ago win

@@ -2,7 +2,13 @@
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
     <div class="card__header" style="margin-bottom: 20px;">
-        <h1 style="margin: 0;">Ledger</h1>
+        <h1 style="margin: 0;">
+            Ledger
+            {% if status_filter == 'unsold' %}
+            <span class="badge neutral" style="margin-left: 8px; vertical-align: middle;">Unsold only</span>
+            <a href="{% url 'albright_reselling_app:ledger' %}" style="font-size: 0.75rem; margin-left: 4px;">Clear</a>
+            {% endif %}
+        </h1>
         <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" style="font-size: 0.8125rem;">View Scorecard &rarr;</a>
     </div>
 

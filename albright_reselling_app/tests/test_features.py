@@ -156,3 +156,49 @@ class ExtractFeaturesEdgeCaseTests(TestCase):
         features = extract_features(MAXSOLD_ITEM, MAXSOLD_ITEM["title"], "desc", "maxsold")
 
         json.dumps(features)  # raises if anything isn't serializable
+
+
+class ExtractFeaturesRelistTests(TestCase):
+    """relist_id / is_relisted, from ShopGoodwill's "relistId" - a live
+    production sample (9689 ShopGoodwill lots) showed relistId as the int 0
+    on every single one, so the 0-means-not-relisted case below is in fact
+    the overwhelmingly common real shape, not just an edge case."""
+
+    def test_extracted_when_present_and_positive(self):
+        item = dict(SHOPGOODWILL_ITEM)
+        item["relistId"] = 456
+
+        features = extract_features(item, item["title"], "", "shopgoodwill")
+
+        self.assertEqual(features["relist_id"], 456)
+        self.assertTrue(features["is_relisted"])
+
+    def test_none_when_absent(self):
+        features = extract_features(SHOPGOODWILL_ITEM, SHOPGOODWILL_ITEM["title"], "", "shopgoodwill")
+
+        self.assertIsNone(features["relist_id"])
+        self.assertFalse(features["is_relisted"])
+
+    def test_none_when_zero(self):
+        item = dict(SHOPGOODWILL_ITEM)
+        item["relistId"] = 0
+
+        features = extract_features(item, item["title"], "", "shopgoodwill")
+
+        self.assertIsNone(features["relist_id"])
+        self.assertFalse(features["is_relisted"])
+
+    def test_none_for_maxsold_item(self):
+        features = extract_features(MAXSOLD_ITEM, MAXSOLD_ITEM["title"], "", "maxsold")
+
+        self.assertIsNone(features["relist_id"])
+        self.assertFalse(features["is_relisted"])
+
+    def test_non_numeric_value_treated_as_absent(self):
+        item = dict(SHOPGOODWILL_ITEM)
+        item["relistId"] = "not-a-number"
+
+        features = extract_features(item, item["title"], "", "shopgoodwill")
+
+        self.assertIsNone(features["relist_id"])
+        self.assertFalse(features["is_relisted"])

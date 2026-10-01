@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import modelformset_factory
 from .models import LedgerEntry, LedgerSale, ScanRequest, HarvestRequest, AnalysisRequest
+from .scanner_models import BidWatch
 
 _NUM_WIDGET = lambda placeholder=None: forms.NumberInput(attrs={  # noqa: E731
     "class": "ledger-input num", "step": "0.01", **({"placeholder": placeholder} if placeholder else {}),
@@ -169,4 +170,16 @@ class AnalysisRequestForm(forms.ModelForm):
             "min_final_price": forms.NumberInput(attrs={"class": "ledger-input num"}),
             "max_final_price": forms.NumberInput(attrs={"class": "ledger-input num"}),
             "max_lots": forms.NumberInput(attrs={"class": "ledger-input num", "min": "1"}),
+        }
+
+
+class BidWatchForm(forms.ModelForm):
+    """The "I bid on this" form: just the one number the user actually
+    needs to supply - everything else on BidWatch is set by the view
+    (the lot) or by the watch-resolution sweep (status, alerts sent)."""
+    class Meta:
+        model = BidWatch
+        fields = ["my_max_bid"]
+        widgets = {
+            "my_max_bid": forms.NumberInput(attrs={"class": "ledger-input num", "step": "0.01"}),
         }
