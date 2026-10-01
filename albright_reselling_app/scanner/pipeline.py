@@ -12,6 +12,7 @@ from .adapters.base import SourceBlocked, SourceUnavailable
 from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .coins import estimate_resale
+from .features import extract_features
 from .max_bid import BuyCosts, SellFees, max_bid
 from .spot import get_all_spot
 from .valuers import classify
@@ -59,12 +60,19 @@ def _upsert(raw, keyword, tz_name):
     end = raw.end_time
     if end and timezone.is_naive(end):
         end = timezone.make_aware(end, ZoneInfo(tz_name))
-    lot, _ = SourcedLot.objects.update_or_create(
+    features = extract_features(raw.raw, raw.title, raw.description, raw.source)
+    lot, created = SourcedLot.objects.update_or_create(
         source=raw.source, external_id=raw.external_id,
         defaults=dict(url=raw.url, title=raw.title[:500], description=raw.description,
                       image_url=raw.image_url[:500], current_price=_d(raw.current_price),
-                      bid_count=raw.bid_count, end_time=end, matched_keyword=keyword, raw=raw.raw),
+                      bid_count=raw.bid_count, end_time=end, matched_keyword=keyword, raw=raw.raw,
+                      features=features),
     )
+    if created:
+        # Set once, on the lot's very first scan - re-scans update current_price
+        # (and features) every time, but this is the listing's starting point.
+        lot.first_seen_price = lot.current_price
+        lot.save(update_fields=["first_seen_price"])
     return lot
 
 

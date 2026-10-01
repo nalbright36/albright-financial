@@ -23,6 +23,15 @@ class SourcedLot(models.Model):
     is_closed = models.BooleanField(default=False)
     final_checked_at = models.DateTimeField(null=True, blank=True)
 
+    # Listing-feature tracking (scanner/features.py) - for the offline
+    # "what predicts a cheap close" analysis (see export_features command).
+    # first_seen_price is set once, on the scan that creates the row;
+    # features is refreshed on every scan, then augmented with closing-time
+    # keys (end_hour_local, at_close_*, etc.) by the track_closed command.
+    features = models.JSONField(default=dict, blank=True)
+    first_seen_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    bid_count_at_close = models.IntegerField(null=True, blank=True)
+
     class Meta:
         unique_together = ("source", "external_id")
         ordering = ["end_time"]

@@ -2,6 +2,8 @@
 
     from .scanner_admin import *  # noqa: E402,F401,F403
 """
+import json
+
 from django.contrib import admin
 from django.db.models import Q
 from django.utils import timezone
@@ -38,10 +40,19 @@ class SourcedLotAdmin(admin.ModelAdmin):
     list_filter = ("source", "matched_keyword")
     search_fields = ("title",)
     inlines = [EvaluationInline]
+    exclude = ("features",)
+    readonly_fields = ("features_pretty",)
 
     @admin.display(description="Open")
     def link(self, obj):
         return format_html('<a href="{}" target="_blank">view</a>', obj.url)
+
+    @admin.display(description="Features")
+    def features_pretty(self, obj):
+        return format_html(
+            '<pre style="white-space: pre-wrap; margin: 0;">{}</pre>',
+            json.dumps(obj.features or {}, indent=2, sort_keys=True),
+        )
 
 
 @admin.register(LotEvaluation)

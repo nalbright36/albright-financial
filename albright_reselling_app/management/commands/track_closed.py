@@ -35,6 +35,33 @@ def _search_closed(adapter, source, keyword, days_back):
     return adapter.search_closed(keyword)
 
 
+def _closing_features(lot, evaluation):
+    """Timing features that only exist once a lot has actually closed, plus
+    a snapshot of its evaluation at that moment (prefixed "at_close_") so
+    the analysis still works if the lot gets re-evaluated later. Called
+    with lot.final_price already set on the in-memory object."""
+    features = dict(lot.features or {})
+
+    if lot.end_time:
+        local_end = timezone.localtime(lot.end_time)  # project TIME_ZONE
+        features["end_hour_local"] = local_end.hour
+        features["end_weekday_local"] = local_end.weekday()  # 0 = Monday
+        features["hours_listed"] = round((lot.end_time - lot.first_seen).total_seconds() / 3600, 2)
+
+    if lot.first_seen_price:
+        features["final_to_first_seen_ratio"] = round(float(lot.final_price) / float(lot.first_seen_price), 4)
+    else:
+        features["final_to_first_seen_ratio"] = None
+
+    if evaluation is not None:
+        features["at_close_category"] = evaluation.category
+        features["at_close_melt_value"] = float(evaluation.melt_value)
+        features["at_close_expected_sale"] = float(evaluation.expected_sale)
+        features["at_close_max_bid"] = float(evaluation.max_bid)
+
+    return features
+
+
 class Command(BaseCommand):
     help = "Record final (closed) prices for already-scanned lots, and summarize how they closed vs. max bid."
 
@@ -65,7 +92,11 @@ class Command(BaseCommand):
                     lot.final_price = Decimal(str(raw.current_price)).quantize(Decimal("0.01"))
                     lot.is_closed = True
                     lot.final_checked_at = now
-                    lot.save(update_fields=["final_price", "is_closed", "final_checked_at"])
+                    lot.bid_count_at_close = raw.bid_count
+                    lot.features = _closing_features(lot, getattr(lot, "evaluation", None))
+                    lot.save(update_fields=[
+                        "final_price", "is_closed", "final_checked_at", "bid_count_at_close", "features",
+                    ])
                     updated += 1
             except SourceBlocked as exc:
                 self.stderr.write(self.style.ERROR(f"Stopping: {exc}"))

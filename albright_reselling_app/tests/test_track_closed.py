@@ -88,6 +88,64 @@ class TrackClosedCommandTests(TestCase):
         self.assertIn("Lots updated: 1", out.getvalue())
 
     @mock.patch("albright_reselling_app.scanner.adapters.base.time.sleep")
+    def test_sets_bid_count_and_closing_features(self, mock_sleep):
+        lot = _make_lot("feat-close-1", max_bid="20.00", melt_value="18.00")
+        lot.first_seen_price = Decimal("10.00")
+        lot.save(update_fields=["first_seen_price"])
+
+        def fake_search_closed(self, keyword, days_back=2):
+            yield RawLot(source="shopgoodwill", external_id="feat-close-1", url=lot.url, title=lot.title,
+                         current_price=15.0, bid_count=7)
+
+        out = StringIO()
+        with mock.patch.object(ShopGoodwillAdapter, "search_closed", fake_search_closed):
+            call_command("track_closed", "--category", "coins", stdout=out)
+
+        lot.refresh_from_db()
+        self.assertEqual(lot.bid_count_at_close, 7)
+        self.assertIn("end_hour_local", lot.features)
+        self.assertIn("end_weekday_local", lot.features)
+        self.assertIn("hours_listed", lot.features)
+        self.assertEqual(lot.features["final_to_first_seen_ratio"], 1.5)  # 15.00 / 10.00
+        self.assertEqual(lot.features["at_close_category"], "coins")
+        self.assertEqual(lot.features["at_close_max_bid"], 20.0)
+        self.assertEqual(lot.features["at_close_melt_value"], 18.0)
+
+    @mock.patch("albright_reselling_app.scanner.adapters.base.time.sleep")
+    def test_final_to_first_seen_ratio_null_without_first_seen_price(self, mock_sleep):
+        lot = _make_lot("feat-close-2")  # first_seen_price left at its default (None)
+
+        def fake_search_closed(self, keyword, days_back=2):
+            yield RawLot(source="shopgoodwill", external_id="feat-close-2", url=lot.url, title=lot.title,
+                         current_price=15.0)
+
+        out = StringIO()
+        with mock.patch.object(ShopGoodwillAdapter, "search_closed", fake_search_closed):
+            call_command("track_closed", "--category", "coins", stdout=out)
+
+        lot.refresh_from_db()
+        self.assertIsNone(lot.features["final_to_first_seen_ratio"])
+
+    @mock.patch("albright_reselling_app.scanner.adapters.base.time.sleep")
+    def test_closing_features_preserve_existing_scan_features(self, mock_sleep):
+        lot = _make_lot("feat-close-3")
+        lot.features = {"title_length": 12, "photo_count": 2}
+        lot.save(update_fields=["features"])
+
+        def fake_search_closed(self, keyword, days_back=2):
+            yield RawLot(source="shopgoodwill", external_id="feat-close-3", url=lot.url, title=lot.title,
+                         current_price=15.0)
+
+        out = StringIO()
+        with mock.patch.object(ShopGoodwillAdapter, "search_closed", fake_search_closed):
+            call_command("track_closed", "--category", "coins", stdout=out)
+
+        lot.refresh_from_db()
+        self.assertEqual(lot.features["title_length"], 12)
+        self.assertEqual(lot.features["photo_count"], 2)
+        self.assertIn("end_hour_local", lot.features)
+
+    @mock.patch("albright_reselling_app.scanner.adapters.base.time.sleep")
     def test_ignores_items_not_already_in_database(self, mock_sleep):
         def fake_search_closed(self, keyword, days_back=2):
             yield RawLot(source="shopgoodwill", external_id="ghost-1", url="https://example.com/ghost-1",
