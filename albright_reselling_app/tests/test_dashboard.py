@@ -2,8 +2,10 @@
 directly (get_scanner_dashboard_context), and the dashboard view end to end
 via the test client. No HTTP call to any external site happens here - only
 ORM fixtures."""
+import os
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -11,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_context
-from albright_reselling_app.scanner_models import AIReview, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from albright_reselling_app.scanner_models import AIReview, AlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
 
 
 def _make_lot(external_id, end_time, current_price=10.0, source="shopgoodwill", raw=None):
@@ -314,6 +316,26 @@ class ScannerDashboardContextTests(TestCase):
 
         self.assertIsNone(context["live_candidates_ending_soon"][0]["ai_review"])
 
+    def test_alerts_status_reflects_missing_env_vars(self):
+        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
+            context = get_scanner_dashboard_context()
+
+        self.assertFalse(context["alerts_status"]["configured"])
+
+    def test_alerts_status_reflects_configured_env_vars(self):
+        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "123"}):
+            context = get_scanner_dashboard_context()
+
+        self.assertTrue(context["alerts_status"]["configured"])
+
+    def test_alerts_status_counts_todays_alerts(self):
+        lot = _make_lot("alert-count-1", timezone.now() + timedelta(hours=3))
+        AlertSent.objects.create(lot=lot, kind="candidate")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["alerts_status"]["today_count"], 1)
+
     def test_ai_review_stats_reflect_todays_reviews(self):
         lot = _make_lot("ai-stats-1", timezone.now() + timedelta(hours=3))
         AIReview.objects.create(lot=lot, status="done", cost_usd=Decimal("0.05"))
@@ -396,6 +418,22 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "No close calls right now")
         self.assertContains(response, "No runs recorded yet")
         self.assertContains(response, "No MaxSold candidates right now")
+
+    def test_alerts_card_shows_configured_state_and_todays_count(self):
+        lot = _make_lot("alert-card-1", timezone.now() + timedelta(hours=3))
+        AlertSent.objects.create(lot=lot, kind="candidate")
+
+        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "123"}):
+            response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Telegram configured")
+        self.assertContains(response, "1 sent today")
+
+    def test_alerts_card_shows_not_configured_state(self):
+        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
+            response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Telegram not configured")
 
     def test_status_bar_shows_error_dot_when_never_run(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))

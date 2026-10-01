@@ -210,6 +210,16 @@
             <div class="status-card__sub">${{ ai_review_stats.month_cost|floatformat:2 }} of ${{ ai_review_stats.monthly_budget|floatformat:2 }} this month</div>
             <div class="status-card__sub"><a href="{% url 'albright_reselling_app:ai_review_history' %}">View all reviews &rarr;</a></div>
         </div>
+
+        <div class="status-card {% if alerts_status.configured %}status-card--quiet{% endif %}"
+             title="{% if alerts_status.configured %}Telegram alerts are configured{% else %}TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set - alerts are silently skipped{% endif %}">
+            <div class="status-card__title">
+                <span class="status-dot status-dot--{% if alerts_status.configured %}ok{% else %}warn{% endif %}"></span>
+                Alerts
+            </div>
+            <div class="status-card__body">{% if alerts_status.configured %}Telegram configured{% else %}Telegram not configured{% endif %}</div>
+            <div class="status-card__sub">{{ alerts_status.today_count }} sent today</div>
+        </div>
     </div>
 
     <div class="card" style="margin-bottom: 20px;">

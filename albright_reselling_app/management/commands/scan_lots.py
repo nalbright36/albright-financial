@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from albright_reselling_app.scanner.alerts import run_alerts
 from albright_reselling_app.scanner.pipeline import run_scan
 from albright_reselling_app.scanner_models import ScanRun
 
@@ -120,3 +121,10 @@ class Command(BaseCommand):
                 )
         if ending_later:
             self.stdout.write(f"{len(ending_later)} more candidates ending later (bids will likely rise)")
+
+        try:
+            alerts_sent = run_alerts()
+            if alerts_sent:
+                self.stdout.write(f"Alerts sent: {len(alerts_sent)}")
+        except Exception as exc:  # noqa: BLE001 - alerting must never break the scan or lose its ScanRun record
+            self.stderr.write(self.style.WARNING(f"Alert check failed: {exc}"))

@@ -1,6 +1,6 @@
 """Scanner models. Add to the bottom of albright_reselling_app/models.py:
 
-    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview  # noqa: E402,F401
+    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent  # noqa: E402,F401
 """
 from django.db import models
 
@@ -106,6 +106,26 @@ class AIReview(models.Model):
 
     def __str__(self):
         return f"AIReview({self.lot_id}, {self.status}) @ {self.created_at}"
+
+
+class AlertSent(models.Model):
+    """Records that a Telegram alert already went out for a given lot +
+    kind, so the hourly scan_lots alert pass (scanner/alerts.py) never
+    repeats one. unique_together is the actual dedup guarantee; the alert
+    query also excludes already-sent lots so the common case never even
+    reaches an IntegrityError."""
+    KIND_CHOICES = [("candidate", "Candidate"), ("lead", "Lead"), ("check_by_hand", "Check by Hand")]
+
+    lot = models.ForeignKey(SourcedLot, on_delete=models.CASCADE, related_name="alerts_sent")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("lot", "kind")
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"AlertSent({self.lot_id}, {self.kind}) @ {self.sent_at}"
 
 
 class ScanRun(models.Model):

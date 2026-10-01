@@ -13,6 +13,7 @@ schedules and have different staleness expectations.
 Read-only: nothing here starts a scan. Scans only run from the scheduled
 `scan_lots` task.
 """
+import os
 import re
 import statistics
 from datetime import timedelta
@@ -21,7 +22,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.utils import timezone
 
-from ..scanner_models import AIReview, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from ..scanner_models import AIReview, AlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
 from .ai_review_service import months_review_cost, todays_review_count
 
 STALE_RUN_AFTER = timedelta(hours=2)
@@ -397,6 +398,15 @@ def _attach_ai_reviews(*row_lists):
         row["ai_review"] = latest.get(row["lot_id"])
 
 
+def _alerts_status():
+    """Status bar card: whether Telegram is actually configured (both env
+    vars set - scanner/alerts.py silently no-ops otherwise) and how many
+    alerts have gone out today."""
+    configured = bool(os.environ.get("TELEGRAM_BOT_TOKEN")) and bool(os.environ.get("TELEGRAM_CHAT_ID"))
+    today_count = AlertSent.objects.filter(sent_at__date=timezone.localdate()).count()
+    return {"configured": configured, "today_count": today_count}
+
+
 def _ai_review_stats(cfg):
     return {
         "today_count": todays_review_count(),
@@ -497,6 +507,7 @@ def get_scanner_dashboard_context():
         "closed_results_rows": closed_results_rows,
         "closed_results_has_maxsold": _has_maxsold(closed_results_rows),
         "ai_review_stats": _ai_review_stats(cfg["AI_REVIEW"]),
+        "alerts_status": _alerts_status(),
         "last_run_lots_seen": sum(
             h["last_run"].lots_seen for h in scanner_health.values() if h["last_run"]
         ),
