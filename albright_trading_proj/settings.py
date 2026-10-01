@@ -236,5 +236,5 @@ RESELLING_SCANNER = {
                   "usd_per_search": 0.01, "daily_limit": 20, "monthly_budget_usd": 10.0},
     "SPOT": {"monthly_api_limit": 90, "max_age_days": 3, "manual": {"silver": None, "gold": None}},
     "ALERTS": {"enabled": True, "window_minutes": 90, "kinds": ["candidate", "lead"], "min_headroom": 5.0,
-               "candidate_confidence": ["high", "medium"], "max_per_run": 10},
+               "candidate_confidence": ["high", "medium"], "max_per_run": 10, "critical_alerts": True},
 }

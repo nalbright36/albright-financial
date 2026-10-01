@@ -184,6 +184,7 @@ def run_scan(source: str, category: str | None = None, use_llm=True, keywords=No
     llm_budget = cfg["LLM"]["max_calls_per_run"]
     tz_name = cfg["SOURCES"][source].get("timezone", "UTC")
     seen, failed_keywords = 0, []
+    blocked = False
     latest_by_lot = {}  # lot_id -> most recent evaluation, so a lot matched by
                         # several keywords is only counted/listed once
     consecutive_failures = 0
@@ -203,6 +204,7 @@ def run_scan(source: str, category: str | None = None, use_llm=True, keywords=No
                 latest_by_lot[ev.lot_id] = ev
         except SourceBlocked as exc:
             log.error("Stopping scan: %s", exc)
+            blocked = True
             break
         except SourceUnavailable as exc:
             log.warning("Keyword %r failed, keeping lots found so far: %s", keyword, exc)
@@ -222,5 +224,5 @@ def run_scan(source: str, category: str | None = None, use_llm=True, keywords=No
     leads = [ev for ev in latest_by_lot.values() if ev.is_lead]
 
     return {"seen": seen, "candidates": candidates, "leads": leads, "spot": spot,
-            "failed_keywords": failed_keywords, "keywords_scanned": keyword_list,
+            "failed_keywords": failed_keywords, "keywords_scanned": keyword_list, "blocked": blocked,
             "llm_calls": cfg["LLM"]["max_calls_per_run"] - llm_budget}

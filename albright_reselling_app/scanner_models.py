@@ -1,6 +1,8 @@
 """Scanner models. Add to the bottom of albright_reselling_app/models.py:
 
-    from .scanner_models import SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent  # noqa: E402,F401
+    from .scanner_models import (  # noqa: E402,F401
+        SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent,
+    )
 """
 from django.db import models
 
@@ -126,6 +128,24 @@ class AlertSent(models.Model):
 
     def __str__(self):
         return f"AlertSent({self.lot_id}, {self.kind}) @ {self.sent_at}"
+
+
+class CriticalAlertSent(models.Model):
+    """Rate-limits scanner.alerts.send_critical_alert() to at most one per
+    source+alert_type every CRITICAL_ALERT_COOLDOWN (6h) - these are
+    source-level problems (blocked, zero lots, stale), not lot-level, so
+    they don't fit AlertSent's per-lot dedup."""
+    ALERT_TYPE_CHOICES = [("blocked", "Blocked"), ("zero_lots", "Zero Lots"), ("stale", "Stale")]
+
+    source = models.CharField(max_length=40)
+    alert_type = models.CharField(max_length=20, choices=ALERT_TYPE_CHOICES)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"CriticalAlertSent({self.source}, {self.alert_type}) @ {self.sent_at}"
 
 
 class ScanRun(models.Model):

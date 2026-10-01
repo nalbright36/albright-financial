@@ -10,7 +10,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from albright_reselling_app.scanner.alerts import run_alerts
+from albright_reselling_app.scanner.alerts import check_stale_source, check_zero_lots, run_alerts, \
+    send_critical_alert
 from albright_reselling_app.scanner.pipeline import run_scan
 from albright_reselling_app.scanner_models import ScanRun
 
@@ -71,10 +72,16 @@ class Command(BaseCommand):
         parser.add_argument("--keyword", action="append", help="Override configured keywords (repeatable)")
 
     def handle(self, *args, **opts):
-        run = ScanRun.objects.create(source=opts["source"])
+        source = opts["source"]
+
         try:
-            result = run_scan(opts["source"], opts["category"], use_llm=not opts["no_llm"],
-                               keywords=opts["keyword"])
+            check_stale_source(source)  # before this run, so a broken cadence is caught, not masked by it
+        except Exception as exc:  # noqa: BLE001 - alerting must never break the scan
+            self.stderr.write(self.style.WARNING(f"Stale-source check failed: {exc}"))
+
+        run = ScanRun.objects.create(source=source)
+        try:
+            result = run_scan(source, opts["category"], use_llm=not opts["no_llm"], keywords=opts["keyword"])
         except Exception as exc:
             run.error = str(exc)
             run.finished_at = timezone.now()
@@ -121,6 +128,15 @@ class Command(BaseCommand):
                 )
         if ending_later:
             self.stdout.write(f"{len(ending_later)} more candidates ending later (bids will likely rise)")
+
+        try:
+            if result.get("blocked"):
+                send_critical_alert(
+                    source, "blocked", "Scan was BLOCKED by the site (403/429) - stopped immediately."
+                )
+            check_zero_lots(source, result["seen"])
+        except Exception as exc:  # noqa: BLE001 - alerting must never break the scan or lose its ScanRun record
+            self.stderr.write(self.style.WARNING(f"Critical-alert check failed: {exc}"))
 
         try:
             alerts_sent = run_alerts()

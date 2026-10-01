@@ -1,9 +1,13 @@
 """Telegram alerting for the scanner.
 
-send_telegram() is the raw HTTP call; everything else here decides which
-live lots are worth a push notification and sends them, run once at the
-end of every scan_lots command (see management/commands/scan_lots.py) plus
-the separately-scheduled alert_digest command.
+send_telegram() is the raw HTTP call. Three kinds of alert sit on top of it:
+  - run_alerts(): per-lot "worth a look" pushes (candidate/lead/check_by_hand),
+    run once at the end of every scan_lots command.
+  - send_critical_alert() / check_stale_source() / check_zero_lots(): immediate,
+    rate-limited, source-level problem alerts (blocked, zero lots, stale),
+    called from scan_lots and alert_digest.
+  - send_daily_digest(): one daily summary - spot prices, 24h system health,
+    yesterday's results, live counts, and "my bids" status.
 
 Telegram credentials come from the environment (TELEGRAM_BOT_TOKEN,
 TELEGRAM_CHAT_ID), not settings.py/RESELLING_SCANNER - like OPENAI_API_KEY,
@@ -14,18 +18,26 @@ unconfigured bot must never break a scan.
 import logging
 import os
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 import requests
 from django.conf import settings
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from ..scanner_models import AlertSent, LotEvaluation, SourcedLot
+from ..scanner_models import AIReview, AlertSent, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from .ai_review_service import months_review_cost
 from .dashboard import _source_display, _time_remaining
 
 log = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 REQUEST_TIMEOUT_SECONDS = 15
+
+CRITICAL_ALERT_COOLDOWN = timedelta(hours=6)
+STALE_ALERT_AFTER = timedelta(hours=3)
+SPOT_CHANGE_WARN_PCT = 3.0
+AI_REVIEW_BUDGET_WARN_PCT = 0.8
 
 # "a link to run an AI review on the dashboard" - the scheduled scan_lots
 # run (and this module generally) has no request object to build an
@@ -146,6 +158,61 @@ def run_alerts(now=None):
 
 
 # ---------------------------------------------------------------------------
+# Immediate critical alerts: scan blocked, zero lots, stale source
+# ---------------------------------------------------------------------------
+
+def send_critical_alert(source, alert_type, message, now=None):
+    """Immediate, out-of-band alert for a source-level problem - distinct
+    from the per-lot alerts above, and gated by its own setting
+    (ALERTS["critical_alerts"]). Rate-limited to one per source+alert_type
+    every CRITICAL_ALERT_COOLDOWN via CriticalAlertSent, recorded
+    regardless of whether the send itself succeeds - so a Telegram outage
+    doesn't turn into a retry-every-run spam burst once it recovers."""
+    cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
+    if not cfg.get("critical_alerts"):
+        return False
+
+    now = now or timezone.now()
+    cutoff = now - CRITICAL_ALERT_COOLDOWN
+    if CriticalAlertSent.objects.filter(source=source, alert_type=alert_type, sent_at__gte=cutoff).exists():
+        return False
+
+    sent = send_telegram(f"<b>CRITICAL · {_source_display(source)}</b>\n{message}")
+    CriticalAlertSent.objects.create(source=source, alert_type=alert_type)
+    return sent
+
+
+def check_zero_lots(source, seen, now=None):
+    """Call right after a scan_lots run finishes, with that run's seen
+    count."""
+    if seen > 0:
+        return False
+    return send_critical_alert(
+        source, "zero_lots", "Scan saw 0 lots - the site may have changed its data format.", now=now,
+    )
+
+
+def check_stale_source(source, now=None):
+    """"No scan has completed for a source in 3 hours" - called at the
+    start of every scan_lots run (catching a broken cadence before the
+    next scan even starts) and from alert_digest (a backstop in case
+    scan_lots has stopped running on its own schedule entirely, in which
+    case the start-of-run check never fires at all)."""
+    now = now or timezone.now()
+    last_finished = (
+        ScanRun.objects.filter(source=source, finished_at__isnull=False).order_by("-finished_at").first()
+    )
+    if last_finished is None:
+        return False  # never completed a run at all - a different, pre-existing problem
+    if now - last_finished.finished_at > STALE_ALERT_AFTER:
+        hours = STALE_ALERT_AFTER.total_seconds() / 3600
+        return send_critical_alert(
+            source, "stale", f"No completed scan in over {hours:.0f}h - check the scheduled task.", now=now,
+        )
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Daily digest (management/commands/alert_digest.py)
 # ---------------------------------------------------------------------------
 
@@ -182,22 +249,234 @@ def _today_live_counts(now):
     )
 
 
+def _my_bids_counts(now):
+    """"My bids": lots the scanner flagged as worth bidding on (candidate)
+    or that got an AI review (a deliberate second look) - this app has no
+    way to know whether a bid was actually placed on the auction site
+    itself, so engagement is the closest available signal.
+      - watching: still live
+      - likely won: closed in the last 24h at/under the best bid ceiling
+        on record for it (the AI's suggested max, if reviewed, else the
+        scanner's max bid)
+      - lost: closed in the last 24h over that ceiling
+    """
+    cutoff = now - timedelta(hours=24)
+    my_bids_filter = Q(is_candidate=True) | Q(lot__ai_reviews__isnull=False)
+
+    watching = LotEvaluation.objects.filter(my_bids_filter, lot__end_time__gt=now).distinct().count()
+
+    closed_qs = (
+        LotEvaluation.objects.filter(
+            my_bids_filter, lot__is_closed=True, lot__final_price__isnull=False,
+            lot__end_time__gte=cutoff, lot__end_time__lte=now,
+        ).select_related("lot").distinct()
+    )
+
+    likely_won = lost = 0
+    for ev in closed_qs:
+        best_review = (
+            ev.lot.ai_reviews.filter(status="done", suggested_max_bid__isnull=False).order_by("-created_at").first()
+        )
+        ceiling = best_review.suggested_max_bid if best_review else ev.max_bid
+        if ceiling and ev.lot.final_price <= ceiling:
+            likely_won += 1
+        else:
+            lost += 1
+
+    return watching, likely_won, lost
+
+
+def _spot_section(now):
+    """Today's silver/gold price, change vs. yesterday ($ and %), and a
+    warning if either moved more than SPOT_CHANGE_WARN_PCT."""
+    today = timezone.localdate(now)
+    lines, warnings = [], []
+
+    for metal in ("silver", "gold"):
+        today_row = SpotPrice.objects.filter(metal=metal, fetched_at__date=today).order_by("-fetched_at").first()
+        if today_row is None:
+            lines.append(f"{metal.title()}: no price fetched today")
+            warnings.append(f"{metal.title()} spot price not fetched today")
+            continue
+        if today_row.source == "goldapi_failed":
+            lines.append(f"{metal.title()}: fetch FAILED today")
+            warnings.append(f"{metal.title()} spot price fetch failed today")
+            continue
+
+        prior_row = (
+            SpotPrice.objects.filter(metal=metal, source="goldapi", fetched_at__date__lt=today)
+            .order_by("-fetched_at").first()
+        )
+        if prior_row is None:
+            lines.append(f"{metal.title()}: ${today_row.price_usd:.2f} (no prior price to compare)")
+            continue
+
+        delta = today_row.price_usd - prior_row.price_usd
+        pct = float(delta / prior_row.price_usd) * 100 if prior_row.price_usd else 0.0
+        sign = "+" if delta >= 0 else ""
+        lines.append(f"{metal.title()}: ${today_row.price_usd:.2f} ({sign}{delta:.2f}, {sign}{pct:.1f}%)")
+        if abs(pct) > SPOT_CHANGE_WARN_PCT:
+            warnings.append(f"{metal.title()} moved {sign}{pct:.1f}% vs. yesterday - max bids have shifted")
+
+    return lines, warnings
+
+
+def _source_health_lines(source, now):
+    cutoff = now - timedelta(hours=24)
+    runs = list(ScanRun.objects.filter(source=source, started_at__gte=cutoff))
+    lines, warnings = [], []
+    label = _source_display(source)
+
+    lines.append(f"{label}: {len(runs)} run(s) in last 24h (expect ~24)")
+
+    last_run = ScanRun.objects.filter(source=source).order_by("-started_at").first()
+    if last_run:
+        lines.append(f"  Last run: {timezone.localtime(last_run.started_at).strftime('%b %d, %I:%M %p')}")
+    else:
+        lines.append("  Last run: never")
+        warnings.append(f"{label} has never run a scan")
+
+    lines.append(f"  Lots seen (24h): {sum(r.lots_seen for r in runs)}")
+
+    error_runs = [r for r in runs if r.error]
+    if error_runs:
+        lines.append(f"  Runs with errors: {len(error_runs)}")
+        warnings.append(f"{label}: {len(error_runs)} run(s) with errors in the last 24h")
+
+    failed_keywords = sorted({kw for r in runs for kw in (r.failed_keywords or [])})
+    if failed_keywords:
+        lines.append(f"  Failed keywords: {', '.join(failed_keywords)}")
+        warnings.append(f"{label}: failed keywords in last 24h: {', '.join(failed_keywords)}")
+
+    zero_lot_runs = [r for r in runs if r.lots_seen == 0]
+    if zero_lot_runs:
+        warnings.append(
+            f"{label}: {len(zero_lot_runs)} run(s) saw 0 lots - the site may have changed its data format."
+        )
+
+    return lines, warnings
+
+
+def _spot_fetch_health_lines(now):
+    cutoff = now - timedelta(hours=24)
+    failed_24h = SpotPrice.objects.filter(source="goldapi_failed", fetched_at__gte=cutoff).count()
+    month_start = timezone.localdate(now).replace(day=1)
+    attempts_this_month = SpotPrice.objects.filter(
+        source__in=["goldapi", "goldapi_failed"], fetched_at__date__gte=month_start,
+    ).count()
+    limit = settings.RESELLING_SCANNER["SPOT"]["monthly_api_limit"]
+
+    lines = [f"Spot fetch: {attempts_this_month}/{limit} API calls this month"]
+    warnings = []
+    if failed_24h:
+        lines.append(f"  Failed fetches (24h): {failed_24h}")
+        warnings.append(f"Spot price fetch failed {failed_24h} time(s) in the last 24h")
+    if attempts_this_month >= limit:
+        warnings.append(f"Spot price API monthly limit reached ({attempts_this_month}/{limit})")
+    return lines, warnings
+
+
+def _track_closed_health_lines(now):
+    cutoff = now - timedelta(hours=24)
+    updated = SourcedLot.objects.filter(final_checked_at__gte=cutoff).count()
+    lines = [f"track_closed: {updated} lot(s) updated in last 24h"]
+    warnings = []
+    if updated == 0:
+        warnings.append("track_closed: no lots updated in the last 24h - it may not have run")
+    return lines, warnings
+
+
+def _ai_review_health_lines(now):
+    today = timezone.localdate(now)
+    cfg = settings.RESELLING_SCANNER["AI_REVIEW"]
+    today_count = AIReview.objects.filter(created_at__date=today).count()
+    today_cost = AIReview.objects.filter(created_at__date=today).aggregate(t=Sum("cost_usd"))["t"] or Decimal("0")
+    month_cost = months_review_cost(today)
+    budget = Decimal(str(cfg["monthly_budget_usd"]))
+
+    lines = [f"AI reviews: {today_count} today (${today_cost:.2f}) · ${month_cost:.2f} of ${budget:.2f} "
+             f"this month"]
+    warnings = []
+    if budget and month_cost >= budget * Decimal(str(AI_REVIEW_BUDGET_WARN_PCT)):
+        pct = float(month_cost / budget) * 100
+        warnings.append(f"AI review spend at {pct:.0f}% of monthly budget (${month_cost:.2f} of ${budget:.2f})")
+    return lines, warnings
+
+
+def _alerts_sent_lines(now):
+    cutoff = now - timedelta(hours=24)
+    counts = {
+        row["kind"]: row["n"]
+        for row in AlertSent.objects.filter(sent_at__gte=cutoff).values("kind").annotate(n=Count("kind"))
+    }
+    if not counts:
+        return ["Alerts sent (24h): none"]
+    return ["Alerts sent (24h): " + ", ".join(f"{kind}: {n}" for kind, n in sorted(counts.items()))]
+
+
 def build_digest_message(now=None):
     now = now or timezone.now()
+    cfg = settings.RESELLING_SCANNER
+    sources = list(cfg["SOURCES"].keys())
+
+    warnings = []
+
+    spot_lines, spot_warnings = _spot_section(now)
+    warnings += spot_warnings
+
+    health_lines = []
+    for source in sources:
+        lines, source_warnings = _source_health_lines(source, now)
+        health_lines += lines
+        warnings += source_warnings
+    for section_fn in (_spot_fetch_health_lines, _track_closed_health_lines, _ai_review_health_lines):
+        lines, section_warnings = section_fn(now)
+        health_lines += lines
+        warnings += section_warnings
+    health_lines += _alerts_sent_lines(now)
+
     results = _yesterday_results(now)
     candidate_count, lead_count = _today_live_counts(now)
+    watching, likely_won, lost = _my_bids_counts(now)
 
-    lines = ["<b>Scanner Daily Digest</b>", "Yesterday's results:"]
+    lines = ["<b>Scanner Daily Digest</b>", ""]
+
+    if warnings:
+        lines.append("<b>⚠ Needs attention</b>")
+        lines += [f"• {w}" for w in warnings]
+    else:
+        lines.append("✅ All systems OK")
+    lines.append("")
+
+    lines.append("<b>Spot Prices</b>")
+    lines += spot_lines
+    lines.append("")
+
+    lines.append("<b>System Health (24h)</b>")
+    lines += health_lines
+    lines.append("")
+
+    lines.append("<b>Yesterday's Results</b>")
     if results:
         for (source, category), stats in sorted(results.items()):
-            lines.append(f"  {_source_display(source)} {category}: {stats['under']} under max, {stats['over']} over max")
+            lines.append(f"  {_source_display(source)} {category}: {stats['under']} under max, "
+                         f"{stats['over']} over max")
     else:
         lines.append("  No lots closed with a max bid yesterday.")
+    lines.append("")
+
     lines.append(f"Live now: {candidate_count} candidate(s), {lead_count} lead(s)")
+    lines.append(f"My bids: {watching} watching, {likely_won} likely won, {lost} lost (last 24h)")
+
     return "\n".join(lines)
 
 
 def send_daily_digest(now=None):
-    message = build_digest_message(now)
+    now = now or timezone.now()
+    cfg = settings.RESELLING_SCANNER
+    for source in cfg["SOURCES"].keys():
+        check_stale_source(source, now=now)
+
+    message = build_digest_message(now=now)
     send_telegram(message)
     return message
