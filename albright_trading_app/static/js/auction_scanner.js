@@ -1,10 +1,13 @@
 /*
- * Auction Scanner dashboard: column sorting, a shared filter bar, and
- * collapsible section headers. Vanilla JS, no libraries.
+ * Auction Scanner dashboard: column sorting (with paired detail rows),
+ * expandable row detail, tabs, a shared filter bar, and collapsible
+ * section headers. Vanilla JS, no libraries.
  *
- * Every table renders complete on the server first - this file only
- * reorders/hides rows that are already in the DOM, so the page works
- * (just without these controls) if JavaScript is disabled.
+ * Every table renders complete on the server first, and all three tab
+ * groups render stacked and visible - this file only reorders/hides
+ * things already in the DOM, so the page works (just without these
+ * controls) if JavaScript is disabled: every row is visible, and the tab
+ * nav links still work as plain in-page anchors.
  */
 (function () {
     "use strict";
@@ -23,6 +26,13 @@
         return (rawA || "").localeCompare(rawB || "");
     }
 
+    // A main row's detail row (if any) is always rendered as the very next
+    // <tr> in the markup - no id matching needed to keep them paired.
+    function detailOf(row) {
+        var next = row.nextElementSibling;
+        return next && next.classList.contains("scanner-detail") ? next : null;
+    }
+
     // ---------- Column sorting (per table, independent of the others) ----------
     function initSortableTable(table) {
         var tbody = table.querySelector("tbody");
@@ -36,12 +46,16 @@
             sortAsc = sortKey === key ? !sortAsc : true;
             sortKey = key;
 
-            var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
-            rows.sort(function (a, b) {
-                var cmp = compareRaw(key, a.dataset[key], b.dataset[key]);
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.scanner-row"));
+            var pairs = rows.map(function (row) { return [row, detailOf(row)]; });
+            pairs.sort(function (a, b) {
+                var cmp = compareRaw(key, a[0].dataset[key], b[0].dataset[key]);
                 return sortAsc ? cmp : -cmp;
             });
-            rows.forEach(function (row) { tbody.appendChild(row); });
+            pairs.forEach(function (pair) {
+                tbody.appendChild(pair[0]);
+                if (pair[1]) tbody.appendChild(pair[1]);
+            });
 
             headers.forEach(function (h) { h.classList.remove("sorted-asc", "sorted-desc"); });
             var active = headers.filter(function (h) { return h.dataset.sortKey === key; })[0];
@@ -50,6 +64,22 @@
 
         headers.forEach(function (h) {
             h.addEventListener("click", function () { sortBy(h.dataset.sortKey); });
+        });
+    }
+
+    // ---------- Expandable row detail (click the chevron cell, or anywhere
+    // on the row that isn't a link/button/form) ----------
+    function initExpandableRows() {
+        document.querySelectorAll("table.holdings tbody").forEach(function (tbody) {
+            tbody.addEventListener("click", function (event) {
+                if (event.target.closest("a, button, form")) return;
+                var row = event.target.closest("tr.scanner-row");
+                if (!row) return;
+                var detail = detailOf(row);
+                if (!detail) return;
+                detail.hidden = !detail.hidden;
+                row.classList.toggle("is-expanded", !detail.hidden);
+            });
         });
     }
 
@@ -84,6 +114,54 @@
         });
     }
 
+    // ---------- Tabs: Act now / Watch / Performance ----------
+    // The server renders all three panels stacked and visible (the no-JS
+    // fallback - the nav links are plain in-page anchors to each panel's
+    // heading). This only adds show/hide-one-at-a-time plus a #hash so the
+    // active tab survives a bookmark or refresh.
+    var TAB_NAMES = ["act-now", "watch", "performance"];
+
+    function initTabs() {
+        var nav = document.getElementById("scanner-tabs");
+        if (!nav) return;
+        var links = Array.prototype.slice.call(nav.querySelectorAll(".scanner-tab"));
+        var panels = TAB_NAMES.map(function (name) { return document.getElementById(name); }).filter(Boolean);
+        if (!links.length || !panels.length) return;
+
+        function activate(name, updateHash) {
+            if (TAB_NAMES.indexOf(name) === -1) name = TAB_NAMES[0];
+            panels.forEach(function (panel) { panel.hidden = panel.id !== name; });
+            links.forEach(function (link) {
+                link.classList.toggle("is-active", link.dataset.tab === name);
+            });
+            if (updateHash) window.history.replaceState(null, "", "#" + name);
+        }
+
+        links.forEach(function (link) {
+            link.addEventListener("click", function (event) {
+                event.preventDefault();
+                activate(link.dataset.tab, true);
+            });
+        });
+
+        var initial = (window.location.hash || "").replace("#", "");
+        activate(TAB_NAMES.indexOf(initial) !== -1 ? initial : TAB_NAMES[0], false);
+    }
+
+    // ---------- Tab row-count badges (reflect the current filters) ----------
+    // Counts every non-hidden main row in each panel's tables, whether or
+    // not that table participates in the shared filter bar - a table with
+    // no filter bar membership (MaxSold estates, results, runs) just never
+    // gets a row hidden, so it always counts in full.
+    function updateTabCounts() {
+        TAB_NAMES.forEach(function (name) {
+            var panel = document.getElementById(name);
+            var badge = document.getElementById("tab-badge-" + name);
+            if (!panel || !badge) return;
+            badge.textContent = panel.querySelectorAll("tr.scanner-row:not([hidden])").length;
+        });
+    }
+
     // ---------- Shared filter bar (source / category / confidence / search) ----------
     function initFilters() {
         var searchInput = document.getElementById("af-search");
@@ -93,7 +171,6 @@
         if (!searchInput || !sourceSelect || !categorySelect || !confidenceSelect) return;
 
         var tables = Array.prototype.slice.call(document.querySelectorAll("table[data-filterable]"));
-        if (!tables.length) return;
 
         function applyFromURL() {
             var params = new URLSearchParams(window.location.search);
@@ -123,7 +200,7 @@
             tables.forEach(function (table) {
                 var tbody = table.querySelector("tbody");
                 if (!tbody) return;
-                var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+                var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.scanner-row"));
                 var shown = 0;
 
                 rows.forEach(function (row) {
@@ -133,6 +210,17 @@
                         (!category || row.dataset.category === category) &&
                         (!confidence || row.dataset.confidence === confidence);
                     row.hidden = !matches;
+
+                    // A hidden row's detail always collapses too, rather
+                    // than tracking "was this expanded before the filter
+                    // changed" - simpler, and avoids a stray open detail
+                    // row under a parent that's no longer shown.
+                    var detail = detailOf(row);
+                    if (detail) {
+                        detail.hidden = true;
+                        row.classList.remove("is-expanded");
+                    }
+
                     if (matches) shown += 1;
                 });
 
@@ -141,6 +229,7 @@
             });
 
             updateURL();
+            updateTabCounts();
         }
 
         applyFromURL();
@@ -153,8 +242,11 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         Array.prototype.slice.call(document.querySelectorAll("table.holdings")).forEach(initSortableTable);
+        initExpandableRows();
         initCollapsible();
         initAIReviewForms();
+        initTabs();
         initFilters();
+        updateTabCounts(); // covers pages where initFilters() has nothing to wire up
     });
 })();

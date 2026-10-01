@@ -148,21 +148,73 @@
     </div>
 
     <!-- ============================================================
-         Auction Scanner: health (per source), spot prices, live
-         candidates, check-by-hand, leads to review, MaxSold estates,
-         closest calls, results, and the scan_lots run log.
-         Read-only - scans only run from the scheduled task, never
-         from this page.
+         Auction Scanner: a compact status bar (per-source health, spot
+         prices, AI review usage), a shared filter bar, and three tabs of
+         tables (Act now / Watch / Performance). Read-only - scans only
+         run from the scheduled task, never from this page.
 
-         Sorting/filtering/collapsing is progressive enhancement via
+         Sorting/filtering/tabs/row-detail is progressive enhancement via
          static/js/auction_scanner.js (vanilla JS, no libraries). Every
-         table below renders complete server-side HTML first - with
-         JavaScript disabled you still see every row, just without the
-         interactive controls.
+         table below renders complete server-side HTML first, and all
+         three tab groups render stacked and visible - with JavaScript
+         disabled you still see everything, just without the interactive
+         controls (the tab nav links still work as plain in-page anchors).
          ============================================================ -->
-    <div class="card" style="margin-top: 24px; margin-bottom: 24px;">
+    <div class="status-bar" style="margin-top: 24px;">
+        {% for source, health in scanner_health.items %}
+        <div class="status-card {% if health.status == 'ok' %}status-card--quiet{% endif %}"
+             title="{% if health.warnings %}{{ health.warnings|join:' ' }}{% else %}{{ health.source_display }} is healthy{% endif %}">
+            <div class="status-card__title">
+                <span class="status-dot status-dot--{{ health.status }}"></span>
+                {{ health.source_display }}
+            </div>
+            <div class="status-card__body">
+                {% if health.last_run %}
+                {{ health.last_run_relative }} &middot; {{ health.last_run.lots_seen }} lot{{ health.last_run.lots_seen|pluralize }} seen
+                {% else %}
+                Never run
+                {% endif %}
+            </div>
+            {% if health.warnings %}
+            <details>
+                <summary>{{ health.warnings|length }} warning{{ health.warnings|length|pluralize }}</summary>
+                {% for message in health.warnings %}
+                <div class="alert-warning" style="margin-top: 6px;">{{ message }}</div>
+                {% endfor %}
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="status-card">
+            <div class="status-card__title">Spot Prices</div>
+            {% for metal, spot in spot_prices.items %}
+            <div class="status-card__body" style="display: flex; justify-content: space-between; {% if not forloop.last %}margin-bottom: 4px;{% endif %}">
+                <span style="text-transform: capitalize; color: var(--text-secondary);">{{ metal }}</span>
+                {% if spot %}
+                <span class="num">
+                    ${{ spot.price|floatformat:2 }}
+                    <span style="color: var(--text-tertiary); font-size: 0.6875rem;">({{ spot.fetched_at|date:"M j" }})</span>
+                    {% if spot.is_stale %}<span class="status-dot status-dot--warn" style="margin-left: 4px;" title="Stale"></span>{% endif %}
+                </span>
+                {% else %}
+                <span class="status-dot status-dot--warn" title="No price yet"></span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="status-card status-card--quiet">
+            <div class="status-card__title">AI Reviews</div>
+            <div class="status-card__body">{{ ai_review_stats.today_count }} today (of {{ ai_review_stats.daily_limit }})</div>
+            <div class="status-card__sub">${{ ai_review_stats.month_cost|floatformat:2 }} of ${{ ai_review_stats.monthly_budget|floatformat:2 }} this month</div>
+            <div class="status-card__sub"><a href="{% url 'albright_reselling_app:ai_review_history' %}">View all reviews &rarr;</a></div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
         <div class="card__header">
-            <span class="card__label">Filter Auction Scanner Tables</span>
+            <span class="card__label">Filter</span>
             <span style="font-size: 0.75rem; color: var(--text-secondary);">Applies to every table below that lists individual lots</span>
         </div>
         <div class="scanner-controls">
@@ -186,519 +238,449 @@
                 <option value="low">Low</option>
             </select>
         </div>
-        <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
-            AI reviews: {{ ai_review_stats.today_count }} today (of {{ ai_review_stats.daily_limit }})
-            &middot; cost this month ${{ ai_review_stats.month_cost|floatformat:2 }} of ${{ ai_review_stats.monthly_budget|floatformat:2 }} budget
-            &middot; <a href="{% url 'albright_reselling_app:ai_review_history' %}">View all reviews</a>
-        </p>
     </div>
 
-    <div class="grid grid-2" style="margin-bottom: 24px;">
-        <div class="card">
+    <nav class="scanner-tabs" id="scanner-tabs">
+        <a href="#act-now" class="scanner-tab is-active" data-tab="act-now">Act now <span class="tab-badge" id="tab-badge-act-now">{{ tab_counts.act_now }}</span></a>
+        <a href="#watch" class="scanner-tab" data-tab="watch">Watch <span class="tab-badge" id="tab-badge-watch">{{ tab_counts.watch }}</span></a>
+        <a href="#performance" class="scanner-tab" data-tab="performance">Performance <span class="tab-badge" id="tab-badge-performance">{{ tab_counts.performance }}</span></a>
+    </nav>
+
+    <!-- ============ Act now: ending soon, check by hand, leads ============ -->
+    <div class="tab-panel" id="act-now">
+        <h3 class="tab-panel__heading">Act now</h3>
+
+        <div class="card" style="margin-bottom: 20px;">
             <div class="card__header js-collapsible-header">
-                <span class="card__label">Auction Scanner Health</span>
+                <span class="card__label">Candidates Ending Soon <span class="row-count">({{ live_candidates_ending_soon|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Within {{ candidate_window_hours }}h</span>
             </div>
             <div class="js-collapsible-body">
-            {% for source, health in scanner_health.items %}
-            <div style="padding: 8px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border); margin-bottom: 8px;{% endif %}">
-                <div style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 6px;">
-                    {{ health.source_display }}
-                </div>
-                {% for message in health.warnings %}
-                <div class="alert-warning">{{ message }}</div>
-                {% endfor %}
-                {% if health.last_run %}
-                <p style="margin: 0; color: var(--text-primary);">
-                    Last run {{ health.last_run_started_at|date:"M j, g:i A" }}
-                    &mdash; {{ health.last_run.lots_seen }} lot{{ health.last_run.lots_seen|pluralize }} seen,
-                    {{ health.last_run.candidates }} candidate{{ health.last_run.candidates|pluralize }},
-                    {{ health.last_run.leads }} lead{{ health.last_run.leads|pluralize }}.
-                </p>
-                {% else %}
-                <p style="margin: 0; color: var(--text-secondary);">No scans have run yet.</p>
-                {% endif %}
-            </div>
-            {% endfor %}
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card__header js-collapsible-header">
-                <span class="card__label">Spot Prices</span>
-            </div>
-            <div class="js-collapsible-body">
-            {% for metal, spot in spot_prices.items %}
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; {% if not forloop.last %}border-bottom: 1px solid var(--border);{% endif %}">
-                <span style="color: var(--text-secondary); font-size: 0.875rem; text-transform: capitalize;">{{ metal }}</span>
-                {% if spot %}
-                <span class="num">
-                    ${{ spot.price|floatformat:2 }}
-                    <span style="color: var(--text-secondary); font-family: var(--font-body); margin-left: 6px;">({{ spot.fetched_at|date:"M j" }})</span>
-                    {% if spot.is_stale %}<span class="badge warn" style="margin-left: 6px;">stale</span>{% endif %}
-                </span>
-                {% else %}
-                <span class="badge warn">no price yet</span>
-                {% endif %}
-            </div>
-            {% endfor %}
-            </div>
-        </div>
-    </div>
-
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">Live Candidates</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Ending within {{ candidate_window_hours }}h shown first</span>
-        </div>
-        <div class="js-collapsible-body">
-        {% if live_candidates_ending_soon or live_candidates_ending_later %}
-
-        {% if live_candidates_ending_soon %}
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
-            <span id="count-candidates-soon" class="row-count" data-role="row-count"></span>
-        </div>
-        <div style="overflow-x: auto;">
-        <table class="holdings" id="table-candidates-soon" data-filterable="true" data-count-target="count-candidates-soon">
-            <thead>
-                <tr>
-                    <th class="lot-title-col" data-sort-key="title">Title</th>
-                    <th data-sort-key="source">Source</th>
-                    <th data-sort-key="category">Category</th>
-                    <th class="num" data-sort-key="bid">Bid</th>
-                    <th class="num" data-sort-key="maxbid">Max Bid</th>
-                    <th class="num" data-sort-key="headroom">Headroom</th>
-                    <th class="num" data-sort-key="confidence">Confidence</th>
-                    <th class="hide-mobile" data-sort-key="item">Item</th>
-                    <th class="num hide-mobile" data-sort-key="metal">Metal</th>
-                    {% if live_candidates_ending_soon_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
-                    <th class="num" data-sort-key="endtime">Ends In</th>
-                    <th>AI Review</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in live_candidates_ending_soon %}
-                <tr data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                    data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
-                    data-headroom="{{ row.headroom }}" data-item="{{ row.item_label }}" data-metal="{{ row.silver_oz|add:row.gold_oz }}"
-                    data-endtime="{{ row.end_time_epoch_ms }}">
-                    <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
-                    <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
-                    <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                    <td class="num">${{ row.current_bid|floatformat:2 }}</td>
-                    <td class="num">${{ row.max_bid|floatformat:2 }}</td>
-                    <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
-                    <td class="num"><span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ row.confidence }}</span></td>
-                    <td class="hide-mobile">{{ row.item_label|default:"—" }}</td>
-                    <td class="num hide-mobile">{{ row.metal_label|default:"—" }}</td>
-                    {% if live_candidates_ending_soon_has_maxsold %}
-                    <td class="hide-mobile">
-                        {% if row.pickup %}
-                        {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
-                        <br><span style="color: var(--text-secondary); font-size: 0.75rem;">{{ row.pickup.auction_title|truncatechars:30 }}</span>
-                        {% else %}&mdash;{% endif %}
-                    </td>
-                    {% endif %}
-                    <td class="num">{{ row.time_remaining }}</td>
-                    {% include "_ai_review_cell.html" %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <p style="color: var(--text-secondary); margin-bottom: 14px;">Nothing ending within {{ candidate_window_hours }}h right now.</p>
-        {% endif %}
-
-        {% if live_candidates_ending_later %}
-        <details style="margin-top: 14px;">
-            <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.8125rem;">
-                {{ live_candidates_ending_later|length }} more candidate{{ live_candidates_ending_later|length|pluralize }}
-                ending later &mdash; early bids usually rise, so these are worth tracking, not acting on yet
-            </summary>
-            <div style="display: flex; justify-content: flex-end; margin: 10px 0 6px;">
-                <span id="count-candidates-later" class="row-count" data-role="row-count"></span>
+            {% if live_candidates_ending_soon %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <span id="count-candidates-soon" class="row-count" data-role="row-count"></span>
             </div>
             <div style="overflow-x: auto;">
-            <table class="holdings" id="table-candidates-later" data-filterable="true" data-count-target="count-candidates-later">
+            <table class="holdings" id="table-candidates-soon" data-filterable="true" data-count-target="count-candidates-soon">
                 <thead>
                     <tr>
+                        <th class="row-toggle-col"></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
                         <th data-sort-key="category">Category</th>
                         <th class="num" data-sort-key="bid">Bid</th>
                         <th class="num" data-sort-key="maxbid">Max Bid</th>
                         <th class="num" data-sort-key="headroom">Headroom</th>
-                        <th class="num" data-sort-key="confidence">Confidence</th>
-                        <th class="hide-mobile" data-sort-key="item">Item</th>
-                        <th class="num hide-mobile" data-sort-key="metal">Metal</th>
-                        {% if live_candidates_ending_later_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                         <th class="num" data-sort-key="endtime">Ends In</th>
-                        <th>AI Review</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for row in live_candidates_ending_later %}
-                    <tr data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                    {% for row in live_candidates_ending_soon %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
-                        data-headroom="{{ row.headroom }}" data-item="{{ row.item_label }}" data-metal="{{ row.silver_oz|add:row.gold_oz }}"
-                        data-endtime="{{ row.end_time_epoch_ms }}">
-                        <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
+                        data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="row-toggle"></td>
+                        <td class="lot-title">
+                            <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
+                            <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                        </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
                         <td class="num">${{ row.current_bid|floatformat:2 }}</td>
                         <td class="num">${{ row.max_bid|floatformat:2 }}</td>
                         <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
-                        <td class="num"><span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ row.confidence }}</span></td>
-                        <td class="hide-mobile">{{ row.item_label|default:"—" }}</td>
-                        <td class="num hide-mobile">{{ row.metal_label|default:"—" }}</td>
-                        {% if live_candidates_ending_later_has_maxsold %}
-                        <td class="hide-mobile">
-                            {% if row.pickup %}
-                            {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
-                            <br><span style="color: var(--text-secondary); font-size: 0.75rem;">{{ row.pickup.auction_title|truncatechars:30 }}</span>
-                            {% else %}&mdash;{% endif %}
-                        </td>
-                        {% endif %}
                         <td class="num">{{ row.time_remaining }}</td>
                         {% include "_ai_review_cell.html" %}
+                    </tr>
+                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">Nothing ending within {{ candidate_window_hours }}h right now. Last scan checked {{ last_run_lots_seen }} lot{{ last_run_lots_seen|pluralize }}.</p>
+            {% endif %}
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Check by Hand <span class="row-count">({{ check_by_hand|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Affordable but low-confidence - the parser isn't sure, you decide</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if check_by_hand %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <span id="count-check-by-hand" class="row-count" data-role="row-count"></span>
+            </div>
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-check-by-hand" data-filterable="true" data-count-target="count-check-by-hand">
+                <thead>
+                    <tr>
+                        <th class="row-toggle-col"></th>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="bid">Bid</th>
+                        <th class="num" data-sort-key="maxbid">Max Bid</th>
+                        <th class="num" data-sort-key="headroom">Headroom</th>
+                        <th class="num" data-sort-key="endtime">Ends In</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in check_by_hand %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                        data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
+                        data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="row-toggle"></td>
+                        <td class="lot-title">
+                            <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
+                            <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                        </td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                        <td class="num">${{ row.max_bid|floatformat:2 }}</td>
+                        <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
+                        <td class="num">{{ row.time_remaining }}</td>
+                        {% include "_ai_review_cell.html" %}
+                    </tr>
+                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">Nothing low-confidence and affordable right now.</p>
+            {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Leads to Review <span class="row-count">({{ leads_to_review|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Ending within {{ lead_window_hours }}h &mdash; price these by hand</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if lead_counts_by_category %}
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+                {% for category, count in lead_counts_by_category.items %}
+                <span class="badge neutral">{{ category|title }}: {{ count }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if leads_to_review %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <span id="count-leads" class="row-count" data-role="row-count"></span>
+            </div>
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-leads" data-filterable="true" data-count-target="count-leads">
+                <thead>
+                    <tr>
+                        <th class="row-toggle-col"></th>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="bid">Bid</th>
+                        <th data-sort-key="reason">Reason</th>
+                        <th class="num" data-sort-key="endtime">Ends In</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in leads_to_review %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                        data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-reason="{{ row.lead_reason }}"
+                        data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="row-toggle"></td>
+                        <td class="lot-title">
+                            <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
+                            <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                        </td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                        <td>{{ row.lead_reason|default:"—" }}</td>
+                        <td class="num">{{ row.time_remaining }}</td>
+                        {% include "_ai_review_cell.html" %}
+                    </tr>
+                    {% include "_scanner_row_detail.html" with row=row colspan=8 %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No leads ending within {{ lead_window_hours }}h right now.</p>
+            {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Watch: ending later, closest calls, MaxSold estates ============ -->
+    <div class="tab-panel" id="watch" hidden>
+        <h3 class="tab-panel__heading">Watch</h3>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Candidates Ending Later <span class="row-count">({{ live_candidates_ending_later|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Early bids usually rise - worth tracking, not acting on yet</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if live_candidates_ending_later %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <span id="count-candidates-later" class="row-count" data-role="row-count"></span>
+            </div>
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-candidates-later" data-filterable="true" data-count-target="count-candidates-later">
+                <thead>
+                    <tr>
+                        <th class="row-toggle-col"></th>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="bid">Bid</th>
+                        <th class="num" data-sort-key="maxbid">Max Bid</th>
+                        <th class="num" data-sort-key="headroom">Headroom</th>
+                        <th class="num" data-sort-key="endtime">Ends In</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in live_candidates_ending_later %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                        data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
+                        data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="row-toggle"></td>
+                        <td class="lot-title">
+                            <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
+                            <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                        </td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                        <td class="num">${{ row.max_bid|floatformat:2 }}</td>
+                        <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
+                        <td class="num">{{ row.time_remaining }}</td>
+                        {% include "_ai_review_cell.html" %}
+                    </tr>
+                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No candidates ending later right now.</p>
+            {% endif %}
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Closest Calls <span class="row-count">({{ closest_calls|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Live lots currently bid over your max</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if closest_calls %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <span id="count-closest-calls" class="row-count" data-role="row-count"></span>
+            </div>
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-closest-calls" data-filterable="true" data-count-target="count-closest-calls">
+                <thead>
+                    <tr>
+                        <th class="row-toggle-col"></th>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="bid">Bid</th>
+                        <th class="num" data-sort-key="maxbid">Max Bid</th>
+                        <th class="num" data-sort-key="headroom">Headroom</th>
+                        <th class="num" data-sort-key="endtime">Ends In</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in closest_calls %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                        data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
+                        data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="row-toggle"></td>
+                        <td class="lot-title">
+                            <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
+                            <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
+                        </td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+                        <td class="num">${{ row.max_bid|floatformat:2 }}</td>
+                        <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
+                        <td class="num">{{ row.time_remaining }}</td>
+                        {% include "_ai_review_cell.html" %}
+                    </tr>
+                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No close calls right now.</p>
+            {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">MaxSold Candidates by Estate <span class="row-count">({{ maxsold_estates|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">One pickup trip can cover several lots</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if maxsold_estates %}
+            <div style="overflow-x: auto;">
+            <table class="holdings">
+                <thead>
+                    <tr>
+                        <th data-sort-key="auction">Auction</th>
+                        <th data-sort-key="city">City</th>
+                        <th class="num" data-sort-key="distance">Distance</th>
+                        <th class="num" data-sort-key="lots">Candidate Lots</th>
+                        <th class="num" data-sort-key="headroom">Total Headroom</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for estate in maxsold_estates %}
+                    <tr class="scanner-row" data-auction="{{ estate.auction_title }}" data-city="{{ estate.city }}"
+                        data-distance="{{ estate.distance_miles|default_if_none:'' }}" data-lots="{{ estate.lot_count }}"
+                        data-headroom="{{ estate.total_headroom }}">
+                        <td>{{ estate.auction_title|truncatechars:50|default:"—" }}</td>
+                        <td>{{ estate.city|default:"—" }}</td>
+                        <td class="num">{% if estate.distance_miles is not None %}{{ estate.distance_miles }}mi{% else %}&mdash;{% endif %}</td>
+                        <td class="num">{{ estate.lot_count }}</td>
+                        <td class="num" style="color: {% if estate.total_headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ estate.total_headroom|floatformat:2 }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             </div>
-        </details>
-        {% endif %}
-
-        {% else %}
-        <p style="color: var(--text-secondary);">
-            No live candidates right now. Last scan checked {{ last_run_lots_seen }} lot{{ last_run_lots_seen|pluralize }}.
-        </p>
-        {% endif %}
+            {% else %}
+            <p style="color: var(--text-secondary);">No MaxSold candidates right now.</p>
+            {% endif %}
+            </div>
         </div>
     </div>
 
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">Check by Hand</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Affordable but low-confidence - the parser isn't sure, you decide</span>
-        </div>
-        <div class="js-collapsible-body">
-        {% if check_by_hand %}
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
-            <span id="count-check-by-hand" class="row-count" data-role="row-count"></span>
-        </div>
-        <div style="overflow-x: auto;">
-        <table class="holdings" id="table-check-by-hand" data-filterable="true" data-count-target="count-check-by-hand">
-            <thead>
-                <tr>
-                    <th class="lot-title-col" data-sort-key="title">Title</th>
-                    <th data-sort-key="source">Source</th>
-                    <th data-sort-key="category">Category</th>
-                    <th class="num" data-sort-key="bid">Bid</th>
-                    <th class="num" data-sort-key="maxbid">Max Bid</th>
-                    <th class="num" data-sort-key="headroom">Headroom</th>
-                    <th class="hide-mobile" data-sort-key="item">Item</th>
-                    <th class="num hide-mobile" data-sort-key="metal">Metal</th>
-                    <th data-sort-key="notes">Notes</th>
-                    {% if check_by_hand_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
-                    <th class="num" data-sort-key="endtime">Ends In</th>
-                    <th>AI Review</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in check_by_hand %}
-                <tr data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                    data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
-                    data-headroom="{{ row.headroom }}" data-item="{{ row.item_label }}" data-metal="{{ row.silver_oz|add:row.gold_oz }}"
-                    data-notes="{{ row.flags|join:', ' }}" data-endtime="{{ row.end_time_epoch_ms }}">
-                    <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
-                    <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
-                    <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                    <td class="num">${{ row.current_bid|floatformat:2 }}</td>
-                    <td class="num">${{ row.max_bid|floatformat:2 }}</td>
-                    <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
-                    <td class="hide-mobile">{{ row.item_label|default:"—" }}</td>
-                    <td class="num hide-mobile">{{ row.metal_label|default:"—" }}</td>
-                    <td>{% if row.flags %}{{ row.flags|join:", " }}{% else %}&mdash;{% endif %}</td>
-                    {% if check_by_hand_has_maxsold %}
-                    <td class="hide-mobile">
-                        {% if row.pickup %}
-                        {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
-                        <br><span style="color: var(--text-secondary); font-size: 0.75rem;">{{ row.pickup.auction_title|truncatechars:30 }}</span>
-                        {% else %}&mdash;{% endif %}
-                    </td>
-                    {% endif %}
-                    <td class="num">{{ row.time_remaining }}</td>
-                    {% include "_ai_review_cell.html" %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <p style="color: var(--text-secondary);">Nothing low-confidence and affordable right now.</p>
-        {% endif %}
-        </div>
-    </div>
+    <!-- ============ Performance: results, run log, AI review history ============ -->
+    <div class="tab-panel" id="performance" hidden>
+        <h3 class="tab-panel__heading">Performance</h3>
 
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">Leads to Review</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Ending within {{ lead_window_hours }}h &mdash; price these by hand</span>
-        </div>
-        <div class="js-collapsible-body">
-        {% if lead_counts_by_category %}
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
-            {% for category, count in lead_counts_by_category.items %}
-            <span class="badge neutral">{{ category|title }}: {{ count }}</span>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% if leads_to_review %}
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
-            <span id="count-leads" class="row-count" data-role="row-count"></span>
-        </div>
-        <div style="overflow-x: auto;">
-        <table class="holdings" id="table-leads" data-filterable="true" data-count-target="count-leads">
-            <thead>
-                <tr>
-                    <th data-sort-key="category">Category</th>
-                    <th class="lot-title-col" data-sort-key="title">Title</th>
-                    <th data-sort-key="source">Source</th>
-                    <th class="num" data-sort-key="bid">Bid</th>
-                    <th data-sort-key="reason">Reason</th>
-                    {% if leads_to_review_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
-                    <th class="num" data-sort-key="endtime">Ends In</th>
-                    <th>AI Review</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in leads_to_review %}
-                <tr data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                    data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-reason="{{ row.lead_reason }}"
-                    data-endtime="{{ row.end_time_epoch_ms }}">
-                    <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                    <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
-                    <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
-                    <td class="num">${{ row.current_bid|floatformat:2 }}</td>
-                    <td>{{ row.lead_reason|default:"—" }}</td>
-                    {% if leads_to_review_has_maxsold %}
-                    <td class="hide-mobile">
-                        {% if row.pickup %}
-                        {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
-                        {% else %}&mdash;{% endif %}
-                    </td>
-                    {% endif %}
-                    <td class="num">{{ row.time_remaining }}</td>
-                    {% include "_ai_review_cell.html" %}
-                </tr>
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Results (last 7 days) <span class="row-count">({{ closed_results_rows|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">How closed lots compared to your max bid</span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if closed_results_summary %}
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+                {% for stat in closed_results_summary %}
+                <span class="badge neutral">
+                    {{ stat.category|title }}: {{ stat.under }} at/under, {{ stat.over }} over
+                    {% if stat.median_melt_pct is not None %}&middot; {{ stat.median_melt_pct|floatformat:0 }}% of melt{% endif %}
+                </span>
                 {% endfor %}
-            </tbody>
-        </table>
+            </div>
+            {% endif %}
+            {% if closed_results_rows %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <span id="count-results" class="row-count" data-role="row-count"></span>
+            </div>
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-results" data-filterable="true" data-count-target="count-results">
+                <thead>
+                    <tr>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="finalprice">Final Price</th>
+                        <th class="num" data-sort-key="maxbid">Max Bid</th>
+                        <th class="num" data-sort-key="melt">Melt Value</th>
+                        <th class="num" data-sort-key="result">Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in closed_results_rows %}
+                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                        data-confidence="{{ row.confidence }}" data-finalprice="{{ row.final_price }}" data-maxbid="{{ row.max_bid }}"
+                        data-melt="{{ row.melt_value }}" data-result="{% if row.under_max %}1{% else %}0{% endif %}">
+                        <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">${{ row.final_price|floatformat:2 }}</td>
+                        <td class="num">${{ row.max_bid|floatformat:2 }}</td>
+                        <td class="num">${{ row.melt_value|floatformat:2 }}</td>
+                        <td class="num">
+                            <span class="badge {% if row.under_max %}gain{% else %}loss{% endif %}">
+                                {% if row.under_max %}Under max{% else %}Over max{% endif %}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No results with a max bid closed in the last 7 days yet.</p>
+            {% endif %}
+            </div>
         </div>
-        {% else %}
-        <p style="color: var(--text-secondary);">No leads ending soon.</p>
-        {% endif %}
-        </div>
-    </div>
 
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">MaxSold Candidates by Estate</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">One pickup trip can cover several lots</span>
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Recent Scanner Runs <span class="row-count">({{ recent_runs|length }})</span></span>
+            </div>
+            <div class="js-collapsible-body">
+            {% if recent_runs %}
+            <div style="overflow-x: auto;">
+            <table class="holdings">
+                <thead>
+                    <tr>
+                        <th data-sort-key="time">Time</th>
+                        <th data-sort-key="source">Source</th>
+                        <th class="num" data-sort-key="seen">Lots Seen</th>
+                        <th class="num" data-sort-key="candidates">Candidates</th>
+                        <th>Failed Keywords</th>
+                        <th class="num" data-sort-key="error">Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in recent_runs %}
+                    <tr class="scanner-row" data-time="{{ run.started_at|date:'U' }}000" data-source="{{ run.source }}" data-seen="{{ run.lots_seen }}"
+                        data-candidates="{{ run.candidates }}" data-error="{% if run.has_error %}1{% else %}0{% endif %}">
+                        <td>{{ run.started_at|date:"M j, g:i A" }}</td>
+                        <td><span class="badge {% if run.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ run.source_display }}</span></td>
+                        <td class="num">{{ run.lots_seen }}</td>
+                        <td class="num">{{ run.candidates }}</td>
+                        <td>{% if run.failed_keywords %}{{ run.failed_keywords|join:", " }}{% else %}&mdash;{% endif %}</td>
+                        <td class="num"><span class="badge {% if run.has_error %}loss{% else %}gain{% endif %}">{% if run.has_error %}Yes{% else %}No{% endif %}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No runs recorded yet.</p>
+            {% endif %}
+            </div>
         </div>
-        <div class="js-collapsible-body">
-        {% if maxsold_estates %}
-        <div style="overflow-x: auto;">
-        <table class="holdings">
-            <thead>
-                <tr>
-                    <th data-sort-key="auction">Auction</th>
-                    <th data-sort-key="city">City</th>
-                    <th class="num" data-sort-key="distance">Distance</th>
-                    <th class="num" data-sort-key="lots">Candidate Lots</th>
-                    <th class="num" data-sort-key="headroom">Total Headroom</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for estate in maxsold_estates %}
-                <tr data-auction="{{ estate.auction_title }}" data-city="{{ estate.city }}"
-                    data-distance="{{ estate.distance_miles|default_if_none:'' }}" data-lots="{{ estate.lot_count }}"
-                    data-headroom="{{ estate.total_headroom }}">
-                    <td>{{ estate.auction_title|truncatechars:50|default:"—" }}</td>
-                    <td>{{ estate.city|default:"—" }}</td>
-                    <td class="num">{% if estate.distance_miles is not None %}{{ estate.distance_miles }}mi{% else %}&mdash;{% endif %}</td>
-                    <td class="num">{{ estate.lot_count }}</td>
-                    <td class="num" style="color: {% if estate.total_headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ estate.total_headroom|floatformat:2 }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <p style="color: var(--text-secondary);">No MaxSold candidates right now.</p>
-        {% endif %}
-        </div>
-    </div>
 
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">Closest Calls</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Live lots currently bid over your max</span>
-        </div>
-        <div class="js-collapsible-body">
-        {% if closest_calls %}
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
-            <span id="count-closest-calls" class="row-count" data-role="row-count"></span>
-        </div>
-        <div style="overflow-x: auto;">
-        <table class="holdings" id="table-closest-calls" data-filterable="true" data-count-target="count-closest-calls">
-            <thead>
-                <tr>
-                    <th class="lot-title-col" data-sort-key="title">Title</th>
-                    <th data-sort-key="source">Source</th>
-                    <th data-sort-key="category">Category</th>
-                    <th class="num" data-sort-key="bid">Bid</th>
-                    <th class="num" data-sort-key="maxbid">Max Bid</th>
-                    <th class="num" data-sort-key="headroom">Headroom</th>
-                    <th class="num" data-sort-key="confidence">Confidence</th>
-                    <th class="hide-mobile" data-sort-key="item">Item</th>
-                    <th class="num hide-mobile" data-sort-key="metal">Metal</th>
-                    {% if closest_calls_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
-                    <th class="num" data-sort-key="endtime">Ends In</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in closest_calls %}
-                <tr data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                    data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
-                    data-headroom="{{ row.headroom }}" data-item="{{ row.item_label }}" data-metal="{{ row.silver_oz|add:row.gold_oz }}"
-                    data-endtime="{{ row.end_time_epoch_ms }}">
-                    <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
-                    <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
-                    <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                    <td class="num">${{ row.current_bid|floatformat:2 }}</td>
-                    <td class="num">${{ row.max_bid|floatformat:2 }}</td>
-                    <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
-                    <td class="num"><span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ row.confidence }}</span></td>
-                    <td class="hide-mobile">{{ row.item_label|default:"—" }}</td>
-                    <td class="num hide-mobile">{{ row.metal_label|default:"—" }}</td>
-                    {% if closest_calls_has_maxsold %}
-                    <td class="hide-mobile">
-                        {% if row.pickup %}
-                        {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
-                        <br><span style="color: var(--text-secondary); font-size: 0.75rem;">{{ row.pickup.auction_title|truncatechars:30 }}</span>
-                        {% else %}&mdash;{% endif %}
-                    </td>
-                    {% endif %}
-                    <td class="num">{{ row.time_remaining }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <p style="color: var(--text-secondary);">No close calls right now.</p>
-        {% endif %}
-        </div>
-    </div>
-
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">Results (last 7 days)</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">How closed lots compared to your max bid</span>
-        </div>
-        <div class="js-collapsible-body">
-        {% if closed_results_summary %}
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
-            {% for stat in closed_results_summary %}
-            <span class="badge neutral">
-                {{ stat.category|title }}: {{ stat.under }} at/under, {{ stat.over }} over
-                {% if stat.median_melt_pct is not None %}&middot; {{ stat.median_melt_pct|floatformat:0 }}% of melt{% endif %}
-            </span>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% if closed_results_rows %}
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
-            <span id="count-results" class="row-count" data-role="row-count"></span>
-        </div>
-        <div style="overflow-x: auto;">
-        <table class="holdings" id="table-results" data-filterable="true" data-count-target="count-results">
-            <thead>
-                <tr>
-                    <th class="lot-title-col" data-sort-key="title">Title</th>
-                    <th data-sort-key="source">Source</th>
-                    <th data-sort-key="category">Category</th>
-                    <th class="num" data-sort-key="finalprice">Final Price</th>
-                    <th class="num" data-sort-key="maxbid">Max Bid</th>
-                    <th class="num" data-sort-key="melt">Melt Value</th>
-                    <th class="num" data-sort-key="result">Result</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in closed_results_rows %}
-                <tr data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                    data-confidence="{{ row.confidence }}" data-finalprice="{{ row.final_price }}" data-maxbid="{{ row.max_bid }}"
-                    data-melt="{{ row.melt_value }}" data-result="{% if row.under_max %}1{% else %}0{% endif %}">
-                    <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
-                    <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
-                    <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                    <td class="num">${{ row.final_price|floatformat:2 }}</td>
-                    <td class="num">${{ row.max_bid|floatformat:2 }}</td>
-                    <td class="num">${{ row.melt_value|floatformat:2 }}</td>
-                    <td class="num">
-                        <span class="badge {% if row.under_max %}gain{% else %}loss{% endif %}">
-                            {% if row.under_max %}Under max{% else %}Over max{% endif %}
-                        </span>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <p style="color: var(--text-secondary);">No results with a max bid closed in the last 7 days yet.</p>
-        {% endif %}
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card__header js-collapsible-header">
-            <span class="card__label">Recent Scanner Runs</span>
-        </div>
-        <div class="js-collapsible-body">
-        {% if recent_runs %}
-        <div style="overflow-x: auto;">
-        <table class="holdings">
-            <thead>
-                <tr>
-                    <th data-sort-key="time">Time</th>
-                    <th data-sort-key="source">Source</th>
-                    <th class="num" data-sort-key="seen">Lots Seen</th>
-                    <th class="num" data-sort-key="candidates">Candidates</th>
-                    <th>Failed Keywords</th>
-                    <th class="num" data-sort-key="error">Error</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for run in recent_runs %}
-                <tr data-time="{{ run.started_at|date:'U' }}000" data-source="{{ run.source }}" data-seen="{{ run.lots_seen }}"
-                    data-candidates="{{ run.candidates }}" data-error="{% if run.has_error %}1{% else %}0{% endif %}">
-                    <td>{{ run.started_at|date:"M j, g:i A" }}</td>
-                    <td><span class="badge {% if run.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ run.source_display }}</span></td>
-                    <td class="num">{{ run.lots_seen }}</td>
-                    <td class="num">{{ run.candidates }}</td>
-                    <td>{% if run.failed_keywords %}{{ run.failed_keywords|join:", " }}{% else %}&mdash;{% endif %}</td>
-                    <td class="num"><span class="badge {% if run.has_error %}loss{% else %}gain{% endif %}">{% if run.has_error %}Yes{% else %}No{% endif %}</span></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <p style="color: var(--text-secondary);">No runs recorded yet.</p>
-        {% endif %}
+        <div class="card">
+            <div class="card__header">
+                <span class="card__label">AI Reviews</span>
+            </div>
+            <p style="margin: 0; color: var(--text-primary);">
+                Every past AI review, filterable and exportable to CSV.
+                <a href="{% url 'albright_reselling_app:ai_review_history' %}">Open AI Reviews history &rarr;</a>
+            </p>
         </div>
     </div>
 

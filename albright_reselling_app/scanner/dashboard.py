@@ -137,6 +137,13 @@ def _time_remaining(lot, now):
     return _format_duration(remaining) if remaining.total_seconds() > 0 else "Ended"
 
 
+def _relative_time(dt, now):
+    """"12m ago" / "3h ago" - for the status bar's last-scan time. dt is
+    always in the past here, so this is just _format_duration with a
+    suffix, not a general-purpose "time ago" function."""
+    return f"{_format_duration(now - dt)} ago" if dt else None
+
+
 def _end_time_epoch_ms(lot):
     return int(lot.end_time.timestamp() * 1000) if lot.end_time else None
 
@@ -160,6 +167,7 @@ def _lot_row(evaluation, now):
         "gold_oz": evaluation.gold_oz,
         "metal_label": _metal_label(evaluation.silver_oz, evaluation.gold_oz),
         "flags": evaluation.flags,
+        "matched_keyword": lot.matched_keyword,
         "time_remaining": _time_remaining(lot, now),
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
         # Pickup-based sources (MaxSold) carry drive/estate info here; other
@@ -180,6 +188,7 @@ def _lead_row(evaluation, now):
         "confidence": evaluation.confidence,
         "current_bid": lot.current_price,
         "lead_reason": evaluation.lead_reason,
+        "matched_keyword": lot.matched_keyword,
         "time_remaining": _time_remaining(lot, now),
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
         "pickup": (lot.raw or {}).get("_pickup"),
@@ -228,11 +237,23 @@ def _source_health(source, now, check_staleness):
             if age > STALE_RUN_AFTER:
                 warnings.append(f"Last {source} scan was {_format_duration(age)} ago - check the scheduled task.")
 
+    # Status bar dot color: red for "actually broken" (never ran, or the
+    # last run errored outright), amber for "worth a look" (stale, or some
+    # keywords failed but the run otherwise completed), green otherwise.
+    if last_run is None or last_run.error:
+        status = "error"
+    elif warnings:
+        status = "warn"
+    else:
+        status = "ok"
+
     return {
         "source": source,
         "source_display": _source_display(source),
         "last_run": last_run,
         "last_run_started_at": timezone.localtime(last_run.started_at) if last_run else None,
+        "last_run_relative": _relative_time(last_run.started_at, now) if last_run else None,
+        "status": status,
         "warnings": warnings,
     }
 
@@ -436,11 +457,23 @@ def get_scanner_dashboard_context():
     }
 
     closed_results_summary, closed_results_rows = _closed_results(now)
+    maxsold_estates = _maxsold_estates(now)
 
-    # AI review button/badge: only on the tables where you'd plausibly pay
-    # for a second opinion (not Closest Calls - those are already over your
-    # max bid regardless of what an AI review might say).
-    _attach_ai_reviews(live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review)
+    # AI review button/badge on every lot table, Closest Calls included -
+    # a lot sitting over the scanner's melt-based max is exactly the case
+    # where a second (market-comps-based) opinion is most worth paying for.
+    _attach_ai_reviews(
+        live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
+    )
+
+    # Keys use underscores, not the "act-now" hyphenated form used in the
+    # template's HTML ids/URL hash - Django template variable lookup
+    # (tab_counts.act_now) can't parse a hyphen in the attribute name.
+    tab_counts = {
+        "act_now": len(live_candidates_ending_soon) + len(check_by_hand) + len(leads_to_review),
+        "watch": len(live_candidates_ending_later) + len(closest_calls) + len(maxsold_estates),
+        "performance": len(closed_results_rows) + len(recent_runs),
+    }
 
     return {
         "scanner_health": scanner_health,
@@ -459,7 +492,7 @@ def get_scanner_dashboard_context():
         "lead_counts_by_category": lead_counts_by_category,
         "lead_window_hours": lead_window_hours,
         "recent_runs": recent_runs,
-        "maxsold_estates": _maxsold_estates(now),
+        "maxsold_estates": maxsold_estates,
         "closed_results_summary": closed_results_summary,
         "closed_results_rows": closed_results_rows,
         "closed_results_has_maxsold": _has_maxsold(closed_results_rows),
@@ -467,4 +500,5 @@ def get_scanner_dashboard_context():
         "last_run_lots_seen": sum(
             h["last_run"].lots_seen for h in scanner_health.values() if h["last_run"]
         ),
+        "tab_counts": tab_counts,
     }

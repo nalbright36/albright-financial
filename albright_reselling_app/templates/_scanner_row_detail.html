@@ -1,0 +1,34 @@
+{% comment %}
+Secondary per-lot detail, hidden until the row's chevron is clicked
+(static/js/auction_scanner.js toggles `hidden` on click and keeps this row
+attached to its parent through sorting). Shared by every lot/lead table -
+_lead_row rows simply lack item_label/metal_label/flags, and Django quietly
+treats a missing dict key as falsy, so those spans just don't render.
+Expects `row` and `colspan` in context.
+{% endcomment %}
+<tr class="scanner-detail" hidden>
+    <td colspan="{{ colspan }}">
+        <div class="detail-grid">
+            {% if row.item_label %}<span><strong>Item:</strong> {{ row.item_label }}</span>{% endif %}
+            {% if row.metal_label %}<span><strong>Metal:</strong> {{ row.metal_label }}</span>{% endif %}
+            <span>
+                <strong>Confidence:</strong>
+                <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}">{{ row.confidence|default:"—" }}</span>
+                {% if row.flags %} &middot; {{ row.flags|join:", " }}{% endif %}
+            </span>
+            {% if row.pickup %}
+            <span>
+                <strong>Pickup:</strong> {{ row.pickup.auction_title|default:"—" }}{% if row.pickup.city %}, {{ row.pickup.city }}{% endif %}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
+            </span>
+            {% endif %}
+            {% if row.matched_keyword %}<span><strong>Matched keyword:</strong> {{ row.matched_keyword }}</span>{% endif %}
+            {% if row.ai_review %}
+            <span>
+                <strong>AI review:</strong>
+                {% if row.ai_review.resale_low is not None %}${{ row.ai_review.resale_low|floatformat:0 }}&ndash;${{ row.ai_review.resale_high|floatformat:0 }}{% else %}no estimate{% endif %}
+                {% if row.ai_review.result.summary %} &mdash; {{ row.ai_review.result.summary|truncatechars:140 }}{% endif %}
+            </span>
+            {% endif %}
+        </div>
+    </td>
+</tr>

@@ -89,7 +89,9 @@ class ScannerDashboardContextTests(TestCase):
 
         context = get_scanner_dashboard_context()
 
-        self.assertTrue(any("ago" in w for w in context["scanner_health"]["shopgoodwill"]["warnings"]))
+        health = context["scanner_health"]["shopgoodwill"]
+        self.assertTrue(any("ago" in w for w in health["warnings"]))
+        self.assertEqual(health["status"], "warn")
 
     def test_stale_run_not_flagged_for_maxsold(self):
         run = ScanRun.objects.create(source="maxsold", lots_seen=5, candidates=1)
@@ -97,7 +99,41 @@ class ScannerDashboardContextTests(TestCase):
 
         context = get_scanner_dashboard_context()
 
-        self.assertFalse(any("ago" in w for w in context["scanner_health"]["maxsold"]["warnings"]))
+        health = context["scanner_health"]["maxsold"]
+        self.assertFalse(any("ago" in w for w in health["warnings"]))
+        self.assertEqual(health["status"], "ok")
+
+    def test_healthy_run_has_ok_status_and_no_warnings(self):
+        ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1)
+
+        context = get_scanner_dashboard_context()
+
+        health = context["scanner_health"]["shopgoodwill"]
+        self.assertEqual(health["status"], "ok")
+        self.assertEqual(health["warnings"], [])
+        self.assertIsNotNone(health["last_run_relative"])
+
+    def test_never_run_has_error_status(self):
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["scanner_health"]["shopgoodwill"]["status"], "error")
+        self.assertIsNone(context["scanner_health"]["shopgoodwill"]["last_run_relative"])
+
+    def test_failed_run_has_error_status(self):
+        ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1, error="boom")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["scanner_health"]["shopgoodwill"]["status"], "error")
+
+    def test_failed_keywords_warning_has_warn_status_not_error(self):
+        ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1, failed_keywords=["peace dollar"])
+
+        context = get_scanner_dashboard_context()
+
+        health = context["scanner_health"]["shopgoodwill"]
+        self.assertEqual(health["status"], "warn")
+        self.assertTrue(any("failed keywords" in w for w in health["warnings"]))
 
     def test_stale_spot_warning(self):
         price = SpotPrice.objects.create(metal="silver", price_usd=Decimal("30.00"), source="goldapi")
@@ -288,6 +324,59 @@ class ScannerDashboardContextTests(TestCase):
         self.assertEqual(context["ai_review_stats"]["today_count"], 2)
         self.assertEqual(context["ai_review_stats"]["month_cost"], Decimal("0.05"))
 
+    def test_matched_keyword_on_lot_and_lead_rows(self):
+        lot = _make_lot("matched-kw", timezone.now() + timedelta(hours=3))
+        lot.matched_keyword = "morgan dollar"
+        lot.save()
+        _make_evaluation(lot, is_candidate=True)
+
+        lead_lot = _make_lot("matched-kw-lead", timezone.now() + timedelta(hours=10))
+        lead_lot.matched_keyword = "n64 games"
+        lead_lot.save()
+        _make_lead_evaluation(lead_lot)
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["live_candidates_ending_soon"][0]["matched_keyword"], "morgan dollar")
+        self.assertEqual(context["leads_to_review"][0]["matched_keyword"], "n64 games")
+
+    def test_closest_calls_get_ai_review_attached(self):
+        lot = _make_lot("closest-ai", timezone.now() + timedelta(hours=5))
+        _make_evaluation(lot, is_candidate=False, max_bid=20.0, headroom=-5.0, confidence="high")
+        AIReview.objects.create(
+            lot=lot, status="done", resale_low=Decimal("95.00"), resale_high=Decimal("130.00"),
+            confidence="high", cost_usd=Decimal("0.05"),
+        )
+
+        context = get_scanner_dashboard_context()
+
+        self.assertIsNotNone(context["closest_calls"][0]["ai_review"])
+
+    def test_tab_counts_group_tables_correctly(self):
+        soon_lot = _make_lot("tab-soon", timezone.now() + timedelta(hours=5))
+        _make_evaluation(soon_lot, is_candidate=True)
+        later_lot = _make_lot("tab-later", timezone.now() + timedelta(days=3))
+        _make_evaluation(later_lot, is_candidate=True)
+        check_lot = _make_lot("tab-check", timezone.now() + timedelta(hours=5))
+        _make_evaluation(check_lot, is_candidate=False, max_bid=20.0, headroom=5.0, confidence="low")
+        lead_lot = _make_lot("tab-lead", timezone.now() + timedelta(hours=10))
+        _make_lead_evaluation(lead_lot)
+        closest_lot = _make_lot("tab-closest", timezone.now() + timedelta(hours=5))
+        _make_evaluation(closest_lot, is_candidate=False, max_bid=20.0, headroom=-5.0, confidence="high")
+
+        context = get_scanner_dashboard_context()
+
+        # Act now: candidates ending soon (1) + check by hand (1) + leads (1)
+        self.assertEqual(context["tab_counts"]["act_now"], 3)
+        # Watch: candidates ending later (1) + closest calls (1) + maxsold estates (0)
+        self.assertEqual(context["tab_counts"]["watch"], 2)
+        self.assertEqual(context["tab_counts"]["performance"], 0)
+
+    def test_tab_counts_empty_state(self):
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["tab_counts"], {"act_now": 0, "watch": 0, "performance": 0})
+
 
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
@@ -300,13 +389,63 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No scans have run yet")
-        self.assertContains(response, "No live candidates right now")
+        self.assertContains(response, "Never run")
+        self.assertContains(response, "Nothing ending within")
         self.assertContains(response, "Nothing low-confidence and affordable right now")
-        self.assertContains(response, "No leads ending soon")
+        self.assertContains(response, "No leads ending within")
         self.assertContains(response, "No close calls right now")
         self.assertContains(response, "No runs recorded yet")
         self.assertContains(response, "No MaxSold candidates right now")
+
+    def test_status_bar_shows_error_dot_when_never_run(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "status-dot--error")
+
+    def test_status_bar_shows_ok_dot_for_healthy_run(self):
+        ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1)
+        ScanRun.objects.create(source="maxsold", lots_seen=5, candidates=1)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "status-dot--ok")
+        self.assertNotContains(response, "status-dot--error")
+
+    def test_status_bar_shows_warn_dot_for_stale_run(self):
+        run = ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1)
+        ScanRun.objects.filter(pk=run.pk).update(started_at=timezone.now() - timedelta(hours=3))
+        ScanRun.objects.create(source="maxsold", lots_seen=5, candidates=1)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "status-dot--warn")
+
+    def test_tabs_render_with_badge_counts(self):
+        lot = _make_lot("tab-page-soon", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, 'id="tab-badge-act-now">1<')
+        self.assertContains(response, 'id="tab-badge-watch">0<')
+        self.assertContains(response, 'id="tab-badge-performance">0<')
+        # All three panels render stacked (the no-JS fallback) - "watch" and
+        # "performance" just carry the hidden attribute for JS to toggle.
+        self.assertContains(response, 'id="act-now"')
+        self.assertContains(response, 'id="watch" hidden')
+        self.assertContains(response, 'id="performance" hidden')
+
+    def test_candidate_in_act_now_tab_not_watch(self):
+        soon_lot = _make_lot("tab-page-act", timezone.now() + timedelta(hours=3))
+        _make_evaluation(soon_lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+
+        act_now_html = content.split('id="watch"')[0]
+        watch_html = content.split('id="watch"')[1].split('id="performance"')[0]
+        self.assertIn(soon_lot.title, act_now_html)
+        self.assertNotIn(soon_lot.title, watch_html)
 
     def test_live_candidate_appears_on_page(self):
         lot = _make_lot("live-page-1", timezone.now() + timedelta(hours=3))

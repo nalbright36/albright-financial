@@ -923,6 +923,157 @@ td.lot-title a {
   font-family: var(--font-mono);
 }
 
+/* ---------- Auction Scanner: status bar ----------
+   One compact row of small cards (health per source, spot prices, AI
+   review usage). Cards with nothing wrong are visually quiet
+   (status-card--quiet); a warning/error dot and the alert banner inside
+   its <details> are what should actually draw the eye. */
+.status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.status-card {
+  flex: 1 1 230px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+.status-card--quiet {
+  opacity: 0.82;
+}
+.status-card__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.status-card__body {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+.status-card__sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.status-card details {
+  margin-top: 6px;
+}
+.status-card summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.status-dot--ok { background: var(--gain); box-shadow: 0 0 6px var(--gain-glow); }
+.status-dot--warn { background: var(--warn); box-shadow: 0 0 6px var(--warn-glow); }
+.status-dot--error { background: var(--loss); box-shadow: 0 0 6px var(--loss-glow); }
+
+/* ---------- Auction Scanner: tabs ---------- */
+.scanner-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.scanner-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.scanner-tab:hover {
+  color: var(--text-primary);
+}
+.scanner-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab-badge {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.scanner-tab.is-active .tab-badge {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.tab-panel__heading {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+/* ---------- Auction Scanner: expandable row detail ----------
+   The chevron cell is the click target (JS also accepts a click anywhere
+   on the row outside a link/button/form); the detail row itself is a
+   full-width panel directly under its parent, indented to align under
+   the title column. */
+th.row-toggle-col {
+  width: 24px;
+  padding-left: 14px !important;
+  padding-right: 0 !important;
+}
+td.row-toggle {
+  width: 24px;
+  padding-left: 14px !important;
+  padding-right: 0 !important;
+  cursor: pointer;
+  color: var(--text-tertiary);
+}
+td.row-toggle::before {
+  content: "\25B6";
+  display: inline-block;
+  font-size: 0.6rem;
+  transition: transform 0.15s ease;
+}
+tr.scanner-row.is-expanded td.row-toggle::before {
+  transform: rotate(90deg);
+}
+tr.scanner-detail td {
+  background: var(--surface);
+  padding: 12px 14px 14px 46px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.detail-grid strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 /* ---------- Toggle switch (strategy on/off) ---------- */
 .toggle-switch {
   position: relative;
