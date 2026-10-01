@@ -1,90 +1,51 @@
-<!DOCTYPE html>
 {% extends 'index.html' %}
 {% load static %}
 
-  {% block content %}
-  <h2>Create Investor Profile</h2>
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 760px;">
 
-  <form method="post" autocomplete="off" enctype="multipart/form-data">
+    <div class="page-header">
+        <div>
+            <h1 class="page-header__title">Create Investor Profile</h1>
+            <p class="page-header__subtitle">Used to tailor strategy recommendations to your situation and risk tolerance.</p>
+        </div>
+    </div>
 
-    {% csrf_token %}
+    <div class="card">
+        <form method="post" autocomplete="off" enctype="multipart/form-data">
+            {% csrf_token %}
 
-    <table>
+            <div class="grid grid-2">
+                <div class="field"><label for="id_first_name">First Name</label>{{ form.first_name }}</div>
+                <div class="field"><label for="id_last_name">Last Name</label>{{ form.last_name }}</div>
+                <div class="field"><label for="id_date_of_birth">Date of Birth</label>{{ form.date_of_birth }}</div>
+                <div class="field"><label for="id_expected_retirement_date">Expected Retirement Date</label>{{ form.expected_retirement_date }}</div>
+                <div class="field"><label for="id_risk_tolerance">Risk Tolerance</label>{{ form.risk_tolerance }}</div>
+                <div class="field"><label for="id_marital_status">Marital Status</label>{{ form.marital_status }}</div>
+                <div class="field"><label for="id_dependents_count">Dependents Count</label>{{ form.dependents_count }}</div>
+                <div class="field"><label for="id_employment_status">Employment Status</label>{{ form.employment_status }}</div>
+            </div>
 
-      <tr>
-        <td><label for="first_name">First Name: </label></td>
-        <td>{{ form.first_name }}</td>
-      </tr>
-      <tr>
-        <td><label for="last_name">Last Name: </label></td>
-        <td>{{ form.last_name }}</td>
-      </tr>
-      <tr>
-        <td><label for="date_of_birth">Date of Birth: </label></td>
-        <td>{{ form.date_of_birth }}</td>
-      </tr>
-      <tr>
-        <td><label for="expected_retirement_date">Expected Retirement Date: </label></td>
-        <td>{{ form.expected_retirement_date }}</td>
-      </tr>
-      <tr>
-        <td><label for="risk_tolerance">Risk Tolerance: </label></td>
-        <td>{{ form.risk_tolerance }}</td>
-      </tr>
-      <tr>
-        <td><label for="marital_status">Marital Status: </label></td>
-        <td>{{ form.marital_status }}</td>
-      </tr>
-      <tr>
-        <td><label for="dependents_count">Dependents Count: </label></td>
-        <td>{{ form.dependents_count }}</td>
-      </tr>
-      <tr>
-        <td><label for="home_street_address">Home Street Address: </label></td>
-        <td>{{ form.home_street_address }}</td>
-      </tr>
-      <tr>
-        <td><label for="home_city">Home City: </label></td>
-        <td>{{ form.home_city }}</td>
-      </tr>
-      <tr>
-        <td><label for="home_state">Home State: </label></td>
-        <td>{{ form.home_state }}</td>
-      </tr>
-      <tr>
-        <td><label for="home_zip">Home Zip: </label></td>
-        <td>{{ form.home_zip }}</td>
-      </tr>
-      <tr>
-        <td><label for="employment_status">Employment Status: </label></td>
-        <td>{{ form.employment_status }}</td>
-      </tr>
-      <tr>
-        <td><label for="goal_type">Goal Type: </label></td>
-        <td>{{ form.goal_type }}</td>
-      </tr>
-      <tr>
-        <td><label for="maximum_tolerable_drawdown">Maximum Tolerable Drawdown: </label></td>
-        <td>{{ form.maximum_tolerable_drawdown }}</td>
-      </tr>
-      <tr>
-        <td><label for="monthly_contribution_amount">Monthly Contribution Amount: </label></td>
-        <td>{{ form.monthly_contribution_amount }}</td>
-      </tr>
-      <tr>
-        <td><label for="liquid_assets">Liquid Assets: </label></td>
-        <td>{{ form.liquid_assets }}</td>
-      </tr>
-      <tr>
-        <td><label for="debt">Debt: </label></td>
-        <td>{{ form.debt }}</td>
-      </tr>
+            <h3 style="margin: 8px 0 16px;">Address</h3>
+            <div class="grid grid-2">
+                <div class="field" style="grid-column: 1 / -1;"><label for="id_home_street_address">Home Street Address</label>{{ form.home_street_address }}</div>
+                <div class="field"><label for="id_home_city">Home City</label>{{ form.home_city }}</div>
+                <div class="field"><label for="id_home_state">Home State</label>{{ form.home_state }}</div>
+                <div class="field"><label for="id_home_zip">Home Zip</label>{{ form.home_zip }}</div>
+            </div>
 
-    </table>
+            <h3 style="margin: 8px 0 16px;">Goals &amp; Finances</h3>
+            <div class="grid grid-2">
+                <div class="field"><label for="id_goal_type">Goal Type</label>{{ form.goal_type }}</div>
+                <div class="field"><label for="id_maximum_tolerable_drawdown">Maximum Tolerable Drawdown</label>{{ form.maximum_tolerable_drawdown }}</div>
+                <div class="field"><label for="id_monthly_contribution_amount">Monthly Contribution Amount</label>{{ form.monthly_contribution_amount }}</div>
+                <div class="field"><label for="id_liquid_assets">Liquid Assets</label>{{ form.liquid_assets }}</div>
+                <div class="field"><label for="id_debt">Debt</label>{{ form.debt }}</div>
+            </div>
 
-    <br>
-    <input type="submit" name="" value="Submit" class="form-button" id="form-button">
+            <button type="submit" class="btn btn-primary" id="form-button">Submit</button>
+        </form>
+    </div>
 
-  </form>
-    
-  {% endblock %}
+</div>
+{% endblock %}

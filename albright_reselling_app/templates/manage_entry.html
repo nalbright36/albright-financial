@@ -112,6 +112,7 @@
         </div>
         {% with sales=entry.sales.all %}
         {% if sales %}
+        <div class="table-scroll">
         <table class="holdings">
             <thead>
                 <tr><th>Date</th><th>Channel</th><th class="num">Price</th><th class="num">Fees</th><th class="num">Shipping</th><th class="num">Hours</th><th>Notes</th></tr>
@@ -130,6 +131,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% elif entry.sold_for is not None %}
         <p>Sold for ${{ entry.sold_for|floatformat:2 }}{% if entry.sold_date %} on {{ entry.sold_date }}{% endif %} (legacy single-sale field - fill in sold_date on the ledger spreadsheet if blank, so days-to-sell can be calculated).</p>
         {% else %}

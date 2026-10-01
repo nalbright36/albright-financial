@@ -69,6 +69,7 @@
             </div>
 
             {% if holdings %}
+            <div class="table-scroll">
             <table class="holdings">
                 <thead>
                     <tr>
@@ -98,6 +99,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             {% else %}
                 <p style="color: var(--text-secondary);">No open positions right now.</p>
             {% endif %}

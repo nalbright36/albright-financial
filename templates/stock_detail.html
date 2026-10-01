@@ -198,6 +198,25 @@
         chart.applyOptions({ width: container.clientWidth });
     });
 
+    // Chart colors are read from CSS vars once, at creation time above -
+    // the light/dark toggle (templates/index.html) dispatches this event
+    // so an already-open chart re-colors immediately instead of needing
+    // a reload.
+    document.addEventListener('themechange', function () {
+        chart.applyOptions({
+            layout: { textColor: cssVar('--text-secondary') },
+            grid: { vertLines: { color: cssVar('--border') }, horzLines: { color: cssVar('--border') } },
+            rightPriceScale: { borderColor: cssVar('--border') },
+            timeScale: { borderColor: cssVar('--border') },
+        });
+        candleSeries.applyOptions({
+            upColor: cssVar('--gain'),
+            downColor: cssVar('--loss'),
+            wickUpColor: cssVar('--gain'),
+            wickDownColor: cssVar('--loss'),
+        });
+    });
+
     // ---- Timeframe switching ----
     let activeRequest = null;
 

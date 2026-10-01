@@ -1,213 +1,217 @@
 /* ============================================================
-   FINANCE TELEMETRY — a mission-control design system for
-   trading/portfolio UIs
-   ------------------------------------------------------------
-   Concept: your positions as telemetry, not spreadsheet rows.
-   Deep-space palette, phosphor-cyan accent, HUD corner brackets
-   on panels, a quiet starfield, and a glow on live numbers.
-   Same class names as before — only re-skin, no markup changes
-   needed in your templates.
+   ALBRIGHT FINANCIAL — v2 visual system (Linear / Vercel / Stripe
+   register: quiet dark neutrals, one refined accent per app,
+   no glow/scanline/bracket decoration, real typographic scale).
+
+   Same class names the templates have always used (.card, .btn,
+   table.holdings, .badge, .scanner-tab, tr.scanner-row/
+   scanner-detail, .status-dot, .field, .navbar*...) - this is a
+   visual-only redesign, so no markup/JS relies on anything new
+   here except the theme toggle (data-theme on <html>, see
+   templates/index.html) and .table-scroll (wraps a table so it
+   scrolls horizontally inside its card instead of overflowing).
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ---------- Tokens ---------- */
+/* ---------- Shared tokens (same in both themes) ---------- */
 :root {
-  /* Surfaces — deep space, not pure black */
-  --bg:            #070B14;
-  --bg-elevated:   #0C1220;
-  --surface:       rgba(17, 25, 43, 0.68);
-  --surface-hover: rgba(25, 36, 58, 0.85);
-  --border:        rgba(120, 170, 210, 0.16);
-  --border-strong: rgba(94, 224, 255, 0.38);
-  --grid-line: rgba(94, 224, 255, 0.035);
-  --nav-bg: rgba(10, 15, 26, 0.75);
-  --trading-color: #4FE0FF;
-  --reselling-color: #4ADE80;
+  /* Spacing — 4px base */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
 
-  /* Text */
-  --text-primary:   #E9F1F7;
-  --text-secondary: #8393AD;
-  --text-tertiary:  #4E5B78;
+  /* Radius */
+  --radius-sm: 8px;   /* inputs, buttons */
+  --radius-md: 10px;  /* cards, panels */
+  --radius-lg: 12px;  /* larger surfaces (modals, the styleguide's big tiles) */
+  --radius-full: 999px;
 
-  /* Brand / interactive — phosphor cyan, telemetry-readout color */
-  --accent:        #4FE0FF;
-  --accent-hover:  #8EEEFF;
-  --accent-dim:    #1E7A94;
-  --accent-glow:   rgba(79, 224, 255, 0.45);
-
-  /* Signal colors — muted but with a faint glow, not flat */
-  --gain:          #5CE0A6;
-  --gain-bg:       rgba(92, 224, 166, 0.10);
-  --gain-glow:     rgba(92, 224, 166, 0.35);
-  --loss:          #FF6E68;
-  --loss-bg:       rgba(255, 110, 104, 0.10);
-  --loss-glow:     rgba(255, 110, 104, 0.35);
-  --neutral:       #8393AD;
-  --warn:          #F5A623;
-  --warn-bg:       rgba(245, 166, 35, 0.10);
-  --warn-glow:     rgba(245, 166, 35, 0.35);
+  /* Motion */
+  --transition: 150ms ease;
 
   /* Type */
-  --font-display: 'Space Grotesk', 'Inter', sans-serif;
-  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono:    'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: var(--font-sans);  /* alias - a couple of templates reference this name directly */
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
-  /* Scale */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px -10px rgba(0, 0, 0, 0.65);
+  --text-xs: 0.75rem;     /* 12px — small table/meta labels */
+  --text-sm: 0.8125rem;   /* 13px */
+  --text-base: 0.875rem;  /* 14px — default body/table */
+  --text-md: 0.9375rem;   /* 15px */
+  --text-lg: 1.0625rem;   /* 17px */
+  --text-xl: 1.25rem;     /* 20px — h3 */
+  --text-2xl: 1.5rem;     /* 24px — h2 */
+  --text-3xl: 1.875rem;   /* 30px — h1 */
+
+  /* Status hues — the underlying color a theme's text/bg shades
+     are derived from; badges/dots pick theme-appropriate shades
+     below so contrast holds in both themes. */
+  --red-hue: 351;
+  --amber-hue: 38;
+  --blue-hue: 217;
+  --emerald-hue: 160;
 }
 
-/* Registering this custom property lets the corner-bracket
-   hover transition animate smoothly in supporting browsers
-   (Chrome/Edge/Safari). Falls back to an instant color swap
-   elsewhere — harmless either way. */
-@property --bracket-color {
-  syntax: '<color>';
-  inherits: false;
-  initial-value: #1E7A94;
+@media (prefers-reduced-motion: reduce) {
+  :root { --transition: 0ms; }
+}
+
+/* ---------- Dark theme (default) ----------
+   Deliberately NOT scoped to :root alone - also matches a plain
+   [data-theme="dark"] on any element, so the styleguide can nest a
+   small dark-theme preview panel inside an otherwise-light page (and
+   vice versa) for side-by-side comparison, not just a whole-page
+   toggle. The real site only ever sets data-theme on <html>. */
+:root,
+[data-theme="dark"] {
+  --bg: #0B0D10;
+  --bg-elevated: #12151A;
+  --surface: #12151A;
+  --surface-hover: #171B21;
+  --surface-raised: #1A1E25;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #E6E8EB;
+  --text-secondary: #8B93A1;
+  --text-tertiary: #5B6472;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+  --red: #FB7185;
+  --red-bg: rgba(244, 63, 94, 0.14);
+  --amber: #FBBF24;
+  --amber-bg: rgba(245, 158, 11, 0.14);
+  --blue: #60A5FA;
+  --blue-bg: rgba(59, 130, 246, 0.14);
+  --emerald: #34D399;
+  --emerald-bg: rgba(16, 185, 129, 0.14);
+}
+
+/* ---------- Light theme ---------- */
+[data-theme="light"] {
+  --bg: #FFFFFF;
+  --bg-elevated: #F6F7F8;
+  --surface: #FFFFFF;
+  --surface-hover: #F3F4F6;
+  --surface-raised: #FFFFFF;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  --text-primary: #0E1116;
+  --text-secondary: #5B6472;
+  --text-tertiary: #8B93A1;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
+
+  --red: #E11D48;
+  --red-bg: rgba(244, 63, 94, 0.10);
+  --amber: #B45309;
+  --amber-bg: rgba(245, 158, 11, 0.14);
+  --blue: #2563EB;
+  --blue-bg: rgba(59, 130, 246, 0.10);
+  --emerald: #059669;
+  --emerald-bg: rgba(16, 185, 129, 0.10);
+}
+
+/* ---------- Per-app accent ----------
+   Trading keeps its current cool hue (refined to a Vercel-style
+   blue); Reselling keeps emerald. Everything else (positive/
+   negative values, warnings, info) is the shared --emerald/--red/
+   --amber/--blue above, independent of which app you're in. A dark,
+   near-black "on-accent" text color (not white) sits on top of
+   either, matching how the primary button already works today. */
+:root,
+body {
+  --accent: #3B82F6;
+  --accent-hover: #60A5FA;
+  --accent-ring: rgba(59, 130, 246, 0.3);
+  --on-accent: #051029;
+}
+body.theme-reselling {
+  --accent: #10B981;
+  --accent-hover: #34D399;
+  --accent-ring: rgba(16, 185, 129, 0.3);
+  --on-accent: #06211A;
+}
+
+/* Aliases kept for the existing gain/loss/warn vocabulary used
+   throughout scanner/ledger templates today — same tokens, same
+   names, just no longer neon. */
+:root {
+  --gain: var(--emerald);
+  --gain-bg: var(--emerald-bg);
+  --loss: var(--red);
+  --loss-bg: var(--red-bg);
+  --warn: var(--amber);
+  --warn-bg: var(--amber-bg);
+  --info: var(--blue);
+  --info-bg: var(--blue-bg);
 }
 
 /* ---------- Reset & base ---------- */
 * { box-sizing: border-box; }
 
-/* Starfield + nebula — layered so it doesn't scroll with content.
-   Base layer (grid, static stars, nebula blobs) never animates;
-   the twinkle and shooting-star layers below are the only motion,
-   and both respect prefers-reduced-motion. */
 body {
-  background-color: var(--bg);
-  background-image:
-    /* faint orbital chart grid, sits beneath everything else */
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    /* static stars */
-    radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.35), transparent),
-    radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.25), transparent),
-    radial-gradient(1.5px 1.5px at 85% 60%, rgba(255,255,255,0.3), transparent),
-    radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.2), transparent),
-    radial-gradient(1px 1px at 10% 65%, rgba(255,255,255,0.25), transparent),
-    radial-gradient(1.5px 1.5px at 92% 25%, rgba(255,255,255,0.3), transparent),
-    radial-gradient(1px 1px at 55% 50%, rgba(255,255,255,0.18), transparent);
-  background-repeat:
-    repeat, repeat,
-    no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
-  background-size:
-    64px 64px, 64px 64px,
-    auto, auto, auto, auto, auto, auto, auto;
-  background-attachment: fixed;
+  background: var(--bg);
   color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-  position: relative;
+  transition: background var(--transition), color var(--transition);
 }
 
-/* Twinkle layer — a handful of brighter stars that slowly pulse.
-   Fixed + negative z-index keeps it pinned behind all page content
-   regardless of stacking contexts created elsewhere (backdrop-filter,
-   position:relative, etc). */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  background-image:
-    radial-gradient(1.5px 1.5px at 30% 20%, #FFFFFF, transparent),
-    radial-gradient(1.5px 1.5px at 75% 70%, #FFFFFF, transparent),
-    radial-gradient(2px 2px at 15% 85%, #FFFFFF, transparent),
-    radial-gradient(1.5px 1.5px at 60% 40%, #FFFFFF, transparent),
-    radial-gradient(2px 2px at 88% 50%, #FFFFFF, transparent);
-  background-repeat: no-repeat;
-  animation: twinkle 4s ease-in-out infinite;
-}
-
-@keyframes twinkle {
-  0%, 100% { opacity: 0.25; }
-  50%      { opacity: 1; }
-}
-
-/* Shooting star — a thin streak that crosses the sky briefly once
-   every cycle, then stays invisible for the rest of it. */
-body::after {
-  content: "";
-  position: fixed;
-  top: 12%;
-  left: -10%;
-  z-index: -1;
-  pointer-events: none;
-  width: 140px;
-  height: 1.5px;
-  background: linear-gradient(90deg, transparent, var(--accent-hover), transparent);
-  box-shadow: 0 0 6px 1px var(--accent-glow);
-  opacity: 0;
-  transform: rotate(18deg);
-  animation: shooting-star 9s linear infinite;
-}
-
-@keyframes shooting-star {
-  0%, 88%  { opacity: 0; transform: translate(0, 0) rotate(18deg); }
-  90%      { opacity: 1; }
-  97%      { opacity: 0.4; }
-  100%     { opacity: 0; transform: translate(130vw, 65vh) rotate(18deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body::before { animation: none; opacity: 0.6; }
-  body::after { display: none; }
-}
-
-h1, h2, h3, .font-display {
-  font-family: var(--font-display);
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
   margin: 0;
+  text-transform: none;         /* no more holographic all-caps headings */
 }
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+h4 { font-size: var(--text-lg); }
 
-/* Holographic gradient text for primary headings */
-h1, h2, .font-display {
-  background: linear-gradient(100deg, var(--text-primary) 20%, var(--accent) 55%, var(--text-primary) 85%);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+p { color: var(--text-secondary); margin: 0 0 var(--space-3); }
+p:last-child { margin-bottom: 0; }
 
-h1 { font-size: 2rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.125rem; color: var(--text-primary); }
-
-/* All numeric data uses monospace with tabular figures so
-   columns of prices/quantities align vertically. */
-.num, .ledger-stat__value, table.holdings td.num {
+/* Numbers/money/code: tabular mono, never the UI font. */
+.num, .mono, code, pre,
+table.holdings td.num, .ledger-stat__value {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--accent); text-decoration: none; transition: color var(--transition); }
 a:hover { color: var(--accent-hover); }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
+
+::selection { background: var(--accent-ring); color: var(--text-primary); }
 
 /* ---------- Layout ---------- */
-.container {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
+.container { max-width: 1180px; margin: 0 auto; padding: 0 var(--space-6); }
 
-.grid {
-  display: grid;
-  gap: 20px;
-}
+.grid { display: grid; gap: var(--space-5); }
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
@@ -217,1172 +221,568 @@ a:hover { color: var(--accent-hover); }
 }
 @media (max-width: 600px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .container { padding: 0 16px; }
+  .container { padding: 0 var(--space-4); }
 }
 
-/* ---------- Top nav ----------
-   Two internal rows (switch row + main row) sharing one
-   background/border/blur, so the app-switch button reads as
-   part of the same navbar box instead of a separate bar. */
+/* ---------- App shell: sticky top header ---------- */
 .navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border);
-  background: var(--nav-bg);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  position: relative;
-  z-index: 100;
+  border-bottom: 1px solid var(--border);
 }
 
 .navbar__switch-row {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 6px 24px 0;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6) 0;
 }
 
 .navbar__main-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  min-height: 56px;
 }
 
 .navbar__brand {
-  position: relative;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  background: none; /* brand text itself stays solid, unlike h1/h2 */
-  -webkit-background-clip: initial;
-  background-clip: initial;
-  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-left: 4px;
-  line-height: 1;
-  margin-top: -10px;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
-
-/* Brand mark: a small pulsing "signal" dot instead of the old
-   diamond — reads as a live telemetry indicator. */
 .navbar__brand::before {
   content: "";
-  position: relative;
-  z-index: 1;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 8px 1px var(--accent-glow);
-  display: inline-block;
-  animation: pulse-dot 2.4s ease-in-out infinite;
-}
-
-/* Radar-ping ring expanding outward from the dot */
-.navbar__brand::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid var(--accent);
-  transform: translateY(-50%) scale(1);
-  animation: radar-ping 2.4s ease-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-@keyframes radar-ping {
-  0%   { transform: translateY(-50%) scale(1); opacity: 0.6; }
-  100% { transform: translateY(-50%) scale(3.2); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .navbar__brand::before { animation: none; }
-  .navbar__brand::after { display: none; }
+  flex-shrink: 0;
 }
 
 .navbar__links {
   display: flex;
-  gap: 28px;
-  font-size: 0.875rem;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--text-sm);
 }
-
 .navbar__links a {
   color: var(--text-secondary);
   font-weight: 500;
-  letter-spacing: 0.02em;
 }
-.navbar__links a:hover,
-.navbar__links a.active {
-  color: var(--accent);
-}
+.navbar__links a:hover { color: var(--text-primary); }
+.navbar__links a.active { color: var(--accent); }
 
-/* ---------- Nav dropdown (Strategies: Stock / Options) ---------- */
-.navbar__dropdown {
-  position: relative;
-}
-
-.navbar__dropdown-trigger {
+.app-switch-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.875rem;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.navbar__dropdown:hover .navbar__dropdown-trigger {
-  color: var(--accent);
-}
-
-.navbar__dropdown-caret {
-  font-size: 0.6875rem;
-  transition: transform 0.15s ease;
-}
-.navbar__dropdown:hover .navbar__dropdown-caret {
-  transform: rotate(180deg);
-}
-
-.navbar__dropdown-menu {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 170px;
-  background: var(--bg-elevated);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  padding: 10px 6px 6px;
-  z-index: 30;
+  border-radius: var(--radius-full);
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
 }
-
-.navbar__dropdown:hover .navbar__dropdown-menu {
-  display: block;
-}
-
-.navbar__dropdown-menu a {
-  display: block;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-.navbar__dropdown-menu a:hover {
-  background: var(--surface-hover);
-  color: var(--accent);
-}
-
-/* ---------- App switch button (Trading <-> Reselling) ----------
-   Deliberately hue-neutral: starlight silver only, never var(--accent),
-   so the same pill sits correctly in the cyan trading theme and the
-   green reselling theme. The space read comes from texture rather
-   than color — a deep-space fill, a few stars inside the capsule, a
-   horizon glow along the top edge, and a comet sweep on hover. */
-.app-switch-btn {
-    position: relative;
-    isolation: isolate;
-    overflow: hidden;
-    display: inline-block;
-    padding: 4px 14px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-decoration: none;
-    color: #C9D6E5;
-    background-color: rgba(18, 26, 42, 0.5);
-    background-image:
-      /* stars, positioned in % so they track the pill's size */
-      radial-gradient(1px 1px at 18% 34%, rgba(255, 255, 255, 0.55), transparent),
-      radial-gradient(1px 1px at 63% 22%, rgba(255, 255, 255, 0.38), transparent),
-      radial-gradient(1px 1px at 83% 66%, rgba(255, 255, 255, 0.5),  transparent),
-      radial-gradient(1px 1px at 37% 76%, rgba(255, 255, 255, 0.3),  transparent),
-      /* light falling from above, like a planet limb */
-      linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 60%);
-    border: 1px solid rgba(190, 215, 240, 0.28);
-    border-radius: 999px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-    transition: color 0.2s ease, background-color 0.2s ease,
-                border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* The comet. Parked off the left edge at rest (left + width both stay
-   negative of 0%), so it costs nothing until hover animates it across. */
-.app-switch-btn::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    top: 0;
-    bottom: 0;
-    left: -60%;
-    width: 45%;
-    pointer-events: none;
-    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-    transform: translateX(0) skewX(-18deg);
-}
-
 .app-switch-btn:hover {
-    color: #F2F7FC;
-    background-color: rgba(30, 42, 64, 0.66);
-    border-color: rgba(215, 232, 248, 0.6);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.22),
-      0 0 14px -2px rgba(210, 230, 250, 0.35);
-}
-.app-switch-btn:hover::before {
-    animation: app-switch-comet 0.9s ease-out;
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
 }
 
-@keyframes app-switch-comet {
-    from { transform: translateX(0) skewX(-18deg); }
-    to   { transform: translateX(340%) skewX(-18deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .app-switch-btn:hover::before { animation: none; }
-}
-
-/* ---------- Ticker rail (signature element) ----------
-   A thin strip of live-looking symbols with a scanning glow
-   line beneath it, like an instrument-panel readout. */
-.ticker {
-  position: relative;
-  overflow: hidden;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
-  padding: 8px 0;
-}
-
-.ticker::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: -30%;
-  width: 30%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  box-shadow: 0 0 6px var(--accent-glow);
-  animation: scan-line 5s linear infinite;
-}
-
-@keyframes scan-line {
-  0%   { left: -30%; }
-  100% { left: 100%; }
-}
-
-.ticker__track {
+/* Theme toggle */
+.theme-toggle {
   display: inline-flex;
-  gap: 32px;
-  animation: ticker-scroll 32s linear infinite;
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+.theme-toggle:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.theme-toggle svg { width: 16px; height: 16px; }
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+/* Nav dropdown (trading's Strategies submenu) */
+.navbar__dropdown { position: relative; }
+.navbar__dropdown-trigger {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  color: var(--text-secondary); font-weight: 500; font-size: var(--text-sm); cursor: pointer;
+}
+.navbar__dropdown:hover .navbar__dropdown-trigger { color: var(--text-primary); }
+.navbar__dropdown-caret { font-size: 0.6875rem; transition: transform var(--transition); }
+.navbar__dropdown:hover .navbar__dropdown-caret { transform: rotate(180deg); }
+.navbar__dropdown-menu {
+  display: none; position: absolute; top: 100%; left: 0; min-width: 170px;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md); padding: var(--space-2); z-index: 30;
+}
+.navbar__dropdown:hover .navbar__dropdown-menu { display: block; }
+.navbar__dropdown-menu a {
+  display: block; padding: var(--space-2); border-radius: var(--radius-sm);
+  font-size: var(--text-sm); color: var(--text-secondary); white-space: nowrap;
+}
+.navbar__dropdown-menu a:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+/* Mobile nav toggle */
+.navbar__toggle-checkbox { display: none; }
+.navbar__toggle {
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 28px; height: 28px; cursor: pointer;
+}
+.navbar__toggle span {
+  display: block; height: 2px; width: 100%; background: var(--text-primary);
+  border-radius: 1px; transition: transform var(--transition), opacity var(--transition);
 }
 
-.ticker__item { color: var(--text-secondary); }
-.ticker__item .num { color: var(--text-primary); margin: 0 6px; }
-.ticker__item.up .delta { color: var(--gain); }
-.ticker__item.down .delta { color: var(--loss); }
-
-@keyframes ticker-scroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+/* ---------- Page header: title + subtitle + actions ---------- */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
 }
+.page-header__title { margin: 0 0 var(--space-1); }
+.page-header__subtitle { color: var(--text-secondary); font-size: var(--text-base); margin: 0; }
+.page-header__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
-@media (prefers-reduced-motion: reduce) {
-  .ticker__track { animation: none; }
-  .ticker::after { animation: none; display: none; }
-}
-
-/* ---------- Cards (viewport panels) ---------- */
+/* ---------- Cards ---------- */
 .card {
-  --bracket-color: var(--accent-dim);
-  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 20px;
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  overflow: hidden;
-
-  /* Four-corner HUD brackets, drawn entirely with layered
-     background gradients — no extra markup needed. */
-  background-image:
-    linear-gradient(to right, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to bottom, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to left, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to bottom, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to right, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to top, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to left, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(to top, var(--bracket-color), var(--bracket-color)),
-    linear-gradient(var(--surface), var(--surface));
-  background-repeat: no-repeat;
-  background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right, 0 0;
-  background-size: 14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px, 100% 100%;
-  transition: --bracket-color 0.2s ease;
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
-
-.card:hover {
-  --bracket-color: var(--accent);
-}
-
-/* Scanning glow line sweeps across the panel on hover — reads
-   as an instrument doing a live re-read of the data. */
-.card::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -60%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(79, 224, 255, 0.06), transparent);
-  pointer-events: none;
-  transition: left 0.9s ease;
-}
-.card:hover::after {
-  left: 120%;
-}
+.card:hover { border-color: var(--border-strong); }
 
 .card__header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 14px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
-
 .card__label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-tertiary);
+  font-size: var(--text-xs);
   font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-/* Signature: the ledger stat — a large glowing tabular number
-   on a rule, like a telemetry readout, with a direction
-   triangle instead of a raw sign. */
+/* ---------- Stat values (ledger-stat, used as the "stat tile" number) ---------- */
 .ledger-stat__value {
-  font-size: 2rem;
-  font-weight: 500;
+  font-size: var(--text-3xl);
+  font-weight: 600;
   color: var(--text-primary);
-  text-shadow: 0 0 18px rgba(79, 224, 255, 0.18);
-  border-bottom: 1px solid var(--border-strong);
-  padding-bottom: 10px;
   display: block;
+  text-shadow: none;
+  border-bottom: none;
+  padding-bottom: 0;
 }
-
 .ledger-stat__delta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  font-size: 0.875rem;
-  font-family: var(--font-mono);
+  display: flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-2); font-size: var(--text-sm); font-family: var(--font-mono);
 }
-
-.ledger-stat__delta.gain { color: var(--gain); text-shadow: 0 0 10px var(--gain-glow); }
-.ledger-stat__delta.loss { color: var(--loss); text-shadow: 0 0 10px var(--loss-glow); }
-
+.ledger-stat__delta.gain { color: var(--gain); }
+.ledger-stat__delta.loss { color: var(--loss); }
 .ledger-stat__delta::before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
+  content: ""; width: 0; height: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
 }
-.ledger-stat__delta.gain::before {
-  border-bottom: 7px solid var(--gain);
-  filter: drop-shadow(0 0 3px var(--gain-glow));
-}
-.ledger-stat__delta.loss::before {
-  border-top: 7px solid var(--loss);
-  filter: drop-shadow(0 0 3px var(--loss-glow));
-}
+.ledger-stat__delta.gain::before { border-bottom: 6px solid var(--gain); }
+.ledger-stat__delta.loss::before { border-top: 6px solid var(--loss); }
 
 /* ---------- Badges / pills ---------- */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
   font-weight: 600;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   border: 1px solid transparent;
+  line-height: 1.6;
 }
-.badge.gain { background: var(--gain-bg); color: var(--gain); border-color: rgba(92, 224, 166, 0.25); }
-.badge.loss { background: var(--loss-bg); color: var(--loss); border-color: rgba(255, 110, 104, 0.25); }
-.badge.warn { background: var(--warn-bg); color: var(--warn); border-color: rgba(245, 166, 35, 0.25); }
+.badge.gain { background: var(--gain-bg); color: var(--gain); }
+.badge.loss { background: var(--loss-bg); color: var(--loss); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
 .badge.neutral { background: var(--surface-hover); color: var(--text-secondary); }
 
-/* ---------- Warning banner (stale data, missing runs, etc.) ----------
-   Same shape as the existing error-card convention (a card with a colored
-   left border) but amber for "worth a look" instead of red for "broken". */
+/* ---------- Status dots ---------- */
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+}
+.status-dot--ok { background: var(--gain); }
+.status-dot--warn { background: var(--warn); }
+.status-dot--error { background: var(--loss); }
+
+.status-card {
+  flex: 1 1 230px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+.status-card--quiet { opacity: 0.75; }
+.status-card__title {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-2);
+}
+.status-card__body { font-size: var(--text-sm); color: var(--text-primary); }
+.status-card__sub { font-size: var(--text-xs); color: var(--text-secondary); margin-top: var(--space-1); }
+.status-bar { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-5); }
+
+/* ---------- Alerts / toasts (Django messages) ---------- */
 .alert-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  background: var(--warn-bg);
-  border: 1px solid rgba(245, 166, 35, 0.3);
-  border-left: 3px solid var(--warn);
-  border-radius: var(--radius-sm);
-  color: var(--warn);
-  font-size: 0.875rem;
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-3); margin-bottom: var(--space-2);
+  background: var(--warn-bg); border: 1px solid var(--border);
+  border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
+  color: var(--text-primary); font-size: var(--text-sm);
 }
 .alert-warning:last-child { margin-bottom: 0; }
 
-/* ---------- Holdings table ---------- */
-table.holdings {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
+.toast-container {
+  position: fixed; top: var(--space-4); right: var(--space-4); z-index: 200;
+  display: flex; flex-direction: column; gap: var(--space-2); max-width: 360px;
 }
-
-table.holdings th {
-  text-align: left;
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-strong);
+.toast {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm); color: var(--text-primary);
+  animation: toast-in var(--transition);
 }
-
-table.holdings td {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-primary);
+.toast::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0;
+  background: var(--info);
 }
-
-table.holdings td.num,
-table.holdings th.num { text-align: center; }
-
-table.holdings tr:hover td {
-  background: var(--surface-hover);
-}
-
-table.holdings td.symbol {
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
-table.holdings td.symbol a {
-  color: var(--accent);
-  text-shadow: 0 0 8px var(--accent-glow);
-}
-table.holdings td.symbol a:hover {
-  color: var(--accent-hover);
-}
-
-/* ---------- Stock detail chart ---------- */
-#price-chart {
-  width: 100%;
-  height: 420px;
-}
-
-.btn-timeframe {
-  padding: 6px 12px;
-  font-size: 0.75rem;
-}
-
-.btn-timeframe.active {
-  background: var(--accent);
-  color: #051019;
-  border-color: var(--accent);
-}
-
-.btn-timeframe:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.btn-timeframe-error {
-  border-color: var(--loss) !important;
-  color: var(--loss) !important;
-}
+.toast.toast--success::before { background: var(--gain); }
+.toast.toast--error::before { background: var(--loss); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
 /* ---------- Buttons ---------- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 18px;
-  font-family: var(--font-body);
-  font-size: 0.8125rem;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition), opacity var(--transition);
 }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: default; transform: none; }
 
-.btn:active {
-  transform: scale(0.97);
-}
+.btn-sm { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
 
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-  transform: none;
-}
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
 
-/* Compact variant for buttons that sit inside a table row (e.g. the
-   Auction Scanner's per-lot "AI review" button). */
-.btn-sm {
-  padding: 5px 10px;
-  font-size: 0.6875rem;
-}
+.btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--text-primary); }
+.btn-secondary:hover { background: var(--surface-hover); border-color: var(--text-tertiary); }
 
-.btn-primary {
-  background: var(--accent);
-  color: #051019;
-}
-.btn-primary:hover {
-  background: var(--accent-hover);
-  box-shadow: 0 0 16px var(--accent-glow);
-}
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
 
-.btn-secondary {
-  background: transparent;
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-.btn-secondary:hover {
-  background: var(--surface-hover);
-  border-color: var(--accent);
-}
+.btn-danger { background: var(--red-bg); border-color: transparent; color: var(--red); }
+.btn-danger:hover { background: var(--red); color: var(--on-accent); }
 
-.btn-buy { background: var(--gain); color: #06231A; }
-.btn-buy:hover { box-shadow: 0 0 16px var(--gain-glow); }
+.btn-buy { background: var(--gain); color: var(--on-accent); }
+.btn-buy:hover { opacity: 0.9; }
+.btn-sell { background: var(--loss); color: var(--on-accent); }
+.btn-sell:hover { opacity: 0.9; }
 
-.btn-sell { background: var(--loss); color: #290C0A; }
-.btn-sell:hover { box-shadow: 0 0 16px var(--loss-glow); }
-
-/* ---------- Forms ---------- */
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-
-.field label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.field input,
-.field select {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.9375rem;
-}
-
-.field input:focus,
-.field select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 224, 255, 0.12);
-  outline: none;
-}
-
-/* ---------- Scanner controls (search / sector filter bar) ---------- */
-.scanner-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.scanner-controls input[type="text"],
-.scanner-controls input[type="number"],
-.scanner-controls select {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-}
-
-.scanner-controls input[type="text"] {
-  flex: 1 1 240px;
-}
-
-.scanner-controls input[type="number"] {
-  flex: 0 1 140px;
-}
-
-.scanner-controls select {
-  flex: 0 1 200px;
-}
-
-.scanner-controls input[type="text"]::placeholder,
-.scanner-controls input[type="number"]::placeholder {
-  color: var(--text-tertiary);
-}
-
-.scanner-controls input[type="text"]:focus,
-.scanner-controls input[type="number"]:focus,
-.scanner-controls select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 224, 255, 0.12);
-  outline: none;
-}
-
-/* Sortable table headers */
-table.holdings th[data-sort-key] {
-  cursor: pointer;
-  user-select: none;
-  transition: color 0.15s ease;
-  white-space: nowrap;
-}
-table.holdings th[data-sort-key]:hover {
-  color: var(--accent);
-}
-table.holdings th.sorted-asc::after,
-table.holdings th.sorted-desc::after {
-  color: var(--accent);
-  font-size: 0.65rem;
-  margin-left: 4px;
-}
-table.holdings th.sorted-asc::after {
-  content: "\25B2";
-}
-table.holdings th.sorted-desc::after {
-  content: "\25BC";
-}
-
-/* ---------- Auction Scanner: title clamp, collapsible cards, row counts ----------
-   Titles get real width and wrap to at most two lines with an ellipsis,
-   instead of either blowing up row height or being hard-truncated server
-   side; title="" on the link gives the full text on hover. */
-th.lot-title-col {
-  min-width: 220px;
-}
-td.lot-title {
-  max-width: 320px;
-}
-td.lot-title a {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.35;
-}
-
-/* Card headers that toggle their body on click (JS only - with JS
-   disabled the body is simply always visible, never hidden). */
-.js-collapsible-header {
-  cursor: pointer;
-  user-select: none;
-}
-.js-collapsible-header::before {
-  content: "\25BC";
-  display: inline-block;
-  font-size: 0.65rem;
-  color: var(--text-tertiary);
-  margin-right: 8px;
-  transition: transform 0.15s ease;
-}
-.js-collapsible-header.is-collapsed::before {
-  transform: rotate(-90deg);
-}
-
-.row-count {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-}
-
-/* ---------- Auction Scanner: status bar ----------
-   One compact row of small cards (health per source, spot prices, AI
-   review usage). Cards with nothing wrong are visually quiet
-   (status-card--quiet); a warning/error dot and the alert banner inside
-   its <details> are what should actually draw the eye. */
-.status-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.status-card {
-  flex: 1 1 230px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-}
-.status-card--quiet {
-  opacity: 0.82;
-}
-.status-card__title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.status-card__body {
-  font-size: 0.8125rem;
-  color: var(--text-primary);
-}
-.status-card__sub {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-.status-card details {
-  margin-top: 6px;
-}
-.status-card summary {
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  user-select: none;
-}
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.status-dot--ok { background: var(--gain); box-shadow: 0 0 6px var(--gain-glow); }
-.status-dot--warn { background: var(--warn); box-shadow: 0 0 6px var(--warn-glow); }
-.status-dot--error { background: var(--loss); box-shadow: 0 0 6px var(--loss-glow); }
-
-/* ---------- Auction Scanner: tabs ---------- */
-.scanner-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--border);
-}
-.scanner-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 16px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.scanner-tab:hover {
-  color: var(--text-primary);
-}
-.scanner-tab.is-active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-.tab-badge {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  font-size: 0.6875rem;
-  font-family: var(--font-mono);
-  padding: 1px 7px;
-  border-radius: 999px;
-}
-.scanner-tab.is-active .tab-badge {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-.tab-panel__heading {
-  font-size: 0.8125rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  margin: 0 0 14px;
-}
-
-/* ---------- Auction Scanner: expandable row detail ----------
-   The chevron cell is the click target (JS also accepts a click anywhere
-   on the row outside a link/button/form); the detail row itself is a
-   full-width panel directly under its parent, indented to align under
-   the title column. */
-th.row-toggle-col {
-  width: 24px;
-  padding-left: 14px !important;
-  padding-right: 0 !important;
-}
-td.row-toggle {
-  width: 24px;
-  padding-left: 14px !important;
-  padding-right: 0 !important;
-  cursor: pointer;
-  color: var(--text-tertiary);
-}
-td.row-toggle::before {
-  content: "\25B6";
-  display: inline-block;
-  font-size: 0.6rem;
-  transition: transform 0.15s ease;
-}
-tr.scanner-row.is-expanded td.row-toggle::before {
-  transform: rotate(90deg);
-}
-tr.scanner-detail td {
-  background: var(--surface);
-  padding: 12px 14px 14px 46px;
-  border-bottom: 1px solid var(--border);
-}
-.detail-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 28px;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-.detail-grid strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-/* ---------- Toggle switch (strategy on/off) ---------- */
-.toggle-switch {
+/* Loading state: add data-loading="true" to a .btn - hides the label's
+   text via opacity and spins a ring, no markup change needed beyond the
+   attribute. */
+.btn[data-loading="true"] {
+  color: transparent;
+  pointer-events: none;
   position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  flex-shrink: 0;
 }
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--surface-hover);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.toggle-slider::before {
+.btn[data-loading="true"]::after {
   content: "";
   position: absolute;
-  width: 16px;
-  height: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: var(--text-secondary);
+  width: 14px; height: 14px;
   border-radius: 50%;
-  transition: transform 0.2s ease, background 0.2s ease;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  color: var(--on-accent);
+  animation: btn-spin 0.6s linear infinite;
+}
+.btn-secondary[data-loading="true"]::after,
+.btn-ghost[data-loading="true"]::after { color: var(--text-primary); }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .btn[data-loading="true"]::after { animation: none; } }
+
+.btn-timeframe { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.btn-timeframe.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn-timeframe:disabled { opacity: 0.6; cursor: default; }
+.btn-timeframe-error { border-color: var(--loss) !important; color: var(--loss) !important; }
+
+/* ---------- Forms ---------- */
+.field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
+.field label {
+  font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary);
+  text-transform: none; letter-spacing: 0;
+}
+.field input, .field select, .field textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
 }
 
-.toggle-switch input:checked + .toggle-slider {
-  background: var(--gain-bg);
-  border-color: var(--gain);
+.scanner-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
+.scanner-controls input[type="text"],
+.scanner-controls input[type="number"],
+.scanner-controls input[type="date"],
+.scanner-controls select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
 }
-
-.toggle-switch input:checked + .toggle-slider::before {
-  transform: translateX(20px);
-  background: var(--gain);
-  box-shadow: 0 0 6px var(--gain-glow);
-}
-
-.toggle-switch input:disabled + .toggle-slider {
-  opacity: 0.6;
-  cursor: default;
-}
-
-/* ---------- Mobile nav toggle ---------- */
-.navbar__toggle-checkbox {
-  display: none;
-}
-
-.navbar__toggle {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-}
-
-.navbar__toggle span {
-  display: block;
-  height: 2px;
-  width: 100%;
-  background: var(--text-primary);
-  border-radius: 1px;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-/* ---------- Sector checkbox grid (strategy builder) ---------- */
-.sector-checkbox-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-/* ---------- Strategy parameter groups (shown/hidden via JS
-   based on selected strategy type) ---------- */
-.param-group {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.param-group:first-of-type {
-  margin-top: 16px;
-}
-
-/* ---------- Divider / section rule ---------- */
-.rule {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 28px 0;
-}
-
-/* ============================================================
-   MOBILE — everything below applies at 640px and under. Placed
-   last so it overrides component rules defined earlier in the
-   cascade without needing !important anywhere.
-   ============================================================ */
-@media (max-width: 640px) {
-
-  /* ---- Nav: switch to hamburger ---- */
-  .navbar__main-row {
-    padding: 14px 16px;
-  }
-
-  .navbar__switch-row {
-    padding: 6px 16px 0;
-  }
-
-  .navbar__brand {
-    font-size: 1rem;
-  }
-
-  .navbar__toggle {
-    display: flex;
-  }
-
-  .navbar__links {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    flex-direction: column;
-    gap: 0;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border);
-    padding: 8px 16px 16px;
-    z-index: 20;
-  }
-
-  .navbar__links a {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9375rem;
-  }
-  .navbar__links a:last-child {
-    border-bottom: none;
-  }
-
-  /* Hover doesn't exist on touch — collapse the dropdown into two
-     plain, always-visible links instead of a hover menu. */
-  .navbar__dropdown-trigger {
-    padding: 12px 0 4px;
-    font-size: 0.9375rem;
-    cursor: default;
-  }
-  .navbar__dropdown-caret {
-    display: none;
-  }
-  .navbar__dropdown-menu {
-    display: block;
-    position: static;
-    margin: 0;
-    padding: 0 0 4px 12px;
-    border: none;
-    box-shadow: none;
-    background: transparent;
-  }
-  .navbar__dropdown-menu a {
-    padding: 8px 0;
-    border-bottom: none;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-  }
-
-  #nav-toggle:checked ~ .navbar__links {
-    display: flex;
-  }
-
-  /* Hamburger -> X when open */
-  #nav-toggle:checked ~ .navbar__toggle span:nth-child(1) {
-    transform: translateY(7px) rotate(45deg);
-  }
-  #nav-toggle:checked ~ .navbar__toggle span:nth-child(2) {
-    opacity: 0;
-  }
-  #nav-toggle:checked ~ .navbar__toggle span:nth-child(3) {
-    transform: translateY(-7px) rotate(-45deg);
-  }
-
-  /* ---- Layout & spacing ---- */
-  .container {
-    padding: 0 14px;
-  }
-
-  .card {
-    padding: 16px;
-  }
-
-  /* ---- Typography scale-down ---- */
-  h1 { font-size: 1.5rem; }
-  h2 { font-size: 1.25rem; }
-  .ledger-stat__value {
-    font-size: 1.5rem !important;
-  }
-
-  /* ---- Card headers that pack a label + controls side by side
-     need to stack instead of squeezing onto one line ---- */
-  .card__header {
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  #timeframe-selector {
-    flex-wrap: wrap;
-  }
-
-  /* ---- Chart: shorter on small screens ---- */
-  #price-chart {
-    height: 280px;
-  }
-
-  /* ---- Tables: hide secondary columns, keep the essentials
-     (Symbol, Price, Change) usable without horizontal scrolling.
-     Add class="hide-mobile" to any <th>/<td> that should drop off
-     on narrow screens — Market Scanner's Sector, Day Range, Volume,
-     and Reddit Neutral columns are natural candidates. ---- */
-  .hide-mobile {
-    display: none !important;
-  }
-
-  table.holdings {
-    font-size: 0.8125rem;
-  }
-  table.holdings td, table.holdings th {
-    padding: 10px 8px;
-  }
-
-  /* ---- Scanner controls: stack search + sector filter ---- */
-  .scanner-controls {
-    flex-direction: column;
-  }
-  .scanner-controls input[type="text"],
-  .scanner-controls input[type="number"],
-  .scanner-controls select {
-    flex: 1 1 auto;
-    width: 100%;
-  }
-
-  /* ---- Grids: force single column everywhere on phones,
-     regardless of how many columns the desktop version used ---- */
-  .grid-2, .grid-3, .grid-4 {
-    grid-template-columns: 1fr;
-  }
-
-  .sector-checkbox-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-body.theme-reselling {
-  --accent:        #4ADE80;
-  --accent-hover:  #86EFAC;
-  --accent-dim:    #15803D;
-  --accent-glow:   rgba(74, 222, 128, 0.45);
-  --border-strong: rgba(74, 222, 128, 0.38);
-  --border:        rgba(100, 170, 130, 0.16);
-  --surface:       rgba(17, 34, 28, 0.68);
-  --surface-hover: rgba(22, 44, 36, 0.85);
-  --grid-line:     rgba(74, 222, 128, 0.035);
-
-  --bg:            #071409;
-  --bg-elevated:   #0C2013;
-  --nav-bg:        rgba(10, 22, 15, 0.75);
+.scanner-controls input[type="text"] { flex: 1 1 240px; }
+.scanner-controls input[type="number"] { flex: 0 1 140px; }
+.scanner-controls select { flex: 0 1 200px; }
+.scanner-controls input::placeholder { color: var(--text-tertiary); }
+.scanner-controls input:focus, .scanner-controls select:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none;
 }
 
 .ledger-input {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-primary);
-    font-family: inherit;
-    font-size: 0.875rem;
-    padding: 4px 6px;
-    width: 100%;
-    border-radius: var(--radius-sm);
+  background: transparent; border: 1px solid transparent; color: var(--text-primary);
+  font-family: inherit; font-size: var(--text-base); padding: var(--space-1) var(--space-2);
+  width: 100%; border-radius: var(--radius-sm);
 }
-.ledger-input:focus {
-    border-color: var(--accent);
-    background: var(--bg-elevated);
-    outline: none;
-}
-.ledger-input.num {
-    font-family: var(--font-mono);
-    text-align: center;
+.ledger-input:focus { border-color: var(--accent); background: var(--bg-elevated); outline: none; }
+.ledger-input.num { font-family: var(--font-mono); text-align: center; }
+
+/* ---------- Tables ---------- */
+/* Every table scrolls horizontally inside its own card rather than
+   blowing out the page width, at any viewport size. */
+.table-scroll { overflow-x: auto; }
+
+table.holdings { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+
+table.holdings thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  text-align: left;
+  font-size: var(--text-xs);
+  text-transform: uppercase;     /* the one deliberate uppercase use: small table header labels */
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-strong);
 }
 
-.ledger-table {
-    table-layout: fixed;
+table.holdings td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
 }
-.ledger-table th:nth-child(1),
-.ledger-table td:nth-child(1) {
-    width: 34%;
+table.holdings tbody tr { transition: background var(--transition); }
+table.holdings tbody tr:hover td { background: var(--surface-hover); }
+
+table.holdings td.num, table.holdings th.num { text-align: right; }
+
+table.holdings td.symbol { font-family: var(--font-mono); font-weight: 600; }
+table.holdings td.symbol a { color: var(--accent); }
+
+table.holdings th[data-sort-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+table.holdings th[data-sort-key]:hover { color: var(--text-primary); }
+table.holdings th.sorted-asc::after,
+table.holdings th.sorted-desc::after { color: var(--accent); font-size: 0.65rem; margin-left: var(--space-1); }
+table.holdings th.sorted-asc::after { content: "\25B2"; }
+table.holdings th.sorted-desc::after { content: "\25BC"; }
+
+th.lot-title-col { min-width: 220px; }
+td.lot-title { max-width: 320px; }
+td.lot-title a {
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis; line-height: 1.4;
 }
-.ledger-table th:nth-child(n+2),
-.ledger-table td:nth-child(n+2) {
-    width: 11%;
+
+.row-count { font-size: var(--text-xs); color: var(--text-secondary); font-family: var(--font-mono); }
+
+.ledger-table { table-layout: fixed; }
+.ledger-table th:nth-child(1), .ledger-table td:nth-child(1) { width: 34%; }
+.ledger-table th:nth-child(n+2), .ledger-table td:nth-child(n+2) { width: 11%; }
+.ledger-table td:nth-child(1) { white-space: normal; word-break: break-word; }
+
+/* Expandable detail rows */
+th.row-toggle-col { width: 24px; padding-left: var(--space-3) !important; padding-right: 0 !important; }
+td.row-toggle {
+  width: 24px; padding-left: var(--space-3) !important; padding-right: 0 !important;
+  cursor: pointer; color: var(--text-tertiary);
 }
-.ledger-table td:nth-child(1) {
-    white-space: normal;
-    word-break: break-word;
+td.row-toggle::before {
+  content: "\25B6"; display: inline-block; font-size: 0.6rem; transition: transform var(--transition);
+}
+tr.scanner-row.is-expanded td.row-toggle::before { transform: rotate(90deg); }
+tr.scanner-detail td {
+  background: var(--bg-elevated); padding: var(--space-3) var(--space-4) var(--space-4) 46px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-grid { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); font-size: var(--text-sm); color: var(--text-secondary); }
+.detail-grid strong { color: var(--text-primary); font-weight: 600; }
+
+/* Card headers that toggle their body */
+.js-collapsible-header { cursor: pointer; user-select: none; }
+.js-collapsible-header::before {
+  content: "\25BC"; display: inline-block; font-size: 0.65rem; color: var(--text-tertiary);
+  margin-right: var(--space-2); transition: transform var(--transition);
+}
+.js-collapsible-header.is-collapsed::before { transform: rotate(-90deg); }
+
+/* ---------- Tabs (underline style, with count badges) ---------- */
+.scanner-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-4); border-bottom: 1px solid var(--border); }
+.scanner-tab {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4); font-size: var(--text-base); font-weight: 600;
+  color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color var(--transition), border-color var(--transition);
+}
+.scanner-tab:hover { color: var(--text-primary); }
+.scanner-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-badge {
+  background: var(--surface-hover); color: var(--text-secondary); font-size: var(--text-xs);
+  font-family: var(--font-mono); padding: 1px var(--space-2); border-radius: var(--radius-full);
+}
+.scanner-tab.is-active .tab-badge { background: var(--accent-ring); color: var(--accent); }
+.tab-panel__heading {
+  font-size: var(--text-sm); text-transform: none; color: var(--text-secondary);
+  font-weight: 600; margin: 0 0 var(--space-3);
+}
+
+/* ---------- Empty states ---------- */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: var(--space-2); padding: var(--space-10) var(--space-4);
+  color: var(--text-secondary);
+}
+.empty-state__icon { font-size: 1.5rem; opacity: 0.5; }
+.empty-state__title { color: var(--text-primary); font-weight: 600; font-size: var(--text-base); }
+.empty-state__body { font-size: var(--text-sm); max-width: 360px; }
+
+/* ---------- Tooltips ----------
+   Hover/focus-triggered, pure CSS: add data-tooltip="text" to any
+   inline element with class="tooltip-trigger". */
+.tooltip-trigger { position: relative; }
+.tooltip-trigger:hover::after, .tooltip-trigger:focus-visible::after {
+  content: attr(data-tooltip);
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-6px);
+  background: var(--surface-raised); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2); font-size: var(--text-xs);
+  white-space: nowrap; box-shadow: var(--shadow-md); z-index: 50; pointer-events: none;
+}
+
+/* ---------- Toggle switch (strategy on/off) ---------- */
+.toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: var(--surface-hover); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full); transition: background var(--transition), border-color var(--transition);
+}
+.toggle-slider::before {
+  content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px;
+  background: var(--text-secondary); border-radius: 50%; transition: transform var(--transition), background var(--transition);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--gain-bg); border-color: var(--gain); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background: var(--gain); }
+.toggle-switch input:disabled + .toggle-slider { opacity: 0.6; cursor: default; }
+
+/* ---------- Misc ---------- */
+.rule { border: none; border-top: 1px solid var(--border); margin: var(--space-8) 0; }
+.sector-checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); }
+.param-group { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+
+#price-chart { width: 100%; height: 420px; }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 640px) {
+  .navbar__main-row { padding: var(--space-3) var(--space-4); }
+  .navbar__switch-row { padding: var(--space-2) var(--space-4) 0; }
+  .navbar__toggle { display: flex; }
+  .navbar__links {
+    display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 0;
+    background: var(--surface-raised); border-bottom: 1px solid var(--border); padding: var(--space-2) var(--space-4) var(--space-4);
+  }
+  .navbar__links a { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+  .navbar__links a:last-child { border-bottom: none; }
+  #nav-toggle:checked ~ .navbar__links { display: flex; }
+  #nav-toggle:checked ~ .navbar__toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  #nav-toggle:checked ~ .navbar__toggle span:nth-child(2) { opacity: 0; }
+  #nav-toggle:checked ~ .navbar__toggle span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .container { padding: 0 var(--space-4); }
+  .card { padding: var(--space-4); }
+  h1 { font-size: var(--text-2xl); }
+  h2 { font-size: var(--text-xl); }
+  .ledger-stat__value { font-size: var(--text-2xl) !important; }
+  .card__header { flex-wrap: wrap; gap: var(--space-2); }
+  #price-chart { height: 280px; }
+  .hide-mobile { display: none !important; }
+  table.holdings { font-size: var(--text-sm); }
+  table.holdings td, table.holdings th { padding: var(--space-2) var(--space-2); }
+  .scanner-controls { flex-direction: column; }
+  .scanner-controls input, .scanner-controls select { flex: 1 1 auto; width: 100%; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .sector-checkbox-grid { grid-template-columns: 1fr; }
 }

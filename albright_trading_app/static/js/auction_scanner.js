@@ -68,17 +68,40 @@
     }
 
     // ---------- Expandable row detail (click the chevron cell, or anywhere
-    // on the row that isn't a link/button/form) ----------
+    // on the row that isn't a link/button/form; Enter/Space when the
+    // chevron cell itself has keyboard focus) ----------
+    function toggleRow(row) {
+        var detail = detailOf(row);
+        if (!detail) return;
+        detail.hidden = !detail.hidden;
+        row.classList.toggle("is-expanded", !detail.hidden);
+        var toggle = row.querySelector(".row-toggle");
+        if (toggle) toggle.setAttribute("aria-expanded", String(!detail.hidden));
+    }
+
     function initExpandableRows() {
+        document.querySelectorAll("tr.scanner-row").forEach(function (row) {
+            var toggle = row.querySelector(".row-toggle");
+            if (!toggle || !detailOf(row)) return;
+            toggle.setAttribute("tabindex", "0");
+            toggle.setAttribute("role", "button");
+            toggle.setAttribute("aria-expanded", "false");
+            toggle.setAttribute("aria-label", "Toggle details");
+        });
+
         document.querySelectorAll("table.holdings tbody").forEach(function (tbody) {
             tbody.addEventListener("click", function (event) {
                 if (event.target.closest("a, button, form")) return;
                 var row = event.target.closest("tr.scanner-row");
                 if (!row) return;
-                var detail = detailOf(row);
-                if (!detail) return;
-                detail.hidden = !detail.hidden;
-                row.classList.toggle("is-expanded", !detail.hidden);
+                toggleRow(row);
+            });
+            tbody.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                if (!event.target.classList.contains("row-toggle")) return;
+                event.preventDefault();
+                var row = event.target.closest("tr.scanner-row");
+                if (row) toggleRow(row);
             });
         });
     }
@@ -89,10 +112,22 @@
         headers.forEach(function (header) {
             var body = header.nextElementSibling;
             if (!body) return;
-            header.addEventListener("click", function () {
+            header.setAttribute("tabindex", "0");
+            header.setAttribute("role", "button");
+            header.setAttribute("aria-expanded", "true");
+
+            function toggle() {
                 var isHidden = body.hidden;
                 body.hidden = !isHidden;
                 header.classList.toggle("is-collapsed", !isHidden);
+                header.setAttribute("aria-expanded", String(isHidden));
+            }
+
+            header.addEventListener("click", toggle);
+            header.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                toggle();
             });
         });
     }

@@ -1879,3 +1879,12 @@ def registration(request):
 
 def registrationsuccess(request):
     return render(request,'registrationsuccess.html')
+
+
+@login_required
+def styleguide(request):
+    """Preview-only page for the v2 visual redesign (tokens.css) - every
+    token and component shown in both themes, against realistic examples
+    from both apps. Not linked from the live nav; nothing it renders is
+    wired to real data."""
+    return render(request, 'styleguide.html')

@@ -51,6 +51,7 @@
             <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ unsold_count }} unsold item{{ unsold_count|pluralize }} &middot; ${{ unsold_value_at_cost|floatformat:2 }} at cost</span>
         </div>
         {% if aging %}
+        <div class="table-scroll">
         <table class="holdings">
             <thead>
                 <tr><th>Item</th><th class="num">Days Held</th><th class="num">Value at Cost</th><th>Suggested Action</th></tr>
@@ -66,6 +67,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <p style="color: var(--text-secondary);">Nothing unsold right now.</p>
         {% endif %}

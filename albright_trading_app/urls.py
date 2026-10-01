@@ -32,4 +32,5 @@ urlpatterns = [
     path("stock/<str:symbol>/bars/", views.stock_bars_api, name="stock_bars_api"),
     path("account/connect-alpaca/", views.connect_alpaca_account, name="connect_alpaca_account"),
     path("account/disconnect-alpaca/", views.disconnect_alpaca_account, name="disconnect_alpaca_account"),
+    path("styleguide/", views.styleguide, name="styleguide"),
 ]
