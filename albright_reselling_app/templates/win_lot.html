@@ -1,0 +1,61 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card" style="max-width: 640px; margin: 0 auto;">
+        <div class="card__header">
+            <span class="card__label">I Won This</span>
+            <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Back to dashboard</a>
+        </div>
+
+        {% if show_warning %}
+        <div class="alert-warning" style="display: block; margin-bottom: 16px;">
+            You already logged this lot as <strong>{{ existing.item }}</strong>{% if existing.purchase_date %} (bought {{ existing.purchase_date }}){% endif %}.
+        </div>
+        <p>
+            <a href="{% url 'albright_reselling_app:ledger' %}#entry-{{ existing.pk }}" class="btn btn-secondary">View existing entry</a>
+            <a href="{{ confirm_url }}" class="btn btn-secondary">Create another entry anyway</a>
+        </p>
+
+        {% else %}
+        <h3 style="margin-bottom: 4px;"><a href="{{ lot.url }}" target="_blank" rel="noopener">{{ lot.title }}</a></h3>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 20px;">
+            {% if review %}Prediction will use the AI review's resale range (${{ review.resale_low|floatformat:0 }}&ndash;${{ review.resale_high|floatformat:0 }}).
+            {% elif evaluation %}Prediction will use the scanner's expected sale (${{ evaluation.expected_sale|floatformat:2 }}).
+            {% else %}No prediction available for this lot.{% endif %}
+        </p>
+
+        <form method="post">
+            {% csrf_token %}
+            {% if review %}<input type="hidden" name="review" value="{{ review.pk }}">{% endif %}
+            <div class="field"><label>Item</label>{{ form.item }}</div>
+            <div class="grid grid-2">
+                <div class="field"><label>Purchase Date</label>{{ form.purchase_date }}</div>
+                <div class="field"><label>Source</label>{{ form.source }}</div>
+            </div>
+            <div class="grid grid-2">
+                <div class="field"><label>Category</label>{{ form.category }}</div>
+                <div class="field"><label>Listing URL</label>{{ form.listing_url }}</div>
+            </div>
+            <div class="grid grid-3">
+                <div class="field"><label>Winning Bid</label>{{ form.cost }}</div>
+                <div class="field"><label>Buyer's Premium</label>{{ form.buyer_premium }}</div>
+                <div class="field"><label>Sales Tax</label>{{ form.sales_tax }}</div>
+            </div>
+            <div class="grid grid-3">
+                <div class="field"><label>Inbound Shipping/Pickup</label>{{ form.inbound_shipping }}</div>
+                <div class="field"><label>Other Buy Fees</label>{{ form.buy_fees }}</div>
+                <div class="field"><label>Sourcing/Pickup Hours</label>{{ form.purchase_hours }}</div>
+            </div>
+
+            {% if form.errors %}
+            <div class="alert-warning" style="display: block; margin-bottom: 16px;">Please fix the highlighted fields.</div>
+            {% endif %}
+
+            <button type="submit" class="btn btn-primary">Add to Ledger</button>
+        </form>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

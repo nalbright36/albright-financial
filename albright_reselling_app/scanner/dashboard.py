@@ -22,6 +22,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.utils import timezone
 
+from .. import ledger_metrics
 from ..scanner_models import AIReview, AlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice
 from .ai_review_service import months_review_cost, todays_review_count
 
@@ -416,7 +417,7 @@ def _ai_review_stats(cfg):
     }
 
 
-def get_scanner_dashboard_context():
+def get_scanner_dashboard_context(user=None):
     now = timezone.now()
     cfg = settings.RESELLING_SCANNER
     max_age_days = cfg["SPOT"]["max_age_days"]
@@ -508,6 +509,7 @@ def get_scanner_dashboard_context():
         "closed_results_has_maxsold": _has_maxsold(closed_results_rows),
         "ai_review_stats": _ai_review_stats(cfg["AI_REVIEW"]),
         "alerts_status": _alerts_status(),
+        "realized_summary": ledger_metrics.realized_summary(user) if user is not None else None,
         "last_run_lots_seen": sum(
             h["last_run"].lots_seen for h in scanner_health.values() if h["last_run"]
         ),

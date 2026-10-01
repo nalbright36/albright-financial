@@ -1,0 +1,75 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <span class="card__label">Scorecard</span>
+        <a href="{% url 'albright_reselling_app:ledger' %}" style="font-size: 0.8125rem;">&larr; Back to ledger</a>
+    </div>
+
+    {% if conflicting_entries %}
+    <div class="alert-warning" style="display: block; margin-bottom: 20px;">
+        {{ conflicting_entries|length }} item{{ conflicting_entries|length|pluralize }} have both itemized sales and a
+        legacy "sold for" value set - itemized sales are used, sold_for is ignored for these:
+        {% for e in conflicting_entries %}<a href="{% url 'albright_reselling_app:ledger_manage' e.pk %}">{{ e.item }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-3" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Realized Items</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{{ totals.count }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Total Realized Profit</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0; color: {% if totals.total_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ totals.total_profit|floatformat:2 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Avg ROI</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.75rem; border-bottom: none; padding-bottom: 0;">{% if totals.avg_roi_pct is not None %}{{ totals.avg_roi_pct|floatformat:0 }}%{% else %}&mdash;{% endif %}</span>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">By Category</span></div>
+        {% include "_scorecard_group_table.html" with rows=by_category label_heading="Category" %}
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">By Source</span></div>
+        {% include "_scorecard_group_table.html" with rows=by_source label_heading="Source" %}
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">By Prediction Source</span></div>
+        {% include "_scorecard_group_table.html" with rows=by_prediction_source label_heading="Prediction Source" %}
+    </div>
+
+    <div class="card">
+        <div class="card__header">
+            <span class="card__label">Inventory Aging</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ unsold_count }} unsold item{{ unsold_count|pluralize }} &middot; ${{ unsold_value_at_cost|floatformat:2 }} at cost</span>
+        </div>
+        {% if aging %}
+        <table class="holdings">
+            <thead>
+                <tr><th>Item</th><th class="num">Days Held</th><th class="num">Value at Cost</th><th>Suggested Action</th></tr>
+            </thead>
+            <tbody>
+                {% for row in aging %}
+                <tr>
+                    <td><a href="{% url 'albright_reselling_app:ledger_manage' row.entry.pk %}">{{ row.entry.item }}</a></td>
+                    <td class="num">{{ row.days_held }}</td>
+                    <td class="num">${{ row.value_at_cost|floatformat:2 }}</td>
+                    <td>{% if row.suggested_action %}<span class="badge warn">{{ row.suggested_action }}</span>{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-secondary);">Nothing unsold right now.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

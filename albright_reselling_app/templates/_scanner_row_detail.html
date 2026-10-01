@@ -29,6 +29,9 @@ Expects `row` and `colspan` in context.
                 {% if row.ai_review.result.summary %} &mdash; {{ row.ai_review.result.summary|truncatechars:140 }}{% endif %}
             </span>
             {% endif %}
+            <span>
+                <a href="{% url 'albright_reselling_app:ledger_win_lot' row.lot_id %}{% if row.ai_review %}?review={{ row.ai_review.pk }}{% endif %}" class="btn btn-secondary btn-sm">I Won This</a>
+            </span>
         </div>
     </td>
 </tr>

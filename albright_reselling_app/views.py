@@ -98,7 +98,7 @@ def dashboard(request):
         "under_max_hammer": under_max_hammer,
         "pending_jobs": pending_jobs[:5],
     }
-    context.update(get_scanner_dashboard_context())
+    context.update(get_scanner_dashboard_context(user=user))
     return render(request, "dashboard.html", context)
 
 

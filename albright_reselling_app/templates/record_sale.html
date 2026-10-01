@@ -1,0 +1,35 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <div class="card" style="max-width: 560px; margin: 0 auto;">
+        <div class="card__header">
+            <span class="card__label">Record a Sale</span>
+            <a href="{% url 'albright_reselling_app:ledger_manage' entry.pk %}" style="font-size: 0.8125rem;">&larr; Back</a>
+        </div>
+        <h3 style="margin-bottom: 6px;">{{ entry.item }}</h3>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 20px;">
+            Adds one sale against this item - use this for each buyer if you sell it off in pieces.
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="grid grid-2">
+                <div class="field"><label>Sale Date</label>{{ form.sale_date }}</div>
+                <div class="field"><label>Sale Price</label>{{ form.sale_price }}</div>
+            </div>
+            <div class="field"><label>Channel</label>{{ form.channel }}</div>
+            <div class="grid grid-2">
+                <div class="field"><label>Selling Fees</label>{{ form.selling_fees }}</div>
+                <div class="field"><label>Outbound Shipping</label>{{ form.outbound_shipping }}</div>
+            </div>
+            <div class="field"><label>Hours Spent (listing/packing)</label>{{ form.hours_spent }}</div>
+            <div class="field"><label>Notes</label>{{ form.notes }}</div>
+
+            {% if form.errors %}
+            <div class="alert-warning" style="display: block; margin-bottom: 16px;">Please fix the highlighted fields.</div>
+            {% endif %}
+
+            <button type="submit" class="btn btn-primary">Record Sale</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

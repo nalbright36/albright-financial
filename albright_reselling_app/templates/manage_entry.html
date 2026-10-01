@@ -1,0 +1,156 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <span class="card__label">Manage: {{ entry.item }}</span>
+        <a href="{% url 'albright_reselling_app:ledger' %}" style="font-size: 0.8125rem;">&larr; Back to ledger</a>
+    </div>
+
+    {% if entry.has_conflicting_sale_data %}
+    <div class="alert-warning" style="display: block; margin-bottom: 20px;">
+        This entry has both itemized sales and a legacy "sold for" value set. Itemized sales are used for every
+        total; sold_for/sell_fees/sell_shipping below are ignored. Clear sold_for on the ledger spreadsheet if that
+        was a mistake.
+    </div>
+    {% endif %}
+
+    <div class="grid grid-4" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Status</span></div>
+            <span class="badge {% if entry.status == 'sold_out' %}gain{% elif entry.status == 'written_off' %}loss{% elif entry.status == 'partially_sold' %}neutral{% else %}warn{% endif %}" style="font-size: 0.875rem;">{{ entry.get_status_display }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Profit</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if entry.profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ entry.profit|floatformat:2 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">ROI</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{% if entry.roi_pct is not None %}{{ entry.roi_pct|floatformat:0 }}%{% else %}&mdash;{% endif %}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Profit / Hour</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{% if entry.profit_per_hour is not None %}${{ entry.profit_per_hour|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+        </div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Edit Details</span></div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="field"><label>Item</label>{{ form.item }}</div>
+                <div class="grid grid-2">
+                    <div class="field"><label>Purchase Date</label>{{ form.purchase_date }}</div>
+                    <div class="field"><label>Purchase Hours</label>{{ form.purchase_hours }}</div>
+                </div>
+                <div class="grid grid-2">
+                    <div class="field"><label>Source</label>{{ form.source }}</div>
+                    <div class="field"><label>Category</label>{{ form.category }}</div>
+                </div>
+                <div class="field"><label>Listing URL</label>{{ form.listing_url }}</div>
+                <button type="submit" class="btn btn-primary">Save Details</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card__header"><span class="card__label">Prediction &amp; Scanner Snapshot</span></div>
+            {% if entry.scanner_lot %}<p style="margin-top: 0;"><a href="{{ entry.scanner_lot.url }}" target="_blank" rel="noopener">View original listing</a></p>{% endif %}
+            {% if entry.predicted_sale_low is not None %}
+            <p>Predicted: ${{ entry.predicted_sale_low|floatformat:0 }}&ndash;${{ entry.predicted_sale_high|floatformat:0 }} <span style="color: var(--text-secondary);">({{ entry.get_predicted_sale_source_display }})</span></p>
+            {% if entry.total_realized is not None %}
+            <p>Prediction error:
+                <span style="color: {% if entry.prediction_error_dollars >= 0 %}var(--gain){% else %}var(--loss){% endif %};">
+                    {% if entry.prediction_error_dollars >= 0 %}+{% endif %}${{ entry.prediction_error_dollars|floatformat:2 }}
+                    ({% if entry.prediction_error_pct >= 0 %}+{% endif %}{{ entry.prediction_error_pct|floatformat:0 }}%)
+                </span>
+            </p>
+            {% endif %}
+            {% else %}
+            <p style="color: var(--text-secondary);">No prediction recorded for this item.</p>
+            {% endif %}
+            {% if entry.scanner_max_bid is not None %}<p>Scanner max bid: ${{ entry.scanner_max_bid|floatformat:2 }}</p>{% endif %}
+            {% if entry.ai_suggested_max_bid is not None %}<p>AI suggested max bid: ${{ entry.ai_suggested_max_bid|floatformat:2 }}</p>{% endif %}
+            {% if entry.melt_value is not None %}<p>Melt value: ${{ entry.melt_value|floatformat:2 }}</p>{% endif %}
+            {% if entry.days_to_sell is not None %}<p>Days to sell: {{ entry.days_to_sell }}</p>{% endif %}
+            {% if entry.status == 'holding' or entry.status == 'partially_sold' %}
+            <p>Days held: {{ entry.days_held }}{% if entry.aging_suggestion %} &middot; <span class="badge warn">{{ entry.aging_suggestion }}</span>{% endif %}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if legacy_form %}
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">Split Legacy Costs</span></div>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 12px;">
+            {% if entry.fees %}Old fees (unsplit): ${{ entry.fees|floatformat:2 }} &mdash; split into buy fees + sell fees below.{% endif %}
+            {% if entry.shipping %}{% if entry.fees %}<br>{% endif %}Old shipping (unsplit): ${{ entry.shipping|floatformat:2 }} &mdash; split into inbound + sell shipping below.{% endif %}
+        </p>
+        <form method="post" action="{% url 'albright_reselling_app:ledger_split_legacy' entry.pk %}">
+            {% csrf_token %}
+            {% if entry.fees %}
+            <div class="grid grid-2">
+                <div class="field"><label>New Buy Fees</label>{{ legacy_form.new_buy_fees }}</div>
+                <div class="field"><label>New Sell Fees</label>{{ legacy_form.new_sell_fees }}</div>
+            </div>
+            {% endif %}
+            {% if entry.shipping %}
+            <div class="grid grid-2">
+                <div class="field"><label>New Inbound Shipping</label>{{ legacy_form.new_inbound_shipping }}</div>
+                <div class="field"><label>New Sell Shipping</label>{{ legacy_form.new_sell_shipping }}</div>
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-secondary">Apply Split</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">Sales</span>
+            <a href="{% url 'albright_reselling_app:ledger_record_sale' entry.pk %}" class="btn btn-secondary btn-sm">Record a Sale</a>
+        </div>
+        {% with sales=entry.sales.all %}
+        {% if sales %}
+        <table class="holdings">
+            <thead>
+                <tr><th>Date</th><th>Channel</th><th class="num">Price</th><th class="num">Fees</th><th class="num">Shipping</th><th class="num">Hours</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>{{ sale.sale_date }}</td>
+                    <td>{{ sale.get_channel_display }}</td>
+                    <td class="num">${{ sale.sale_price|floatformat:2 }}</td>
+                    <td class="num">${{ sale.selling_fees|floatformat:2 }}</td>
+                    <td class="num">${{ sale.outbound_shipping|floatformat:2 }}</td>
+                    <td class="num">{{ sale.hours_spent }}</td>
+                    <td>{{ sale.notes|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% elif entry.sold_for is not None %}
+        <p>Sold for ${{ entry.sold_for|floatformat:2 }}{% if entry.sold_date %} on {{ entry.sold_date }}{% endif %} (legacy single-sale field - fill in sold_date on the ledger spreadsheet if blank, so days-to-sell can be calculated).</p>
+        {% else %}
+        <p style="color: var(--text-secondary);">No sales recorded yet.</p>
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="card">
+        <div class="card__header"><span class="card__label">Status Actions</span></div>
+        <form method="post" action="{% url 'albright_reselling_app:ledger_set_status' entry.pk %}" style="display: inline-block; margin-right: 10px;">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="sold_out">
+            <button type="submit" class="btn btn-secondary" {% if entry.status == 'sold_out' %}disabled{% endif %}>Mark Sold Out</button>
+        </form>
+        <form method="post" action="{% url 'albright_reselling_app:ledger_set_status' entry.pk %}" style="display: inline-block;">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="written_off">
+            <button type="submit" class="btn btn-secondary" {% if entry.status == 'written_off' %}disabled{% endif %}>Write Off</button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

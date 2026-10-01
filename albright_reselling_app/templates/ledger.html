@@ -1,20 +1,27 @@
 {% extends "index.html" %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
-    <h1 style="margin-bottom: 20px;">Ledger</h1>
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Ledger</h1>
+        <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" style="font-size: 0.8125rem;">View Scorecard &rarr;</a>
+    </div>
 
     <!-- Single-line add-entry form -->
     <form method="post" style="margin-bottom: 24px;">
         {% csrf_token %}
-        <div class="card" style="padding: 0;">
+        <div class="card" style="padding: 0; overflow-x: auto;">
             <table class="holdings ledger-table">
                 <thead>
                     <tr>
                         <th>Item</th>
                         <th class="num">Cost</th>
-                        <th class="num">Fees</th>
-                        <th class="num">Shipping</th>
+                        <th class="num">Premium</th>
+                        <th class="num">Tax</th>
+                        <th class="num">Buy Fees</th>
+                        <th class="num">Inbound Ship</th>
                         <th class="num">Sold For</th>
+                        <th class="num">Sell Fees</th>
+                        <th class="num">Sell Ship</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -22,9 +29,13 @@
                     <tr>
                         <td>{{ add_form.item }}</td>
                         <td class="num">{{ add_form.cost }}</td>
-                        <td class="num">{{ add_form.fees }}</td>
-                        <td class="num">{{ add_form.shipping }}</td>
+                        <td class="num">{{ add_form.buyer_premium }}</td>
+                        <td class="num">{{ add_form.sales_tax }}</td>
+                        <td class="num">{{ add_form.buy_fees }}</td>
+                        <td class="num">{{ add_form.inbound_shipping }}</td>
                         <td class="num">{{ add_form.sold_for }}</td>
+                        <td class="num">{{ add_form.sell_fees }}</td>
+                        <td class="num">{{ add_form.sell_shipping }}</td>
                         <td><button type="submit" name="add_entry" class="btn btn-primary">Add</button></td>
                     </tr>
                 </tbody>
@@ -37,30 +48,47 @@
         {% csrf_token %}
         {{ formset.management_form }}
 
-        <div class="card" style="padding: 0;">
+        <div class="card" style="padding: 0; overflow-x: auto;">
             <table class="holdings ledger-table">
                 <thead>
                     <tr>
                         <th>Item</th>
                         <th class="num">Cost</th>
-                        <th class="num">Fees</th>
-                        <th class="num">Shipping</th>
-                        <th class="num">Total</th>
+                        <th class="num">Premium</th>
+                        <th class="num">Tax</th>
+                        <th class="num">Buy Fees</th>
+                        <th class="num">Inbound Ship</th>
+                        <th class="num">Buy Total</th>
                         <th class="num">Sold For</th>
+                        <th class="num">Sell Fees</th>
+                        <th class="num">Sell Ship</th>
                         <th class="num">Profit</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for form in formset %}
-                    <tr>
+                    <tr id="entry-{{ form.instance.pk }}">
                         {{ form.id }}
-                        <td>{{ form.item }}</td>
+                        <td>
+                            {{ form.item }}
+                            <div style="margin-top: 4px; font-size: 0.75rem; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                                <span class="badge {% if form.instance.status == 'sold_out' %}gain{% elif form.instance.status == 'written_off' %}loss{% elif form.instance.status == 'partially_sold' %}neutral{% else %}warn{% endif %}">{{ form.instance.get_status_display }}</span>
+                                {% if form.instance.has_legacy_amounts %}<span class="badge warn" title="Old fees/shipping not yet split into buy/sell">legacy</span>{% endif %}
+                                {% if form.instance.has_conflicting_sale_data %}<span class="badge loss" title="Both itemized sales and sold_for are set">conflict</span>{% endif %}
+                                {% if form.instance.scanner_lot_id %}<span class="badge neutral">scanner</span>{% endif %}
+                                <a href="{% url 'albright_reselling_app:ledger_manage' form.instance.pk %}">Manage</a>
+                            </div>
+                        </td>
                         <td class="num">{{ form.cost }}</td>
-                        <td class="num">{{ form.fees }}</td>
-                        <td class="num">{{ form.shipping }}</td>
-                        <td class="num">{{ form.instance.total|floatformat:2 }}</td>
+                        <td class="num">{{ form.buyer_premium }}</td>
+                        <td class="num">{{ form.sales_tax }}</td>
+                        <td class="num">{{ form.buy_fees }}</td>
+                        <td class="num">{{ form.inbound_shipping }}</td>
+                        <td class="num">{{ form.instance.buy_side_cost|floatformat:2 }}</td>
                         <td class="num">{{ form.sold_for }}</td>
+                        <td class="num">{{ form.sell_fees }}</td>
+                        <td class="num">{{ form.sell_shipping }}</td>
                         <td class="num {% if form.instance.profit >= 0 %}gain{% else %}loss{% endif %}">
                             {{ form.instance.profit|floatformat:2 }}
                         </td>
@@ -72,10 +100,14 @@
                     <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
                         <td>Totals</td>
                         <td class="num">{{ totals.cost|floatformat:2 }}</td>
-                        <td class="num">{{ totals.fees|floatformat:2 }}</td>
-                        <td class="num">{{ totals.shipping|floatformat:2 }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
                         <td class="num">{{ totals.total|floatformat:2 }}</td>
                         <td class="num">{{ totals.sold_for|floatformat:2 }}</td>
+                        <td></td>
+                        <td></td>
                         <td class="num {% if totals.profit >= 0 %}gain{% else %}loss{% endif %}">{{ totals.profit|floatformat:2 }}</td>
                         <td></td>
                     </tr>

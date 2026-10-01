@@ -692,6 +692,34 @@
                 <a href="{% url 'albright_reselling_app:ai_review_history' %}">Open AI Reviews history &rarr;</a>
             </p>
         </div>
+
+        {% if realized_summary %}
+        <div class="card" style="margin-top: 20px;">
+            <div class="card__header">
+                <span class="card__label">Realized</span>
+                <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" style="font-size: 0.75rem;">Open Scorecard &rarr;</a>
+            </div>
+            <div class="grid grid-4">
+                <div>
+                    <div class="row-count" style="margin-bottom: 4px;">Bought This Month</div>
+                    <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ realized_summary.bought_this_month }}</span>
+                </div>
+                <div>
+                    <div class="row-count" style="margin-bottom: 4px;">Sold This Month</div>
+                    <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ realized_summary.sold_this_month }}</span>
+                </div>
+                <div>
+                    <div class="row-count" style="margin-bottom: 4px;">Realized Profit This Month</div>
+                    <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if realized_summary.realized_profit_this_month >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ realized_summary.realized_profit_this_month|floatformat:2 }}</span>
+                </div>
+                <div>
+                    <div class="row-count" style="margin-bottom: 4px;">Unsold Inventory</div>
+                    <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ realized_summary.unsold_count }}</span>
+                    <div class="row-count">${{ realized_summary.unsold_value_at_cost|floatformat:2 }} at cost</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
 </div>

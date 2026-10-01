@@ -1,0 +1,29 @@
+{% comment %}Expects `rows` (list of dicts from ledger_metrics._group_summary) and `label_heading` in context.{% endcomment %}
+<table class="holdings">
+    <thead>
+        <tr>
+            <th>{{ label_heading }}</th>
+            <th class="num">Count</th>
+            <th class="num">Total Profit</th>
+            <th class="num">Avg ROI</th>
+            <th class="num">Avg Days to Sell</th>
+            <th class="num">Median Pred. Error</th>
+            <th class="num">Unsplit Legacy</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <td>{{ row.label }}</td>
+            <td class="num">{{ row.count }}</td>
+            <td class="num" style="color: {% if row.total_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.total_profit|floatformat:2 }}</td>
+            <td class="num">{% if row.avg_roi_pct is not None %}{{ row.avg_roi_pct|floatformat:0 }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.avg_days_to_sell is not None %}{{ row.avg_days_to_sell|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.median_prediction_error_pct is not None %}{{ row.median_prediction_error_pct|floatformat:0 }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.legacy_unsplit_count %}{{ row.legacy_unsplit_count }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" style="color: var(--text-secondary);">No realized items yet.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
