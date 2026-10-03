@@ -130,6 +130,7 @@
                 <option value="">All sources</option>
                 <option value="shopgoodwill">ShopGoodwill</option>
                 <option value="maxsold">MaxSold</option>
+                <option value="hibid">HiBid</option>
             </select>
             <select id="af-category">
                 <option value="">All categories</option>
@@ -192,6 +193,7 @@
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
+                            {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -247,6 +249,7 @@
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
+                            {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -308,6 +311,7 @@
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
+                            {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -415,6 +419,7 @@
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
+                            {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -470,6 +475,7 @@
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
+                            {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>

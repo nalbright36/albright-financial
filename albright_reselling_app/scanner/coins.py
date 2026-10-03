@@ -42,7 +42,8 @@ COIN_TYPES = [
              note="modern $5 gold: 1/10 oz Eagle or 0.24 oz commemorative - valued at 1/10 oz"),
     CoinType("quarter_eagle_gold", "gold", 0.12094, (r"\$2(\.| 1/)?5 gold", r"quarter eagle"),
              numismatic=True, gross_g=4.18),
-    CoinType("krugerrand", "gold", 1.0, (r"krugerrand",), fractional=True),
+    CoinType("silver_krugerrand", "silver", 1.0, (r"silver.{0,40}krugerrand|krugerrand.{0,40}silver",), gross_g=31.1),
+    CoinType("krugerrand", "gold", 1.0, (r"^(?!.*silver).*krugerrand",), fractional=True),  # gold only
     CoinType("gold_buffalo", "gold", 1.0, (r"gold buffalo",), gross_g=31.1),
     CoinType("gold_eagle_1oz", "gold", 1.0, (r"gold eagle",), fractional=True),
     # Silver dollars and bullion
@@ -83,6 +84,7 @@ NOT_COIN_PATTERNS = [
     r"\bstuds?\b", r"jewel(le)?ry", r"cuff ?links?", r"anklet", r"\bchain\b",
     r"shirt", r"hoodie", r"jacket", r"\bhat\b", r"microphone", r"camera", r"figurine", r"statue",
     r"belt buckle", r"\bpatch\b", r"poster", r"\bmug\b", r"knife", r"lighter", r"\bwatch\b",
+    r"\bpins?\b", r"tie (?:bar|clip|tack)",
 ]
 # Real coin/bullion listings almost always use at least one of these words.
 COIN_CONTEXT = (r"\bcoins?\b|dollars?\b|\bhalf\b|halves|quarters?\b|\bdimes?\b|nickels?\b|\bcents?\b"
@@ -113,7 +115,9 @@ QTY_PATTERNS = [
     r"|half dollars|quarters|dimes|nickels|rounds|bars)\b",
 ]
 YEAR_RE = re.compile(r"\b(17[89]\d|18\d\d|19\d\d|20[0-2]\d)\b")
-GRAMS_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?|\.\d+)\s*(?:g|grams?)\b")
+GRAMS_RE = re.compile(r"(?<![\d./])(\d+(?:\.\d+)?|\.\d+)\s*(?:g|grams?)\b")  # not "1/2 gram"
+FRACTION_GRAMS_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\s*(?:g|grams?)\b")
+OZ_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?|\.\d+)\s*(?:troy\s*)?(?:oz|ounces?)\b")
 FRACTION_RE = re.compile(r"\b1/(2|4|10|20)\s*(?:troy\s*)?oz")
 ONE_OZ_RE = re.compile(r"\b1\s*(?:troy\s*)?oz\b|one (?:troy )?ounce")
 
@@ -158,15 +162,23 @@ def _quantity(text: str) -> int | None:
     return None
 
 
+KARAT_RE = re.compile(r"\b(?:8|9|10|14|18|22)\s?(?:k|kt|karat|carat)\b|\b(?:417|585|750|916)\b")
+
+
 def _generic_bullion(text: str) -> ParsedItem | None:
+    if KARAT_RE.search(text):
+        return None  # karat gold is jewelry, never bullion ("one 5.5mm round" garnet in 14k...)
     metal = "gold" if "gold" in text else "silver" if "silver" in text else None
     if not metal or not re.search(r"\.999|\b999\b|fine (silver|gold)|bullion|\bbar\b|\bround\b", text):
         return None
     purity = 0.925 if (metal == "silver" and re.search(r"sterling|\b925\b", text)) else 1.0
     frac = FRACTION_RE.search(text)
-    oz = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:troy\s*)?(?:oz|ounces?)\b", text)
+    frac_g = FRACTION_GRAMS_RE.search(text)
+    oz = OZ_RE.search(text)
     grams = GRAMS_RE.search(text)
-    if frac:
+    if frac_g and int(frac_g.group(2)):
+        weight = int(frac_g.group(1)) / int(frac_g.group(2)) / GRAMS_PER_TROY_OZ
+    elif frac:
         weight = 1 / int(frac.group(1))
     elif oz:
         weight = float(oz.group(1))

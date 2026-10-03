@@ -42,7 +42,7 @@ class JewelryTests(TestCase):
 
     def test_stones_reduce_weight(self):
         r = parse_jewelry_text("10k gold ring with sapphire 4.0g")
-        self.assertEqual(r.confidence, "medium")
+        self.assertEqual(r.confidence, "low")  # colored stone
         self.assertAlmostEqual(r.items[0].oz_each, 3.6 * 0.417 / 31.1035, places=4)
 
     def test_mixed_karats_use_lowest(self):
@@ -97,9 +97,26 @@ class JewelryTests(TestCase):
                          "jewelry_sterling")
 
 
+    def test_pearl_strand_is_low(self):
+        for t in ["Pearl Necklace Strand and Bracelet Set in 14k Yellow Gold 38g",
+                  "Italian Lapis Lazuli Ball Bead Necklace in 14k Yellow Gold 22g"]:
+            r = parse_jewelry_text(t)
+            self.assertEqual(r.confidence, "low", t)
+            self.assertIn("mostly_stones", r.flags)
+
+
+    def test_leading_decimal_ounces(self):
+        r = parse_jewelry_text("Fine Sterling 8 inch Bracelet",
+                               "The total weight is .60 troy ounces")
+        self.assertAlmostEqual(r.items[0].oz_each, 0.60 * 0.925, places=3)
+
+    def test_implausible_bracelet_weight_is_low(self):
+        self.assertEqual(parse_jewelry_text("Sterling Silver Bangle Bracelet 925 400g").confidence, "low")
+
+
 class LeadTests(TestCase):
     def test_game_lot_is_lead(self):
-        r = evaluate_lead("Lot of 8 Nintendo 64 N64 Games Mario Kart Zelda", "", 25.0, LIMITS)
+        r = evaluate_lead("Lot of 8 Nintendo 64 N64 Games Mario Kart Zelda Complete in Box", "", 25.0, LIMITS)
         self.assertTrue(r.is_lead)
         self.assertEqual((r.category, r.subtype), ("games", "n64"))
         self.assertIn("bulk lot", r.signals)
@@ -122,6 +139,49 @@ class LeadTests(TestCase):
         r = evaluate_lead("1989 Upper Deck Ken Griffey Jr Rookie PSA 8", "", 20.0, LIMITS)
         self.assertTrue(r.is_lead)
         self.assertIn("graded", r.signals)
+
+    def test_single_weak_signal_not_lead(self):
+        r = evaluate_lead("Lot of Nintendo 64 Games", "", 10.0, LIMITS)
+        self.assertFalse(r.is_lead)
+        self.assertIn("no strong signal", r.excluded_reason)
+
+    def test_cards_need_strong_signal(self):
+        self.assertFalse(evaluate_lead("Pokemon Card Lot with Holos", "", 10.0, LIMITS).is_lead)
+        self.assertTrue(evaluate_lead("Pokemon Card Binder Vintage WOTC Holos", "", 10.0, LIMITS).is_lead)
+        self.assertTrue(evaluate_lead("1989 Upper Deck Ken Griffey Jr Rookie Card PSA 8", "", 10.0, LIMITS).is_lead)
+
+    def test_lead_window(self):
+        t = "GameCube Console Bundle with Games"
+        self.assertTrue(evaluate_lead(t, "", 30.0, LIMITS, hours_left=10, window_hours=48).is_lead)
+        self.assertFalse(evaluate_lead(t, "", 30.0, LIMITS, hours_left=100, window_hours=48).is_lead)
+
+    def test_fraction_gram_jewelry(self):
+        r = parse_jewelry_text("14k gold charm 1/2 gram")
+        self.assertAlmostEqual(r.items[0].oz_each, 0.5 * 0.583 / 31.1035, places=3)
+
+    def test_colored_stone_pieces_are_low_diamond_accents_ok(self):
+        for t in ["Quartz Energy Amplifier Pendant in 14K Yellow Gold 9g",
+                  "Ruby Frosted Quartz Heart Pendant in 14k Yellow Gold 6g",
+                  "Blue Kyanite Dangle Earrings in 14k Yellow Gold 3g"]:
+            self.assertEqual(parse_jewelry_text(t).confidence, "low", t)
+        self.assertEqual(parse_jewelry_text("14k Gold Diamond Accent Heart Pendant 2.1g").confidence, "medium")
+
+    def test_garnet_pin_with_round_stone_is_jewelry_low(self):
+        from albright_reselling_app.scanner.valuers import classify
+        desc = ("In 14K Yellow Gold. Contains one 12 x 8mm marquise, one 5.5mm round, and one 4.5mm round "
+                "high quality natural Garnet gemstones. 2 inches long. 8.0g")
+        c = classify("Vintage Garnet Pin in 14K Yellow Gold", desc, 910, LIMITS)
+        self.assertEqual((c.category, c.parse.confidence), ("jewelry", "low"))
+
+    def test_porcelain_pendant_is_low(self):
+        r = parse_jewelry_text("Large Hand Painted Flower Porcelain Pendant in 10k Gold 14g")
+        self.assertEqual(r.confidence, "low")
+
+    def test_stone_bracelets_and_necklaces_are_low(self):
+        for t in ["Jade Good Fortune Bracelet in 14K Yellow Gold 18g",
+                  "Blue Kyanite Station Dangle Necklace in 14k Yellow Gold 10g"]:
+            self.assertEqual(parse_jewelry_text(t).confidence, "low", t)
+        self.assertEqual(parse_jewelry_text("14k Gold Rope Chain Necklace 6.2g").confidence, "high")
 
     def test_exclusions(self):
         for t in ["Lot Of Pokemon Commemorative Coins", "Pokemon Plush Lot", "Repro NES Cartridge Lot",

@@ -36,6 +36,28 @@ def _make_maxsold_lot(external_id, end_time, auction_id, city="Riverview", dista
     )
 
 
+def _make_hibid_lot(external_id, end_time, current_price=40.0, ships=True, miles=None,
+                     distance_estimated=False, end_time_source="time_left", premium_pct=0.21):
+    raw = {
+        "_costs": {"buyer_premium_pct": premium_pct, "premium_text": f"{premium_pct * 100:.0f}%"},
+        "_hibid": {
+            "pass": "shipping" if ships else "pickup", "end_time_source": end_time_source, "ships": ships,
+            "shipping_type": "SHIPPING_OFFERED_ALL", "auction_id": 777, "auction_title": "Saturday Showcase",
+            "auctioneer_id": 55, "auctioneer": "Hessney Auction Co.", "city": "Geneva", "state": "NY",
+            "zip": "14456", "lot_number": "12", "picture_count": 6, "status": "OPEN",
+        },
+    }
+    if not ships:
+        raw["_pickup"] = {
+            "distance_miles": miles if miles is not None else 30.0, "distance_estimated": distance_estimated,
+            "auction_id": 777, "auction_title": "Saturday Showcase", "city": "Geneva, NY", "has_shipping": False,
+        }
+    return SourcedLot.objects.create(
+        source="hibid", external_id=external_id, url=f"https://hibid.com/lot/{external_id}",
+        title=f"10 oz .999 Fine Silver Bar {external_id}", current_price=current_price, end_time=end_time, raw=raw,
+    )
+
+
 def _make_evaluation(lot, is_candidate, max_bid=20.0, headroom=5.0, confidence="high"):
     return LotEvaluation.objects.create(
         lot=lot, is_candidate=is_candidate, max_bid=Decimal(str(max_bid)), headroom=Decimal(str(headroom)),
@@ -420,6 +442,83 @@ class ScannerDashboardContextTests(TestCase):
 
         self.assertFalse(context["live_candidates_ending_soon"][0]["is_relisted"])
 
+    def test_hibid_row_carries_auctioneer_premium_and_city_state(self):
+        lot = _make_hibid_lot("hibid-ctx-1", timezone.now() + timedelta(hours=3), premium_pct=0.21)
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+        row = context["live_candidates_ending_soon"][0]
+
+        self.assertEqual(row["auctioneer"], "Hessney Auction Co.")
+        self.assertEqual(row["hibid_city_state"], "Geneva, NY")
+        self.assertEqual(row["premium_pct"], 21.0)
+        self.assertFalse(row["end_time_estimated"])
+
+    def test_hibid_pickup_lot_carries_pickup_and_estimate_marker(self):
+        lot = _make_hibid_lot(
+            "hibid-ctx-2", timezone.now() + timedelta(hours=3), ships=False, distance_estimated=True,
+        )
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+        row = context["live_candidates_ending_soon"][0]
+
+        self.assertIsNotNone(row["pickup"])
+        self.assertTrue(row["pickup"]["distance_estimated"])
+
+    def test_hibid_auction_close_end_time_flagged_estimated(self):
+        lot = _make_hibid_lot("hibid-ctx-3", timezone.now() + timedelta(hours=3), end_time_source="auction_close")
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+        row = context["live_candidates_ending_soon"][0]
+
+        self.assertTrue(row["end_time_estimated"])
+
+    def test_non_hibid_row_has_no_hibid_detail_fields(self):
+        lot = _make_lot("non-hibid-ctx", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+        row = context["live_candidates_ending_soon"][0]
+
+        self.assertNotIn("auctioneer", row)
+
+    def test_pickup_column_shown_for_hibid_pickup_only_lots(self):
+        """_has_maxsold (the Pickup-column gate) keys on real pickup data,
+        not source == "maxsold" specifically - a watched HiBid pickup lot
+        must still get the column, same as MaxSold always has."""
+        lot = _make_hibid_lot("hibid-ctx-4", timezone.now() + timedelta(hours=3), ships=False)
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+
+        self.assertTrue(context["live_candidates_ending_soon_has_maxsold"])
+
+    def test_reserve_not_met_flag_true_on_row(self):
+        # confidence="low" + affordable (headroom>=0) lands this in
+        # check_by_hand regardless of is_candidate - exactly the kind of
+        # row a reserve-not-met lot (forced out of the candidate tables)
+        # would actually show up in.
+        lot = _make_hibid_lot("reserve-ctx-1", timezone.now() + timedelta(hours=3))
+        LotEvaluation.objects.create(
+            lot=lot, is_candidate=False, max_bid=Decimal("20.0"), headroom=Decimal("5.0"),
+            confidence="low", flags=["reserve_not_met"],
+        )
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(len(context["check_by_hand"]), 1)
+        self.assertTrue(context["check_by_hand"][0]["reserve_not_met"])
+
+    def test_reserve_not_met_flag_false_by_default(self):
+        lot = _make_hibid_lot("reserve-ctx-2", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        context = get_scanner_dashboard_context()
+
+        self.assertFalse(context["live_candidates_ending_soon"][0]["reserve_not_met"])
+
 
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
@@ -464,6 +563,7 @@ class DashboardViewTests(TestCase):
     def test_status_bar_shows_ok_dot_for_healthy_run(self):
         ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1)
         ScanRun.objects.create(source="maxsold", lots_seen=5, candidates=1)
+        ScanRun.objects.create(source="hibid", lots_seen=5, candidates=1)
 
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
@@ -575,6 +675,64 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
         self.assertNotContains(response, "Relisted")
+
+    def test_reserve_not_met_badge_shown(self):
+        lot = _make_hibid_lot("reserve-page-1", timezone.now() + timedelta(hours=3))
+        LotEvaluation.objects.create(
+            lot=lot, is_candidate=False, max_bid=Decimal("20.0"), headroom=Decimal("5.0"),
+            confidence="low", flags=["reserve_not_met"],
+        )
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Reserve not met")
+
+    def test_no_reserve_not_met_badge_without_the_flag(self):
+        lot = _make_hibid_lot("reserve-page-2", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertNotContains(response, "Reserve not met")
+
+    def test_hibid_source_filter_option_present(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, '<option value="hibid">HiBid</option>')
+
+    def test_hibid_detail_shows_auctioneer_premium_and_city_state(self):
+        lot = _make_hibid_lot("hibid-page-1", timezone.now() + timedelta(hours=3), premium_pct=0.21)
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Hessney Auction Co.")
+        self.assertContains(response, "Geneva, NY")
+        self.assertContains(response, "21% premium")
+
+    def test_hibid_pickup_lot_shows_pickup_and_estimate_badge(self):
+        lot = _make_hibid_lot(
+            "hibid-page-2", timezone.now() + timedelta(hours=3), ships=False, distance_estimated=True,
+        )
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Pickup:")
+        self.assertContains(response, "est.")
+
+    def test_hibid_auction_close_end_time_shows_estimate_badge(self):
+        lot = _make_hibid_lot("hibid-page-3", timezone.now() + timedelta(hours=3), end_time_source="auction_close")
+        _make_evaluation(lot, is_candidate=True)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "est. end time")
+
+    def test_hibid_in_health_status_bar(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "HiBid")
 
 
 class LedgerTilesDashboardTests(TestCase):

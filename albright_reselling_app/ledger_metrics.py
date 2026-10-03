@@ -134,7 +134,7 @@ def realized_summary(owner, now=None):
 
     entries = list(LedgerEntry.objects.filter(owner=owner).prefetch_related("sales"))
     bought_this_month = sum(
-        1 for e in entries if (e.purchase_date or e.created_at.date()) >= month_start
+        1 for e in entries if (e.purchase_date or timezone.localtime(e.created_at).date()) >= month_start
     )
 
     sold_this_month = [e for e in entries if _is_sold_this_month(e, month_start)]

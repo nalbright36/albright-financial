@@ -61,6 +61,25 @@ def _relist_id(raw):
     return value if value > 0 else None
 
 
+def _hibid_fields(raw):
+    """HiBid-specific fields stashed by scanner/adapters/hibid.py's
+    _parse_item: per-auction info (raw["_hibid"]) and the per-lot buyer's
+    premium (raw["_costs"]) - both None for every other source's raw dict,
+    same as the ShopGoodwill/MaxSold-only fields above."""
+    hibid = raw.get("_hibid") or {}
+    costs = raw.get("_costs") or {}
+    return {
+        "picture_count": hibid.get("picture_count"),
+        "auctioneer_id": hibid.get("auctioneer_id"),
+        "auctioneer": hibid.get("auctioneer"),
+        "shipping_type": hibid.get("shipping_type"),
+        "end_time_source": hibid.get("end_time_source"),
+        "pass": hibid.get("pass"),
+        "lot_number": hibid.get("lot_number"),
+        "buyer_premium_pct": costs.get("buyer_premium_pct"),
+    }
+
+
 def extract_features(raw_lot_dict, title, description, source):
     raw = raw_lot_dict or {}
     title = title or ""
@@ -92,4 +111,5 @@ def extract_features(raw_lot_dict, title, description, source):
         "has_shipping": pickup.get("has_shipping"),
         "relist_id": relist_id,
         "is_relisted": relist_id is not None,
+        **_hibid_fields(raw),
     }

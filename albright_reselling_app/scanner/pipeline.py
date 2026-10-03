@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from ..scanner_models import LotEvaluation, SourcedLot
 from .adapters.base import SourceBlocked, SourceUnavailable
+from .adapters.hibid import HiBidAdapter
 from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .coins import estimate_resale
@@ -18,7 +19,7 @@ from .spot import get_all_spot
 from .valuers import classify
 
 log = logging.getLogger(__name__)
-ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter}
+ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter, "hibid": HiBidAdapter}
 
 
 def _d(x, places="0.01"):
@@ -41,6 +42,24 @@ def _keywords_for(cfg, source, category):
     win when present; otherwise fall back to the global per-category list. This
     keeps ShopGoodwill (no "keywords" key in its SOURCES entry) unchanged."""
     return cfg["SOURCES"][source].get("keywords", {}).get(category) or cfg["KEYWORDS"][category]
+
+
+def _buyer_premium_pct(raw, src_cfg):
+    """Per-lot premium (HiBid: raw["_costs"]["buyer_premium_pct"], parsed by
+    the adapter from each lot's own auction - HiBid's premium varies by
+    auction house, unlike ShopGoodwill/MaxSold's one flat source-level rate)
+    overrides the source's own default when present. Shared by the max bid
+    calc here, the ledger's "I won this" cost prefill, and the AI review
+    service's suggested max bid, so all three price a HiBid lot the same
+    way the scanner itself did."""
+    per_lot = (raw or {}).get("_costs", {}).get("buyer_premium_pct")
+    if per_lot is not None:
+        return per_lot
+    # HiBid has no flat "buyer_premium_pct" in its SOURCES config (its own
+    # default lives under "default_buyer_premium_pct" and is already baked
+    # into every parsed lot's raw["_costs"]) - this fallback only matters
+    # for sources that always set a flat rate (ShopGoodwill/MaxSold).
+    return src_cfg.get("buyer_premium_pct", 0.0)
 
 
 def _inbound_shipping(raw, src_cfg):
@@ -94,7 +113,7 @@ def _apply_valuation(evaluation, parse, lot, spot, src, cfg):
     if parse.items and not parse.excluded_reason:
         melt, expected = estimate_resale(parse, spot, cfg["RESALE_MULTIPLIERS"])
         fees = {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(evaluation.category, {})}
-        buy = BuyCosts(src["buyer_premium_pct"], src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
+        buy = BuyCosts(_buyer_premium_pct(lot.raw, src), src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
         bid = max_bid(expected, SellFees(**fees), buy)
         evaluation.melt_value, evaluation.expected_sale, evaluation.max_bid = _d(melt), _d(expected), _d(bid)
         evaluation.headroom = _d(bid - float(lot.current_price))
@@ -107,6 +126,15 @@ def _apply_valuation(evaluation, parse, lot, spot, src, cfg):
 
     evaluation.is_lead = bool(parse.needs_review and not parse.excluded_reason)
     evaluation.lead_reason = parse.review_reason
+
+    # LEAD_RULES["jewelry_no_weight"]: a jewelry lot flagged "no_weight" and
+    # nothing else isn't worth a manual lead review when this is False - a
+    # designer piece (flagged "designer:...") stays a lead either way, with
+    # or without a stated weight.
+    if (evaluation.category == "jewelry" and "no_weight" in evaluation.flags
+            and not any(flag.startswith("designer:") for flag in evaluation.flags)
+            and not cfg["LEAD_RULES"]["jewelry_no_weight"]):
+        evaluation.is_lead = False
 
 
 def _apply_lead(evaluation, lead):
@@ -138,12 +166,28 @@ def _apply_none(evaluation, reason):
     evaluation.lead_reason = ""
 
 
+def _apply_reserve_not_met(evaluation, lot):
+    """HiBid-only: raw["_hibid"]["reserve_not_met"] means the auction's
+    reserve hasn't been hit yet, so the current bid isn't a real signal of
+    what this lot will actually sell for - never a candidate off that bid,
+    regardless of what the valuation math said, until a later scan finds
+    the reserve met (or the lot closes). A no-op for every other source,
+    since their raw dicts never carry "_hibid" at all."""
+    if not (lot.raw or {}).get("_hibid", {}).get("reserve_not_met"):
+        return
+    evaluation.is_candidate = False
+    if "reserve_not_met" not in evaluation.flags:
+        evaluation.flags = [*evaluation.flags, "reserve_not_met"]
+
+
 def evaluate(lot, spot, llm_budget, use_llm=True):
     cfg = _cfg()
     src = cfg["SOURCES"][lot.source]
     evaluation, _ = LotEvaluation.objects.get_or_create(lot=lot)
 
-    classification = classify(lot.title, lot.description, float(lot.current_price), cfg["LEAD_LIMITS"])
+    hours_left = (lot.end_time - timezone.now()).total_seconds() / 3600 if lot.end_time else None
+    classification = classify(lot.title, lot.description, float(lot.current_price), cfg["LEAD_LIMITS"],
+                              hours_left=hours_left, window_hours=cfg["LEAD_WINDOW_HOURS"])
     evaluation.category = classification.category
 
     if classification.category == "coins":
@@ -172,6 +216,8 @@ def evaluate(lot, spot, llm_budget, use_llm=True):
 
     else:  # "none"
         _apply_none(evaluation, classification.reason)
+
+    _apply_reserve_not_met(evaluation, lot)
 
     evaluation.save()
     return evaluation, llm_budget

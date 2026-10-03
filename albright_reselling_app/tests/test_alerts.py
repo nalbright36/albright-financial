@@ -548,6 +548,14 @@ class QuietHoursGatingTests(TestCase):
 
 
 class DigestTests(TestCase):
+    def test_hibid_included_in_health_section(self):
+        """build_digest_message() loops every configured source
+        (RESELLING_SCANNER["SOURCES"]), so adding hibid there is enough -
+        no separate digest-side wiring needed."""
+        message = build_digest_message(now=timezone.now())
+
+        self.assertIn("HiBid:", message)
+
     def test_includes_yesterday_results_and_todays_live_counts(self):
         now = timezone.now()
         yesterday = now - timedelta(days=1)

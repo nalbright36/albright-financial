@@ -1,8 +1,9 @@
 """Usage:
     python manage.py track_closed                            # ShopGoodwill, every category, last 2 days
     python manage.py track_closed --source maxsold             # MaxSold instead
+    python manage.py track_closed --source hibid                # HiBid instead
     python manage.py track_closed --category jewelry           # one category only
-    python manage.py track_closed --days-back 5                 # look back further (ShopGoodwill only)
+    python manage.py track_closed --days-back 5                 # look back further (ShopGoodwill/HiBid only)
 
 Updates lots we already scanned with their final (closed/sold) price, so we
 can see how our max-bid math actually held up. Never creates new lots -
@@ -17,20 +18,22 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from albright_reselling_app.scanner.adapters.base import SourceBlocked, SourceUnavailable
+from albright_reselling_app.scanner.adapters.hibid import HiBidAdapter
 from albright_reselling_app.scanner.adapters.maxsold import MaxSoldAdapter
 from albright_reselling_app.scanner.adapters.shopgoodwill import ShopGoodwillAdapter
 from albright_reselling_app.scanner.pipeline import _categories_for, _cfg, _keywords_for
 from albright_reselling_app.scanner_models import SourcedLot
 
-ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter}
+ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter, "hibid": HiBidAdapter}
 RESULTS_WINDOW_DAYS = 7
 
 
 def _search_closed(adapter, source, keyword, days_back):
-    """search_closed()'s signature isn't identical across adapters - only
-    ShopGoodwill supports a lookback window (MaxSold's API has no
-    equivalent parameter)."""
-    if source == "shopgoodwill":
+    """search_closed()'s signature isn't identical across adapters -
+    ShopGoodwill and HiBid both support a lookback window (MaxSold's API
+    has no equivalent parameter; HiBid accepts it for interface parity but
+    its archive pass doesn't actually use it - see adapters/hibid.py)."""
+    if source in ("shopgoodwill", "hibid"):
         return adapter.search_closed(keyword, days_back=days_back)
     return adapter.search_closed(keyword)
 

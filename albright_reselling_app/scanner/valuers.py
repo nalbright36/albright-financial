@@ -19,7 +19,8 @@ class Classification:
     reason: str = ""                   # why it was excluded (category "none")
 
 
-def classify(title: str, description: str, current_price: float, lead_limits: dict) -> Classification:
+def classify(title: str, description: str, current_price: float, lead_limits: dict,
+             hours_left: float | None = None, window_hours: float | None = None) -> Classification:
     coin = parse_coin_text(title, description)
     if coin.items or coin.needs_llm:
         return Classification("coins", parse=coin)
@@ -28,7 +29,8 @@ def classify(title: str, description: str, current_price: float, lead_limits: di
     if jewelry.items or jewelry.needs_review:
         return Classification("jewelry", parse=jewelry)
 
-    lead = evaluate_lead(title, description, current_price, lead_limits)
+    lead = evaluate_lead(title, description, current_price, lead_limits, hours_left=hours_left,
+                         window_hours=window_hours)
     if lead.category:
         return Classification(lead.category, lead=lead)
 

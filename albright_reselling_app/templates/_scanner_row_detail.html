@@ -18,7 +18,14 @@ Expects `row` and `colspan` in context.
             </span>
             {% if row.pickup %}
             <span>
-                <strong>Pickup:</strong> {{ row.pickup.auction_title|default:"—" }}{% if row.pickup.city %}, {{ row.pickup.city }}{% endif %}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
+                <strong>Pickup:</strong> {{ row.pickup.auction_title|default:"—" }}{% if row.pickup.city %}, {{ row.pickup.city }}{% endif %}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% if row.pickup.distance_estimated %} <span class="badge neutral" title="No distance returned by the site - using the search radius as a placeholder">est.</span>{% endif %}{% endif %}
+            </span>
+            {% endif %}
+            {% if row.auctioneer %}
+            <span>
+                <strong>Auctioneer:</strong> {{ row.auctioneer }}{% if row.hibid_city_state %} &mdash; {{ row.hibid_city_state }}{% endif %}
+                {% if row.premium_pct is not None %} &middot; {{ row.premium_pct|floatformat:0 }}% premium{% endif %}
+                {% if row.end_time_estimated %}<span class="badge neutral" title="No live countdown from the site - using the auction's stated close time instead">est. end time</span>{% endif %}
             </span>
             {% endif %}
             {% if row.matched_keyword %}<span><strong>Matched keyword:</strong> {{ row.matched_keyword }}</span>{% endif %}

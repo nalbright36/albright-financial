@@ -31,6 +31,7 @@ from django.utils import timezone
 
 from ..scanner_models import BidWatch
 from .adapters.base import SourceBlocked, SourceUnavailable
+from .adapters.hibid import HiBidAdapter
 from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .alerts import SITE_BASE_URL, send_telegram
@@ -38,7 +39,7 @@ from .dashboard import _source_display, _time_remaining
 
 log = logging.getLogger(__name__)
 
-ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter}
+ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter, "hibid": HiBidAdapter}
 RESOLVE_GIVE_UP_AFTER = timedelta(days=2)
 
 
@@ -91,10 +92,11 @@ def send_closing_soon_alerts(now=None):
 
 
 def _search_closed_for_lot(adapter, lot, now):
-    """search_closed()'s signature differs by adapter - only ShopGoodwill
-    takes a lookback window, and it needs to cover however long ago this
-    specific lot actually ended, not just the default couple of days."""
-    if lot.source == "shopgoodwill":
+    """search_closed()'s signature differs by adapter - ShopGoodwill and
+    HiBid both take a lookback window (MaxSold's API has no equivalent
+    parameter), and it needs to cover however long ago this specific lot
+    actually ended, not just the default couple of days."""
+    if lot.source in ("shopgoodwill", "hibid"):
         days_back = max(2, (now - lot.end_time).days + 1)
         return adapter.search_closed(lot.title, days_back=days_back)
     return adapter.search_closed(lot.title)

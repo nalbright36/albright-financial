@@ -19,7 +19,7 @@ from . import ebay
 from .ai_review import run_review
 from .max_bid import BuyCosts, SellFees
 from .max_bid import max_bid as compute_max_bid
-from .pipeline import _inbound_shipping
+from .pipeline import _buyer_premium_pct, _inbound_shipping
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ def _suggested_max_bid(resale_low, category, lot):
     cfg = settings.RESELLING_SCANNER
     src = cfg["SOURCES"][lot.source]
     fees = {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(category, {})}
-    buy = BuyCosts(src["buyer_premium_pct"], src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
+    buy = BuyCosts(_buyer_premium_pct(lot.raw, src), src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
     return compute_max_bid(resale_low, SellFees(**fees), buy)
 
 

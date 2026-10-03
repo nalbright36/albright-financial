@@ -202,6 +202,24 @@ RESELLING_SCANNER = {
                                    "magic the gathering", "yugioh cards", "psa graded", "card binder",
                                    "trading card lot"]},
         },
+        "hibid": {
+            "home_zip": "33611", "radius_miles": 30,
+            "include_pickup": True, "include_shipping": True,
+            "page_length": 100, "max_pages_per_pass": 1,
+            "sort_order": "TIME_LEFT",
+            "sort_direction": None,
+            "default_buyer_premium_pct": 0.20, "sales_tax_pct": 0.07,
+            "default_inbound_shipping": 15.0,
+            "mileage_rate": 0.70, "pickup_fixed_cost": 5.0,
+            "auction_timezone": "America/New_York",
+            # Deliberately short - HiBid returns thousands of lots per keyword.
+            "keywords": {
+                "coins": ["silver coins", "morgan dollar", "gold coin", "silver bullion"],
+                "jewelry": ["14k gold", "10k gold", "scrap gold", "sterling silver jewelry"],
+                "games": ["nintendo 64", "video game lot", "game boy", "gamecube"],
+                "cards": ["pokemon cards", "sports cards lot", "psa graded", "card binder"],
+            },
+        },
     },
     "KEYWORDS": {
         "coins": ["morgan dollar", "peace dollar", "silver eagle", "90% silver", "junk silver",
@@ -228,6 +246,10 @@ RESELLING_SCANNER = {
     },
     "LEAD_LIMITS": {"games": 40, "cards": 40, "jewelry": 60},
     "LEAD_WINDOW_HOURS": 48,
+    # jewelry_no_weight: False - a jewelry lot flagged "no_weight" alone is
+    # not worth a manual lead review; one also flagged "designer:..." still
+    # is, regardless of this setting.
+    "LEAD_RULES": {"jewelry_no_weight": False},
     "CANDIDATE_WINDOW_HOURS": 24,
     "CANDIDATE_CONFIDENCE": ["high", "medium"],
     "LLM": {"enabled": True, "model": "gpt-4o-mini", "max_calls_per_run": 25},

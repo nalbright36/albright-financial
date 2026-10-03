@@ -192,7 +192,7 @@ class LedgerEntry(models.Model):
         itemized sales (measured to the last sale date), or the legacy
         sold_for path with a sold_date. Still-partial sales and still-held
         items haven't finished the clock yet."""
-        start = self.purchase_date or self.created_at.date()
+        start = self.purchase_date or timezone.localtime(self.created_at).date()
         if self.has_itemized_sales:
             if self.status != "sold_out":
                 return None
@@ -234,7 +234,7 @@ class LedgerEntry(models.Model):
 
     @property
     def days_held(self):
-        start = self.purchase_date or self.created_at.date()
+        start = self.purchase_date or timezone.localtime(self.created_at).date()
         return (timezone.localdate() - start).days
 
     @property

@@ -6,7 +6,7 @@ review leads instead. Designer pieces are flagged, since they can sell above scr
 """
 import re
 
-from .coins import GRAMS_PER_TROY_OZ, GRAMS_RE, ParsedItem, ParseResult
+from .coins import FRACTION_GRAMS_RE, GRAMS_PER_TROY_OZ, GRAMS_RE, OZ_RE, ParsedItem, ParseResult
 
 GRAMS_PER_DWT = 1.555174
 
@@ -27,14 +27,21 @@ BASE_METALS = r"stainless|\bsteel\b|titanium|tungsten|\bbrass\b|bronze|\bcopper\
 # Only part of the lot is precious metal - the stated weight overstates it.
 PARTIAL = r"\bsome\b|partial|not all|\bmostly\b|mixed metals?|assorted metals?"
 # Heavier than these is almost always a misread ("Size 73.4g" = size 7, 3.4g) or not solid.
-MAX_PLAUSIBLE_G = {r"\brings?\b": 25, r"earrings?|\bstuds?\b": 15, r"pendant|\bcharms?\b": 30}
+MAX_PLAUSIBLE_G = {r"\brings?\b": 25, r"earrings?|\bstuds?\b": 15, r"pendant|\bcharms?\b": 30,
+                   r"bracelet|bangle|\bcuff\b": 150, r"necklace|\bchain\b|choker": 200}
 JEWELRY_WORDS = (r"jewel(le)?ry|\brings?\b|necklace|pendant|bracelet|earrings?|brooch|\bcharms?\b"
-                 r"|\bchains?\b|anklet|cuff ?links?|\bstuds?\b|\bband\b|locket|\bscrap\b")
+                 r"|\bchains?\b|anklet|cuff ?links?|\bstuds?\b|\bband\b|locket|\bscrap\b|\bpins?\b|tie (?:bar|clip|tack)")
 DESIGNERS = [
     "tiffany", "cartier", "david yurman", "james avery", "john hardy", "van cleef", "bulgari", "bvlgari",
     "pandora", "kendra scott", "chanel", "hermes", "georg jensen", "tacori", "judith ripka", "lagos",
 ]
-STONE_WORDS = r"diamond|sapphire|ruby|emerald|opal|pearl|garnet|amethyst|topaz|turquoise|\bstones?\b|\bgems?\b|\bcz\b"
+# Pieces whose weight is mostly pearls/beads/stones, with gold only in the clasp or findings.
+STONE_HEAVY = r"pearl (?:strand|necklace|bracelet)|\bstrands?\b|\bbeads?\b|\bbeaded\b|tennis bracelet|riviera"
+STONE_WORDS = (r"diamond|sapphire|ruby|emerald|opal|pearl|garnet|amethyst|topaz|turquoise|\bstones?\b|\bgems?\b"
+               r"|\bcz\b|kyanite|peridot|tourmaline|aquamarine|citrine|morganite|tanzanite|onyx|lapis|jade|coral"
+               r"|larimar|agate|quartz|cabochon|moissanite|zircon|spinel|iolite|labradorite|malachite|carnelian"
+               r"|moonstone|jasper|amber|cameo|enamel|station|porcelain|ceramic|glass|crystal|shell"
+               r"|mother of pearl|cloisonne|mosaic|intaglio|resin|\bwood\b|\bbone\b|\bhorn\b")
 
 
 def _karat(text: str) -> tuple[int | None, bool]:
@@ -47,10 +54,13 @@ def _karat(text: str) -> tuple[int | None, bool]:
 
 
 def _weight_grams(text: str) -> float | None:
-    dwt = re.search(r"(\d+(?:\.\d+)?)\s*(?:dwt|pennyweight)", text)
+    dwt = re.search(r"(?<![\d.])(\d+(?:\.\d+)?|\.\d+)\s*(?:dwt|pennyweight)", text)
     if dwt:
         return float(dwt.group(1)) * GRAMS_PER_DWT
-    oz = re.search(r"(\d+(?:\.\d+)?)\s*(?:troy\s*)?(?:oz|ounces?)\b", text)
+    oz = OZ_RE.search(text)
+    frac_g = FRACTION_GRAMS_RE.search(text)
+    if frac_g and int(frac_g.group(2)):
+        return int(frac_g.group(1)) / int(frac_g.group(2))
     grams = GRAMS_RE.search(text)
     if grams:
         return float(grams.group(1))
@@ -108,8 +118,21 @@ def parse_jewelry_text(title: str, description: str = "") -> ParseResult:
             notes.append(f"{grams:g}g is implausible for this item - check listing")
             confidence = "low"
             break
+    if re.search(STONE_HEAVY, text):
+        result.flags.append("mostly_stones")
+        notes.append("weight is mostly pearls/beads/stones - gold content unknown")
+        confidence = "low"
     if re.search(PARTIAL, text):
         notes.append("only part of the lot may be precious metal")
+        confidence = "low"
+    # Stated weights almost always include the stones. Small diamond/CZ accents are fine;
+    # anything else (colored stones, pearls, jade...) can be most of the weight.
+    colored = re.sub(r"diamonds?|\bcz\b|cubic zirconia|accents?", "", text)
+    if re.search(STONE_WORDS, colored) or (
+            re.search(STONE_WORDS, text) and re.search(r"bracelet|bangle|necklace|choker|\bstrand", text)):
+        if "mostly_stones" not in result.flags:
+            result.flags.append("mostly_stones")
+        notes.append("stones may be much of the stated weight - check by hand")
         confidence = "low"
     if re.search(STONE_WORDS, text):
         grams *= 0.9  # stated weight usually includes stones

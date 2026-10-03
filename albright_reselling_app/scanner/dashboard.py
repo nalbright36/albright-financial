@@ -105,7 +105,7 @@ def _metal_label(silver_oz, gold_oz):
 # the dashboard. MaxSold isn't on a firm enough schedule yet to flag it.
 STALENESS_CHECKED_SOURCES = {"shopgoodwill"}
 
-SOURCE_DISPLAY_NAMES = {"shopgoodwill": "ShopGoodwill", "maxsold": "MaxSold"}
+SOURCE_DISPLAY_NAMES = {"shopgoodwill": "ShopGoodwill", "maxsold": "MaxSold", "hibid": "HiBid"}
 
 
 def _source_display(source):
@@ -113,9 +113,14 @@ def _source_display(source):
 
 
 def _has_maxsold(rows):
-    """Whether a table's row list has any MaxSold lots - the template uses
-    this to only show the Pickup column on tables where it means anything."""
-    return any(row.get("source") == "maxsold" for row in rows)
+    """Whether a table's row list has any lot carrying real pickup info -
+    the template uses this to only show the Pickup column on tables where
+    it means anything. Keyed on the presence of pickup data itself, not on
+    source=="maxsold" specifically, so HiBid's pickup-only lots (same
+    raw["_pickup"] shape) are included too without a per-source check.
+    Name kept as-is (not renamed to something source-neutral) since it's
+    referenced from several context keys/templates already."""
+    return any(row.get("pickup") for row in rows)
 
 
 def _format_duration(delta):
@@ -150,6 +155,28 @@ def _end_time_epoch_ms(lot):
     return int(lot.end_time.timestamp() * 1000) if lot.end_time else None
 
 
+def _hibid_detail(lot):
+    """Auctioneer/premium/city-state/estimate-markers for a HiBid lot, read
+    straight from the adapter's own raw["_hibid"]/raw["_costs"] (the live
+    per-lot data, same place "pickup" below is read from) - {} for every
+    other source, so the template's {% if row.auctioneer %} guards just
+    skip rendering this block entirely."""
+    hibid = (lot.raw or {}).get("_hibid") or {}
+    if not hibid:
+        return {}
+    costs = (lot.raw or {}).get("_costs") or {}
+    city_state = ", ".join(p for p in (hibid.get("city"), hibid.get("state")) if p)
+    premium = costs.get("buyer_premium_pct")
+    return {
+        "auctioneer": hibid.get("auctioneer") or "",
+        "hibid_city_state": city_state,
+        # Display-ready percent (13.0, not the 0.13 fraction settings/
+        # BuyCosts use elsewhere) - the template can't do the *100 itself.
+        "premium_pct": round(premium * 100, 1) if premium is not None else None,
+        "end_time_estimated": hibid.get("end_time_source") == "auction_close",
+    }
+
+
 def _lot_row(evaluation, now):
     lot = evaluation.lot
     return {
@@ -179,6 +206,8 @@ def _lot_row(evaluation, now):
         # before that field existed just have no "is_relisted" key, hence
         # the default.
         "is_relisted": (lot.features or {}).get("is_relisted", False),
+        "reserve_not_met": "reserve_not_met" in (evaluation.flags or []),
+        **_hibid_detail(lot),
     }
 
 
@@ -199,6 +228,8 @@ def _lead_row(evaluation, now):
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
         "pickup": (lot.raw or {}).get("_pickup"),
         "is_relisted": (lot.features or {}).get("is_relisted", False),
+        "reserve_not_met": "reserve_not_met" in (evaluation.flags or []),
+        **_hibid_detail(lot),
     }
 
 

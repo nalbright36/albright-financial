@@ -16,7 +16,7 @@ from . import ledger_metrics
 from .forms import EntryDetailsForm, LedgerSaleForm, LegacySplitForm, WinLotForm
 from .models import LedgerEntry
 from .scanner.max_bid import BuyCosts, all_in_cost
-from .scanner.pipeline import _inbound_shipping
+from .scanner.pipeline import _buyer_premium_pct, _inbound_shipping
 from .scanner_models import AIReview, SourcedLot
 
 
@@ -31,7 +31,7 @@ def _win_lot_initial(lot, evaluation, review):
     recomputed fresh rather than trusted from hidden form fields."""
     cfg = settings.RESELLING_SCANNER
     src = cfg["SOURCES"].get(lot.source, {})
-    buyer_premium_pct = src.get("buyer_premium_pct", 0.0)
+    buyer_premium_pct = _buyer_premium_pct(lot.raw, src) if src else 0.0
     sales_tax_pct = src.get("sales_tax_pct", 0.0)
     inbound = _inbound_shipping(lot.raw, src) if src else 0.0
 

@@ -58,8 +58,17 @@ class LeadResult:
         return f"{self.subtype}: {', '.join(self.signals)}" if self.is_lead else self.excluded_reason
 
 
-def evaluate_lead(title: str, description: str, current_price: float, max_bids: dict) -> LeadResult:
-    """max_bids: {"games": 40, "cards": 40} - leads only while the current bid is at or under this."""
+# Games: one strong signal, or two weaker ones. Cards: a strong signal is required, because
+# almost every card lot is a "bulk lot" with "holos".
+STRONG_SIGNALS = {"games": {"sealed", "complete in box", "console"},
+                  "cards": {"graded", "sealed", "vintage"}}
+REQUIRE_STRONG = {"cards"}
+
+
+def evaluate_lead(title: str, description: str, current_price: float, max_bids: dict,
+                  hours_left: float | None = None, window_hours: float | None = None) -> LeadResult:
+    """max_bids: {"games": 40, "cards": 40} - leads only while the current bid is at or under this.
+    hours_left/window_hours: if both given, only lots ending within the window can be leads."""
     text = f"{title} {description}".lower()
     for pat in EXCLUDE:
         if re.search(pat, text):
@@ -79,6 +88,10 @@ def evaluate_lead(title: str, description: str, current_price: float, max_bids: 
     result = LeadResult(category=category, subtype=subtype, signals=found)
     if not found:
         result.excluded_reason = f"{subtype}: no value signals (single common item?)"
+    elif not STRONG_SIGNALS[category] & set(found) and (category in REQUIRE_STRONG or len(found) < 2):
+        result.excluded_reason = f"{subtype}: no strong signal ({', '.join(found)})"
+    elif hours_left is not None and window_hours is not None and not (0 <= hours_left <= window_hours):
+        result.excluded_reason = f"{subtype}: ends in {hours_left:.0f}h, outside the {window_hours:.0f}h lead window"
     elif current_price > max_bids.get(category, 0):
         result.excluded_reason = f"{subtype}: bid ${current_price:.2f} over lead limit ${max_bids.get(category, 0)}"
     else:

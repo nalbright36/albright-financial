@@ -41,6 +41,21 @@ class CoinParserTests(TestCase):
         r = parse_coin_text("10 oz .999 Fine Silver Bar")
         self.assertAlmostEqual(r.total_oz("silver"), 10.0)
 
+    def test_leading_decimal_oz_bar(self):
+        self.assertAlmostEqual(parse_coin_text(".5 oz .999 Fine Silver Bar").total_oz("silver"), 0.5)
+
+    def test_karat_gold_is_never_bullion(self):
+        self.assertEqual(parse_coin_text("14k gold item, one 5.5mm round stone 8.0g").items, [])
+
+    def test_silver_krugerrand(self):
+        r = parse_coin_text("1oz .999 Silver South Africa Krugerrand Sealed Box")
+        self.assertEqual((r.items[0].coin_key, r.total_oz("silver"), r.total_oz("gold")), ("silver_krugerrand", 1.0, 0))
+        self.assertEqual(parse_coin_text("1 oz Gold Krugerrand").items[0].coin_key, "krugerrand")
+
+    def test_fraction_of_a_gram(self):
+        r = parse_coin_text("1/2 gram .999 Fine Gold Bar (Carded)")
+        self.assertAlmostEqual(r.total_oz("gold"), 0.5 / 31.1035, places=3)
+
     def test_fractional_gold(self):
         r = parse_coin_text("1/10 oz .999 gold round")
         self.assertAlmostEqual(r.total_oz("gold"), 0.1)

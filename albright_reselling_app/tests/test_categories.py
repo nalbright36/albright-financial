@@ -6,7 +6,7 @@ from decimal import Decimal
 from unittest import mock
 
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from albright_reselling_app.scanner import pipeline
 from albright_reselling_app.scanner.adapters.base import RawLot
@@ -51,7 +51,9 @@ class EvaluateCategoryTests(TestCase):
         plain_fee_max_bid = compute_max_bid(expected_sale, SellFees(**cfg["FEES"]), buy)
         self.assertGreater(expected_with_category_fees, plain_fee_max_bid)
 
-    def test_jewelry_with_no_weight_is_lead_with_no_max_bid(self):
+    def test_jewelry_with_no_weight_and_no_designer_is_not_a_lead_by_default(self):
+        """LEAD_RULES["jewelry_no_weight"] defaults to False - a plain
+        no-weight jewelry lot isn't worth a manual review on its own."""
         lot = _make_lot("Vintage 14k Gold Diamond Ring Size 6", current_price=20.0)
 
         evaluation, _ = pipeline.evaluate(lot, SPOT, llm_budget=0, use_llm=False)
@@ -59,8 +61,39 @@ class EvaluateCategoryTests(TestCase):
         self.assertEqual(evaluation.category, "jewelry")
         self.assertEqual(evaluation.max_bid, 0)
         self.assertFalse(evaluation.is_candidate)
+        self.assertFalse(evaluation.is_lead)
+        self.assertIn("no_weight", evaluation.flags)
+
+    def test_jewelry_with_no_weight_is_a_lead_when_rule_enabled(self):
+        lot = _make_lot("Vintage 14k Gold Diamond Ring Size 6", current_price=20.0)
+        cfg = {**settings.RESELLING_SCANNER, "LEAD_RULES": {"jewelry_no_weight": True}}
+
+        with override_settings(RESELLING_SCANNER=cfg):
+            evaluation, _ = pipeline.evaluate(lot, SPOT, llm_budget=0, use_llm=False)
+
         self.assertTrue(evaluation.is_lead)
         self.assertIn("no weight", evaluation.lead_reason)
+
+    def test_designer_jewelry_with_no_weight_stays_a_lead_regardless_of_rule(self):
+        lot = _make_lot("Tiffany 14k Gold Ring No Weight Stated", current_price=20.0)
+
+        evaluation, _ = pipeline.evaluate(lot, SPOT, llm_budget=0, use_llm=False)
+
+        self.assertIn("no_weight", evaluation.flags)
+        self.assertTrue(any(f.startswith("designer:") for f in evaluation.flags))
+        self.assertTrue(evaluation.is_lead)
+
+    def test_designer_jewelry_with_weight_stays_a_lead(self):
+        """Not affected by jewelry_no_weight at all - this lot has no
+        "no_weight" flag, it's the pre-existing designer-review path."""
+        lot = _make_lot("Tiffany 14k Gold Ring 5g", current_price=20.0)
+
+        evaluation, _ = pipeline.evaluate(lot, SPOT, llm_budget=0, use_llm=False)
+
+        self.assertNotIn("no_weight", evaluation.flags)
+        self.assertTrue(any(f.startswith("designer:") for f in evaluation.flags))
+        self.assertTrue(evaluation.is_lead)
+        self.assertIn("designer", evaluation.lead_reason)
 
     def test_game_lot_under_limit_is_lead_with_zero_max_bid(self):
         lot = _make_lot("Lot of 8 Nintendo 64 N64 Games Mario Kart Zelda", current_price=25.0)
