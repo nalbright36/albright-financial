@@ -30,7 +30,7 @@ from ..scanner_models import (
     AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
 from .ai_review_service import months_review_cost
-from .dashboard import _source_display, _time_remaining
+from .dashboard import _expected_interval_hours, _source_display, _time_remaining
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 REQUEST_TIMEOUT_SECONDS = 15
 
 CRITICAL_ALERT_COOLDOWN = timedelta(hours=6)
-STALE_ALERT_AFTER = timedelta(hours=3)
+STALE_ALERT_GRACE_HOURS = 2  # critical alert fires once a source is this far past its own expected interval
 SPOT_CHANGE_WARN_PCT = 3.0
 AI_REVIEW_BUDGET_WARN_PCT = 0.8
 
@@ -282,19 +282,21 @@ def check_zero_lots(source, seen, now=None):
 
 
 def check_stale_source(source, now=None):
-    """"No scan has completed for a source in 3 hours" - called at the
-    start of every scan_lots run (catching a broken cadence before the
-    next scan even starts) and from alert_digest (a backstop in case
-    scan_lots has stopped running on its own schedule entirely, in which
-    case the start-of-run check never fires at all)."""
+    """"No scan has completed for a source in its expected_interval_hours
+    (RESELLING_SCANNER["SOURCES"][source], default 1) plus a grace period"
+    - called at the start of every scan_lots run (catching a broken cadence
+    before the next scan even starts) and from alert_digest (a backstop in
+    case scan_lots has stopped running on its own schedule entirely, in
+    which case the start-of-run check never fires at all)."""
     now = now or timezone.now()
     last_finished = (
         ScanRun.objects.filter(source=source, finished_at__isnull=False).order_by("-finished_at").first()
     )
     if last_finished is None:
         return False  # never completed a run at all - a different, pre-existing problem
-    if now - last_finished.finished_at > STALE_ALERT_AFTER:
-        hours = STALE_ALERT_AFTER.total_seconds() / 3600
+    stale_after = timedelta(hours=_expected_interval_hours(source) + STALE_ALERT_GRACE_HOURS)
+    if now - last_finished.finished_at > stale_after:
+        hours = stale_after.total_seconds() / 3600
         return send_critical_alert(
             source, "stale", f"No completed scan in over {hours:.0f}h - check the scheduled task.", now=now,
         )
@@ -391,8 +393,9 @@ def _source_health_lines(source, now):
     runs = list(ScanRun.objects.filter(source=source, started_at__gte=cutoff))
     lines, warnings = [], []
     label = _source_display(source)
+    expected_runs = 24 / _expected_interval_hours(source)
 
-    lines.append(f"{label}: {len(runs)} run(s) in last 24h (expect ~24)")
+    lines.append(f"{label}: {len(runs)} run(s) in last 24h (expect ~{expected_runs:g})")
 
     last_run = ScanRun.objects.filter(source=source).order_by("-started_at").first()
     if last_run:

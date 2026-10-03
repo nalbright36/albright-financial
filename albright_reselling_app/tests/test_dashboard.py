@@ -120,15 +120,42 @@ class ScannerDashboardContextTests(TestCase):
         self.assertTrue(any("ago" in w for w in health["warnings"]))
         self.assertEqual(health["status"], "warn")
 
-    def test_stale_run_not_flagged_for_maxsold(self):
+    def test_stale_run_flagged_for_maxsold_too(self):
+        """Staleness is now checked per-source (expected_interval_hours+1,
+        default 1h -> 2h threshold) rather than gated by a hardcoded
+        whitelist - MaxSold gets the same default threshold as
+        ShopGoodwill unless its own settings say otherwise."""
         run = ScanRun.objects.create(source="maxsold", lots_seen=5, candidates=1)
         ScanRun.objects.filter(pk=run.pk).update(started_at=timezone.now() - timedelta(hours=3))
 
         context = get_scanner_dashboard_context()
 
         health = context["scanner_health"]["maxsold"]
+        self.assertTrue(any("ago" in w for w in health["warnings"]))
+        self.assertEqual(health["status"], "warn")
+
+    def test_hibid_not_flagged_stale_within_its_longer_interval(self):
+        """HiBid's expected_interval_hours=6 gives it a 7h threshold
+        (6+1), so a 5h-old run isn't stale even though that would already
+        be stale for ShopGoodwill/MaxSold's default 2h threshold."""
+        run = ScanRun.objects.create(source="hibid", lots_seen=5, candidates=1)
+        ScanRun.objects.filter(pk=run.pk).update(started_at=timezone.now() - timedelta(hours=5))
+
+        context = get_scanner_dashboard_context()
+
+        health = context["scanner_health"]["hibid"]
         self.assertFalse(any("ago" in w for w in health["warnings"]))
         self.assertEqual(health["status"], "ok")
+
+    def test_hibid_flagged_stale_past_its_longer_interval(self):
+        run = ScanRun.objects.create(source="hibid", lots_seen=5, candidates=1)
+        ScanRun.objects.filter(pk=run.pk).update(started_at=timezone.now() - timedelta(hours=8))
+
+        context = get_scanner_dashboard_context()
+
+        health = context["scanner_health"]["hibid"]
+        self.assertTrue(any("ago" in w for w in health["warnings"]))
+        self.assertEqual(health["status"], "warn")
 
     def test_healthy_run_has_ok_status_and_no_warnings(self):
         ScanRun.objects.create(source="shopgoodwill", lots_seen=5, candidates=1)

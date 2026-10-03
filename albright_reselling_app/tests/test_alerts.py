@@ -719,6 +719,14 @@ class SourceHealthTests(TestCase):
         self.assertIn("ShopGoodwill: 3 run(s) in last 24h (expect ~24)", lines)
         self.assertEqual(warnings, [])
 
+    def test_expected_runs_per_day_uses_hibid_longer_interval(self):
+        now = timezone.now()
+        ScanRun.objects.create(source="hibid", lots_seen=10, candidates=1)
+
+        lines, _warnings = _source_health_lines("hibid", now)
+
+        self.assertIn("HiBid: 1 run(s) in last 24h (expect ~4)", lines)
+
     def test_error_run_flagged(self):
         now = timezone.now()
         ScanRun.objects.create(source="shopgoodwill", lots_seen=5, error="boom")
@@ -1057,6 +1065,40 @@ class CriticalAlertTests(TestCase):
 
         self.assertFalse(result)
         mock_post.assert_not_called()
+
+    @mock.patch(TELEGRAM_POST)
+    @mock.patch.dict(os.environ, CREDS)
+    def test_check_stale_source_uses_hibid_longer_threshold(self, mock_post):
+        """HiBid's expected_interval_hours=6 gives an 8h threshold (6+2) -
+        a 7h-old finish, already stale for ShopGoodwill's default 3h
+        threshold, is still fine for HiBid."""
+        mock_post.return_value = _ok_response()
+        now = timezone.now()
+        run = ScanRun.objects.create(source="hibid", lots_seen=5)
+        ScanRun.objects.filter(pk=run.pk).update(
+            started_at=now - timedelta(hours=7), finished_at=now - timedelta(hours=7),
+        )
+
+        result = check_stale_source("hibid", now=now)
+
+        self.assertFalse(result)
+        mock_post.assert_not_called()
+
+    @mock.patch(TELEGRAM_POST)
+    @mock.patch.dict(os.environ, CREDS)
+    def test_check_stale_source_triggers_for_hibid_past_its_longer_threshold(self, mock_post):
+        mock_post.return_value = _ok_response()
+        now = timezone.now()
+        run = ScanRun.objects.create(source="hibid", lots_seen=5)
+        ScanRun.objects.filter(pk=run.pk).update(
+            started_at=now - timedelta(hours=9), finished_at=now - timedelta(hours=9),
+        )
+
+        result = check_stale_source("hibid", now=now)
+
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        self.assertIn("8h", mock_post.call_args.kwargs["json"]["text"])
 
 
 class ScanLotsCriticalAlertIntegrationTests(TestCase):

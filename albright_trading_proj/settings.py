@@ -212,6 +212,7 @@ RESELLING_SCANNER = {
             "default_inbound_shipping": 15.0,
             "mileage_rate": 0.70, "pickup_fixed_cost": 5.0,
             "auction_timezone": "America/New_York",
+            "expected_interval_hours": 6,  # scanned less often than ShopGoodwill/MaxSold (default 1)
             # Deliberately short - HiBid returns thousands of lots per keyword.
             "keywords": {
                 "coins": ["silver coins", "morgan dollar", "gold coin", "silver bullion"],

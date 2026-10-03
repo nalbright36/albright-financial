@@ -3,6 +3,7 @@
     python manage.py scan_lots --category jewelry        # one category only
     python manage.py scan_lots --no-llm                 # regex only, zero API cost
     python manage.py scan_lots --keyword "morgan dollar"  # one keyword, handy for testing
+    python manage.py scan_lots --source hibid --min-interval-hours 6  # skip if last good hibid scan was <6h ago
 """
 from datetime import timedelta
 
@@ -44,6 +45,17 @@ def _split_by_window(candidates, now, window_hours):
     return ending_soon, ending_later
 
 
+def _last_good_run(source):
+    """Most recent ScanRun for this source that actually finished without
+    an error - a failed run doesn't count, so --min-interval-hours lets
+    the very next scheduled run retry it rather than waiting out the full
+    interval again."""
+    return (
+        ScanRun.objects.filter(source=source, finished_at__isnull=False, error="")
+        .order_by("-started_at").first()
+    )
+
+
 def _stopped_early(keywords_requested, failed_keywords):
     """True if the scan broke off before attempting every requested keyword.
     With the current pipeline, that only happens when two keywords in a row
@@ -71,6 +83,9 @@ class Command(BaseCommand):
                              help="Limit to one category (coins/jewelry/games/cards). Default: every category.")
         parser.add_argument("--no-llm", action="store_true")
         parser.add_argument("--keyword", action="append", help="Override configured keywords (repeatable)")
+        parser.add_argument("--min-interval-hours", type=float, default=None,
+                             help="Skip this run if the last successful scan for this source "
+                                  "started less than this many hours ago.")
 
     def handle(self, *args, **opts):
         source = opts["source"]
@@ -79,6 +94,17 @@ class Command(BaseCommand):
             check_stale_source(source)  # before this run, so a broken cadence is caught, not masked by it
         except Exception as exc:  # noqa: BLE001 - alerting must never break the scan
             self.stderr.write(self.style.WARNING(f"Stale-source check failed: {exc}"))
+
+        min_interval = opts["min_interval_hours"]
+        if min_interval is not None:
+            last_good = _last_good_run(source)
+            if last_good is not None:
+                hours_since = (timezone.now() - last_good.started_at).total_seconds() / 3600
+                if hours_since < min_interval:
+                    self.stdout.write(
+                        f"Skipped: last {source} scan was {hours_since:.1f} hours ago (minimum {min_interval:g})"
+                    )
+                    return
 
         run = ScanRun.objects.create(source=source)
         try:

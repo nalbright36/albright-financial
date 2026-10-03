@@ -26,7 +26,8 @@ from .. import ledger_metrics
 from ..scanner_models import AIReview, AlertSent, BidWatch, LotEvaluation, ScanRun, SourcedLot, SpotPrice
 from .ai_review_service import months_review_cost, todays_review_count
 
-STALE_RUN_AFTER = timedelta(hours=2)
+DEFAULT_EXPECTED_INTERVAL_HOURS = 1  # RESELLING_SCANNER["SOURCES"][source]["expected_interval_hours"] fallback
+STALE_RUN_GRACE_HOURS = 1  # dashboard flags a source stale once it's this far past its own expected interval
 CLOSEST_CALLS_LIMIT = 10
 RECENT_RUNS_LIMIT = 10
 LEADS_TO_REVIEW_LIMIT = 50
@@ -101,15 +102,22 @@ def _metal_label(silver_oz, gold_oz):
     return ", ".join(parts)
 
 
-# Sources whose staleness ("last run was over 2 hours ago") is checked on
-# the dashboard. MaxSold isn't on a firm enough schedule yet to flag it.
-STALENESS_CHECKED_SOURCES = {"shopgoodwill"}
-
 SOURCE_DISPLAY_NAMES = {"shopgoodwill": "ShopGoodwill", "maxsold": "MaxSold", "hibid": "HiBid"}
 
 
 def _source_display(source):
     return SOURCE_DISPLAY_NAMES.get(source, source.title())
+
+
+def _expected_interval_hours(source):
+    """How often this source is expected to scan
+    (RESELLING_SCANNER["SOURCES"][source]["expected_interval_hours"]) - every
+    source-aware staleness check (here, scanner.alerts' critical alert, and
+    the daily digest's "expect ~N runs") reads this same value, so they
+    can't drift apart. Defaults to hourly, matching every source's
+    schedule before HiBid's slower 6h cadence."""
+    src_cfg = settings.RESELLING_SCANNER["SOURCES"].get(source, {})
+    return src_cfg.get("expected_interval_hours", DEFAULT_EXPECTED_INTERVAL_HOURS)
 
 
 def _has_maxsold(rows):
@@ -259,7 +267,7 @@ def _check_by_hand(now):
     return [_lot_row(ev, now) for ev in check_qs]
 
 
-def _source_health(source, now, check_staleness):
+def _source_health(source, now):
     last_run = ScanRun.objects.filter(source=source).order_by("-started_at").first()
     warnings = []
 
@@ -270,10 +278,10 @@ def _source_health(source, now, check_staleness):
             warnings.append(f"Last {source} scan failed: {last_run.error}")
         if last_run.failed_keywords:
             warnings.append(f"Last {source} scan had failed keywords: {', '.join(last_run.failed_keywords)}")
-        if check_staleness:
-            age = now - last_run.started_at
-            if age > STALE_RUN_AFTER:
-                warnings.append(f"Last {source} scan was {_format_duration(age)} ago - check the scheduled task.")
+        age = now - last_run.started_at
+        stale_after = timedelta(hours=_expected_interval_hours(source) + STALE_RUN_GRACE_HOURS)
+        if age > stale_after:
+            warnings.append(f"Last {source} scan was {_format_duration(age)} ago - check the scheduled task.")
 
     # Status bar dot color: red for "actually broken" (never ran, or the
     # last run errored outright), amber for "worth a look" (stale, or some
@@ -539,10 +547,7 @@ def get_scanner_dashboard_context(user=None):
         for run in ScanRun.objects.all()[:RECENT_RUNS_LIMIT]
     ]
 
-    scanner_health = {
-        source: _source_health(source, now, check_staleness=source in STALENESS_CHECKED_SOURCES)
-        for source in sources
-    }
+    scanner_health = {source: _source_health(source, now) for source in sources}
 
     closed_results_summary, closed_results_rows = _closed_results(now)
     maxsold_estates = _maxsold_estates(now)
