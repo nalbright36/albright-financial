@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from albright_trading_app.forms import UserForm, LoginForm, InvestorProfileForm
+from albright_trading_proj.middleware import LAST_APP_COOKIE
 from django.urls import reverse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -22,6 +23,7 @@ import logging
 import datetime as dt
 from dateutil import tz
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from time import strftime, localtime
 import base64
 import ast
@@ -219,6 +221,13 @@ def get_market_outlook():
  
  
 def home(request):
+    """"/" - redirects a logged-in user straight to the reseller dashboard
+    if that's the last app they used (see albright_trading_proj.middleware.
+    LastAppMiddleware); otherwise renders this app's own landing page,
+    exactly as before (the default for anonymous users and anyone whose
+    last_app cookie says "trading" or isn't set yet)."""
+    if request.user.is_authenticated and request.COOKIES.get(LAST_APP_COOKIE) == "reseller":
+        return redirect("albright_reselling_app:dashboard")
     outlook = get_market_outlook()
     context = {"outlook": outlook}
     return render(request, 'home.html', context=context)
@@ -1824,10 +1833,12 @@ def stock_detail(request, symbol):
 def user_login(request):
 
     login_form = LoginForm()
+    next_url = request.GET.get('next', '')
 
     if request.method == 'POST':
 
         login_form = LoginForm(request, data=request.POST)
+        next_url = request.POST.get('next', '')
 
         if login_form.is_valid():
 
@@ -1840,8 +1851,16 @@ def user_login(request):
 
                 auth.login(request, user)
 
+                # Honor an explicit ?next= (e.g. @login_required bouncing
+                # back to the page the user actually wanted); otherwise "/"
+                # itself now remembers the last app (see home() above), so
+                # a plain redirect there already lands the right place.
+                if next_url and url_has_allowed_host_and_scheme(
+                    next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+                ):
+                    return redirect(next_url)
                 return redirect('/')
-    context = {'login_form':login_form}
+    context = {'login_form': login_form, 'next': next_url}
 
     return render(request,'user_login.html', context)
 
