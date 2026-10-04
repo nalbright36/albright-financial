@@ -99,19 +99,21 @@
 
 /* ---------- Light theme ---------- */
 [data-theme="light"] {
-  --bg: #FFFFFF;
+  --bg: #F3F4F6;
   --bg-elevated: #F6F7F8;
   --surface: #FFFFFF;
   --surface-hover: #F3F4F6;
   --surface-raised: #FFFFFF;
-  --border: rgba(0, 0, 0, 0.08);
+  --border: #E2E5EA;
   --border-strong: rgba(0, 0, 0, 0.14);
 
   --text-primary: #0E1116;
   --text-secondary: #5B6472;
   --text-tertiary: #8B93A1;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  /* Two-layer card shadow - cards need to lift off the new gray page
+     background, not just the old white-on-white/near-invisible edge. */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
   --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
 
@@ -604,6 +606,19 @@ a:hover { color: var(--accent-hover); }
 .scanner-controls input::placeholder { color: var(--text-tertiary); }
 .scanner-controls input:focus, .scanner-controls select:focus {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none;
+}
+
+/* Light theme only: inputs/selects inside a card go white (--surface)
+   with the card's own border color (--border), so they read as part of
+   the card rather than a separate gray well - dark theme keeps its
+   current --bg-elevated/--border-strong look untouched. */
+[data-theme="light"] .field input,
+[data-theme="light"] .field select,
+[data-theme="light"] .field textarea,
+[data-theme="light"] .scanner-controls input,
+[data-theme="light"] .scanner-controls select {
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 .ledger-input {
