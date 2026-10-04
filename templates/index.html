@@ -50,10 +50,19 @@
                         {% if in_reselling_app %}
                         <a href="{% url 'albright_reselling_app:dashboard' %}">Dashboard</a>
                         <a href="{% url 'albright_reselling_app:ledger' %}">Ledger</a>
-                        <a href="{% url 'albright_reselling_app:auction_scanner' %}">Auction Scanner</a>
-                        <a href="{% url 'albright_reselling_app:ai_review_history' %}">AI Reviews</a>
-                        <a href="{% url 'albright_reselling_app:historical_data' %}">Historical Data</a>
-                        <a href="{% url 'albright_reselling_app:sleeper_segments' %}">Sleeper Segments</a>
+
+                        <div class="navbar__dropdown">
+                            <button type="button" class="navbar__dropdown-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="tools-dropdown-menu">
+                                Tools <span class="navbar__dropdown-caret">&#9662;</span>
+                            </button>
+                            <div class="navbar__dropdown-menu" id="tools-dropdown-menu">
+                                <a href="{% url 'albright_reselling_app:ai_review_history' %}">AI Reviews</a>
+                                <a href="{% url 'albright_reselling_app:auction_scanner' %}">Auction Scanner</a>
+                                <a href="{% url 'albright_reselling_app:historical_data' %}">Legacy Historical Data</a>
+                                <a href="{% url 'albright_reselling_app:sleeper_segments' %}">Sleeper Segments</a>
+                                <a href="{% url 'albright_reselling_app:insights' %}">Insights</a>
+                            </div>
+                        </div>
                         {% else %}
                         <a href="/">Home</a>
                         <a href="/trading_account">Trading Account</a>
@@ -91,6 +100,37 @@
         {% endblock %}
 
         <script>
+            // Nav dropdowns (Tools, and Strategies on the trading side):
+            // :hover already opens them for mouse users (see style.css) -
+            // this adds click-to-toggle so they also work by keyboard
+            // (trigger is a real <button>, so Enter/Space fires this same
+            // click handler) and on touch, where :hover doesn't fire.
+            document.querySelectorAll('.navbar__dropdown').forEach(function (dropdown) {
+                var trigger = dropdown.querySelector('.navbar__dropdown-trigger');
+                var menu = dropdown.querySelector('.navbar__dropdown-menu');
+                if (!trigger || !menu) return;
+
+                function closeDropdown() {
+                    dropdown.classList.remove('navbar__dropdown--open');
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+                function openDropdown() {
+                    dropdown.classList.add('navbar__dropdown--open');
+                    trigger.setAttribute('aria-expanded', 'true');
+                }
+
+                trigger.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (dropdown.classList.contains('navbar__dropdown--open')) closeDropdown(); else openDropdown();
+                });
+                document.addEventListener('click', function (e) {
+                    if (!dropdown.contains(e.target)) closeDropdown();
+                });
+                dropdown.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') { closeDropdown(); trigger.focus(); }
+                });
+            });
+
             document.getElementById('theme-toggle').addEventListener('click', function () {
                 var current = document.documentElement.getAttribute('data-theme');
                 var next = current === 'light' ? 'dark' : 'light';

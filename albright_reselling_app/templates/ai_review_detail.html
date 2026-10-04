@@ -144,6 +144,7 @@
         <a href="{% url 'albright_reselling_app:watch_lot' lot.pk %}?review={{ review.pk }}" class="btn btn-secondary" style="display: inline-block; margin-top: 12px;">I Bid On This</a>
         {% endif %}
         <a href="{% url 'albright_reselling_app:ledger_win_lot' lot.pk %}?review={{ review.pk }}" class="btn btn-primary" style="display: inline-block; margin-top: 12px;">I Won This</a>
+        <a href="{% url 'albright_reselling_app:lot_feedback' lot.pk %}?next={{ request.path|urlencode }}" class="btn btn-secondary" style="display: inline-block; margin-top: 12px;">Wrong?</a>
     </div>
 
 </div>

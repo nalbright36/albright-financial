@@ -1,7 +1,7 @@
 from django import forms
 from django.forms import modelformset_factory
 from .models import LedgerEntry, LedgerSale, ScanRequest, HarvestRequest, AnalysisRequest
-from .scanner_models import BidWatch
+from .scanner_models import BidWatch, LotFeedback
 
 _NUM_WIDGET = lambda placeholder=None: forms.NumberInput(attrs={  # noqa: E731
     "class": "ledger-input num", "step": "0.01", **({"placeholder": placeholder} if placeholder else {}),
@@ -182,4 +182,17 @@ class BidWatchForm(forms.ModelForm):
         fields = ["my_max_bid"]
         widgets = {
             "my_max_bid": forms.NumberInput(attrs={"class": "ledger-input num", "step": "0.01"}),
+        }
+
+
+class LotFeedbackForm(forms.ModelForm):
+    """The "Wrong?" form: what kind of mistake, and an optional note - the
+    lot itself is set by the view, same pattern as BidWatchForm above."""
+    class Meta:
+        model = LotFeedback
+        fields = ["kind", "note"]
+        widgets = {
+            "kind": forms.Select(attrs={"class": "ledger-input"}),
+            "note": forms.Textarea(attrs={"class": "ledger-input", "rows": 3,
+                                            "placeholder": "What's wrong? (optional)"}),
         }

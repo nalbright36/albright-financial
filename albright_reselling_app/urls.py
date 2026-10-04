@@ -1,5 +1,5 @@
 from django.urls import path
-from . import ledger_views, scanner_views, views
+from . import insights_views, ledger_views, scanner_views, views
 
 app_name = "albright_reselling_app"
 
@@ -21,4 +21,14 @@ urlpatterns = [
     path("scanner/reviews/", scanner_views.review_history, name="ai_review_history"),
     path("scanner/win/<int:lot_id>/", ledger_views.win_lot, name="ledger_win_lot"),
     path("scanner/watch/<int:lot_id>/", scanner_views.watch_lot, name="watch_lot"),
+    path("insights/", insights_views.insights_page, name="insights"),
+    path("insights/suggestions/<int:suggestion_id>/apply/", insights_views.apply_suggestion,
+         name="apply_suggestion"),
+    path("insights/suggestions/<int:suggestion_id>/dismiss/", insights_views.dismiss_suggestion,
+         name="dismiss_suggestion"),
+    path("insights/overrides/<int:override_id>/undo/", insights_views.undo_override, name="undo_override"),
+    path("insights/feedback/export/", insights_views.export_lot_feedback, name="export_lot_feedback"),
+    path("insights/feedback/<int:feedback_id>/resolve/", insights_views.resolve_lot_feedback,
+         name="resolve_lot_feedback"),
+    path("scanner/lot/<int:lot_id>/feedback/", insights_views.create_lot_feedback, name="lot_feedback"),
 ]

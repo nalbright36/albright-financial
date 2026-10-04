@@ -2,8 +2,10 @@
 
     from .scanner_models import (  # noqa: E402,F401
         SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent, BidWatch,
+        CalibrationOverride, CalibrationSuggestion, LotFeedback,
     )
 """
+from django.conf import settings
 from django.db import models
 
 
@@ -181,6 +183,77 @@ class BidWatch(models.Model):
 
     def __str__(self):
         return f"BidWatch({self.lot_id}, {self.status})"
+
+
+class CalibrationOverride(models.Model):
+    """A settings.py (RESELLING_SCANNER) value overridden by the Insights
+    calibration workflow - read first, before the settings.py default, by
+    every override-aware config read (scanner/insights.py's get_calibrated
+    and friends). `key` is a dotted path mirroring the nested settings
+    dict it stands in for, e.g. "RESALE_MULTIPLIERS.jewelry_gold" or
+    "CATEGORY_FEES.jewelry.min_profit_pct" - unique, so there's at most one
+    live override per key; applying a new suggestion for the same key
+    replaces it (see insights_views.apply_suggestion)."""
+    key = models.CharField(max_length=150, unique=True)
+    value = models.DecimalField(max_digits=10, decimal_places=4)
+    source_note = models.TextField(blank=True)
+    sample_size = models.IntegerField(default=0)
+    applied_at = models.DateTimeField(auto_now_add=True)
+    applied_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
+    class Meta:
+        ordering = ["-applied_at"]
+
+    def __str__(self):
+        return f"{self.key} = {self.value}"
+
+
+class CalibrationSuggestion(models.Model):
+    """One calibrate command finding: settings.py's current value for `key`
+    looks off vs. real outcomes (Ledger sale prices or closed-lot final
+    prices), by at least the 5% threshold calibrate requires. Sits pending
+    until applied (creates/updates the matching CalibrationOverride) or
+    dismissed from the Insights page."""
+    STATUS_CHOICES = [("pending", "Pending"), ("applied", "Applied"), ("dismissed", "Dismissed")]
+
+    key = models.CharField(max_length=150)
+    current_value = models.DecimalField(max_digits=10, decimal_places=4)
+    suggested_value = models.DecimalField(max_digits=10, decimal_places=4)
+    sample_size = models.IntegerField()
+    evidence = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.key}: {self.current_value} -> {self.suggested_value} ({self.status})"
+
+
+class LotFeedback(models.Model):
+    """A "Wrong?" report from the dashboard's expandable lot rows or an AI
+    review page - a quick flag that the scanner (or the AI review) got
+    something wrong about a lot, surfaced on the Insights page for
+    later review (and export as test cases for scanner/valuers.py etc.)."""
+    KIND_CHOICES = [
+        ("misread", "Misread"), ("not_a_deal", "Not a Deal"),
+        ("wrong_category", "Wrong Category"), ("other", "Other"),
+    ]
+
+    lot = models.ForeignKey(SourcedLot, on_delete=models.CASCADE, related_name="feedback")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="other")
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"LotFeedback({self.lot_id}, {self.kind})"
 
 
 class ScanRun(models.Model):

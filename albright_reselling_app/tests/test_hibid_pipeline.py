@@ -19,8 +19,8 @@ from albright_reselling_app.scanner import pipeline
 from albright_reselling_app.scanner.adapters.base import RawLot
 from albright_reselling_app.scanner.adapters.hibid import HiBidAdapter
 from albright_reselling_app.scanner.alerts import run_alerts
-from albright_reselling_app.scanner.pipeline import _buyer_premium_pct, _inbound_shipping
-from albright_reselling_app.scanner_models import AlertSent, LotEvaluation, SourcedLot
+from albright_reselling_app.scanner.pipeline import _buyer_premium_pct, _inbound_shipping, _sales_tax_pct
+from albright_reselling_app.scanner_models import AlertSent, CalibrationOverride, LotEvaluation, SourcedLot
 
 SPOT = {"silver": 30.0, "gold": 2500.0}
 
@@ -56,12 +56,12 @@ def _make_hibid_lot(external_id, title="10 oz .999 Fine Silver Bar", current_pri
 class BuyerPremiumHelperTests(TestCase):
     def test_per_lot_premium_from_costs_wins(self):
         src = settings.RESELLING_SCANNER["SOURCES"]["hibid"]
-        self.assertEqual(_buyer_premium_pct({"_costs": {"buyer_premium_pct": 0.21}}, src), 0.21)
+        self.assertEqual(_buyer_premium_pct({"_costs": {"buyer_premium_pct": 0.21}}, src, "hibid"), 0.21)
 
     def test_falls_back_to_source_default_without_per_lot_costs(self):
         src = settings.RESELLING_SCANNER["SOURCES"]["shopgoodwill"]
-        self.assertEqual(_buyer_premium_pct({}, src), src["buyer_premium_pct"])
-        self.assertEqual(_buyer_premium_pct(None, src), src["buyer_premium_pct"])
+        self.assertEqual(_buyer_premium_pct({}, src, "shopgoodwill"), src["buyer_premium_pct"])
+        self.assertEqual(_buyer_premium_pct(None, src, "shopgoodwill"), src["buyer_premium_pct"])
 
     def test_hibid_source_has_no_flat_buyer_premium_pct_key(self):
         """HiBid's own default lives under default_buyer_premium_pct and is
@@ -71,7 +71,25 @@ class BuyerPremiumHelperTests(TestCase):
         break the fallback without a test catching it."""
         src = settings.RESELLING_SCANNER["SOURCES"]["hibid"]
         self.assertNotIn("buyer_premium_pct", src)
-        self.assertEqual(_buyer_premium_pct({}, src), 0.0)  # the bare .get() fallback, never actually hit
+        self.assertEqual(_buyer_premium_pct({}, src, "hibid"), 0.0)  # the bare .get() fallback, never hit
+
+    def test_calibration_override_wins_over_source_default(self):
+        src = settings.RESELLING_SCANNER["SOURCES"]["shopgoodwill"]
+        CalibrationOverride.objects.create(key="SOURCES.shopgoodwill.buyer_premium_pct", value=Decimal("0.05"))
+
+        self.assertEqual(_buyer_premium_pct({}, src, "shopgoodwill"), 0.05)
+
+
+class SalesTaxPctHelperTests(TestCase):
+    def test_falls_back_to_source_default(self):
+        src = settings.RESELLING_SCANNER["SOURCES"]["shopgoodwill"]
+        self.assertEqual(_sales_tax_pct(src, "shopgoodwill"), src["sales_tax_pct"])
+
+    def test_calibration_override_wins(self):
+        src = settings.RESELLING_SCANNER["SOURCES"]["shopgoodwill"]
+        CalibrationOverride.objects.create(key="SOURCES.shopgoodwill.sales_tax_pct", value=Decimal("0.0825"))
+
+        self.assertEqual(_sales_tax_pct(src, "shopgoodwill"), 0.0825)
 
 
 class InboundShippingHelperTests(TestCase):

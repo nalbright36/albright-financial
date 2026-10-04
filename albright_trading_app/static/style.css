@@ -331,21 +331,32 @@ a:hover { color: var(--accent-hover); }
 :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
-/* Nav dropdown (trading's Strategies submenu) */
+/* Nav dropdown (trading's Strategies submenu; reselling's Tools menu).
+   :hover opens it for mouse users; the JS in index.html toggles the
+   --open modifier too, so it also works by keyboard (the trigger is a
+   real <button> for Tools - Enter/Space fires a native click) and on
+   touch, where :hover doesn't fire. */
 .navbar__dropdown { position: relative; }
 .navbar__dropdown-trigger {
   display: inline-flex; align-items: center; gap: var(--space-1);
   color: var(--text-secondary); font-weight: 500; font-size: var(--text-sm); cursor: pointer;
+  background: none; border: none; padding: 0; margin: 0; font-family: inherit;
 }
-.navbar__dropdown:hover .navbar__dropdown-trigger { color: var(--text-primary); }
+.navbar__dropdown-trigger:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm);
+}
+.navbar__dropdown:hover .navbar__dropdown-trigger,
+.navbar__dropdown--open .navbar__dropdown-trigger { color: var(--text-primary); }
 .navbar__dropdown-caret { font-size: 0.6875rem; transition: transform var(--transition); }
-.navbar__dropdown:hover .navbar__dropdown-caret { transform: rotate(180deg); }
+.navbar__dropdown:hover .navbar__dropdown-caret,
+.navbar__dropdown--open .navbar__dropdown-caret { transform: rotate(180deg); }
 .navbar__dropdown-menu {
   display: none; position: absolute; top: 100%; left: 0; min-width: 170px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md);
   box-shadow: var(--shadow-md); padding: var(--space-2); z-index: 30;
 }
-.navbar__dropdown:hover .navbar__dropdown-menu { display: block; }
+.navbar__dropdown:hover .navbar__dropdown-menu,
+.navbar__dropdown--open .navbar__dropdown-menu { display: block; }
 .navbar__dropdown-menu a {
   display: block; padding: var(--space-2); border-radius: var(--radius-sm);
   font-size: var(--text-sm); color: var(--text-secondary); white-space: nowrap;
@@ -787,6 +798,17 @@ tr.scanner-detail td {
   }
   .navbar__links a { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
   .navbar__links a:last-child { border-bottom: none; }
+
+  /* The dropdown menu becomes part of the vertical mobile menu's own
+     flow instead of an absolutely-positioned floating box - same
+     bordered-row look as its sibling links. */
+  .navbar__dropdown { width: 100%; border-bottom: 1px solid var(--border); }
+  .navbar__dropdown-trigger { width: 100%; justify-content: space-between; padding: var(--space-3) 0; }
+  .navbar__dropdown-menu {
+    position: static; border: none; box-shadow: none; padding: 0 0 var(--space-2) var(--space-3);
+    background: transparent;
+  }
+  .navbar__dropdown-menu a { padding: var(--space-2) 0; }
   #nav-toggle:checked ~ .navbar__links { display: flex; }
   #nav-toggle:checked ~ .navbar__toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
   #nav-toggle:checked ~ .navbar__toggle span:nth-child(2) { opacity: 0; }

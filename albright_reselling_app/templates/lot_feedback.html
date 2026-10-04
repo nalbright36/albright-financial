@@ -1,0 +1,32 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card" style="max-width: 480px; margin: 0 auto;">
+        <div class="card__header">
+            <span class="card__label">Wrong?</span>
+            <a href="{{ next }}" style="font-size: 0.8125rem;">&larr; Back</a>
+        </div>
+
+        <h3 style="margin-bottom: 4px;"><a href="{{ lot.url }}" target="_blank" rel="noopener">{{ lot.title }}</a></h3>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 20px;">
+            Flag something the scanner (or an AI review) got wrong about this lot - it'll show up on
+            <a href="{% url 'albright_reselling_app:insights' %}">Insights</a> for review.
+        </p>
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            <div class="field"><label>What's wrong?</label>{{ form.kind }}</div>
+            <div class="field"><label>Note</label>{{ form.note }}</div>
+
+            {% if form.errors %}
+            <div class="alert-warning" style="display: block; margin-bottom: 16px;">Please fix the highlighted fields.</div>
+            {% endif %}
+
+            <button type="submit" class="btn btn-primary">Submit Report</button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

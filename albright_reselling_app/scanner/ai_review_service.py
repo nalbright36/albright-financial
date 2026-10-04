@@ -17,9 +17,10 @@ from django.utils import timezone
 from ..scanner_models import AIReview
 from . import ebay
 from .ai_review import run_review
+from .insights import calibrated_category_fees
 from .max_bid import BuyCosts, SellFees
 from .max_bid import max_bid as compute_max_bid
-from .pipeline import _buyer_premium_pct, _inbound_shipping
+from .pipeline import _buyer_premium_pct, _inbound_shipping, _sales_tax_pct
 
 log = logging.getLogger(__name__)
 
@@ -132,8 +133,11 @@ def _suggested_max_bid(resale_low, category, lot):
     buy-side costs (including the MaxSold pickup cost, if any)."""
     cfg = settings.RESELLING_SCANNER
     src = cfg["SOURCES"][lot.source]
-    fees = {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(category, {})}
-    buy = BuyCosts(_buyer_premium_pct(lot.raw, src), src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
+    fees = calibrated_category_fees(category, {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(category, {})})
+    buy = BuyCosts(
+        _buyer_premium_pct(lot.raw, src, lot.source), _sales_tax_pct(src, lot.source),
+        _inbound_shipping(lot.raw, src),
+    )
     return compute_max_bid(resale_low, SellFees(**fees), buy)
 
 

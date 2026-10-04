@@ -1,0 +1,257 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Insights</h1>
+    </div>
+
+    <!-- ============ Filter bar (Part A: market history) ============ -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">Filter Market History</span></div>
+        <form method="get" class="scanner-controls">
+            <select name="source">
+                <option value="">All sources</option>
+                <option value="shopgoodwill" {% if filters.source == 'shopgoodwill' %}selected{% endif %}>ShopGoodwill</option>
+                <option value="maxsold" {% if filters.source == 'maxsold' %}selected{% endif %}>MaxSold</option>
+                <option value="hibid" {% if filters.source == 'hibid' %}selected{% endif %}>HiBid</option>
+            </select>
+            <select name="category">
+                <option value="">All categories</option>
+                <option value="coins" {% if filters.category == 'coins' %}selected{% endif %}>Coins</option>
+                <option value="jewelry" {% if filters.category == 'jewelry' %}selected{% endif %}>Jewelry</option>
+                <option value="games" {% if filters.category == 'games' %}selected{% endif %}>Games</option>
+                <option value="cards" {% if filters.category == 'cards' %}selected{% endif %}>Cards</option>
+            </select>
+            <input type="date" name="from" value="{{ filters.from }}" placeholder="From">
+            <input type="date" name="to" value="{{ filters.to }}" placeholder="To">
+            <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+            <a href="{% url 'albright_reselling_app:insights' %}" class="btn btn-secondary btn-sm">Clear</a>
+        </form>
+        <p style="color: var(--text-secondary); font-size: 0.75rem; margin: 10px 0 0;">
+            Defaults to the last 30 days when no dates are given.
+        </p>
+    </div>
+
+    <!-- ============ Part A: market history ============ -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">Closed Lots by Source + Category</span></div>
+        {% if history.by_source_category %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Source</th><th>Category</th><th class="num">Closed</th>
+                    <th class="num">% At/Under Max</th><th class="num">Median Final/Melt %</th>
+                    <th class="num">Median Final/Expected %</th><th>Trend by Week</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in history.by_source_category %}
+                <tr>
+                    <td>{{ row.source }}</td>
+                    <td>{{ row.category }}</td>
+                    <td class="num">{{ row.closed_count }}</td>
+                    <td class="num">{% if row.pct_at_or_under_max is not None %}{{ row.pct_at_or_under_max }}%{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if row.median_final_melt_pct %}{{ row.median_final_melt_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if row.median_final_expected_pct %}{{ row.median_final_expected_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+                    <td style="font-size: 0.75rem; color: var(--text-secondary);">
+                        {% for week, count in row.trend_by_week %}{{ week|date:"M j" }}: {{ count }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No closed lots in this window yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom: 20px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Top Sellers/Auctioneers (Lowest Median Final/Melt %)</span></div>
+            {% if history.top_sellers %}
+            <table class="holdings">
+                <thead><tr><th>Source</th><th>Seller/Auctioneer</th><th class="num">Lots</th><th class="num">Median Final/Melt %</th></tr></thead>
+                <tbody>
+                    {% for row in history.top_sellers %}
+                    <tr>
+                        <td>{{ row.source }}</td>
+                        <td>{{ row.seller }}</td>
+                        <td class="num">{{ row.lot_count }}</td>
+                        <td class="num">{{ row.median_final_melt_pct|floatformat:1 }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--text-secondary);">No seller/auctioneer has at least 5 closed lots in this window yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card__header"><span class="card__label">Final/Melt % by End Hour / Weekday</span></div>
+            {% if history.final_melt_by_hour or history.final_melt_by_weekday %}
+            <div style="display: flex; gap: var(--space-6); flex-wrap: wrap;">
+                <div>
+                    <div class="row-count" style="margin-bottom: 6px;">By hour (local)</div>
+                    <table class="holdings">
+                        <thead><tr><th class="num">Hour</th><th class="num">Median %</th><th class="num">n</th></tr></thead>
+                        <tbody>
+                            {% for hour, stats in history.final_melt_by_hour.items %}
+                            <tr><td class="num">{{ hour }}:00</td><td class="num">{{ stats.median_final_melt_pct|floatformat:1 }}%</td><td class="num">{{ stats.n }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div>
+                    <div class="row-count" style="margin-bottom: 6px;">By weekday (0=Mon)</div>
+                    <table class="holdings">
+                        <thead><tr><th class="num">Day</th><th class="num">Median %</th><th class="num">n</th></tr></thead>
+                        <tbody>
+                            {% for weekday, stats in history.final_melt_by_weekday.items %}
+                            <tr><td class="num">{{ weekday }}</td><td class="num">{{ stats.median_final_melt_pct|floatformat:1 }}%</td><td class="num">{{ stats.n }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No closed lots with closing-time features recorded yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============ Part D: AI review accuracy ============ -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">AI Review Accuracy</span></div>
+        {% if ai_accuracy %}
+        <table class="holdings">
+            <thead><tr><th>Category</th><th class="num">Count</th><th class="num">% In AI Range</th><th class="num">Median Error %</th></tr></thead>
+            <tbody>
+                {% for category, stats in ai_accuracy.items %}
+                <tr>
+                    <td>{{ category }}</td>
+                    <td class="num">{{ stats.count }}</td>
+                    <td class="num">{% if stats.pct_in_range is not None %}{{ stats.pct_in_range }}%{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if stats.median_error_pct is not None %}{{ stats.median_error_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-secondary);">No reviewed lots with a known outcome yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- ============ Part B: calibration suggestions ============ -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header">
+            <span class="card__label">Pending Calibration Suggestions</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">From <code>python manage.py calibrate</code></span>
+        </div>
+        {% if pending_suggestions %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead>
+                <tr><th>Key</th><th class="num">Current</th><th class="num">Suggested</th><th class="num">n</th><th>Evidence</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                {% for s in pending_suggestions %}
+                <tr>
+                    <td><code>{{ s.key }}</code></td>
+                    <td class="num">{{ s.current_value }}</td>
+                    <td class="num">{{ s.suggested_value }}</td>
+                    <td class="num">{{ s.sample_size }}</td>
+                    <td style="font-size: 0.75rem; color: var(--text-secondary);">{{ s.evidence }}</td>
+                    <td>
+                        <form method="post" action="{% url 'albright_reselling_app:apply_suggestion' s.pk %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                        </form>
+                        <form method="post" action="{% url 'albright_reselling_app:dismiss_suggestion' s.pk %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Dismiss</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No pending suggestions right now.</p>
+        {% endif %}
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">Applied Overrides</span></div>
+        {% if applied_overrides %}
+        <table class="holdings">
+            <thead><tr><th>Key</th><th class="num">Value</th><th class="num">n</th><th>Applied</th><th>By</th><th>Actions</th></tr></thead>
+            <tbody>
+                {% for o in applied_overrides %}
+                <tr>
+                    <td><code>{{ o.key }}</code></td>
+                    <td class="num">{{ o.value }}</td>
+                    <td class="num">{{ o.sample_size }}</td>
+                    <td>{{ o.applied_at|date:"M j, Y" }}</td>
+                    <td>{{ o.applied_by|default:"—" }}</td>
+                    <td>
+                        <form method="post" action="{% url 'albright_reselling_app:undo_override' o.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Undo</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-secondary);">No overrides applied yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- ============ Part C: misread reports ============ -->
+    <div class="card">
+        <div class="card__header">
+            <span class="card__label">Open "Wrong?" Reports</span>
+            <a href="{% url 'albright_reselling_app:export_lot_feedback' %}" class="btn btn-secondary btn-sm">Export as Test Cases</a>
+        </div>
+        {% if open_feedback %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead>
+                <tr><th>Lot</th><th>Source</th><th>Category</th><th>Scanner Notes</th><th>Kind</th><th>Note</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                {% for report in open_feedback %}
+                <tr>
+                    <td><a href="{{ report.lot.url }}" target="_blank" rel="noopener">{{ report.lot.title|truncatechars:50 }}</a></td>
+                    <td>{{ report.lot.source }}</td>
+                    <td>{{ report.lot.evaluation.category|default:"—" }}</td>
+                    <td style="font-size: 0.75rem; color: var(--text-secondary);">
+                        {% if report.lot.evaluation.flags %}{{ report.lot.evaluation.flags|join:", " }}{% else %}&mdash;{% endif %}
+                        {% if report.lot.evaluation.lead_reason %} &middot; {{ report.lot.evaluation.lead_reason }}{% endif %}
+                    </td>
+                    <td><span class="badge warn">{{ report.get_kind_display }}</span></td>
+                    <td style="font-size: 0.8125rem;">{{ report.note|default:"—" }}</td>
+                    <td>
+                        <form method="post" action="{% url 'albright_reselling_app:resolve_lot_feedback' report.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Resolve</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No open reports.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

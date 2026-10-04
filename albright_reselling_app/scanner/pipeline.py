@@ -14,6 +14,7 @@ from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .coins import estimate_resale
 from .features import extract_features
+from .insights import calibrated_category_fees, calibrated_multipliers, get_calibrated
 from .max_bid import BuyCosts, SellFees, max_bid
 from .spot import get_all_spot
 from .valuers import classify
@@ -44,14 +45,16 @@ def _keywords_for(cfg, source, category):
     return cfg["SOURCES"][source].get("keywords", {}).get(category) or cfg["KEYWORDS"][category]
 
 
-def _buyer_premium_pct(raw, src_cfg):
+def _buyer_premium_pct(raw, src_cfg, source):
     """Per-lot premium (HiBid: raw["_costs"]["buyer_premium_pct"], parsed by
     the adapter from each lot's own auction - HiBid's premium varies by
     auction house, unlike ShopGoodwill/MaxSold's one flat source-level rate)
     overrides the source's own default when present. Shared by the max bid
     calc here, the ledger's "I won this" cost prefill, and the AI review
     service's suggested max bid, so all three price a HiBid lot the same
-    way the scanner itself did."""
+    way the scanner itself did. When there's no per-lot premium, falls
+    back to a calibration override for this source before the flat
+    settings.py default - see scanner/insights.py."""
     per_lot = (raw or {}).get("_costs", {}).get("buyer_premium_pct")
     if per_lot is not None:
         return per_lot
@@ -59,7 +62,15 @@ def _buyer_premium_pct(raw, src_cfg):
     # default lives under "default_buyer_premium_pct" and is already baked
     # into every parsed lot's raw["_costs"]) - this fallback only matters
     # for sources that always set a flat rate (ShopGoodwill/MaxSold).
-    return src_cfg.get("buyer_premium_pct", 0.0)
+    default = src_cfg.get("buyer_premium_pct", 0.0)
+    return get_calibrated(f"SOURCES.{source}.buyer_premium_pct", default)
+
+
+def _sales_tax_pct(src_cfg, source):
+    """Same override-then-settings fallback as _buyer_premium_pct, for the
+    other buy-side rate shared by the pipeline, the ledger, and the AI
+    review service."""
+    return get_calibrated(f"SOURCES.{source}.sales_tax_pct", src_cfg["sales_tax_pct"])
 
 
 def _inbound_shipping(raw, src_cfg):
@@ -111,9 +122,14 @@ def _apply_valuation(evaluation, parse, lot, spot, src, cfg):
     evaluation.gold_oz = _d(parse.total_oz("gold"), "0.0001")
 
     if parse.items and not parse.excluded_reason:
-        melt, expected = estimate_resale(parse, spot, cfg["RESALE_MULTIPLIERS"])
-        fees = {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(evaluation.category, {})}
-        buy = BuyCosts(_buyer_premium_pct(lot.raw, src), src["sales_tax_pct"], _inbound_shipping(lot.raw, src))
+        multipliers = calibrated_multipliers(cfg["RESALE_MULTIPLIERS"])
+        melt, expected = estimate_resale(parse, spot, multipliers)
+        base_fees = {**cfg["FEES"], **cfg["CATEGORY_FEES"].get(evaluation.category, {})}
+        fees = calibrated_category_fees(evaluation.category, base_fees)
+        buy = BuyCosts(
+            _buyer_premium_pct(lot.raw, src, lot.source), _sales_tax_pct(src, lot.source),
+            _inbound_shipping(lot.raw, src),
+        )
         bid = max_bid(expected, SellFees(**fees), buy)
         evaluation.melt_value, evaluation.expected_sale, evaluation.max_bid = _d(melt), _d(expected), _d(bid)
         evaluation.headroom = _d(bid - float(lot.current_price))
