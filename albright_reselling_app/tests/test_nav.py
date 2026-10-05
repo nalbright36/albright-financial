@@ -45,6 +45,7 @@ class NavStructureTests(TestCase):
         self.assertContains(response, reverse("albright_reselling_app:historical_data"))
         self.assertContains(response, reverse("albright_reselling_app:sleeper_segments"))
         self.assertContains(response, reverse("albright_reselling_app:insights"))
+        self.assertContains(response, reverse("albright_reselling_app:calculator"))
 
     def test_historical_data_relabeled_in_nav(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
@@ -70,7 +71,7 @@ class NavStructureTests(TestCase):
 
     def test_every_tools_page_still_loads(self):
         for url_name in (
-            "auction_scanner", "ai_review_history", "historical_data", "sleeper_segments", "insights",
+            "auction_scanner", "ai_review_history", "historical_data", "sleeper_segments", "insights", "calculator",
         ):
             response = self.client.get(reverse(f"albright_reselling_app:{url_name}"))
             self.assertEqual(response.status_code, 200, f"{url_name} did not load")

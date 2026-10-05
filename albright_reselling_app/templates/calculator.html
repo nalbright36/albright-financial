@@ -1,0 +1,352 @@
+{% extends 'index.html' %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Bid Calculator</h1>
+    </div>
+
+    <!-- No-JS fallback: this form posts straight to this page and
+         re-renders with server-computed results. With JS, the same
+         fields are read live and posted to calculator_calculate instead,
+         so results update as you type - either way goes through the
+         exact same scanner/calculator.py math. -->
+    <form method="post" id="calc-form">
+        {% csrf_token %}
+
+        <div class="grid grid-2" style="margin-bottom: 20px; align-items: start;">
+            <!-- ============ Buy side ============ -->
+            <div class="card">
+                <div class="card__header"><span class="card__label">Buy Side</span></div>
+
+                <div class="field"><label>Source Preset</label>
+                    <select id="source-preset">
+                        <option value="">Custom</option>
+                        {% for src in source_choices %}<option value="{{ src }}">{{ src }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field"><label>Bid Amount</label><input type="number" step="0.01" name="bid" id="f-bid" class="ledger-input num"></div>
+                <div class="field"><label>Buyer's Premium %</label><input type="number" step="0.01" name="premium_pct" id="f-premium_pct" class="ledger-input num"></div>
+                <div class="field"><label>Sales Tax %</label><input type="number" step="0.01" name="tax_pct" id="f-tax_pct" class="ledger-input num"></div>
+                <div class="field">
+                    <label><input type="checkbox" name="tax_on_premium" id="f-tax_on_premium" checked> Tax applies to buyer's premium</label>
+                </div>
+                <div class="field"><label>Card/Processing Fee %</label><input type="number" step="0.01" name="card_fee_pct" id="f-card_fee_pct" class="ledger-input num"></div>
+                <div class="field"><label>Per-Lot/Invoice Fee $</label><input type="number" step="0.01" name="per_lot_fee" id="f-per_lot_fee" class="ledger-input num"></div>
+
+                <div class="field">
+                    <label>Inbound</label>
+                    <div style="display: flex; gap: var(--space-4); font-size: 0.8125rem; margin-bottom: 6px;">
+                        <label><input type="radio" name="inbound_mode" value="shipping" id="f-inbound-shipping" checked> Shipping</label>
+                        <label><input type="radio" name="inbound_mode" value="pickup" id="f-inbound-pickup"> Pickup</label>
+                    </div>
+                </div>
+                <div class="field" id="group-shipping"><label>Shipping $</label><input type="number" step="0.01" name="shipping" id="f-shipping" class="ledger-input num"></div>
+                <div class="field" id="group-pickup" style="display: none;">
+                    <label>Round-Trip Miles</label><input type="number" step="0.1" name="pickup_miles" id="f-pickup_miles" class="ledger-input num">
+                    <label style="margin-top: 8px;">Rate per Mile $</label><input type="number" step="0.01" name="pickup_rate_per_mile" id="f-pickup_rate_per_mile" class="ledger-input num">
+                    <label style="margin-top: 8px;">Fixed Pickup Cost $</label><input type="number" step="0.01" name="pickup_fixed_cost" id="f-pickup_fixed_cost" class="ledger-input num">
+                </div>
+            </div>
+
+            <!-- ============ Items + resale (optional) ============ -->
+            <div class="card">
+                <div class="card__header"><span class="card__label">Items &amp; Resale</span></div>
+
+                <table class="holdings" id="items-table">
+                    <thead><tr><th>Name</th><th class="num">Qty</th><th class="num">Price Each</th><th></th></tr></thead>
+                    <tbody id="items-body"></tbody>
+                </table>
+                <button type="button" class="btn btn-secondary btn-sm" id="add-item" style="margin-top: 8px;">Add Item</button>
+
+                <div class="card" style="margin-top: 16px; background: var(--surface-hover);">
+                    <div class="card__header"><span class="card__label">Melt Helper</span></div>
+                    <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: flex-end;">
+                        <div class="field" style="margin-bottom: 0;"><label>Metal</label>
+                            <select id="melt-metal"><option value="gold">Gold</option><option value="silver">Silver</option></select>
+                        </div>
+                        <div class="field" style="margin-bottom: 0;"><label>Karat/Purity</label>
+                            <input type="text" id="melt-purity" class="ledger-input" style="width: 90px;" placeholder="14 or .925">
+                        </div>
+                        <div class="field" style="margin-bottom: 0;"><label>Weight</label>
+                            <input type="number" step="0.01" id="melt-weight" class="ledger-input num" style="width: 90px;">
+                        </div>
+                        <div class="field" style="margin-bottom: 0;"><label>Unit</label>
+                            <select id="melt-unit"><option value="g">g</option><option value="dwt">dwt</option><option value="oz">troy oz</option></select>
+                        </div>
+                        <div class="field" style="margin-bottom: 0;"><label>Payout %</label>
+                            <input type="number" step="0.01" id="melt-payout" class="ledger-input num" style="width: 70px;" value="100">
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="melt-calc">Add as Item</button>
+                    </div>
+                    <p id="melt-result" style="margin: 8px 0 0; font-size: 0.8125rem; color: var(--text-secondary);"></p>
+                </div>
+
+                <div class="field" style="margin-top: 16px;"><label>Channel Preset</label>
+                    <select id="channel-preset">
+                        <option value="">Custom</option>
+                        {% for ch in channel_choices %}<option value="{{ ch }}">{{ ch }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field"><label>Platform Fee %</label><input type="number" step="0.01" name="platform_fee_pct" id="f-platform_fee_pct" class="ledger-input num"></div>
+                <div class="field"><label>Fixed Fee per Order $</label><input type="number" step="0.01" name="fixed_fee" id="f-fixed_fee" class="ledger-input num"></div>
+                <div class="field"><label>Outbound Shipping $</label><input type="number" step="0.01" name="outbound_shipping" id="f-outbound_shipping" class="ledger-input num"></div>
+                <div class="field"><label>Packaging $</label><input type="number" step="0.01" name="packaging" id="f-packaging" class="ledger-input num"></div>
+                <div class="field"><label>Other Costs $</label><input type="number" step="0.01" name="other_costs" id="f-other_costs" class="ledger-input num"></div>
+
+                <div class="field"><label>Target Profit $</label><input type="number" step="0.01" name="target_profit_dollars" id="f-target_profit_dollars" class="ledger-input num"></div>
+                <div class="field"><label>Target Profit % of Sale</label><input type="number" step="0.01" name="target_profit_pct" id="f-target_profit_pct" class="ledger-input num"></div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Calculate</button>
+    </form>
+
+    <!-- ============ Results ============ -->
+    <div class="card" style="margin: 20px 0;" id="results-card">
+        <div class="card__header"><span class="card__label">Results</span></div>
+        <div id="results-body">
+            {% if results %}
+            <div class="grid grid-4" style="margin-bottom: 16px;">
+                <div><div class="row-count">Max Bid</div><span id="r-max_bid" class="ledger-stat__value num" style="font-size: 1.75rem;">${{ results.max_bid|floatformat:2 }}</span></div>
+                <div><div class="row-count">Break-Even Bid</div><span id="r-break_even_bid" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.break_even_bid|floatformat:2 }}</span></div>
+                <div><div class="row-count">Total Cost (Entered Bid)</div><span id="r-total_cost" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.total_cost|floatformat:2 }}</span></div>
+                <div><div class="row-count">Net Proceeds</div><span id="r-net_proceeds" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.net_proceeds|floatformat:2 }}</span></div>
+                <div><div class="row-count">Profit</div><span id="r-profit" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.profit|floatformat:2 }}</span></div>
+                <div><div class="row-count">ROI %</div><span id="r-roi_pct" class="ledger-stat__value num" style="font-size: 1.5rem;">{% if results.roi_pct is not None %}{{ results.roi_pct }}%{% else %}&mdash;{% endif %}</span></div>
+                <div><div class="row-count">Margin %</div><span id="r-margin_pct" class="ledger-stat__value num" style="font-size: 1.5rem;">{% if results.margin_pct is not None %}{{ results.margin_pct }}%{% else %}&mdash;{% endif %}</span></div>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">Enter a bid and (optionally) resale items, then Calculate.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============ Save ============ -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">Save This Calculation</span></div>
+        <form method="post" action="{% url 'albright_reselling_app:calculator_save' %}" id="save-form">
+            {% csrf_token %}
+            <input type="hidden" name="inputs" id="save-inputs">
+            <input type="hidden" name="results" id="save-results">
+            <div style="display: flex; gap: var(--space-2);">
+                <input type="text" name="name" class="ledger-input" placeholder="Name this calculation" style="flex: 1;">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ============ Saved calculations ============ -->
+    <div class="card">
+        <div class="card__header"><span class="card__label">Saved Calculations</span></div>
+        {% if saved_calculations %}
+        <table class="holdings">
+            <thead><tr><th>Name</th><th>Saved</th><th></th></tr></thead>
+            <tbody>
+                {% for calc in saved_calculations %}
+                <tr>
+                    <td>{{ calc.name|default:"(unnamed)" }}</td>
+                    <td>{{ calc.created_at|date:"M j, Y g:i A" }}</td>
+                    <td>
+                        <a href="{% url 'albright_reselling_app:calculator' %}?load={{ calc.pk }}" class="btn btn-secondary btn-sm">Load</a>
+                        <form method="post" action="{% url 'albright_reselling_app:calculator_rename' calc.pk %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="text" name="name" value="{{ calc.name }}" class="ledger-input" style="width: 140px; display: inline-block;">
+                            <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+                        </form>
+                        <form method="post" action="{% url 'albright_reselling_app:calculator_delete' calc.pk %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-secondary);">No saved calculations yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+(function () {
+    var PCT_FIELDS = ["premium_pct", "tax_pct", "card_fee_pct", "platform_fee_pct", "target_profit_pct"];
+    var PLAIN_FIELDS = [
+        "bid", "per_lot_fee", "shipping", "pickup_miles", "pickup_rate_per_mile", "pickup_fixed_cost",
+        "fixed_fee", "outbound_shipping", "packaging", "other_costs", "target_profit_dollars",
+    ];
+    var form = document.getElementById("calc-form");
+    var itemsBody = document.getElementById("items-body");
+    var resultsBody = document.getElementById("results-body");
+
+    function field(name) { return document.getElementById("f-" + name); }
+
+    function addItemRow(name, quantity, priceEach) {
+        var row = document.createElement("tr");
+        row.innerHTML =
+            '<td><input type="text" name="item_name" class="ledger-input" value="' + (name || "").replace(/"/g, "&quot;") + '"></td>' +
+            '<td class="num"><input type="number" step="0.01" name="item_quantity" class="ledger-input num" value="' + (quantity != null ? quantity : 1) + '"></td>' +
+            '<td class="num"><input type="number" step="0.01" name="item_price" class="ledger-input num" value="' + (priceEach != null ? priceEach : "") + '"></td>' +
+            '<td><button type="button" class="btn btn-secondary btn-sm remove-item">&times;</button></td>';
+        itemsBody.appendChild(row);
+        row.querySelector(".remove-item").addEventListener("click", function () {
+            row.remove();
+            scheduleCalculate();
+        });
+    }
+    document.getElementById("add-item").addEventListener("click", function () { addItemRow("", 1, ""); });
+
+    // Inbound mode toggle.
+    function syncInboundVisibility() {
+        var pickup = document.getElementById("f-inbound-pickup").checked;
+        document.getElementById("group-shipping").style.display = pickup ? "none" : "";
+        document.getElementById("group-pickup").style.display = pickup ? "" : "none";
+    }
+    document.getElementById("f-inbound-shipping").addEventListener("change", syncInboundVisibility);
+    document.getElementById("f-inbound-pickup").addEventListener("change", syncInboundVisibility);
+
+    function collectData() {
+        var data = {tax_on_premium: field("tax_on_premium").checked,
+                    inbound_mode: document.querySelector('input[name="inbound_mode"]:checked').value};
+        PLAIN_FIELDS.forEach(function (name) { data[name] = field(name).value; });
+        PCT_FIELDS.forEach(function (name) { data[name] = (parseFloat(field(name).value) || 0) / 100; });
+        data.items = [];
+        itemsBody.querySelectorAll("tr").forEach(function (row) {
+            var inputs = row.querySelectorAll("input");
+            data.items.push({name: inputs[0].value, quantity: inputs[1].value, price_each: inputs[2].value});
+        });
+        return data;
+    }
+
+    function renderResults(results) {
+        resultsBody.innerHTML =
+            '<div class="grid grid-4" style="margin-bottom: 16px;">' +
+            statBlock("Max Bid", results.max_bid, "r-max_bid", "font-size: 1.75rem;") +
+            statBlock("Break-Even Bid", results.break_even_bid, "r-break_even_bid") +
+            statBlock("Total Cost (Entered Bid)", results.total_cost, "r-total_cost") +
+            statBlock("Net Proceeds", results.net_proceeds, "r-net_proceeds") +
+            statBlock("Profit", results.profit, "r-profit") +
+            pctBlock("ROI %", results.roi_pct, "r-roi_pct") +
+            pctBlock("Margin %", results.margin_pct, "r-margin_pct") +
+            "</div>";
+        var maxBidEl = document.getElementById("r-max_bid");
+        if (maxBidEl) {
+            maxBidEl.style.color = results.over_max ? "var(--loss)" : "var(--gain)";
+        }
+        document.getElementById("save-inputs").value = JSON.stringify(window.__lastCalcInputs || {});
+        document.getElementById("save-results").value = JSON.stringify(results);
+    }
+    function statBlock(label, value, id, extraStyle) {
+        return '<div><div class="row-count">' + label + '</div><span id="' + id + '" class="ledger-stat__value num" style="font-size: 1.5rem;' + (extraStyle || "") + '">$' + Number(value).toFixed(2) + '</span></div>';
+    }
+    function pctBlock(label, value, id) {
+        var text = (value === null || value === undefined) ? "&mdash;" : Number(value).toFixed(2) + "%";
+        return '<div><div class="row-count">' + label + '</div><span id="' + id + '" class="ledger-stat__value num" style="font-size: 1.5rem;">' + text + '</span></div>';
+    }
+
+    var calcTimer = null;
+    function scheduleCalculate() {
+        window.clearTimeout(calcTimer);
+        calcTimer = window.setTimeout(doCalculate, 300);
+    }
+    function doCalculate() {
+        var data = collectData();
+        window.__lastCalcInputs = data;
+        fetch("{% url 'albright_reselling_app:calculator_calculate' %}", {
+            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+            body: JSON.stringify(data),
+        }).then(function (r) { return r.json(); }).then(renderResults).catch(function () {});
+    }
+    function csrfToken() {
+        var match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value;
+    }
+
+    form.addEventListener("input", scheduleCalculate);
+    form.addEventListener("submit", function (e) {
+        if (window.fetch) e.preventDefault();  // let JS own it when available; otherwise real submit
+        doCalculate();
+    });
+
+    // Melt helper.
+    document.getElementById("melt-calc").addEventListener("click", function () {
+        var data = {
+            metal: document.getElementById("melt-metal").value,
+            purity: document.getElementById("melt-purity").value,
+            weight: document.getElementById("melt-weight").value,
+            unit: document.getElementById("melt-unit").value,
+            payout_pct: (parseFloat(document.getElementById("melt-payout").value) || 0) / 100,
+        };
+        fetch("{% url 'albright_reselling_app:calculator_melt' %}", {
+            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+            body: JSON.stringify(data),
+        }).then(function (r) { return r.json(); }).then(function (result) {
+            if (result.value === null) {
+                document.getElementById("melt-result").textContent = "No spot price available.";
+                return;
+            }
+            document.getElementById("melt-result").textContent =
+                result.troy_oz + " troy oz @ " + result.purity + " purity -> $" + result.value.toFixed(2);
+            addItemRow(data.metal + " " + (data.purity || "") + " " + data.weight + data.unit, 1, result.value);
+            scheduleCalculate();
+        });
+    });
+
+    // Source preset.
+    document.getElementById("source-preset").addEventListener("change", function (e) {
+        var source = e.target.value;
+        if (!source) return;
+        fetch("{% url 'albright_reselling_app:calculator_preset' %}", {
+            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+            body: JSON.stringify({kind: "source", source: source}),
+        }).then(function (r) { return r.json(); }).then(function (preset) { applyPreset(preset); });
+    });
+    // Channel preset.
+    document.getElementById("channel-preset").addEventListener("change", function (e) {
+        var channel = e.target.value;
+        if (!channel) return;
+        fetch("{% url 'albright_reselling_app:calculator_preset' %}", {
+            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+            body: JSON.stringify({kind: "channel", channel: channel}),
+        }).then(function (r) { return r.json(); }).then(function (preset) { applyPreset(preset); });
+    });
+
+    function applyPreset(preset) {
+        Object.keys(preset).forEach(function (key) {
+            var el = field(key);
+            if (!el) return;
+            if (el.type === "checkbox") { el.checked = !!preset[key]; return; }
+            if (key === "inbound_mode") {
+                document.getElementById("f-inbound-" + preset[key]).checked = true;
+                syncInboundVisibility();
+                return;
+            }
+            el.value = PCT_FIELDS.indexOf(key) >= 0 ? (preset[key] * 100) : preset[key];
+        });
+        scheduleCalculate();
+    }
+
+    // Prefill from server (an "Open in calculator" lot, a loaded saved
+    // calculation, or a resubmitted no-JS form).
+    var prefill = {{ prefill|safe }};
+    (prefill.items || []).forEach(function (item) { addItemRow(item.name, item.quantity, item.price_each); });
+    if (!prefill.items || !prefill.items.length) {
+        addItemRow("", 1, "");  // always start with at least one row
+    }
+    Object.keys(prefill).forEach(function (key) {
+        if (key === "items") return;
+        var el = field(key);
+        if (!el) return;
+        if (key === "inbound_mode") {
+            document.getElementById("f-inbound-" + prefill[key]).checked = true;
+            return;
+        }
+        el.value = PCT_FIELDS.indexOf(key) >= 0 ? (prefill[key] * 100) : prefill[key];
+    });
+    syncInboundVisibility();
+    scheduleCalculate();
+})();
+</script>
+{% endblock %}

@@ -46,6 +46,7 @@ Expects `row` and `colspan` in context.
                 {% endif %}
                 <a href="{% url 'albright_reselling_app:ledger_win_lot' row.lot_id %}{% if row.ai_review %}?review={{ row.ai_review.pk }}{% endif %}" class="btn btn-secondary btn-sm">I Won This</a>
                 <a href="{% url 'albright_reselling_app:lot_feedback' row.lot_id %}?next={{ request.path|urlencode }}" class="btn btn-secondary btn-sm">Wrong?</a>
+                <a href="{% url 'albright_reselling_app:calculator' %}?lot={{ row.lot_id }}{% if row.ai_review %}&review={{ row.ai_review.pk }}{% endif %}" class="btn btn-secondary btn-sm">Open in Calculator</a>
             </span>
         </div>
     </td>

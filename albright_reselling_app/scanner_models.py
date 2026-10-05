@@ -2,7 +2,7 @@
 
     from .scanner_models import (  # noqa: E402,F401
         SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent, BidWatch,
-        CalibrationOverride, CalibrationSuggestion, LotFeedback,
+        CalibrationOverride, CalibrationSuggestion, LotFeedback, BidCalculation,
     )
 """
 from django.conf import settings
@@ -254,6 +254,27 @@ class LotFeedback(models.Model):
 
     def __str__(self):
         return f"LotFeedback({self.lot_id}, {self.kind})"
+
+
+class BidCalculation(models.Model):
+    """A saved Bid Calculator run (calculator_views.py / scanner/
+    calculator.py) - inputs and results both stored as JSON (not
+    individual fields) since the calculator's input shape is itself
+    pretty wide and may grow; optionally tied back to the scanner lot it
+    was opened from, for "Open in calculator" round-trips."""
+    name = models.CharField(max_length=200, blank=True)
+    inputs = models.JSONField(default=dict)
+    results = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    scanner_lot = models.ForeignKey(
+        SourcedLot, on_delete=models.SET_NULL, null=True, blank=True, related_name="bid_calculations",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name or f"Calculation #{self.pk}"
 
 
 class ScanRun(models.Model):
