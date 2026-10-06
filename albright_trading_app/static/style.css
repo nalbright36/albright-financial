@@ -696,7 +696,7 @@ td.lot-title a {
    width - the card's own overflow-x:auto then scrolls it horizontally
    instead of squeezing every column down to fit. */
 .ledger-table .ledger-item-col,
-.ledger-table .ledger-item-cell { min-width: 260px; white-space: normal; word-break: break-word; }
+.ledger-table .ledger-item-cell { min-width: 220px; white-space: normal; word-break: break-word; }
 .ledger-table td.num, .ledger-table th.num { min-width: 7.5em; }
 
 .ledger-group-head {
@@ -717,6 +717,60 @@ td.lot-title a {
    least 10 characters) without being clipped, regardless of the cell's
    own width. */
 .ledger-edit-table input.ledger-input.num { min-width: 10ch; text-align: right; }
+
+/* ---------- Read-only Ledger table (table.ledger-view-table only -
+   edit mode and the quick-add form use plain .ledger-table and are
+   untouched below) ----------
+   Every leaf column gets an explicit min-width floor so the browser's
+   table layout can never compress a money column far enough for two
+   values to overlap, and the table itself gets a matching min-width so
+   the card scrolls horizontally once the columns no longer fit, rather
+   than squeezing them. */
+table.ledger-view-table { min-width: 1280px; }
+
+table.ledger-view-table .ledger-item-col,
+table.ledger-view-table .ledger-item-cell {
+  max-width: 320px;
+}
+
+table.ledger-view-table td.num,
+table.ledger-view-table th.num {
+  min-width: 96px;
+  white-space: nowrap;
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+}
+
+/* Full header labels, never truncated - wraps to a second line instead of
+   being clipped by the shared sortable-header nowrap rule. */
+table.ledger-view-table th[data-sort-key] {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+/* Item column pinned to the left edge while scrolling sideways. The
+   header cell is already sticky on the top axis (table.holdings thead th,
+   above) - this adds the left axis and a higher z-index so the corner
+   cell (sticky on both axes) stays above the plain left-sticky body
+   cells and the row below it while scrolled in both directions. */
+table.ledger-view-table .ledger-item-cell,
+table.ledger-view-table tfoot td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+table.ledger-view-table thead th.ledger-item-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+/* Subtle vertical dividers between the Buy / Sell / Result column groups,
+   carried down through every row via .ledger-col-divider on the first
+   cell of the Sell group (Sold for) and the Result group (Profit) - not
+   just on the group-heading row. */
+table.ledger-view-table .ledger-col-divider { border-left: 1px solid var(--border); }
 
 /* Expandable detail rows */
 th.row-toggle-col { width: 24px; padding-left: var(--space-3) !important; padding-right: 0 !important; }

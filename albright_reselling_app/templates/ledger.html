@@ -166,8 +166,8 @@
                 <tr>
                     <th rowspan="2" class="ledger-item-col" data-sort-key="item">Item</th>
                     <th colspan="{% if has_legacy %}7{% else %}6{% endif %}" class="ledger-group-head">Buy</th>
-                    <th colspan="3" class="ledger-group-head">Sell</th>
-                    <th rowspan="2" class="ledger-group-head num" data-sort-key="profit">Result</th>
+                    <th colspan="3" class="ledger-group-head ledger-col-divider">Sell</th>
+                    <th colspan="1" class="ledger-group-head ledger-col-divider">Result</th>
                 </tr>
                 <tr>
                     <th class="num" data-sort-key="cost">Cost</th>
@@ -179,9 +179,10 @@
                     <th class="num" data-sort-key="oldunsplit" title="Old fees/shipping from before buy-side and sell-side costs were tracked separately. Included here so the buy total still adds up - open Manage on a row with this amount to split it into the columns on either side.">Old unsplit</th>
                     {% endif %}
                     <th class="num" data-sort-key="buytotal">Buy total</th>
-                    <th class="num" data-sort-key="soldfor">Sold for</th>
+                    <th class="num ledger-col-divider" data-sort-key="soldfor">Sold for</th>
                     <th class="num" data-sort-key="sellfees">Sell fees</th>
                     <th class="num" data-sort-key="sellship">Sell ship</th>
+                    <th class="num ledger-col-divider" data-sort-key="profit">Profit</th>
                 </tr>
             </thead>
             <tbody>
@@ -221,10 +222,10 @@
                     </td>
                     {% endif %}
                     <td class="num">{{ entry.buy_side_cost|money }}</td>
-                    <td class="num">{{ entry.sold_for|money }}</td>
+                    <td class="num ledger-col-divider">{{ entry.sold_for|money }}</td>
                     <td class="num">{{ entry.sell_fees|money }}</td>
                     <td class="num">{{ entry.sell_shipping|money }}</td>
-                    <td class="num {% if entry.profit >= 0 %}gain{% else %}loss{% endif %}">{{ entry.profit|money }}</td>
+                    <td class="num ledger-col-divider {% if entry.profit >= 0 %}gain{% else %}loss{% endif %}">{{ entry.profit|money }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -233,9 +234,9 @@
                     <td>Totals</td>
                     <td class="num" colspan="{% if has_legacy %}6{% else %}5{% endif %}"></td>
                     <td class="num" id="ledger-total-buytotal">{{ totals.total|money }}</td>
-                    <td class="num" id="ledger-total-soldfor">{{ totals.sold_for|money }}</td>
+                    <td class="num ledger-col-divider" id="ledger-total-soldfor">{{ totals.sold_for|money }}</td>
                     <td class="num" colspan="2" id="ledger-total-sellcosts">{{ totals.sell_costs|money }}</td>
-                    <td class="num {% if totals.profit >= 0 %}gain{% else %}loss{% endif %}" id="ledger-total-profit">{{ totals.profit|money }}</td>
+                    <td class="num ledger-col-divider {% if totals.profit >= 0 %}gain{% else %}loss{% endif %}" id="ledger-total-profit">{{ totals.profit|money }}</td>
                 </tr>
             </tfoot>
         </table>
