@@ -1,20 +1,23 @@
-"""Tests for the Bid Calculator: scanner/calculator.py's math (checked
-against scanner/max_bid.py directly for the same inputs), presets, the
-melt helper, the JSON endpoints, prefill from a lot, and save/load/delete.
-All pure ORM/function calls - no HTTP to any external site; spot price
-lookups are given explicitly or mocked."""
-import json
+"""Tests for scanner/calculator.py's own math (checked against
+scanner/max_bid.py directly for the same inputs), presets, the melt
+helper, and prefill from a lot. All pure ORM/function calls - no HTTP to
+any external site; spot price lookups are given explicitly or mocked.
+
+This module (and the old multi-item/melt-helper Bid Calculator page it
+originally backed) is no longer wired to any URL - the Bid Calculator
+page now runs entirely on scanner/simple_calc.py instead (see
+calculator_views.py and tests/test_bid_calculator_views.py). The tests
+below just keep scanner/calculator.py's own math covered since the
+module itself is still here, untouched."""
 from decimal import Decimal
 
-from django.contrib.auth.models import User
 from django.test import TestCase
-from django.urls import reverse
 
 from albright_reselling_app.scanner import calculator
 from albright_reselling_app.scanner.max_bid import BuyCosts, SellFees, all_in_cost
 from albright_reselling_app.scanner.max_bid import max_bid as compute_max_bid
 from albright_reselling_app.scanner.max_bid import projected_profit
-from albright_reselling_app.scanner_models import AIReview, BidCalculation, CalibrationOverride, LotEvaluation, SourcedLot
+from albright_reselling_app.scanner_models import AIReview, CalibrationOverride, LotEvaluation, SourcedLot
 
 
 class ExactMatchWithMaxBidTests(TestCase):
@@ -245,97 +248,3 @@ class PrefillFromLotTests(TestCase):
         evaluation = LotEvaluation.objects.create(lot=lot, category="coins", expected_sale=Decimal("50.00"))
         self.assertEqual(calculator.prefill_expected_sale(evaluation, None), 50.0)
 
-
-class CalculatorViewTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
-        self.client.login(username="tester", password="pw-not-real-12345")
-
-    def test_requires_login(self):
-        self.client.logout()
-        response = self.client.get(reverse("albright_reselling_app:calculator"))
-        self.assertEqual(response.status_code, 302)
-
-    def test_page_loads(self):
-        response = self.client.get(reverse("albright_reselling_app:calculator"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bid Calculator")
-
-    def test_prefill_from_lot_query_param(self):
-        lot = SourcedLot.objects.create(
-            source="shopgoodwill", external_id="view-prefill-1", url="https://example.com/view-prefill-1",
-            title="Prefill Lot", current_price=Decimal("25.00"),
-        )
-        response = self.client.get(f"{reverse('albright_reselling_app:calculator')}?lot={lot.pk}")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '"bid": 25.0')
-
-    def test_calculate_api_returns_json(self):
-        response = self.client.post(
-            reverse("albright_reselling_app:calculator_calculate"),
-            data=json.dumps({"bid": 100, "premium_pct": 0.1, "tax_pct": 0.05, "items": []}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("max_bid", response.json())
-
-    def test_melt_api_returns_json(self):
-        response = self.client.post(
-            reverse("albright_reselling_app:calculator_melt"),
-            data=json.dumps({"metal": "gold", "purity": 14, "weight": 10, "unit": "g", "payout_pct": 1.0}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("value", response.json())
-
-    def test_no_js_post_renders_results(self):
-        response = self.client.post(reverse("albright_reselling_app:calculator"), {
-            "bid": "100", "premium_pct": "18", "tax_pct": "7", "tax_on_premium": "on",
-            "item_name": ["ring"], "item_quantity": ["1"], "item_price": ["300"],
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Max Bid")
-
-
-class SaveLoadDeleteTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="tester2", password="pw-not-real-12345")
-        self.client.login(username="tester2", password="pw-not-real-12345")
-
-    def test_save_creates_calculation(self):
-        response = self.client.post(reverse("albright_reselling_app:calculator_save"), {
-            "name": "My Calc", "inputs": json.dumps({"bid": 100}), "results": json.dumps({"max_bid": 150}),
-        })
-        calc = BidCalculation.objects.get(name="My Calc")
-        self.assertRedirects(response, f"{reverse('albright_reselling_app:calculator')}?load={calc.pk}")
-        self.assertEqual(calc.inputs["bid"], 100)
-        self.assertEqual(calc.results["max_bid"], 150)
-
-    def test_load_prefills_from_saved_calculation(self):
-        calc = BidCalculation.objects.create(name="Loadable", inputs={"bid": 77.0}, results={})
-
-        response = self.client.get(f"{reverse('albright_reselling_app:calculator')}?load={calc.pk}")
-
-        self.assertContains(response, '"bid": 77.0')
-
-    def test_rename(self):
-        calc = BidCalculation.objects.create(name="Old Name", inputs={}, results={})
-
-        self.client.post(reverse("albright_reselling_app:calculator_rename", args=[calc.pk]), {"name": "New Name"})
-
-        calc.refresh_from_db()
-        self.assertEqual(calc.name, "New Name")
-
-    def test_delete(self):
-        calc = BidCalculation.objects.create(name="Temp", inputs={}, results={})
-
-        self.client.post(reverse("albright_reselling_app:calculator_delete", args=[calc.pk]))
-
-        self.assertFalse(BidCalculation.objects.filter(pk=calc.pk).exists())
-
-    def test_saved_calculations_listed_on_page(self):
-        BidCalculation.objects.create(name="Visible Calc", inputs={}, results={})
-
-        response = self.client.get(reverse("albright_reselling_app:calculator"))
-
-        self.assertContains(response, "Visible Calc")

@@ -1,0 +1,13 @@
+{% if results %}
+<div class="grid grid-2" style="margin-bottom: 12px;">
+    <div><div class="row-count">Bid</div><span class="num">${{ results.bid|floatformat:2 }}</span></div>
+    <div><div class="row-count">Premium</div><span class="num">${{ results.premium|floatformat:2 }}</span></div>
+    <div><div class="row-count">Tax</div><span class="num">${{ results.tax|floatformat:2 }}</span></div>
+    <div><div class="row-count">Shipping</div><span class="num">${{ results.shipping|floatformat:2 }}</span></div>
+    <div><div class="row-count">Other fees</div><span class="num">${{ results.other_fees|floatformat:2 }}</span></div>
+</div>
+<div class="row-count">Out-the-door total</div>
+<span class="ledger-stat__value num" style="font-size: 2rem;">${{ results.total|floatformat:2 }}</span>
+{% else %}
+<p style="color: var(--text-secondary);">Enter a bid, then Calculate.</p>
+{% endif %}

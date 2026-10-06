@@ -1,8 +1,8 @@
-"""Tests for the reselling app's main nav: Dashboard/Ledger/Tools at the
-top level, the Tools dropdown grouping AI Reviews/Auction Scanner/Legacy
-Historical Data/Sleeper Segments/Insights, and every one of those pages'
-URLs still resolving and loading after the regroup (URLs/views/functionality
-were never touched - only the nav markup moved)."""
+"""Tests for the reselling app's main nav: Dashboard/Ledger/Bid Calculator/
+Tools at the top level, the Tools dropdown grouping AI Reviews/Auction
+Scanner/Legacy Historical Data/Sleeper Segments/Insights, and every one of
+those pages' URLs still resolving and loading after the regroup (URLs/
+views/functionality were never touched - only the nav markup moved)."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -13,20 +13,21 @@ class NavStructureTests(TestCase):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
         self.client.login(username="tester", password="pw-not-real-12345")
 
-    def test_top_level_nav_is_dashboard_ledger_tools(self):
+    def test_top_level_nav_is_dashboard_ledger_calculator_tools(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
         content = response.content.decode()
 
         self.assertIn('class="navbar__links"', content)
         self.assertContains(response, ">Dashboard<")
         self.assertContains(response, ">Ledger<")
+        self.assertContains(response, ">Bid Calculator<")
         self.assertContains(response, "Tools")
 
-    def test_old_standalone_nav_links_removed_from_top_level(self):
-        """Auction Scanner/AI Reviews/Historical Data/Sleeper Segments are
-        no longer top-level links directly inside .navbar__links - between
-        the Ledger link and the Tools dropdown trigger there should be
-        nothing else, since they all moved inside the dropdown."""
+    def test_bid_calculator_moved_out_of_tools_dropdown(self):
+        """Bid Calculator is now a top-level link, between Ledger and the
+        Tools dropdown trigger - and no longer inside the dropdown menu
+        itself. Auction Scanner/AI Reviews/Historical Data/Sleeper
+        Segments/Insights are still grouped inside the dropdown."""
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
         content = response.content.decode()
 
@@ -34,7 +35,13 @@ class NavStructureTests(TestCase):
         tools_trigger_pos = content.index("navbar__dropdown-trigger")
         between = content[ledger_pos:tools_trigger_pos]
 
-        self.assertNotIn("<a href", between)
+        self.assertIn(">Bid Calculator<", between)
+        self.assertEqual(between.count("<a href"), 1)  # only the Bid Calculator link lives here now
+
+        dropdown_start = content.index('id="tools-dropdown-menu"')
+        dropdown_end = content.index("</div>", dropdown_start)
+        dropdown_html = content[dropdown_start:dropdown_end]
+        self.assertNotIn(reverse("albright_reselling_app:calculator"), dropdown_html)
 
     def test_tools_dropdown_contains_every_expected_item(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
@@ -45,7 +52,6 @@ class NavStructureTests(TestCase):
         self.assertContains(response, reverse("albright_reselling_app:historical_data"))
         self.assertContains(response, reverse("albright_reselling_app:sleeper_segments"))
         self.assertContains(response, reverse("albright_reselling_app:insights"))
-        self.assertContains(response, reverse("albright_reselling_app:calculator"))
 
     def test_historical_data_relabeled_in_nav(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))

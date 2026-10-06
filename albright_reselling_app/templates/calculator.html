@@ -1,4 +1,5 @@
 {% extends 'index.html' %}
+{% load static %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
 
@@ -6,347 +7,361 @@
         <h1 style="margin: 0;">Bid Calculator</h1>
     </div>
 
-    <!-- No-JS fallback: this form posts straight to this page and
-         re-renders with server-computed results. With JS, the same
-         fields are read live and posted to calculator_calculate instead,
+    <!-- No-JS fallback: each tab is its own real <form method="post">, and
+         its "Calculate" button re-renders this page with server-computed
+         results (calculator_views._buy_result()/_ebay_result(), both
+         backed by scanner/simple_calc.py). With JS, the same fields are
+         read live and posted to calculator_calculate instead, debounced,
          so results update as you type - either way goes through the
-         exact same scanner/calculator.py math. -->
-    <form method="post" id="calc-form">
-        {% csrf_token %}
+         exact same simple_calc functions, so they can never disagree. -->
+    <nav class="scanner-tabs" id="calc-tabs">
+        <a href="#buy" class="scanner-tab{% if active_tab == 'buy' %} is-active{% endif %}" data-tab="buy">Buy cost</a>
+        <a href="#ebay" class="scanner-tab{% if active_tab == 'ebay' %} is-active{% endif %}" data-tab="ebay">eBay profit</a>
+    </nav>
 
-        <div class="grid grid-2" style="margin-bottom: 20px; align-items: start;">
-            <!-- ============ Buy side ============ -->
-            <div class="card">
-                <div class="card__header"><span class="card__label">Buy Side</span></div>
-
-                <div class="field"><label>Source Preset</label>
-                    <select id="source-preset">
-                        <option value="">Custom</option>
-                        {% for src in source_choices %}<option value="{{ src }}">{{ src }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="field"><label>Bid Amount</label><input type="number" step="0.01" name="bid" id="f-bid" class="ledger-input num"></div>
-                <div class="field"><label>Buyer's Premium %</label><input type="number" step="0.01" name="premium_pct" id="f-premium_pct" class="ledger-input num"></div>
-                <div class="field"><label>Sales Tax %</label><input type="number" step="0.01" name="tax_pct" id="f-tax_pct" class="ledger-input num"></div>
-                <div class="field">
-                    <label><input type="checkbox" name="tax_on_premium" id="f-tax_on_premium" checked> Tax applies to buyer's premium</label>
-                </div>
-                <div class="field"><label>Card/Processing Fee %</label><input type="number" step="0.01" name="card_fee_pct" id="f-card_fee_pct" class="ledger-input num"></div>
-                <div class="field"><label>Per-Lot/Invoice Fee $</label><input type="number" step="0.01" name="per_lot_fee" id="f-per_lot_fee" class="ledger-input num"></div>
-
-                <div class="field">
-                    <label>Inbound</label>
-                    <div style="display: flex; gap: var(--space-4); font-size: 0.8125rem; margin-bottom: 6px;">
-                        <label><input type="radio" name="inbound_mode" value="shipping" id="f-inbound-shipping" checked> Shipping</label>
-                        <label><input type="radio" name="inbound_mode" value="pickup" id="f-inbound-pickup"> Pickup</label>
-                    </div>
-                </div>
-                <div class="field" id="group-shipping"><label>Shipping $</label><input type="number" step="0.01" name="shipping" id="f-shipping" class="ledger-input num"></div>
-                <div class="field" id="group-pickup" style="display: none;">
-                    <label>Round-Trip Miles</label><input type="number" step="0.1" name="pickup_miles" id="f-pickup_miles" class="ledger-input num">
-                    <label style="margin-top: 8px;">Rate per Mile $</label><input type="number" step="0.01" name="pickup_rate_per_mile" id="f-pickup_rate_per_mile" class="ledger-input num">
-                    <label style="margin-top: 8px;">Fixed Pickup Cost $</label><input type="number" step="0.01" name="pickup_fixed_cost" id="f-pickup_fixed_cost" class="ledger-input num">
-                </div>
-            </div>
-
-            <!-- ============ Items + resale (optional) ============ -->
-            <div class="card">
-                <div class="card__header"><span class="card__label">Items &amp; Resale</span></div>
-
-                <table class="holdings" id="items-table">
-                    <thead><tr><th>Name</th><th class="num">Qty</th><th class="num">Price Each</th><th></th></tr></thead>
-                    <tbody id="items-body"></tbody>
-                </table>
-                <button type="button" class="btn btn-secondary btn-sm" id="add-item" style="margin-top: 8px;">Add Item</button>
-
-                <div class="card" style="margin-top: 16px; background: var(--surface-hover);">
-                    <div class="card__header"><span class="card__label">Melt Helper</span></div>
-                    <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: flex-end;">
-                        <div class="field" style="margin-bottom: 0;"><label>Metal</label>
-                            <select id="melt-metal"><option value="gold">Gold</option><option value="silver">Silver</option></select>
-                        </div>
-                        <div class="field" style="margin-bottom: 0;"><label>Karat/Purity</label>
-                            <input type="text" id="melt-purity" class="ledger-input" style="width: 90px;" placeholder="14 or .925">
-                        </div>
-                        <div class="field" style="margin-bottom: 0;"><label>Weight</label>
-                            <input type="number" step="0.01" id="melt-weight" class="ledger-input num" style="width: 90px;">
-                        </div>
-                        <div class="field" style="margin-bottom: 0;"><label>Unit</label>
-                            <select id="melt-unit"><option value="g">g</option><option value="dwt">dwt</option><option value="oz">troy oz</option></select>
-                        </div>
-                        <div class="field" style="margin-bottom: 0;"><label>Payout %</label>
-                            <input type="number" step="0.01" id="melt-payout" class="ledger-input num" style="width: 70px;" value="100">
-                        </div>
-                        <button type="button" class="btn btn-secondary btn-sm" id="melt-calc">Add as Item</button>
-                    </div>
-                    <p id="melt-result" style="margin: 8px 0 0; font-size: 0.8125rem; color: var(--text-secondary);"></p>
-                </div>
-
-                <div class="field" style="margin-top: 16px;"><label>Channel Preset</label>
-                    <select id="channel-preset">
-                        <option value="">Custom</option>
-                        {% for ch in channel_choices %}<option value="{{ ch }}">{{ ch }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="field"><label>Platform Fee %</label><input type="number" step="0.01" name="platform_fee_pct" id="f-platform_fee_pct" class="ledger-input num"></div>
-                <div class="field"><label>Fixed Fee per Order $</label><input type="number" step="0.01" name="fixed_fee" id="f-fixed_fee" class="ledger-input num"></div>
-                <div class="field"><label>Outbound Shipping $</label><input type="number" step="0.01" name="outbound_shipping" id="f-outbound_shipping" class="ledger-input num"></div>
-                <div class="field"><label>Packaging $</label><input type="number" step="0.01" name="packaging" id="f-packaging" class="ledger-input num"></div>
-                <div class="field"><label>Other Costs $</label><input type="number" step="0.01" name="other_costs" id="f-other_costs" class="ledger-input num"></div>
-
-                <div class="field"><label>Target Profit $</label><input type="number" step="0.01" name="target_profit_dollars" id="f-target_profit_dollars" class="ledger-input num"></div>
-                <div class="field"><label>Target Profit % of Sale</label><input type="number" step="0.01" name="target_profit_pct" id="f-target_profit_pct" class="ledger-input num"></div>
-            </div>
-        </div>
-
-        <button type="submit" class="btn btn-primary">Calculate</button>
-    </form>
-
-    <!-- ============ Results ============ -->
-    <div class="card" style="margin: 20px 0;" id="results-card">
-        <div class="card__header"><span class="card__label">Results</span></div>
-        <div id="results-body">
-            {% if results %}
-            <div class="grid grid-4" style="margin-bottom: 16px;">
-                <div><div class="row-count">Max Bid</div><span id="r-max_bid" class="ledger-stat__value num" style="font-size: 1.75rem;">${{ results.max_bid|floatformat:2 }}</span></div>
-                <div><div class="row-count">Break-Even Bid</div><span id="r-break_even_bid" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.break_even_bid|floatformat:2 }}</span></div>
-                <div><div class="row-count">Total Cost (Entered Bid)</div><span id="r-total_cost" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.total_cost|floatformat:2 }}</span></div>
-                <div><div class="row-count">Net Proceeds</div><span id="r-net_proceeds" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.net_proceeds|floatformat:2 }}</span></div>
-                <div><div class="row-count">Profit</div><span id="r-profit" class="ledger-stat__value num" style="font-size: 1.5rem;">${{ results.profit|floatformat:2 }}</span></div>
-                <div><div class="row-count">ROI %</div><span id="r-roi_pct" class="ledger-stat__value num" style="font-size: 1.5rem;">{% if results.roi_pct is not None %}{{ results.roi_pct }}%{% else %}&mdash;{% endif %}</span></div>
-                <div><div class="row-count">Margin %</div><span id="r-margin_pct" class="ledger-stat__value num" style="font-size: 1.5rem;">{% if results.margin_pct is not None %}{{ results.margin_pct }}%{% else %}&mdash;{% endif %}</span></div>
-            </div>
-            {% else %}
-            <p style="color: var(--text-secondary);">Enter a bid and (optionally) resale items, then Calculate.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ============ Save ============ -->
-    <div class="card" style="margin-bottom: 20px;">
-        <div class="card__header"><span class="card__label">Save This Calculation</span></div>
-        <form method="post" action="{% url 'albright_reselling_app:calculator_save' %}" id="save-form">
+    <!-- ============ Buy cost tab ============ -->
+    <div id="tab-buy"{% if active_tab != 'buy' %} hidden{% endif %}>
+        <form method="post" id="buy-form">
             {% csrf_token %}
-            <input type="hidden" name="inputs" id="save-inputs">
-            <input type="hidden" name="results" id="save-results">
-            <div style="display: flex; gap: var(--space-2);">
-                <input type="text" name="name" class="ledger-input" placeholder="Name this calculation" style="flex: 1;">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            <input type="hidden" name="tab" value="buy">
+            <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+                <div class="card">
+                    <div class="card__header"><span class="card__label">Buy side</span></div>
+
+                    <div class="field"><label>Source</label>
+                        <select id="buy-source" class="ledger-input">
+                            {% for value, label in source_choices %}
+                            <option value="{{ value }}"{% if buy_values %}{% if buy_values.source == value %} selected{% endif %}{% elif value == 'custom' %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field"><label>Bid ($)</label>
+                        <input type="number" step="0.01" min="0" name="bid" id="buy-bid" class="ledger-input num" value="{% if buy_values %}{{ buy_values.bid }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Buyer's premium (%)</label>
+                        <input type="number" step="0.01" name="premium_pct" id="buy-premium_pct" class="ledger-input num" value="{% if buy_values %}{{ buy_values.premium_pct }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Sales tax (%)</label>
+                        <input type="number" step="0.01" name="tax_pct" id="buy-tax_pct" class="ledger-input num" value="{% if buy_values %}{{ buy_values.tax_pct }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Shipping / pickup ($)</label>
+                        <input type="number" step="0.01" name="shipping" id="buy-shipping" class="ledger-input num" value="{% if buy_values %}{{ buy_values.shipping }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Other fees ($)</label>
+                        <input type="number" step="0.01" name="other_fees" id="buy-other_fees" class="ledger-input num" value="{% if buy_values %}{{ buy_values.other_fees }}{% endif %}">
+                    </div>
+                    <div class="field">
+                        <label><input type="checkbox" name="tax_on_premium" id="buy-tax_on_premium"{% if buy_values %}{% if buy_values.tax_on_premium %} checked{% endif %}{% else %} checked{% endif %}> Tax applies to premium</label>
+                    </div>
+                    <div class="field">
+                        <label><input type="checkbox" name="tax_on_shipping" id="buy-tax_on_shipping"{% if buy_values.tax_on_shipping %} checked{% endif %}> Tax applies to shipping</label>
+                    </div>
+
+                    <div class="card" style="margin-top: 16px; background: var(--surface-hover);">
+                        <div class="card__header"><span class="card__label">What's my max bid?</span></div>
+                        <div class="field" style="margin-bottom: 8px;"><label>Budget for out-the-door total ($)</label>
+                            <input type="number" step="0.01" name="budget" id="buy-budget" class="ledger-input num" value="{% if buy_values %}{{ buy_values.budget }}{% endif %}">
+                        </div>
+                        <p style="margin: 0; font-size: 0.8125rem; color: var(--text-secondary);">
+                            Highest bid that stays within budget: <span id="buy-max-bid-for-budget" class="num" style="font-weight: 600;">{% if buy_results.max_bid_for_budget is not None %}${{ buy_results.max_bid_for_budget|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+                        </p>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Calculate</button>
+                </div>
+
+                <div class="card">
+                    <div class="card__header"><span class="card__label">Out-the-door breakdown</span></div>
+                    <div id="buy-results-body">
+                        {% include "_calc_buy_results.html" with results=buy_results %}
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="use-total-on-ebay" style="margin-top: 16px;">Use this total on the eBay tab</button>
+                </div>
             </div>
         </form>
     </div>
 
-    <!-- ============ Saved calculations ============ -->
-    <div class="card">
-        <div class="card__header"><span class="card__label">Saved Calculations</span></div>
-        {% if saved_calculations %}
-        <table class="holdings">
-            <thead><tr><th>Name</th><th>Saved</th><th></th></tr></thead>
-            <tbody>
-                {% for calc in saved_calculations %}
-                <tr>
-                    <td>{{ calc.name|default:"(unnamed)" }}</td>
-                    <td>{{ calc.created_at|date:"M j, Y g:i A" }}</td>
-                    <td>
-                        <a href="{% url 'albright_reselling_app:calculator' %}?load={{ calc.pk }}" class="btn btn-secondary btn-sm">Load</a>
-                        <form method="post" action="{% url 'albright_reselling_app:calculator_rename' calc.pk %}" style="display: inline;">
-                            {% csrf_token %}
-                            <input type="text" name="name" value="{{ calc.name }}" class="ledger-input" style="width: 140px; display: inline-block;">
-                            <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
-                        </form>
-                        <form method="post" action="{% url 'albright_reselling_app:calculator_delete' calc.pk %}" style="display: inline;">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p style="color: var(--text-secondary);">No saved calculations yet.</p>
-        {% endif %}
-    </div>
+    <!-- ============ eBay profit tab ============ -->
+    <div id="tab-ebay"{% if active_tab != 'ebay' %} hidden{% endif %}>
+        <form method="post" id="ebay-form">
+            {% csrf_token %}
+            <input type="hidden" name="tab" value="ebay">
+            <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+                <div class="card">
+                    <div class="card__header"><span class="card__label">eBay profit</span></div>
 
+                    <div class="field"><label>Pick from Ledger</label>
+                        <select id="ebay-ledger-pick" class="ledger-input">
+                            <option value="">Choose a holding/partially sold item...</option>
+                        </select>
+                    </div>
+                    <div class="field"><label>Item cost ($)</label>
+                        <input type="number" step="0.01" name="item_cost" id="ebay-item_cost" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.item_cost }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Listing price ($)</label>
+                        <input type="number" step="0.01" name="sale_price" id="ebay-sale_price" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.sale_price }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Shipping charged to buyer ($, 0 = free shipping)</label>
+                        <input type="number" step="0.01" name="shipping_charged" id="ebay-shipping_charged" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.shipping_charged }}{% else %}0{% endif %}">
+                    </div>
+                    <div class="field"><label>My shipping cost ($)</label>
+                        <input type="number" step="0.01" name="shipping_cost" id="ebay-shipping_cost" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.shipping_cost }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Packaging ($)</label>
+                        <input type="number" step="0.01" name="packaging" id="ebay-packaging" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.packaging }}{% endif %}">
+                    </div>
+                    <div class="field"><label>Other costs ($)</label>
+                        <input type="number" step="0.01" name="other_costs" id="ebay-other_costs" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.other_costs }}{% endif %}">
+                    </div>
+                    <div class="field"><label>eBay category</label>
+                        <select name="category" id="ebay-category" class="ledger-input">
+                            {% for value, label in ebay_category_choices %}
+                            <option value="{{ value }}"{% if ebay_values %}{% if ebay_values.category == value %} selected{% endif %}{% elif value == 'most' %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field" id="ebay-custom-rate-field" style="display: none;"><label>Custom rate (%)</label>
+                        <input type="number" step="0.01" name="custom_rate_pct" id="ebay-custom_rate_pct" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.custom_rate_pct }}{% else %}13.6{% endif %}">
+                    </div>
+                    <div class="field">
+                        <label>Buyer's sales tax estimate (%)
+                            <span class="badge neutral" style="cursor: default;" title="eBay charges its final value fee on the sales tax it collects too, not just the item price and shipping.">?</span>
+                        </label>
+                        <input type="number" step="0.01" name="buyer_tax_pct" id="ebay-buyer_tax_pct" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.buyer_tax_pct }}{% else %}7{% endif %}">
+                    </div>
+                    <div class="field"><label>Promoted listing (%)</label>
+                        <input type="number" step="0.01" name="promoted_pct" id="ebay-promoted_pct" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.promoted_pct }}{% else %}0{% endif %}">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Calculate</button>
+                </div>
+
+                <div class="card">
+                    <div class="card__header"><span class="card__label">Results</span></div>
+                    <div id="ebay-results-body">
+                        {% include "_calc_ebay_results.html" with results=ebay_results %}
+                    </div>
+
+                    <div class="field" style="margin-top: 16px; margin-bottom: 8px;">
+                        <label>Price for $___ profit</label>
+                        <input type="number" step="0.01" name="target_profit" id="ebay-target_profit" class="ledger-input num" style="width: 120px; display: inline-block;" value="{% if ebay_values %}{{ ebay_values.target_profit }}{% else %}20{% endif %}">
+                    </div>
+                    <p style="margin: 0;">Price for that profit: <span id="ebay-price-for-profit" class="num" style="font-weight: 600;">{% if ebay_results.price_for_profit is not None %}${{ ebay_results.price_for_profit|floatformat:2 }}{% else %}&mdash;{% endif %}</span></p>
+
+                    <p style="margin: 16px 0 0; font-size: 0.75rem; color: var(--text-secondary);">eBay rates vary by category and store subscription. Check eBay's fee page.</p>
+                </div>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
 (function () {
-    var PCT_FIELDS = ["premium_pct", "tax_pct", "card_fee_pct", "platform_fee_pct", "target_profit_pct"];
-    var PLAIN_FIELDS = [
-        "bid", "per_lot_fee", "shipping", "pickup_miles", "pickup_rate_per_mile", "pickup_fixed_cost",
-        "fixed_fee", "outbound_shipping", "packaging", "other_costs", "target_profit_dollars",
+    var SOURCE_PRESETS = {{ source_defaults_json|safe }};
+    var LEDGER_ITEMS = {{ ledger_items_json|safe }};
+    var LOT_PREFILL = {{ lot_prefill_json|safe }};
+    // A no-JS POST just rendered real, fresh results for its tab - skip
+    // restoring that one tab from localStorage so JS doesn't immediately
+    // clobber them with older saved values (the other tab, untouched by
+    // this submit, still restores normally).
+    var JUST_SUBMITTED_BUY = {% if buy_results %}true{% else %}false{% endif %};
+    var JUST_SUBMITTED_EBAY = {% if ebay_results %}true{% else %}false{% endif %};
+    var STORAGE_KEY_BUY = "bidcalc_buy_values";
+    var STORAGE_KEY_EBAY = "bidcalc_ebay_values";
+
+    var BUY_FIELDS = ["bid", "premium_pct", "tax_pct", "shipping", "other_fees", "budget"];
+    var BUY_CHECKBOXES = ["tax_on_premium", "tax_on_shipping"];
+    var EBAY_FIELDS = [
+        "item_cost", "sale_price", "shipping_charged", "shipping_cost", "packaging", "other_costs",
+        "custom_rate_pct", "buyer_tax_pct", "promoted_pct", "target_profit",
     ];
-    var form = document.getElementById("calc-form");
-    var itemsBody = document.getElementById("items-body");
-    var resultsBody = document.getElementById("results-body");
 
-    function field(name) { return document.getElementById("f-" + name); }
-
-    function addItemRow(name, quantity, priceEach) {
-        var row = document.createElement("tr");
-        row.innerHTML =
-            '<td><input type="text" name="item_name" class="ledger-input" value="' + (name || "").replace(/"/g, "&quot;") + '"></td>' +
-            '<td class="num"><input type="number" step="0.01" name="item_quantity" class="ledger-input num" value="' + (quantity != null ? quantity : 1) + '"></td>' +
-            '<td class="num"><input type="number" step="0.01" name="item_price" class="ledger-input num" value="' + (priceEach != null ? priceEach : "") + '"></td>' +
-            '<td><button type="button" class="btn btn-secondary btn-sm remove-item">&times;</button></td>';
-        itemsBody.appendChild(row);
-        row.querySelector(".remove-item").addEventListener("click", function () {
-            row.remove();
-            scheduleCalculate();
-        });
-    }
-    document.getElementById("add-item").addEventListener("click", function () { addItemRow("", 1, ""); });
-
-    // Inbound mode toggle.
-    function syncInboundVisibility() {
-        var pickup = document.getElementById("f-inbound-pickup").checked;
-        document.getElementById("group-shipping").style.display = pickup ? "none" : "";
-        document.getElementById("group-pickup").style.display = pickup ? "" : "none";
-    }
-    document.getElementById("f-inbound-shipping").addEventListener("change", syncInboundVisibility);
-    document.getElementById("f-inbound-pickup").addEventListener("change", syncInboundVisibility);
-
-    function collectData() {
-        var data = {tax_on_premium: field("tax_on_premium").checked,
-                    inbound_mode: document.querySelector('input[name="inbound_mode"]:checked').value};
-        PLAIN_FIELDS.forEach(function (name) { data[name] = field(name).value; });
-        PCT_FIELDS.forEach(function (name) { data[name] = (parseFloat(field(name).value) || 0) / 100; });
-        data.items = [];
-        itemsBody.querySelectorAll("tr").forEach(function (row) {
-            var inputs = row.querySelectorAll("input");
-            data.items.push({name: inputs[0].value, quantity: inputs[1].value, price_each: inputs[2].value});
-        });
-        return data;
-    }
-
-    function renderResults(results) {
-        resultsBody.innerHTML =
-            '<div class="grid grid-4" style="margin-bottom: 16px;">' +
-            statBlock("Max Bid", results.max_bid, "r-max_bid", "font-size: 1.75rem;") +
-            statBlock("Break-Even Bid", results.break_even_bid, "r-break_even_bid") +
-            statBlock("Total Cost (Entered Bid)", results.total_cost, "r-total_cost") +
-            statBlock("Net Proceeds", results.net_proceeds, "r-net_proceeds") +
-            statBlock("Profit", results.profit, "r-profit") +
-            pctBlock("ROI %", results.roi_pct, "r-roi_pct") +
-            pctBlock("Margin %", results.margin_pct, "r-margin_pct") +
-            "</div>";
-        var maxBidEl = document.getElementById("r-max_bid");
-        if (maxBidEl) {
-            maxBidEl.style.color = results.over_max ? "var(--loss)" : "var(--gain)";
-        }
-        document.getElementById("save-inputs").value = JSON.stringify(window.__lastCalcInputs || {});
-        document.getElementById("save-results").value = JSON.stringify(results);
-    }
-    function statBlock(label, value, id, extraStyle) {
-        return '<div><div class="row-count">' + label + '</div><span id="' + id + '" class="ledger-stat__value num" style="font-size: 1.5rem;' + (extraStyle || "") + '">$' + Number(value).toFixed(2) + '</span></div>';
-    }
-    function pctBlock(label, value, id) {
-        var text = (value === null || value === undefined) ? "&mdash;" : Number(value).toFixed(2) + "%";
-        return '<div><div class="row-count">' + label + '</div><span id="' + id + '" class="ledger-stat__value num" style="font-size: 1.5rem;">' + text + '</span></div>';
-    }
-
-    var calcTimer = null;
-    function scheduleCalculate() {
-        window.clearTimeout(calcTimer);
-        calcTimer = window.setTimeout(doCalculate, 300);
-    }
-    function doCalculate() {
-        var data = collectData();
-        window.__lastCalcInputs = data;
-        fetch("{% url 'albright_reselling_app:calculator_calculate' %}", {
-            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
-            body: JSON.stringify(data),
-        }).then(function (r) { return r.json(); }).then(renderResults).catch(function () {});
-    }
+    function byId(id) { return document.getElementById(id); }
     function csrfToken() {
         var match = document.cookie.match(/csrftoken=([^;]+)/);
         return match ? match[1] : (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value;
     }
+    function money(value) {
+        if (value === null || value === undefined) return "&mdash;";
+        var sign = value < 0 ? "-" : "";
+        return sign + "$" + Math.abs(value).toFixed(2);
+    }
+    function pct(value) {
+        return (value === null || value === undefined) ? "&mdash;" : Number(value).toFixed(1) + "%";
+    }
 
-    form.addEventListener("input", scheduleCalculate);
-    form.addEventListener("submit", function (e) {
-        if (window.fetch) e.preventDefault();  // let JS own it when available; otherwise real submit
-        doCalculate();
-    });
+    // ---------- Buy cost tab ----------
+    function collectBuyData() {
+        var data = {tab: "buy"};
+        BUY_FIELDS.forEach(function (name) { data[name] = byId("buy-" + name).value; });
+        BUY_CHECKBOXES.forEach(function (name) { data[name] = byId("buy-" + name).checked; });
+        return data;
+    }
+    function applyBuyData(data) {
+        if (!data) return;
+        BUY_FIELDS.forEach(function (name) {
+            if (data[name] !== undefined && data[name] !== null) byId("buy-" + name).value = data[name];
+        });
+        BUY_CHECKBOXES.forEach(function (name) {
+            if (data[name] !== undefined) byId("buy-" + name).checked = !!data[name];
+        });
+        if (data.source) byId("buy-source").value = data.source;
+    }
+    var lastBuyTotal = 0;
+    function renderBuyResults(results) {
+        lastBuyTotal = results.total || 0;
+        byId("buy-results-body").innerHTML =
+            '<div class="grid grid-2" style="margin-bottom: 12px;">' +
+            '<div><div class="row-count">Bid</div><span class="num">' + money(results.bid) + '</span></div>' +
+            '<div><div class="row-count">Premium</div><span class="num">' + money(results.premium) + '</span></div>' +
+            '<div><div class="row-count">Tax</div><span class="num">' + money(results.tax) + '</span></div>' +
+            '<div><div class="row-count">Shipping</div><span class="num">' + money(results.shipping) + '</span></div>' +
+            '<div><div class="row-count">Other fees</div><span class="num">' + money(results.other_fees) + '</span></div>' +
+            '</div>' +
+            '<div class="row-count">Out-the-door total</div>' +
+            '<span class="ledger-stat__value num" style="font-size: 2rem;">' + money(results.total) + '</span>';
+        byId("buy-max-bid-for-budget").innerHTML =
+            results.max_bid_for_budget === null || results.max_bid_for_budget === undefined
+                ? "&mdash;" : money(results.max_bid_for_budget);
+    }
 
-    // Melt helper.
-    document.getElementById("melt-calc").addEventListener("click", function () {
-        var data = {
-            metal: document.getElementById("melt-metal").value,
-            purity: document.getElementById("melt-purity").value,
-            weight: document.getElementById("melt-weight").value,
-            unit: document.getElementById("melt-unit").value,
-            payout_pct: (parseFloat(document.getElementById("melt-payout").value) || 0) / 100,
-        };
-        fetch("{% url 'albright_reselling_app:calculator_melt' %}", {
+    var buyTimer = null;
+    function scheduleBuyCalculate() { window.clearTimeout(buyTimer); buyTimer = window.setTimeout(doBuyCalculate, 300); }
+    function doBuyCalculate() {
+        var data = collectBuyData();
+        try { localStorage.setItem(STORAGE_KEY_BUY, JSON.stringify(data)); } catch (e) {}
+        fetch("{% url 'albright_reselling_app:calculator_calculate' %}", {
             method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
             body: JSON.stringify(data),
-        }).then(function (r) { return r.json(); }).then(function (result) {
-            if (result.value === null) {
-                document.getElementById("melt-result").textContent = "No spot price available.";
-                return;
-            }
-            document.getElementById("melt-result").textContent =
-                result.troy_oz + " troy oz @ " + result.purity + " purity -> $" + result.value.toFixed(2);
-            addItemRow(data.metal + " " + (data.purity || "") + " " + data.weight + data.unit, 1, result.value);
-            scheduleCalculate();
-        });
-    });
-
-    // Source preset.
-    document.getElementById("source-preset").addEventListener("change", function (e) {
-        var source = e.target.value;
-        if (!source) return;
-        fetch("{% url 'albright_reselling_app:calculator_preset' %}", {
-            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
-            body: JSON.stringify({kind: "source", source: source}),
-        }).then(function (r) { return r.json(); }).then(function (preset) { applyPreset(preset); });
-    });
-    // Channel preset.
-    document.getElementById("channel-preset").addEventListener("change", function (e) {
-        var channel = e.target.value;
-        if (!channel) return;
-        fetch("{% url 'albright_reselling_app:calculator_preset' %}", {
-            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
-            body: JSON.stringify({kind: "channel", channel: channel}),
-        }).then(function (r) { return r.json(); }).then(function (preset) { applyPreset(preset); });
-    });
-
-    function applyPreset(preset) {
-        Object.keys(preset).forEach(function (key) {
-            var el = field(key);
-            if (!el) return;
-            if (el.type === "checkbox") { el.checked = !!preset[key]; return; }
-            if (key === "inbound_mode") {
-                document.getElementById("f-inbound-" + preset[key]).checked = true;
-                syncInboundVisibility();
-                return;
-            }
-            el.value = PCT_FIELDS.indexOf(key) >= 0 ? (preset[key] * 100) : preset[key];
-        });
-        scheduleCalculate();
+        }).then(function (r) { return r.json(); }).then(renderBuyResults).catch(function () {});
     }
 
-    // Prefill from server (an "Open in calculator" lot, a loaded saved
-    // calculation, or a resubmitted no-JS form).
-    var prefill = {{ prefill|safe }};
-    (prefill.items || []).forEach(function (item) { addItemRow(item.name, item.quantity, item.price_each); });
-    if (!prefill.items || !prefill.items.length) {
-        addItemRow("", 1, "");  // always start with at least one row
+    byId("buy-form").addEventListener("input", scheduleBuyCalculate);
+    byId("buy-form").addEventListener("change", scheduleBuyCalculate);
+    byId("buy-form").addEventListener("submit", function (e) {
+        if (window.fetch) e.preventDefault();  // let JS own it when available; otherwise real submit
+        doBuyCalculate();
+    });
+    byId("buy-source").addEventListener("change", function (e) {
+        var preset = SOURCE_PRESETS[e.target.value];
+        if (!preset) return;
+        byId("buy-premium_pct").value = preset.premium_pct;
+        byId("buy-tax_pct").value = preset.tax_pct;
+        byId("buy-shipping").value = preset.shipping;
+        scheduleBuyCalculate();
+    });
+
+    // ---------- eBay profit tab ----------
+    function collectEbayData() {
+        var data = {tab: "ebay", category: byId("ebay-category").value};
+        EBAY_FIELDS.forEach(function (name) { data[name] = byId("ebay-" + name).value; });
+        return data;
     }
-    Object.keys(prefill).forEach(function (key) {
-        if (key === "items") return;
-        var el = field(key);
-        if (!el) return;
-        if (key === "inbound_mode") {
-            document.getElementById("f-inbound-" + prefill[key]).checked = true;
-            return;
+    function applyEbayData(data) {
+        if (!data) return;
+        EBAY_FIELDS.forEach(function (name) {
+            if (data[name] !== undefined && data[name] !== null) byId("ebay-" + name).value = data[name];
+        });
+        if (data.category) byId("ebay-category").value = data.category;
+        syncCustomRateVisibility();
+    }
+    function renderEbayResults(results) {
+        var profitColor = results.profit >= 0 ? "var(--gain)" : "var(--loss)";
+        byId("ebay-results-body").innerHTML =
+            '<div class="grid grid-2" style="margin-bottom: 12px;">' +
+            '<div><div class="row-count">Final value fee</div><span class="num">' + money(results.final_value_fee) + '</span></div>' +
+            '<div><div class="row-count">Per-order fee</div><span class="num">' + money(results.per_order_fee) + '</span></div>' +
+            '<div><div class="row-count">Promoted fee</div><span class="num">' + money(results.promoted_fee) + '</span></div>' +
+            '<div><div class="row-count">Payout from eBay</div><span class="num">' + money(results.payout) + '</span></div>' +
+            '</div>' +
+            '<div class="row-count">Profit</div>' +
+            '<span class="ledger-stat__value num" style="font-size: 2rem; color: ' + profitColor + ';">' + money(results.profit) + '</span>' +
+            '<div class="grid grid-2" style="margin-top: 12px;">' +
+            '<div><div class="row-count">Margin %</div><span class="num">' + pct(results.margin_pct) + '</span></div>' +
+            '<div><div class="row-count">ROI %</div><span class="num">' + pct(results.roi_pct) + '</span></div>' +
+            '</div>' +
+            '<p style="margin: 12px 0 0;">Break-even listing price: <span class="num" style="font-weight: 600;">' + money(results.break_even_price) + '</span></p>';
+        byId("ebay-price-for-profit").innerHTML = money(results.price_for_profit);
+    }
+
+    function syncCustomRateVisibility() {
+        byId("ebay-custom-rate-field").style.display = byId("ebay-category").value === "custom" ? "" : "none";
+    }
+
+    var ebayTimer = null;
+    function scheduleEbayCalculate() { window.clearTimeout(ebayTimer); ebayTimer = window.setTimeout(doEbayCalculate, 300); }
+    function doEbayCalculate() {
+        var data = collectEbayData();
+        try { localStorage.setItem(STORAGE_KEY_EBAY, JSON.stringify(data)); } catch (e) {}
+        fetch("{% url 'albright_reselling_app:calculator_calculate' %}", {
+            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+            body: JSON.stringify(data),
+        }).then(function (r) { return r.json(); }).then(renderEbayResults).catch(function () {});
+    }
+
+    byId("ebay-form").addEventListener("input", scheduleEbayCalculate);
+    byId("ebay-form").addEventListener("change", scheduleEbayCalculate);
+    byId("ebay-form").addEventListener("submit", function (e) {
+        if (window.fetch) e.preventDefault();
+        doEbayCalculate();
+    });
+    byId("ebay-category").addEventListener("change", function () { syncCustomRateVisibility(); scheduleEbayCalculate(); });
+
+    LEDGER_ITEMS.forEach(function (item) {
+        var option = document.createElement("option");
+        option.value = String(item.id);
+        option.setAttribute("data-cost", item.cost);
+        option.textContent = item.label + " ($" + item.cost.toFixed(2) + ")";
+        byId("ebay-ledger-pick").appendChild(option);
+    });
+    byId("ebay-ledger-pick").addEventListener("change", function (e) {
+        var option = e.target.selectedOptions[0];
+        if (!option || !option.dataset.cost) return;
+        byId("ebay-item_cost").value = option.dataset.cost;
+        scheduleEbayCalculate();
+    });
+
+    // ---------- Tabs ----------
+    function activateTab(name) {
+        ["buy", "ebay"].forEach(function (tab) {
+            byId("tab-" + tab).hidden = tab !== name;
+        });
+        document.querySelectorAll("#calc-tabs .scanner-tab").forEach(function (link) {
+            link.classList.toggle("is-active", link.dataset.tab === name);
+        });
+    }
+    document.querySelectorAll("#calc-tabs .scanner-tab").forEach(function (link) {
+        link.addEventListener("click", function (e) { e.preventDefault(); activateTab(link.dataset.tab); });
+    });
+
+    // ---------- "Use this total on the eBay tab" ----------
+    byId("use-total-on-ebay").addEventListener("click", function () {
+        byId("ebay-item_cost").value = lastBuyTotal.toFixed(2);
+        activateTab("ebay");
+        scheduleEbayCalculate();
+    });
+
+    // ---------- Initial load: localStorage first, then an explicit lot
+    // prefill (Open in Calculator) always wins for the Buy cost tab. ----------
+    try {
+        if (!JUST_SUBMITTED_BUY) {
+            var savedBuy = localStorage.getItem(STORAGE_KEY_BUY);
+            if (savedBuy) applyBuyData(JSON.parse(savedBuy));
         }
-        el.value = PCT_FIELDS.indexOf(key) >= 0 ? (prefill[key] * 100) : prefill[key];
-    });
-    syncInboundVisibility();
-    scheduleCalculate();
+        if (!JUST_SUBMITTED_EBAY) {
+            var savedEbay = localStorage.getItem(STORAGE_KEY_EBAY);
+            if (savedEbay) applyEbayData(JSON.parse(savedEbay));
+        }
+    } catch (e) {}
+
+    if (LOT_PREFILL && LOT_PREFILL.bid !== undefined) {
+        applyBuyData(LOT_PREFILL);
+        activateTab("buy");
+    }
+
+    syncCustomRateVisibility();
+    scheduleBuyCalculate();
+    scheduleEbayCalculate();
 })();
 </script>
 {% endblock %}

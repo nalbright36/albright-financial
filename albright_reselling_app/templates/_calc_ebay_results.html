@@ -1,0 +1,17 @@
+{% if results %}
+<div class="grid grid-2" style="margin-bottom: 12px;">
+    <div><div class="row-count">Final value fee</div><span class="num">${{ results.final_value_fee|floatformat:2 }}</span></div>
+    <div><div class="row-count">Per-order fee</div><span class="num">${{ results.per_order_fee|floatformat:2 }}</span></div>
+    <div><div class="row-count">Promoted fee</div><span class="num">${{ results.promoted_fee|floatformat:2 }}</span></div>
+    <div><div class="row-count">Payout from eBay</div><span class="num">${{ results.payout|floatformat:2 }}</span></div>
+</div>
+<div class="row-count">Profit</div>
+<span class="ledger-stat__value num" style="font-size: 2rem; color: {% if results.profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ results.profit|floatformat:2 }}</span>
+<div class="grid grid-2" style="margin-top: 12px;">
+    <div><div class="row-count">Margin %</div><span class="num">{% if results.margin_pct is not None %}{{ results.margin_pct }}%{% else %}&mdash;{% endif %}</span></div>
+    <div><div class="row-count">ROI %</div><span class="num">{% if results.roi_pct is not None %}{{ results.roi_pct }}%{% else %}&mdash;{% endif %}</span></div>
+</div>
+<p style="margin: 12px 0 0;">Break-even listing price: <span class="num" style="font-weight: 600;">{% if results.break_even_price is not None %}${{ results.break_even_price|floatformat:2 }}{% else %}&mdash;{% endif %}</span></p>
+{% else %}
+<p style="color: var(--text-secondary);">Enter an item cost and listing price, then Calculate.</p>
+{% endif %}

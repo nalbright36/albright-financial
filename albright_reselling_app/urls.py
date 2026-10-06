@@ -33,9 +33,4 @@ urlpatterns = [
     path("scanner/lot/<int:lot_id>/feedback/", insights_views.create_lot_feedback, name="lot_feedback"),
     path("calculator/", calculator_views.calculator_page, name="calculator"),
     path("calculator/calculate/", calculator_views.calculate_api, name="calculator_calculate"),
-    path("calculator/melt/", calculator_views.melt_api, name="calculator_melt"),
-    path("calculator/preset/", calculator_views.preset_api, name="calculator_preset"),
-    path("calculator/save/", calculator_views.save_calculation, name="calculator_save"),
-    path("calculator/<int:pk>/rename/", calculator_views.rename_calculation, name="calculator_rename"),
-    path("calculator/<int:pk>/delete/", calculator_views.delete_calculation, name="calculator_delete"),
 ]
