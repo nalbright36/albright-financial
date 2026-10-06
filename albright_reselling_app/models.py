@@ -124,6 +124,13 @@ class LedgerEntry(models.Model):
     def has_legacy_amounts(self):
         return bool(self.fees) or bool(self.shipping)
 
+    @property
+    def legacy_total(self):
+        """fees + shipping combined into the one "Old unsplit" column shown
+        in the read-only ledger table - so Cost+Premium+Tax+Fees+Inbound+
+        this still adds up to `total` for a not-yet-split legacy row."""
+        return (self.fees or 0) + (self.shipping or 0)
+
     # ---------- Sell-side ----------
 
     @property

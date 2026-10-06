@@ -2,7 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from . import ledger_metrics
 from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm, HarvestRequestForm, AnalysisRequestForm
-from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot, AnalysisRequest
+from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot, AnalysisRequest, STATUS_CHOICES
 from .scanner.dashboard import get_scanner_dashboard_context
 from django.db.models import Avg, Count
 
@@ -29,6 +29,11 @@ def ledger(request):
 
     add_form = LedgerEntryForm(prefix="add")
     formset = LedgerEntryFormSet(queryset=queryset)
+    # Edit mode is a plain query param (not JS-only), so editing - and
+    # seeing validation errors on an invalid save - works with JavaScript
+    # off too; a successful save always lands back in the default
+    # read-only view.
+    edit_mode = request.method == "POST" or request.GET.get("edit") == "1"
 
     if request.method == "POST":
         if "add_entry" in request.POST:
@@ -57,13 +62,23 @@ def ledger(request):
         "total": sum((e.total or 0) for e in entries),
         "sold_for": sum((e.sold_for or 0) for e in entries),
         "profit": sum((e.profit or 0) for e in entries),
+        # New derived totals for the read-only table's footer (requirement
+        # 3) - sums of existing per-entry fields, not a new calculation.
+        "sell_costs": sum(((e.sell_fees or 0) + (e.sell_shipping or 0)) for e in entries),
     }
+    distinct_sources = sorted({e.source for e in entries if e.source})
+    has_legacy = any(e.has_legacy_amounts for e in entries)
 
     return render(request, "ledger.html", {
         "add_form": add_form,
         "formset": formset,
+        "entries": entries,
         "totals": totals,
         "status_filter": status_filter,
+        "edit_mode": edit_mode,
+        "distinct_sources": distinct_sources,
+        "has_legacy": has_legacy,
+        "status_choices": STATUS_CHOICES,
     })
 
 

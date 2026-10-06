@@ -767,3 +767,122 @@ class DashboardTilesTests(TestCase):
 
         self.assertEqual(tiles["watching_count"], 1)
         self.assertEqual(tiles["likely_won_this_week"], 1)  # only the 2-days-ago win
+
+
+def _formset_post_data(entries, delete_pks=()):
+    """Builds a full, valid LedgerEntryFormSet POST payload from a list of
+    existing LedgerEntry rows - every required field filled from the row's
+    own current values, so a save is a no-op except for any DELETE flags."""
+    data = {
+        "form-TOTAL_FORMS": str(len(entries)),
+        "form-INITIAL_FORMS": str(len(entries)),
+        "form-MIN_NUM_FORMS": "0",
+        "form-MAX_NUM_FORMS": "1000",
+    }
+    for i, entry in enumerate(entries):
+        prefix = f"form-{i}"
+        data[f"{prefix}-id"] = str(entry.pk)
+        data[f"{prefix}-item"] = entry.item
+        data[f"{prefix}-cost"] = str(entry.cost)
+        data[f"{prefix}-buyer_premium"] = str(entry.buyer_premium)
+        data[f"{prefix}-sales_tax"] = str(entry.sales_tax)
+        data[f"{prefix}-buy_fees"] = str(entry.buy_fees)
+        data[f"{prefix}-inbound_shipping"] = str(entry.inbound_shipping)
+        data[f"{prefix}-sold_for"] = "" if entry.sold_for is None else str(entry.sold_for)
+        data[f"{prefix}-sell_fees"] = str(entry.sell_fees)
+        data[f"{prefix}-sell_shipping"] = str(entry.sell_shipping)
+        if entry.pk in delete_pks:
+            data[f"{prefix}-DELETE"] = "on"
+    return data
+
+
+class LedgerPageRedesignTests(TestCase):
+    """Covers the read-only vs. edit-mode Ledger page: full (untruncated)
+    item names and $-formatted values by default, the Delete checkbox
+    column only existing in edit mode, deleting via the edit-mode save
+    still working, the read-only totals row, and the "Old unsplit" column
+    for legacy (pre-split) rows."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_readonly_view_shows_full_name_and_formatted_values(self):
+        long_name = "A very long descriptive item name that should wrap, never be truncated or ellipsized"
+        _make_entry(self.user, item=long_name, cost="1234.50", sold_for="0")
+
+        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, long_name)
+        self.assertNotIn("…", content)  # no ellipsis character anywhere
+        self.assertContains(response, "$1,234.50")
+        # sold_for was explicitly 0 -> shown as "-", not "$0.00"
+        self.assertNotContains(response, "$0.00")
+
+    def test_delete_checkbox_only_present_in_edit_mode(self):
+        _make_entry(self.user, item="Row One")
+
+        readonly = self.client.get(reverse("albright_reselling_app:ledger"))
+        edit = self.client.get(reverse("albright_reselling_app:ledger"), {"edit": "1"})
+
+        self.assertNotIn("form-0-DELETE", readonly.content.decode())
+        self.assertIn("form-0-DELETE", edit.content.decode())
+        self.assertContains(edit, "Delete")
+
+    def test_saving_with_deletion_removes_only_checked_entries(self):
+        keep = _make_entry(self.user, item="Keep Me", cost="10.00")
+        remove = _make_entry(self.user, item="Remove Me", cost="20.00")
+
+        data = _formset_post_data([keep, remove], delete_pks={remove.pk})
+        data["save_ledger"] = "Save Ledger"
+        response = self.client.post(reverse("albright_reselling_app:ledger"), data)
+
+        self.assertRedirects(response, reverse("albright_reselling_app:ledger"))
+        remaining = LedgerEntry.objects.filter(owner=self.user)
+        self.assertEqual(list(remaining.values_list("item", flat=True)), ["Keep Me"])
+
+    def test_readonly_totals_row_sums_shown_rows(self):
+        _make_entry(self.user, item="Entry A", cost="100.00", sold_for="150.00", status="sold_out")
+        _make_entry(self.user, item="Entry B", cost="20.00", sold_for="10.00", status="written_off")
+
+        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        content = response.content.decode()
+
+        entry_a = LedgerEntry.objects.get(item="Entry A")
+        entry_b = LedgerEntry.objects.get(item="Entry B")
+        expected_buy_total = entry_a.buy_side_cost + entry_b.buy_side_cost
+        expected_sold_for = (entry_a.sold_for or 0) + (entry_b.sold_for or 0)
+        expected_profit = entry_a.profit + entry_b.profit
+
+        self.assertIn('id="ledger-total-buytotal"', content)
+        self.assertIn(f"${expected_buy_total:,.2f}", content)
+        self.assertIn(f"${expected_sold_for:,.2f}", content)
+        sign = "-" if expected_profit < 0 else ""
+        self.assertIn(f"{sign}${abs(expected_profit):,.2f}", content)
+
+    def test_legacy_amounts_shown_in_old_unsplit_column_and_buy_total_adds_up(self):
+        entry = _make_entry(
+            self.user, item="Legacy Row", cost="50.00", buyer_premium="5.00", sales_tax="2.00",
+            buy_fees="1.00", inbound_shipping="3.00", fees="7.00", shipping="4.00",
+        )
+        clean_entry = _make_entry(self.user, item="Clean Row", cost="10.00")
+
+        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        content = response.content.decode()
+
+        self.assertContains(response, "Old unsplit")
+        self.assertEqual(entry.legacy_total, Decimal("11.00"))
+        self.assertIn("$11.00", content)
+        # the visible buy-side columns (cost+premium+tax+buy_fees+inbound+old
+        # unsplit) sum to exactly the buy total shown for that row
+        visible_sum = (
+            entry.cost + entry.buyer_premium + entry.sales_tax + entry.buy_fees
+            + entry.inbound_shipping + entry.legacy_total
+        )
+        self.assertEqual(visible_sum, entry.buy_side_cost)
+        self.assertIn(f"${entry.buy_side_cost:,.2f}", content)
+        # a row with no legacy amounts still renders under the same (shared)
+        # Old unsplit column without error, showing "-"
+        self.assertEqual(clean_entry.legacy_total, 0)

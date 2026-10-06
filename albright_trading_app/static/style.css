@@ -691,10 +691,32 @@ td.lot-title a {
 
 .row-count { font-size: var(--text-xs); color: var(--text-secondary); font-family: var(--font-mono); }
 
-.ledger-table { table-layout: fixed; }
-.ledger-table th:nth-child(1), .ledger-table td:nth-child(1) { width: 34%; }
-.ledger-table th:nth-child(n+2), .ledger-table td:nth-child(n+2) { width: 11%; }
-.ledger-table td:nth-child(1) { white-space: normal; word-break: break-word; }
+/* Content-driven widths (not table-layout:fixed) so the grouped Ledger
+   columns and the wide edit-mode inputs can push the table past the card's
+   width - the card's own overflow-x:auto then scrolls it horizontally
+   instead of squeezing every column down to fit. */
+.ledger-table .ledger-item-col,
+.ledger-table .ledger-item-cell { min-width: 260px; white-space: normal; word-break: break-word; }
+.ledger-table td.num, .ledger-table th.num { min-width: 7.5em; }
+
+.ledger-group-head {
+  text-align: center !important;
+  border-left: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border-strong);
+}
+.ledger-item-name { font-weight: 500; line-height: 1.35; }
+
+/* "Old unsplit" column's link (per legacy row, to the split helper) reads
+   as plain data first, link second - no underline/accent until hovered. */
+.ledger-table td.num a { color: inherit; text-decoration: underline dotted; }
+.ledger-table td.num a:hover { color: var(--accent); }
+
+.ledger-delete-col { text-align: center; width: 70px; }
+
+/* Edit-mode money inputs: wide enough to show a full dollar value (at
+   least 10 characters) without being clipped, regardless of the cell's
+   own width. */
+.ledger-edit-table input.ledger-input.num { min-width: 10ch; text-align: right; }
 
 /* Expandable detail rows */
 th.row-toggle-col { width: 24px; padding-left: var(--space-3) !important; padding-right: 0 !important; }

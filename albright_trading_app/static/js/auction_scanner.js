@@ -197,40 +197,50 @@
         });
     }
 
-    // ---------- Shared filter bar (source / category / confidence / search) ----------
+    // ---------- Shared filter bar (source / category / confidence / search /
+    // status) ----------
+    // Every element is optional, so a page only needs to render the ones
+    // relevant to it (the dashboard uses search+source+category+confidence;
+    // the Ledger page uses only status+source) - this bails out entirely
+    // only when none of the five are present.
     function initFilters() {
         var searchInput = document.getElementById("af-search");
         var sourceSelect = document.getElementById("af-source");
         var categorySelect = document.getElementById("af-category");
         var confidenceSelect = document.getElementById("af-confidence");
-        if (!searchInput || !sourceSelect || !categorySelect || !confidenceSelect) return;
+        var statusSelect = document.getElementById("af-status");
+        var elements = [searchInput, sourceSelect, categorySelect, confidenceSelect, statusSelect].filter(Boolean);
+        if (!elements.length) return;
 
         var tables = Array.prototype.slice.call(document.querySelectorAll("table[data-filterable]"));
 
         function applyFromURL() {
             var params = new URLSearchParams(window.location.search);
-            searchInput.value = params.get("q") || "";
-            sourceSelect.value = params.get("source") || "";
-            categorySelect.value = params.get("category") || "";
-            confidenceSelect.value = params.get("confidence") || "";
+            if (searchInput) searchInput.value = params.get("q") || "";
+            if (sourceSelect) sourceSelect.value = params.get("source") || "";
+            if (categorySelect) categorySelect.value = params.get("category") || "";
+            if (confidenceSelect) confidenceSelect.value = params.get("confidence") || "";
+            if (statusSelect) statusSelect.value = params.get("status") || "";
         }
 
         function updateURL() {
             var params = new URLSearchParams();
-            if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
-            if (sourceSelect.value) params.set("source", sourceSelect.value);
-            if (categorySelect.value) params.set("category", categorySelect.value);
-            if (confidenceSelect.value) params.set("confidence", confidenceSelect.value);
+            if (searchInput && searchInput.value.trim()) params.set("q", searchInput.value.trim());
+            if (sourceSelect && sourceSelect.value) params.set("source", sourceSelect.value);
+            if (categorySelect && categorySelect.value) params.set("category", categorySelect.value);
+            if (confidenceSelect && confidenceSelect.value) params.set("confidence", confidenceSelect.value);
+            if (statusSelect && statusSelect.value) params.set("status", statusSelect.value);
             var query = params.toString();
             var newUrl = window.location.pathname + (query ? "?" + query : "") + window.location.hash;
             window.history.replaceState(null, "", newUrl);
         }
 
         function applyFilters() {
-            var q = searchInput.value.trim().toLowerCase();
-            var source = sourceSelect.value;
-            var category = categorySelect.value;
-            var confidence = confidenceSelect.value;
+            var q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+            var source = sourceSelect ? sourceSelect.value : "";
+            var category = categorySelect ? categorySelect.value : "";
+            var confidence = confidenceSelect ? confidenceSelect.value : "";
+            var status = statusSelect ? statusSelect.value : "";
 
             tables.forEach(function (table) {
                 var tbody = table.querySelector("tbody");
@@ -243,7 +253,8 @@
                         (!q || (row.dataset.title || "").toLowerCase().indexOf(q) !== -1) &&
                         (!source || row.dataset.source === source) &&
                         (!category || row.dataset.category === category) &&
-                        (!confidence || row.dataset.confidence === confidence);
+                        (!confidence || row.dataset.confidence === confidence) &&
+                        (!status || row.dataset.status === status);
                     row.hidden = !matches;
 
                     // A hidden row's detail always collapses too, rather
@@ -268,7 +279,7 @@
         }
 
         applyFromURL();
-        [searchInput, sourceSelect, categorySelect, confidenceSelect].forEach(function (el) {
+        elements.forEach(function (el) {
             el.addEventListener("input", applyFilters);
             el.addEventListener("change", applyFilters);
         });

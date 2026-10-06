@@ -1,4 +1,6 @@
 {% extends "index.html" %}
+{% load static %}
+{% load ledger_extras %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
     <div class="card__header" style="margin-bottom: 20px;">
@@ -9,10 +11,17 @@
             <a href="{% url 'albright_reselling_app:ledger' %}" style="font-size: 0.75rem; margin-left: 4px;">Clear</a>
             {% endif %}
         </h1>
-        <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" style="font-size: 0.8125rem;">View Scorecard &rarr;</a>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            {% if edit_mode %}
+            <a href="{% url 'albright_reselling_app:ledger' %}{% if status_filter %}?status={{ status_filter }}{% endif %}" class="btn btn-secondary btn-sm">Cancel</a>
+            {% else %}
+            <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}edit=1" class="btn btn-secondary btn-sm">Edit ledger</a>
+            {% endif %}
+            <a href="{% url 'albright_reselling_app:ledger_scorecard' %}" style="font-size: 0.8125rem;">View Scorecard &rarr;</a>
+        </div>
     </div>
 
-    <!-- Single-line add-entry form -->
+    <!-- Single-line add-entry form - unchanged, available in both view modes -->
     <form method="post" style="margin-bottom: 24px;">
         {% csrf_token %}
         <div class="card" style="padding: 0; overflow-x: auto;">
@@ -49,13 +58,14 @@
         </div>
     </form>
 
-    <!-- Existing entries, editable spreadsheet-style -->
-    <form method="post">
+    {% if edit_mode %}
+    <!-- Edit mode: the spreadsheet-style formset, with a labeled Delete column -->
+    <form method="post" id="ledger-edit-form">
         {% csrf_token %}
         {{ formset.management_form }}
 
         <div class="card" style="padding: 0; overflow-x: auto;">
-            <table class="holdings ledger-table">
+            <table class="holdings ledger-table ledger-edit-table">
                 <thead>
                     <tr>
                         <th>Item</th>
@@ -69,7 +79,7 @@
                         <th class="num">Sell Fees</th>
                         <th class="num">Sell Ship</th>
                         <th class="num">Profit</th>
-                        <th></th>
+                        <th class="ledger-delete-col">Delete</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -98,7 +108,7 @@
                         <td class="num {% if form.instance.profit >= 0 %}gain{% else %}loss{% endif %}">
                             {{ form.instance.profit|floatformat:2 }}
                         </td>
-                        <td>{{ form.DELETE }}</td>
+                        <td class="ledger-delete-col">{{ form.DELETE }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -123,5 +133,179 @@
 
         <button type="submit" name="save_ledger" class="btn btn-primary" style="margin-top: 16px;">Save Ledger</button>
     </form>
+
+    {% else %}
+    <!-- Read-only mode: full names, grouped BUY/SELL/RESULT columns, sort+filter -->
+    <div class="card" style="margin-bottom: 16px;">
+        <div class="card__header">
+            <span class="card__label">Filter</span>
+        </div>
+        <div class="scanner-controls">
+            <select id="af-status">
+                <option value="">All statuses</option>
+                {% for value, label in status_choices %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select id="af-source">
+                <option value="">All sources</option>
+                {% for src in distinct_sources %}
+                <option value="{{ src }}">{{ src }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+        <span id="count-ledger" class="row-count" data-role="row-count"></span>
+    </div>
+
+    <div class="card" style="padding: 0; overflow-x: auto;">
+        <table class="holdings ledger-table ledger-view-table" id="table-ledger" data-filterable="true" data-count-target="count-ledger">
+            <thead>
+                <tr>
+                    <th rowspan="2" class="ledger-item-col" data-sort-key="item">Item</th>
+                    <th colspan="{% if has_legacy %}7{% else %}6{% endif %}" class="ledger-group-head">Buy</th>
+                    <th colspan="3" class="ledger-group-head">Sell</th>
+                    <th rowspan="2" class="ledger-group-head num" data-sort-key="profit">Result</th>
+                </tr>
+                <tr>
+                    <th class="num" data-sort-key="cost">Cost</th>
+                    <th class="num" data-sort-key="premium">Premium</th>
+                    <th class="num" data-sort-key="tax">Tax</th>
+                    <th class="num" data-sort-key="fees">Fees</th>
+                    <th class="num" data-sort-key="inboundship">Inbound ship</th>
+                    {% if has_legacy %}
+                    <th class="num" data-sort-key="oldunsplit" title="Old fees/shipping from before buy-side and sell-side costs were tracked separately. Included here so the buy total still adds up - open Manage on a row with this amount to split it into the columns on either side.">Old unsplit</th>
+                    {% endif %}
+                    <th class="num" data-sort-key="buytotal">Buy total</th>
+                    <th class="num" data-sort-key="soldfor">Sold for</th>
+                    <th class="num" data-sort-key="sellfees">Sell fees</th>
+                    <th class="num" data-sort-key="sellship">Sell ship</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr class="scanner-row"
+                    data-item="{{ entry.item }}" data-source="{{ entry.source }}" data-status="{{ entry.status }}"
+                    data-cost="{{ entry.cost|default:0 }}" data-premium="{{ entry.buyer_premium|default:0 }}"
+                    data-tax="{{ entry.sales_tax|default:0 }}" data-fees="{{ entry.buy_fees|default:0 }}"
+                    data-inboundship="{{ entry.inbound_shipping|default:0 }}"
+                    data-oldunsplit="{{ entry.legacy_total }}"
+                    data-buytotal="{{ entry.buy_side_cost }}" data-soldfor="{{ entry.sold_for|default:0 }}"
+                    data-sellfees="{{ entry.sell_fees|default:0 }}" data-sellship="{{ entry.sell_shipping|default:0 }}"
+                    data-profit="{{ entry.profit }}">
+                    <td class="ledger-item-cell">
+                        <div class="ledger-item-name">{{ entry.item }}</div>
+                        <div style="margin-top: 4px; font-size: 0.75rem; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <span class="badge {% if entry.status == 'sold_out' %}gain{% elif entry.status == 'written_off' %}loss{% elif entry.status == 'partially_sold' %}neutral{% else %}warn{% endif %}">{{ entry.get_status_display }}</span>
+                            {% if entry.source %}<span class="badge neutral">{{ entry.source }}</span>{% endif %}
+                            {% if entry.has_legacy_amounts %}<span class="badge warn" title="Old fees/shipping not yet split into buy/sell">legacy</span>{% endif %}
+                            {% if entry.has_conflicting_sale_data %}<span class="badge loss" title="Both itemized sales and sold_for are set">conflict</span>{% endif %}
+                            {% if entry.scanner_lot_id %}<span class="badge neutral">scanner</span>{% endif %}
+                            <a href="{% url 'albright_reselling_app:ledger_manage' entry.pk %}">Manage</a>
+                        </div>
+                    </td>
+                    <td class="num">{{ entry.cost|money }}</td>
+                    <td class="num">{{ entry.buyer_premium|money }}</td>
+                    <td class="num">{{ entry.sales_tax|money }}</td>
+                    <td class="num">{{ entry.buy_fees|money }}</td>
+                    <td class="num">{{ entry.inbound_shipping|money }}</td>
+                    {% if has_legacy %}
+                    <td class="num">
+                        {% if entry.has_legacy_amounts %}
+                        <a href="{% url 'albright_reselling_app:ledger_manage' entry.pk %}" title="Old fees/shipping from before buy-side and sell-side costs were tracked separately - included here so the buy total still adds up. Click to open the split helper and move it into the columns on either side.">{{ entry.legacy_total|money }}</a>
+                        {% else %}
+                        {{ entry.legacy_total|money }}
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="num">{{ entry.buy_side_cost|money }}</td>
+                    <td class="num">{{ entry.sold_for|money }}</td>
+                    <td class="num">{{ entry.sell_fees|money }}</td>
+                    <td class="num">{{ entry.sell_shipping|money }}</td>
+                    <td class="num {% if entry.profit >= 0 %}gain{% else %}loss{% endif %}">{{ entry.profit|money }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
+                    <td>Totals</td>
+                    <td class="num" colspan="{% if has_legacy %}6{% else %}5{% endif %}"></td>
+                    <td class="num" id="ledger-total-buytotal">{{ totals.total|money }}</td>
+                    <td class="num" id="ledger-total-soldfor">{{ totals.sold_for|money }}</td>
+                    <td class="num" colspan="2" id="ledger-total-sellcosts">{{ totals.sell_costs|money }}</td>
+                    <td class="num {% if totals.profit >= 0 %}gain{% else %}loss{% endif %}" id="ledger-total-profit">{{ totals.profit|money }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% endif %}
 </div>
+
+<script src="{% static 'js/auction_scanner.js' %}" defer></script>
+{% if not edit_mode %}
+<script>
+    // Totals footer recompute on filter change - deferred with setTimeout(0)
+    // so it always runs after auction_scanner.js's own filter handler (shared
+    // via initFilters()) has already updated which rows are hidden, no
+    // matter which <script> registered its listener first.
+    document.addEventListener("DOMContentLoaded", function () {
+        var table = document.getElementById("table-ledger");
+        if (!table) return;
+        var statusSelect = document.getElementById("af-status");
+        var sourceSelect = document.getElementById("af-source");
+
+        function formatMoney(value) {
+            if (!value) return "-";
+            var sign = value < 0 ? "-" : "";
+            return sign + "$" + Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function setTotal(id, value) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = formatMoney(value);
+        }
+
+        function recomputeTotals() {
+            var rows = Array.prototype.slice.call(table.querySelectorAll("tbody tr.scanner-row"));
+            var buyTotal = 0, soldFor = 0, sellCosts = 0, profit = 0;
+            rows.forEach(function (row) {
+                if (row.hidden) return;
+                buyTotal += parseFloat(row.dataset.buytotal) || 0;
+                soldFor += parseFloat(row.dataset.soldfor) || 0;
+                sellCosts += (parseFloat(row.dataset.sellfees) || 0) + (parseFloat(row.dataset.sellship) || 0);
+                profit += parseFloat(row.dataset.profit) || 0;
+            });
+            setTotal("ledger-total-buytotal", buyTotal);
+            setTotal("ledger-total-soldfor", soldFor);
+            setTotal("ledger-total-sellcosts", sellCosts);
+            var profitCell = document.getElementById("ledger-total-profit");
+            if (profitCell) {
+                profitCell.textContent = formatMoney(profit);
+                profitCell.classList.toggle("gain", profit >= 0);
+                profitCell.classList.toggle("loss", profit < 0);
+            }
+        }
+
+        [statusSelect, sourceSelect].forEach(function (el) {
+            if (!el) return;
+            el.addEventListener("change", function () { setTimeout(recomputeTotals, 0); });
+        });
+    });
+</script>
+{% else %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var form = document.getElementById("ledger-edit-form");
+        if (!form) return;
+        form.addEventListener("submit", function (event) {
+            var checked = form.querySelectorAll('input[type="checkbox"][name$="-DELETE"]:checked').length;
+            if (checked > 0 && !window.confirm("Delete " + checked + " entr" + (checked === 1 ? "y" : "ies") + "?")) {
+                event.preventDefault();
+            }
+        });
+    });
+</script>
+{% endif %}
 {% endblock %}
