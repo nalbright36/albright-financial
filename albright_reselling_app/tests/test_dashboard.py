@@ -840,6 +840,18 @@ class RangeFilterTests(TestCase):
             self.assertIn(element_id, js_source)
             self.assertIn(param, js_source)
 
+    def test_script_tag_is_cache_busted(self):
+        """The shared JS file is loaded through a ?v=<mtime> query string
+        (templatetags/cache_bust.py) - otherwise editing it has no visible
+        effect for a browser (or CDN) already holding an old copy cached
+        under the same stable /static/... URL, which is exactly what made
+        this feature look completely broken even though the code was
+        correct."""
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        match = re.search(r'<script src="([^"]*auction_scanner\.js\?v=\d+)"', response.content.decode())
+        self.assertIsNotNone(match)
+
 
 class LedgerTilesDashboardTests(TestCase):
     """The dashboard's top-of-page row of 5 ledger tiles that replaced the

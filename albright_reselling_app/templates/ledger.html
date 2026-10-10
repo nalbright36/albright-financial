@@ -1,6 +1,7 @@
 {% extends "index.html" %}
 {% load static %}
 {% load ledger_extras %}
+{% load cache_bust %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
     <div class="card__header" style="margin-bottom: 20px;">
@@ -244,7 +245,7 @@
     {% endif %}
 </div>
 
-<script src="{% static 'js/auction_scanner.js' %}" defer></script>
+<script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
 {% if not edit_mode %}
 <script>
     // Totals footer recompute on filter change - deferred with setTimeout(0)
