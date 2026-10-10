@@ -3,6 +3,7 @@ directly (get_scanner_dashboard_context), and the dashboard view end to end
 via the test client. No HTTP call to any external site happens here - only
 ORM fixtures."""
 import os
+import re
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
@@ -760,6 +761,84 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
         self.assertContains(response, "HiBid")
+
+
+class RangeFilterTests(TestCase):
+    """The filter bar's Bid/Max bid/Headroom min-max inputs and headroom
+    presets (static/js/auction_scanner.js's initFilters()) - and the raw
+    numeric data-* attributes on each row those filters read from, since
+    a formatted "$12.50" there would silently break every comparison."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_range_filter_inputs_render(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        for field_id in ("af-bid-min", "af-bid-max", "af-maxbid-min", "af-maxbid-max",
+                          "af-headroom-min", "af-headroom-max"):
+            self.assertContains(response, f'id="{field_id}"')
+        self.assertContains(response, "Under max")
+        self.assertContains(response, "$25+ headroom")
+        self.assertContains(response, "Close calls")
+        self.assertContains(response, 'id="af-clear"')
+        self.assertContains(response, "Clear filters")
+
+    def test_candidate_row_has_raw_numeric_bid_maxbid_headroom(self):
+        lot = _make_lot("range-filter-1", timezone.now() + timedelta(hours=3), current_price=Decimal("12.50"))
+        _make_evaluation(lot, is_candidate=True, max_bid=20.0, headroom=7.5)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+
+        bid = re.search(r'data-bid="([^"]*)"', content)
+        maxbid = re.search(r'data-maxbid="([^"]*)"', content)
+        headroom = re.search(r'data-headroom="([^"]*)"', content)
+        self.assertIsNotNone(bid)
+        self.assertIsNotNone(maxbid)
+        self.assertIsNotNone(headroom)
+        self.assertEqual(float(bid.group(1)), 12.5)
+        self.assertEqual(float(maxbid.group(1)), 20.0)
+        self.assertEqual(float(headroom.group(1)), 7.5)
+        # raw numbers, not formatted currency - the JS filter compares these
+        # with parseFloat(), which "$12.50" would silently fail on.
+        self.assertNotIn("$", bid.group(1))
+        self.assertNotIn("$", maxbid.group(1))
+        self.assertNotIn("$", headroom.group(1))
+
+    def test_lead_row_has_bid_but_no_maxbid_or_headroom(self):
+        lot = _make_lot("range-filter-lead-1", timezone.now() + timedelta(hours=3), current_price=Decimal("8.00"))
+        _make_lead_evaluation(lot)
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+        table_start = content.index('id="table-leads"')
+        leads_table = content[table_start:content.index("</table>", table_start)]
+
+        bid = re.search(r'data-bid="([^"]*)"', leads_table)
+        self.assertIsNotNone(bid)
+        self.assertEqual(float(bid.group(1)), 8.0)
+        self.assertNotIn("data-maxbid=", leads_table)
+        self.assertNotIn("data-headroom=", leads_table)
+
+    def test_query_string_params_documented_in_shared_js(self):
+        """applyFromURL()/updateURL() in the shared JS file read/write the
+        same element ids and query-param names the dashboard renders -
+        the only way to check this without a JS test runner."""
+        js_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "albright_trading_app", "static", "js", "auction_scanner.js",
+        )
+        with open(js_path, encoding="utf-8") as f:
+            js_source = f.read()
+
+        for element_id, param in (
+            ("af-bid-min", "bid_min"), ("af-bid-max", "bid_max"),
+            ("af-maxbid-min", "maxbid_min"), ("af-maxbid-max", "maxbid_max"),
+            ("af-headroom-min", "headroom_min"), ("af-headroom-max", "headroom_max"),
+        ):
+            self.assertIn(element_id, js_source)
+            self.assertIn(param, js_source)
 
 
 class LedgerTilesDashboardTests(TestCase):

@@ -145,6 +145,30 @@
                 <option value="medium">Medium</option>
                 <option value="low">Low</option>
             </select>
+
+            <div class="af-range-group" title="Current bid, in dollars">
+                <span class="af-range-group__label">Bid</span>
+                <label class="af-money-field"><span class="af-money-field__prefix">$</span><input type="number" step="0.01" id="af-bid-min" placeholder="Min"></label>
+                <span class="af-range-group__sep">&ndash;</span>
+                <label class="af-money-field"><span class="af-money-field__prefix">$</span><input type="number" step="0.01" id="af-bid-max" placeholder="Max"></label>
+            </div>
+            <div class="af-range-group" title="Scanner's suggested max bid, in dollars">
+                <span class="af-range-group__label">Max bid</span>
+                <label class="af-money-field"><span class="af-money-field__prefix">$</span><input type="number" step="0.01" id="af-maxbid-min" placeholder="Min"></label>
+                <span class="af-range-group__sep">&ndash;</span>
+                <label class="af-money-field"><span class="af-money-field__prefix">$</span><input type="number" step="0.01" id="af-maxbid-max" placeholder="Max"></label>
+            </div>
+            <div class="af-range-group" title="Max bid minus current bid, in dollars - negative means already over max">
+                <span class="af-range-group__label">Headroom</span>
+                <label class="af-money-field"><span class="af-money-field__prefix">$</span><input type="number" step="0.01" id="af-headroom-min" placeholder="Min"></label>
+                <span class="af-range-group__sep">&ndash;</span>
+                <label class="af-money-field"><span class="af-money-field__prefix">$</span><input type="number" step="0.01" id="af-headroom-max" placeholder="Max"></label>
+                <button type="button" class="btn btn-secondary btn-sm af-preset" data-min="0" data-max="">Under max</button>
+                <button type="button" class="btn btn-secondary btn-sm af-preset" data-min="25" data-max="">$25+ headroom</button>
+                <button type="button" class="btn btn-secondary btn-sm af-preset" data-min="-25" data-max="0">Close calls</button>
+            </div>
+
+            <button type="button" class="btn btn-secondary btn-sm" id="af-clear">Clear filters</button>
         </div>
     </div>
 

@@ -619,6 +619,23 @@ a:hover { color: var(--accent-hover); }
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none;
 }
 
+/* Numeric range filters (bid/max bid/headroom) - a labeled min-max pair,
+   each input with an overlaid $ prefix instead of a separate label. */
+.af-range-group { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.af-range-group__label { font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; }
+.af-range-group__sep { color: var(--text-tertiary); }
+
+.af-money-field { position: relative; display: inline-flex; align-items: center; }
+.af-money-field__prefix {
+  position: absolute; left: var(--space-2); color: var(--text-tertiary); font-size: var(--text-sm);
+  pointer-events: none;
+}
+.scanner-controls .af-money-field input[type="number"] { flex: 0 1 72px; width: 72px; padding-left: 18px; }
+
+/* A headroom preset button reflects the filter it currently matches -
+   same look as an active timeframe toggle elsewhere in this app. */
+.af-preset.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
 /* Light theme only: inputs/selects inside a card go white (--surface)
    with the card's own border color (--border), so they read as part of
    the card rather than a separate gray well - dark theme keeps its

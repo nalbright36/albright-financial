@@ -198,21 +198,51 @@
     }
 
     // ---------- Shared filter bar (source / category / confidence / search /
-    // status) ----------
+    // status / numeric ranges) ----------
     // Every element is optional, so a page only needs to render the ones
-    // relevant to it (the dashboard uses search+source+category+confidence;
-    // the Ledger page uses only status+source) - this bails out entirely
-    // only when none of the five are present.
+    // relevant to it (the dashboard uses search+source+category+confidence+
+    // the bid/max bid/headroom ranges; the Ledger page uses only status+
+    // source) - this bails out entirely only when none of them are present.
     function initFilters() {
         var searchInput = document.getElementById("af-search");
         var sourceSelect = document.getElementById("af-source");
         var categorySelect = document.getElementById("af-category");
         var confidenceSelect = document.getElementById("af-confidence");
         var statusSelect = document.getElementById("af-status");
-        var elements = [searchInput, sourceSelect, categorySelect, confidenceSelect, statusSelect].filter(Boolean);
+        var bidMin = document.getElementById("af-bid-min");
+        var bidMax = document.getElementById("af-bid-max");
+        var maxBidMin = document.getElementById("af-maxbid-min");
+        var maxBidMax = document.getElementById("af-maxbid-max");
+        var headroomMin = document.getElementById("af-headroom-min");
+        var headroomMax = document.getElementById("af-headroom-max");
+        var clearButton = document.getElementById("af-clear");
+        var presetButtons = Array.prototype.slice.call(document.querySelectorAll(".af-preset"));
+        var elements = [
+            searchInput, sourceSelect, categorySelect, confidenceSelect, statusSelect,
+            bidMin, bidMax, maxBidMin, maxBidMax, headroomMin, headroomMax,
+        ].filter(Boolean);
         if (!elements.length) return;
 
         var tables = Array.prototype.slice.call(document.querySelectorAll("table[data-filterable]"));
+
+        function parsedValue(el) {
+            if (!el || el.value === "") return null;
+            var num = parseFloat(el.value);
+            return isNaN(num) ? null : num;
+        }
+
+        // A row whose table doesn't carry this attribute at all (e.g. a
+        // leads row has no data-maxbid/data-headroom, a closed-results row
+        // has no data-bid/data-headroom) always passes - the range filter
+        // simply doesn't apply there, per its own table's columns.
+        function inRange(raw, min, max) {
+            if (raw === undefined || raw === "") return true;
+            var num = parseFloat(raw);
+            if (isNaN(num)) return true;
+            if (min !== null && num < min) return false;
+            if (max !== null && num > max) return false;
+            return true;
+        }
 
         function applyFromURL() {
             var params = new URLSearchParams(window.location.search);
@@ -221,6 +251,12 @@
             if (categorySelect) categorySelect.value = params.get("category") || "";
             if (confidenceSelect) confidenceSelect.value = params.get("confidence") || "";
             if (statusSelect) statusSelect.value = params.get("status") || "";
+            if (bidMin) bidMin.value = params.get("bid_min") || "";
+            if (bidMax) bidMax.value = params.get("bid_max") || "";
+            if (maxBidMin) maxBidMin.value = params.get("maxbid_min") || "";
+            if (maxBidMax) maxBidMax.value = params.get("maxbid_max") || "";
+            if (headroomMin) headroomMin.value = params.get("headroom_min") || "";
+            if (headroomMax) headroomMax.value = params.get("headroom_max") || "";
         }
 
         function updateURL() {
@@ -230,9 +266,43 @@
             if (categorySelect && categorySelect.value) params.set("category", categorySelect.value);
             if (confidenceSelect && confidenceSelect.value) params.set("confidence", confidenceSelect.value);
             if (statusSelect && statusSelect.value) params.set("status", statusSelect.value);
+            if (bidMin && bidMin.value) params.set("bid_min", bidMin.value);
+            if (bidMax && bidMax.value) params.set("bid_max", bidMax.value);
+            if (maxBidMin && maxBidMin.value) params.set("maxbid_min", maxBidMin.value);
+            if (maxBidMax && maxBidMax.value) params.set("maxbid_max", maxBidMax.value);
+            if (headroomMin && headroomMin.value) params.set("headroom_min", headroomMin.value);
+            if (headroomMax && headroomMax.value) params.set("headroom_max", headroomMax.value);
             var query = params.toString();
             var newUrl = window.location.pathname + (query ? "?" + query : "") + window.location.hash;
             window.history.replaceState(null, "", newUrl);
+        }
+
+        // A preset button's own min/max wins when its values aren't already
+        // in the headroom fields; clicking it again (same values already
+        // set) clears both fields instead - a simple toggle driven purely
+        // by the fields' current values, not any separately-tracked state.
+        function wirePresets() {
+            presetButtons.forEach(function (button) {
+                button.addEventListener("click", function () {
+                    if (!headroomMin || !headroomMax) return;
+                    var min = button.dataset.min || "";
+                    var max = button.dataset.max || "";
+                    var alreadyActive = headroomMin.value === min && headroomMax.value === max;
+                    headroomMin.value = alreadyActive ? "" : min;
+                    headroomMax.value = alreadyActive ? "" : max;
+                    applyFilters();
+                });
+            });
+        }
+
+        function syncPresetActiveStates() {
+            if (!headroomMin || !headroomMax) return;
+            presetButtons.forEach(function (button) {
+                var min = button.dataset.min || "";
+                var max = button.dataset.max || "";
+                var isPreset = min !== "" || max !== "";
+                button.classList.toggle("is-active", isPreset && headroomMin.value === min && headroomMax.value === max);
+            });
         }
 
         function applyFilters() {
@@ -241,6 +311,12 @@
             var category = categorySelect ? categorySelect.value : "";
             var confidence = confidenceSelect ? confidenceSelect.value : "";
             var status = statusSelect ? statusSelect.value : "";
+            var bidMinVal = parsedValue(bidMin);
+            var bidMaxVal = parsedValue(bidMax);
+            var maxBidMinVal = parsedValue(maxBidMin);
+            var maxBidMaxVal = parsedValue(maxBidMax);
+            var headroomMinVal = parsedValue(headroomMin);
+            var headroomMaxVal = parsedValue(headroomMax);
 
             tables.forEach(function (table) {
                 var tbody = table.querySelector("tbody");
@@ -254,7 +330,10 @@
                         (!source || row.dataset.source === source) &&
                         (!category || row.dataset.category === category) &&
                         (!confidence || row.dataset.confidence === confidence) &&
-                        (!status || row.dataset.status === status);
+                        (!status || row.dataset.status === status) &&
+                        inRange(row.dataset.bid, bidMinVal, bidMaxVal) &&
+                        inRange(row.dataset.maxbid, maxBidMinVal, maxBidMaxVal) &&
+                        inRange(row.dataset.headroom, headroomMinVal, headroomMaxVal);
                     row.hidden = !matches;
 
                     // A hidden row's detail always collapses too, rather
@@ -276,9 +355,18 @@
 
             updateURL();
             updateTabCounts();
+            syncPresetActiveStates();
+        }
+
+        if (clearButton) {
+            clearButton.addEventListener("click", function () {
+                elements.forEach(function (el) { el.value = ""; });
+                applyFilters();
+            });
         }
 
         applyFromURL();
+        wirePresets();
         elements.forEach(function (el) {
             el.addEventListener("input", applyFilters);
             el.addEventListener("change", applyFilters);
