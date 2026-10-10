@@ -771,10 +771,10 @@ class DashboardTilesTests(TestCase):
 
 class LedgerSummaryTilesTests(TestCase):
     """ledger_metrics.ledger_summary_tiles() - the Ledger page's own 3
-    top-of-page tiles (unsold inventory cost, current P&L, items in
-    inventory). Picked straight out of dashboard_tiles() rather than
-    recomputed, so every assertion here doubles as proof the two can't
-    drift apart for the same owner."""
+    top-of-page tiles (unsold inventory cost, current P&L, net cash
+    flow). The first two are picked straight out of dashboard_tiles()
+    rather than recomputed, so every assertion here doubles as proof the
+    two can't drift apart for the same owner."""
 
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
@@ -786,7 +786,7 @@ class LedgerSummaryTilesTests(TestCase):
         self.assertEqual(tiles["inventory_count"], 0)
         self.assertEqual(tiles["all_time_profit"], Decimal("0"))
         self.assertEqual(tiles["profit_this_month"], Decimal("0"))
-        self.assertEqual(tiles["markdown_count"], 0)
+        self.assertEqual(tiles["net_cash_flow"], Decimal("0"))
 
     def test_inventory_cost_and_count_from_holding_and_partially_sold(self):
         _make_entry(self.user, item="Holding", cost="10.00", status="holding")
@@ -831,16 +831,6 @@ class LedgerSummaryTilesTests(TestCase):
 
         self.assertEqual(tiles["profit_this_month"], Decimal("30.00"))  # 40-10 only
 
-    def test_markdown_count_matches_dashboard_aging_rule(self):
-        _make_entry(self.user, item="Fresh", cost="10.00", status="holding",
-                    purchase_date=timezone.localdate() - timedelta(days=5))
-        _make_entry(self.user, item="Stale", cost="10.00", status="holding",
-                    purchase_date=timezone.localdate() - timedelta(days=95))
-
-        tiles = ledger_metrics.ledger_summary_tiles(self.user)
-
-        self.assertEqual(tiles["markdown_count"], 1)
-
     def test_matches_dashboard_tiles_exactly(self):
         """The whole point of reusing dashboard_tiles() under the hood -
         every shared figure must be identical, not just similar."""
@@ -857,7 +847,6 @@ class LedgerSummaryTilesTests(TestCase):
         self.assertEqual(ledger_tiles["inventory_count"], dashboard["inventory_count"])
         self.assertEqual(ledger_tiles["all_time_profit"], dashboard["all_time_profit"])
         self.assertEqual(ledger_tiles["profit_this_month"], dashboard["profit_this_month"])
-        self.assertEqual(ledger_tiles["markdown_count"], dashboard["markdown_count"])
 
     def test_ledger_page_renders_tiles_unaffected_by_status_filter(self):
         _make_entry(self.user, item="Holding", cost="10.00", status="holding")
@@ -870,19 +859,12 @@ class LedgerSummaryTilesTests(TestCase):
 
         self.assertContains(unfiltered, "Unsold Inventory Cost")
         self.assertContains(unfiltered, "Current P&amp;L")
-        self.assertContains(unfiltered, "Items in Inventory")
+        self.assertContains(unfiltered, "Net Cash Flow")
         self.assertContains(unfiltered, "$10.00")  # inventory cost: only the holding item
         self.assertContains(unfiltered, "$35.00")  # all-time P&L: 55-20
         # The table's own ?status=unsold filter must not change the tiles.
         self.assertContains(filtered, "$10.00")
         self.assertContains(filtered, "$35.00")
-
-    def test_items_in_inventory_tile_links_to_aging_view(self):
-        self.client.login(username="tester", password="pw-not-real-12345")
-
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
-
-        self.assertContains(response, f"{reverse('albright_reselling_app:ledger_scorecard')}#aging")
 
     def test_dash_shown_for_zero_dollar_tiles(self):
         self.client.login(username="tester", password="pw-not-real-12345")
@@ -890,6 +872,119 @@ class LedgerSummaryTilesTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:ledger"))
 
         self.assertContains(response, ">-<")
+
+
+class NetCashFlowTests(TestCase):
+    """ledger_metrics.net_cash_flow() - the Ledger page's "Net Cash Flow"
+    tile: revenue minus costs across every entry, every status, unlike
+    the P&L tile which only counts sold-out/written-off outcomes."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+
+    def test_empty_state(self):
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertEqual(result, {"revenue": Decimal("0"), "costs": Decimal("0"), "net": Decimal("0")})
+
+    def test_unsold_holding_item_counts_its_cost_but_no_revenue(self):
+        _make_entry(self.user, item="Holding", cost="100.00", status="holding")
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertEqual(result["revenue"], Decimal("0"))
+        self.assertEqual(result["costs"], Decimal("100.00"))
+        self.assertEqual(result["net"], Decimal("-100.00"))
+
+    def test_written_off_item_is_a_pure_loss(self):
+        _make_entry(self.user, item="Written Off", cost="50.00", status="written_off")
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertEqual(result["revenue"], Decimal("0"))
+        self.assertEqual(result["costs"], Decimal("50.00"))
+        self.assertEqual(result["net"], Decimal("-50.00"))
+
+    def test_legacy_sold_for_entry_counts_revenue_and_sell_side_costs(self):
+        _make_entry(
+            self.user, item="Legacy Sold", cost="20.00", sold_for="100.00", sell_fees="5.00", sell_shipping="3.00",
+            status="sold_out",
+        )
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertEqual(result["revenue"], Decimal("100.00"))
+        self.assertEqual(result["costs"], Decimal("28.00"))  # 20 buy-side + 5 + 3 sell-side
+        self.assertEqual(result["net"], Decimal("72.00"))
+
+    def test_itemized_sale_counts_sale_price_and_its_own_fees_shipping(self):
+        entry = _make_entry(self.user, item="Itemized", cost="10.00", status="sold_out")
+        LedgerSale.objects.create(
+            entry=entry, sale_date=timezone.localdate(), sale_price=Decimal("60.00"),
+            selling_fees=Decimal("6.00"), outbound_shipping=Decimal("4.00"),
+        )
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertEqual(result["revenue"], Decimal("60.00"))
+        self.assertEqual(result["costs"], Decimal("20.00"))  # 10 buy-side + 6 + 4 sell-side
+        self.assertEqual(result["net"], Decimal("40.00"))
+
+    def test_legacy_unsplit_amounts_included_in_costs(self):
+        _make_entry(self.user, item="Legacy Unsplit", cost="20.00", fees="5.00", shipping="2.00",
+                    sold_for="50.00", status="sold_out")
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertEqual(result["costs"], Decimal("27.00"))  # 20 + 5 + 2, folded into buy_side_cost
+        self.assertEqual(result["net"], Decimal("23.00"))  # 50 - 27
+
+    def test_positive_net_cash_flow_when_revenue_exceeds_costs(self):
+        _make_entry(self.user, item="Profitable", cost="20.00", sold_for="100.00", status="sold_out")
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertGreater(result["net"], 0)
+        self.assertEqual(result["net"], Decimal("80.00"))
+
+    def test_negative_net_cash_flow_when_costs_exceed_revenue(self):
+        _make_entry(self.user, item="Underwater", cost="200.00", sold_for="50.00", status="sold_out")
+        _make_entry(self.user, item="Still Holding", cost="300.00", status="holding")
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        self.assertLess(result["net"], 0)
+        self.assertEqual(result["net"], Decimal("-450.00"))  # (50-200) + (0-300)
+
+    def test_combination_across_every_status(self):
+        """One of each status, including a legacy sold_for entry and a
+        written-off entry, matching the feature's explicit test
+        requirement."""
+        today = timezone.localdate()
+        _make_entry(self.user, item="Holding", cost="40.00", status="holding")
+        partial = _make_entry(self.user, item="Partial", cost="30.00", status="partially_sold")
+        LedgerSale.objects.create(entry=partial, sale_date=today, sale_price=Decimal("10.00"))
+        _make_entry(self.user, item="Legacy Sold Out", cost="20.00", sold_for="80.00", status="sold_out")
+        _make_entry(self.user, item="Written Off", cost="15.00", status="written_off")
+
+        result = ledger_metrics.net_cash_flow(self.user)
+
+        # revenue: 0 (holding) + 10 (partial) + 80 (legacy sold) + 0 (written off) = 90
+        # costs: 40 + 30 + 20 + 15 = 105
+        self.assertEqual(result["revenue"], Decimal("90.00"))
+        self.assertEqual(result["costs"], Decimal("105.00"))
+        self.assertEqual(result["net"], Decimal("-15.00"))
+
+    def test_rendered_on_ledger_page(self):
+        _make_entry(self.user, item="Profitable", cost="20.00", sold_for="100.00", status="sold_out")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+        response = self.client.get(reverse("albright_reselling_app:ledger"))
+
+        self.assertContains(response, "Net Cash Flow")
+        self.assertContains(response, "Revenue $100.00")
+        self.assertContains(response, "Costs $20.00")
+        self.assertContains(response, "$80.00")
 
 
 def _formset_post_data(entries, delete_pks=()):

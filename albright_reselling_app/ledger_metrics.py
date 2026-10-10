@@ -151,21 +151,41 @@ def realized_summary(owner, now=None):
     }
 
 
+def net_cash_flow(owner):
+    """Money in minus money out across every ledger entry for this owner,
+    regardless of status. Unlike dashboard_tiles()'s P&L (which only
+    counts sold-out/written-off outcomes, deliberately excluding unsold
+    inventory's cost), this counts the full buy-side cost of inventory
+    that's still sitting unsold too - that cash already went out the
+    door, whether or not anything's sold yet to offset it. Revenue is
+    LedgerSale.sale_price (itemized sales) or the legacy sold_for; costs
+    are each entry's buy_side_cost (which already folds in any unsplit
+    legacy fees/shipping) plus its sell_side_cost (LedgerSale fees/
+    shipping, or the legacy sell_fees/sell_shipping fields)."""
+    entries = list(LedgerEntry.objects.filter(owner=owner).prefetch_related("sales"))
+    revenue = sum((e.total_realized for e in entries if e.total_realized is not None), Decimal("0"))
+    costs = sum((e.buy_side_cost + e.sell_side_cost for e in entries), Decimal("0"))
+    return {"revenue": revenue, "costs": costs, "net": revenue - costs}
+
+
 def ledger_summary_tiles(owner, now=None):
     """The Ledger page's own 3 top-of-page tiles (unsold inventory cost,
-    all-time P&L, items in inventory) - picked straight out of
+    all-time P&L, net cash flow) - the first two picked straight out of
     dashboard_tiles()'s figures rather than recomputed, so they can never
     drift from what the reseller dashboard's top row (and, through it,
     the Scorecard) already shows for the same owner. Always computed
     across every entry for this owner, regardless of any status filter
     the Ledger page's own table is currently applying."""
     tiles = dashboard_tiles(owner, now=now)
+    cash_flow = net_cash_flow(owner)
     return {
         "inventory_cost": tiles["inventory_cost"],
         "inventory_count": tiles["inventory_count"],
         "all_time_profit": tiles["all_time_profit"],
         "profit_this_month": tiles["profit_this_month"],
-        "markdown_count": tiles["markdown_count"],
+        "net_cash_flow": cash_flow["net"],
+        "revenue": cash_flow["revenue"],
+        "costs": cash_flow["costs"],
     }
 
 

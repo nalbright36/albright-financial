@@ -45,7 +45,7 @@
         {% include "_scorecard_group_table.html" with rows=by_prediction_source label_heading="Prediction Source" %}
     </div>
 
-    <div class="card" id="aging">
+    <div class="card">
         <div class="card__header">
             <span class="card__label">Inventory Aging</span>
             <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ unsold_count }} unsold item{{ unsold_count|pluralize }} &middot; ${{ unsold_value_at_cost|floatformat:2 }} at cost</span>
