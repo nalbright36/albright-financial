@@ -68,6 +68,9 @@ def ledger(request):
     }
     distinct_sources = sorted({e.source for e in entries if e.source})
     has_legacy = any(e.has_legacy_amounts for e in entries)
+    # Always every entry for this owner, regardless of the table's own
+    # status filter above - see ledger_metrics.ledger_summary_tiles.
+    summary_tiles = ledger_metrics.ledger_summary_tiles(request.user)
 
     return render(request, "ledger.html", {
         "add_form": add_form,
@@ -79,6 +82,7 @@ def ledger(request):
         "distinct_sources": distinct_sources,
         "has_legacy": has_legacy,
         "status_choices": STATUS_CHOICES,
+        "summary_tiles": summary_tiles,
     })
 
 

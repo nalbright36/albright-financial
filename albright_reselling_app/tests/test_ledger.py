@@ -769,6 +769,129 @@ class DashboardTilesTests(TestCase):
         self.assertEqual(tiles["likely_won_this_week"], 1)  # only the 2-days-ago win
 
 
+class LedgerSummaryTilesTests(TestCase):
+    """ledger_metrics.ledger_summary_tiles() - the Ledger page's own 3
+    top-of-page tiles (unsold inventory cost, current P&L, items in
+    inventory). Picked straight out of dashboard_tiles() rather than
+    recomputed, so every assertion here doubles as proof the two can't
+    drift apart for the same owner."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+
+    def test_empty_state_shows_zero_not_an_error(self):
+        tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        self.assertEqual(tiles["inventory_cost"], Decimal("0"))
+        self.assertEqual(tiles["inventory_count"], 0)
+        self.assertEqual(tiles["all_time_profit"], Decimal("0"))
+        self.assertEqual(tiles["profit_this_month"], Decimal("0"))
+        self.assertEqual(tiles["markdown_count"], 0)
+
+    def test_inventory_cost_and_count_from_holding_and_partially_sold(self):
+        _make_entry(self.user, item="Holding", cost="10.00", status="holding")
+        partial = _make_entry(self.user, item="Partial", cost="20.00", status="partially_sold")
+        LedgerSale.objects.create(entry=partial, sale_date=timezone.localdate(), sale_price=Decimal("5.00"))
+        _make_entry(self.user, item="Sold Out", cost="30.00", sold_for="50.00", status="sold_out")
+
+        tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        self.assertEqual(tiles["inventory_count"], 2)  # holding + partially_sold, not sold_out
+        self.assertEqual(tiles["inventory_cost"], Decimal("30.00"))  # 10 + 20, not the sold-out item's 30
+
+    def test_current_pnl_covers_sold_out_written_off_and_legacy_sold_for(self):
+        today = timezone.localdate()
+        _make_entry(self.user, item="Legacy Sold", cost="10.00", sold_for="40.00", status="sold_out",
+                    sold_date=today)
+        _make_entry(self.user, item="Written Off", cost="15.00", status="written_off")
+        itemized = _make_entry(self.user, item="Itemized Sold", cost="10.00", status="sold_out")
+        LedgerSale.objects.create(entry=itemized, sale_date=today, sale_price=Decimal("50.00"))
+
+        tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        # (40-10) sold + (50-10) sold - 15 written off = 55
+        self.assertEqual(tiles["all_time_profit"], Decimal("55.00"))
+
+    def test_unsold_items_do_not_reduce_pnl(self):
+        _make_entry(self.user, item="Just Sitting There", cost="500.00", status="holding")
+
+        tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        self.assertEqual(tiles["all_time_profit"], Decimal("0"))
+
+    def test_profit_this_month_excludes_prior_months(self):
+        today = timezone.localdate()
+        last_month = today.replace(day=1) - timedelta(days=1)
+        _make_entry(self.user, item="Sold This Month", cost="10.00", sold_for="40.00", status="sold_out",
+                    sold_date=today)
+        _make_entry(self.user, item="Sold Last Month", cost="10.00", sold_for="999.00", status="sold_out",
+                    sold_date=last_month)
+
+        tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        self.assertEqual(tiles["profit_this_month"], Decimal("30.00"))  # 40-10 only
+
+    def test_markdown_count_matches_dashboard_aging_rule(self):
+        _make_entry(self.user, item="Fresh", cost="10.00", status="holding",
+                    purchase_date=timezone.localdate() - timedelta(days=5))
+        _make_entry(self.user, item="Stale", cost="10.00", status="holding",
+                    purchase_date=timezone.localdate() - timedelta(days=95))
+
+        tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        self.assertEqual(tiles["markdown_count"], 1)
+
+    def test_matches_dashboard_tiles_exactly(self):
+        """The whole point of reusing dashboard_tiles() under the hood -
+        every shared figure must be identical, not just similar."""
+        _make_entry(self.user, item="Holding", cost="10.00", status="holding",
+                    purchase_date=timezone.localdate() - timedelta(days=95))
+        _make_entry(self.user, item="Sold", cost="20.00", sold_for="55.00", status="sold_out",
+                    sold_date=timezone.localdate())
+        _make_entry(self.user, item="Written Off", cost="5.00", status="written_off")
+
+        dashboard = ledger_metrics.dashboard_tiles(self.user)
+        ledger_tiles = ledger_metrics.ledger_summary_tiles(self.user)
+
+        self.assertEqual(ledger_tiles["inventory_cost"], dashboard["inventory_cost"])
+        self.assertEqual(ledger_tiles["inventory_count"], dashboard["inventory_count"])
+        self.assertEqual(ledger_tiles["all_time_profit"], dashboard["all_time_profit"])
+        self.assertEqual(ledger_tiles["profit_this_month"], dashboard["profit_this_month"])
+        self.assertEqual(ledger_tiles["markdown_count"], dashboard["markdown_count"])
+
+    def test_ledger_page_renders_tiles_unaffected_by_status_filter(self):
+        _make_entry(self.user, item="Holding", cost="10.00", status="holding")
+        _make_entry(self.user, item="Sold", cost="20.00", sold_for="55.00", status="sold_out",
+                    sold_date=timezone.localdate())
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+        unfiltered = self.client.get(reverse("albright_reselling_app:ledger"))
+        filtered = self.client.get(reverse("albright_reselling_app:ledger"), {"status": "unsold"})
+
+        self.assertContains(unfiltered, "Unsold Inventory Cost")
+        self.assertContains(unfiltered, "Current P&amp;L")
+        self.assertContains(unfiltered, "Items in Inventory")
+        self.assertContains(unfiltered, "$10.00")  # inventory cost: only the holding item
+        self.assertContains(unfiltered, "$35.00")  # all-time P&L: 55-20
+        # The table's own ?status=unsold filter must not change the tiles.
+        self.assertContains(filtered, "$10.00")
+        self.assertContains(filtered, "$35.00")
+
+    def test_items_in_inventory_tile_links_to_aging_view(self):
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+        response = self.client.get(reverse("albright_reselling_app:ledger"))
+
+        self.assertContains(response, f"{reverse('albright_reselling_app:ledger_scorecard')}#aging")
+
+    def test_dash_shown_for_zero_dollar_tiles(self):
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+        response = self.client.get(reverse("albright_reselling_app:ledger"))
+
+        self.assertContains(response, ">-<")
+
+
 def _formset_post_data(entries, delete_pks=()):
     """Builds a full, valid LedgerEntryFormSet POST payload from a list of
     existing LedgerEntry rows - every required field filled from the row's

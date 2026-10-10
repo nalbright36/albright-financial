@@ -151,6 +151,24 @@ def realized_summary(owner, now=None):
     }
 
 
+def ledger_summary_tiles(owner, now=None):
+    """The Ledger page's own 3 top-of-page tiles (unsold inventory cost,
+    all-time P&L, items in inventory) - picked straight out of
+    dashboard_tiles()'s figures rather than recomputed, so they can never
+    drift from what the reseller dashboard's top row (and, through it,
+    the Scorecard) already shows for the same owner. Always computed
+    across every entry for this owner, regardless of any status filter
+    the Ledger page's own table is currently applying."""
+    tiles = dashboard_tiles(owner, now=now)
+    return {
+        "inventory_cost": tiles["inventory_cost"],
+        "inventory_count": tiles["inventory_count"],
+        "all_time_profit": tiles["all_time_profit"],
+        "profit_this_month": tiles["profit_this_month"],
+        "markdown_count": tiles["markdown_count"],
+    }
+
+
 def dashboard_tiles(owner, now=None):
     """The reseller dashboard's top-of-page summary row: 5 ledger-focused
     tiles (profit/sales this month, inventory, needs-action, my bids),

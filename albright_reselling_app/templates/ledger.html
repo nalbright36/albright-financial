@@ -4,6 +4,27 @@
 {% load cache_bust %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <!-- Always every entry for this owner - see views.ledger()/
+         ledger_metrics.ledger_summary_tiles(). Not affected by the table's
+         own status filter below. -->
+    <div class="grid grid-3" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Unsold Inventory Cost</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ summary_tiles.inventory_cost|money }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ summary_tiles.inventory_count }} item{{ summary_tiles.inventory_count|pluralize }}</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Current P&amp;L</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if summary_tiles.all_time_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{{ summary_tiles.all_time_profit|money }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">This month: {{ summary_tiles.profit_this_month|money }}</div>
+        </div>
+        <a href="{% url 'albright_reselling_app:ledger_scorecard' %}#aging" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Items in Inventory</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ summary_tiles.inventory_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ summary_tiles.markdown_count }} need markdowns</div>
+        </a>
+    </div>
+
     <div class="card__header" style="margin-bottom: 20px;">
         <h1 style="margin: 0;">
             Ledger
