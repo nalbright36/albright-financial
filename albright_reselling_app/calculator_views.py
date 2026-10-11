@@ -1,21 +1,22 @@
-"""Views for the Bid Calculator page: two tabs, Buy cost and eBay profit,
-both backed entirely by scanner/simple_calc.py's pure functions. Logic
-lives there (tested in tests/test_simple_calc.py) - everything in this
-file is just pulling values out of a request (POST form or JSON body),
-coercing them to the types simple_calc expects, and handing the result
-back as a dict/JsonResponse.
+"""Views for the Calculators page: three tabs, Buy cost, eBay profit, and
+Melt value, all backed entirely by scanner/simple_calc.py's pure
+functions. Logic lives there (tested in tests/test_simple_calc.py) -
+everything in this file is just pulling values out of a request (POST
+form or JSON body), coercing them to the types simple_calc expects, and
+handing the result back as a dict/JsonResponse.
 
 Two ways to compute, same as the rest of this app's pages: calculator_page
 itself (a plain POST, the JavaScript-off fallback - its "Calculate" button
 re-renders the page with server-computed results) and calculate_api (the
 JSON endpoint the page's JS calls, debounced, as values change). Both go
-through _buy_result()/_ebay_result() below, so they can never disagree.
+through _buy_result()/_ebay_result()/_melt_result() below, so they can
+never disagree.
 
 The old multi-item table, melt helper, and max-bid-from-profit-target
 calculator (scanner/calculator.py) are no longer used by this page -
 nothing here imports it. Saved calculations (BidCalculation) were dropped
-too: they don't map cleanly onto two independent flat tabs, and the
-feature wasn't worth re-building for this simpler page.
+too: they don't map cleanly onto independent flat tabs, and the feature
+wasn't worth re-building for this simpler page.
 """
 import json
 from dataclasses import asdict
@@ -24,11 +25,15 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import dateformat, timezone
 from django.views.decorators.http import require_POST
 
 from .models import LedgerEntry
-from .scanner.simple_calc import EBAY_PRESETS, break_even_price, buy_cost, ebay_profit, max_bid_for_total, price_for_profit
-from .scanner_models import SourcedLot
+from .scanner.simple_calc import (
+    EBAY_PRESETS, GRAMS_PER, PURITY_PRESETS, break_even_price, buy_cost, ebay_profit, junk_silver_value,
+    max_bid_for_total, melt_value, price_for_profit,
+)
+from .scanner_models import SourcedLot, SpotPrice
 
 SOURCE_CHOICES = [
     ("shopgoodwill", "ShopGoodwill"),
@@ -37,6 +42,10 @@ SOURCE_CHOICES = [
     ("custom", "Custom"),
 ]
 EBAY_CATEGORY_CHOICES = [(key, EBAY_PRESETS[key]["label"]) for key in ("most", "jewelry", "custom")]
+METAL_CHOICES = [("gold", "Gold"), ("silver", "Silver")]
+UNIT_CHOICES = [
+    ("g", "Grams"), ("dwt", "Pennyweight (dwt)"), ("ozt", "Troy ounces (ozt)"), ("oz", "Ounces (kitchen scale)"),
+]
 
 
 def _num(value, default=0.0):
@@ -143,6 +152,55 @@ def _ebay_result(data) -> dict:
     return result
 
 
+def purity_choices_json() -> dict:
+    """{"gold": [{"value": "0.583", "label": "14k (0.583)"}, ...], "silver": [...]}
+    - the melt tab's purity <select> re-populates from this (plus a
+    trailing "Custom" option, always) when the Metal toggle changes, same
+    pattern as the Buy cost tab's Source presets."""
+    return {
+        metal: [{"value": str(fraction), "label": f"{label} ({fraction})"} for label, fraction in presets.items()]
+        for metal, presets in PURITY_PRESETS.items()
+    }
+
+
+def _latest_spot(metal: str) -> dict:
+    """The latest stored SpotPrice for this metal, regardless of age (the
+    melt tab just prefills it and shows its date - unlike
+    scanner/spot.get_spot(), it never raises on a stale/missing price,
+    since the field stays editable either way)."""
+    latest = SpotPrice.objects.filter(metal=metal).order_by("-fetched_at").first()
+    if latest is None:
+        return {"price": None, "date": None}
+    return {"price": float(latest.price_usd), "date": dateformat.format(timezone.localtime(latest.fetched_at), "M j, Y")}
+
+
+def all_latest_spot() -> dict:
+    return {metal: _latest_spot(metal) for metal, _ in METAL_CHOICES}
+
+
+def _melt_result(data) -> dict:
+    mode = data.get("mode") or "weight"
+    metal = data.get("metal") or "gold"
+    payout_pct = _num(data.get("payout_pct"), 100.0)
+    spot = _num(data.get("spot"))
+
+    if mode == "junk":
+        face_value = _num(data.get("face_value"))
+        result = asdict(junk_silver_value(face_value, spot, payout_pct=payout_pct))
+    else:
+        weight = _num(data.get("weight"))
+        unit = data.get("unit") or "g"
+        if unit not in GRAMS_PER:
+            unit = "g"
+        purity_choice = data.get("purity") or "custom"
+        purity = _num(data.get("custom_purity")) if purity_choice == "custom" else _num(purity_choice)
+        result = asdict(melt_value(weight, unit, purity, spot, payout_pct=payout_pct))
+
+    result["mode"] = mode
+    result["metal"] = metal
+    return result
+
+
 def _lot_prefill(lot) -> dict:
     """Buy cost tab prefill for the "Open in Calculator" button: the lot's
     current bid, plus that source's own defaults (same values the Source
@@ -174,12 +232,15 @@ def _ledger_pick_items(user):
 def calculator_page(request):
     buy_results = None
     ebay_results = None
+    melt_results = None
     active_tab = "buy"
 
     if request.method == "POST":
         active_tab = request.POST.get("tab") or "buy"
         if active_tab == "ebay":
             ebay_results = _ebay_result(request.POST)
+        elif active_tab == "melt":
+            melt_results = _melt_result(request.POST)
         else:
             active_tab = "buy"
             buy_results = _buy_result(request.POST)
@@ -190,17 +251,28 @@ def calculator_page(request):
         lot = get_object_or_404(SourcedLot, pk=lot_id)
         lot_prefill = _lot_prefill(lot)
 
+    melt_values = request.POST if (request.method == "POST" and active_tab == "melt") else None
+    melt_metal = (melt_values.get("metal") if melt_values else None) or "gold"
+
     return render(request, "calculator.html", {
         "source_choices": SOURCE_CHOICES,
         "ebay_category_choices": EBAY_CATEGORY_CHOICES,
+        "metal_choices": METAL_CHOICES,
+        "unit_choices": UNIT_CHOICES,
+        "purity_choices": PURITY_PRESETS[melt_metal].items(),
+        "melt_metal": melt_metal,
         "source_defaults_json": json.dumps(all_source_defaults()),
         "ledger_items_json": json.dumps(_ledger_pick_items(request.user)),
         "lot_prefill_json": json.dumps(lot_prefill),
+        "purity_choices_json": json.dumps(purity_choices_json()),
+        "latest_spot_json": json.dumps(all_latest_spot()),
         "active_tab": active_tab,
         "buy_results": buy_results,
         "ebay_results": ebay_results,
+        "melt_results": melt_results,
         "buy_values": request.POST if (request.method == "POST" and active_tab == "buy") else None,
         "ebay_values": request.POST if (request.method == "POST" and active_tab == "ebay") else None,
+        "melt_values": melt_values,
     })
 
 
@@ -214,4 +286,6 @@ def calculate_api(request):
 
     if data.get("tab") == "ebay":
         return JsonResponse(_ebay_result(data))
+    if data.get("tab") == "melt":
+        return JsonResponse(_melt_result(data))
     return JsonResponse(_buy_result(data))

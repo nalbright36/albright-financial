@@ -53,3 +53,24 @@ class EbayTests(TestCase):
 
     def test_promoted_listing_fee(self):
         self.assertEqual(ebay_profit(0, 100, buyer_tax_pct=0, promoted_pct=5).promoted_fee, 5.0)
+
+
+from albright_reselling_app.scanner.simple_calc import junk_silver_value, melt_value  # noqa: E402
+
+
+class MeltTests(TestCase):
+    def test_14k_grams(self):
+        r = melt_value(10, "g", 0.583, spot_per_ozt=4000)
+        self.assertEqual(r.melt_value, round(10 * 0.583 / 31.1035 * 4000, 2))
+
+    def test_units(self):
+        self.assertAlmostEqual(melt_value(1, "ozt", 1.0, 100).melt_value, 100.0)
+        self.assertAlmostEqual(melt_value(20, "dwt", 1.0, 100).melt_value, 100.0, places=1)  # 20 dwt = 1 ozt
+        self.assertAlmostEqual(melt_value(1, "oz", 1.0, 100).melt_value, round(28.349523 / 31.1035 * 100, 2))
+
+    def test_payout(self):
+        r = melt_value(1, "ozt", 0.925, 60, payout_pct=70)
+        self.assertEqual((r.melt_value, r.payout_value), (55.5, 38.85))
+
+    def test_junk_silver(self):
+        self.assertEqual(junk_silver_value(10, 60).melt_value, 429.0)

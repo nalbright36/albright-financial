@@ -131,3 +131,42 @@ def price_for_profit(target_profit: float, item_cost: float, **kwargs) -> float:
 
 def break_even_price(item_cost: float, **kwargs) -> float:
     return price_for_profit(0.0, item_cost, **kwargs)
+
+
+# ---------------------------------------------------------------- melt value
+GRAMS_PER = {"g": 1.0, "dwt": 1.555174, "ozt": 31.1035, "oz": 28.349523}   # oz = kitchen-scale ounce
+PURITY_PRESETS = {
+    "gold": {"24k": 0.999, "22k": 0.916, "18k": 0.750, "14k": 0.583, "10k": 0.417, "9k": 0.375, "8k": 0.333},
+    "silver": {".999 fine": 0.999, ".925 sterling": 0.925, ".900 coin": 0.900, ".800": 0.800, ".400 (40%)": 0.400},
+}
+JUNK_SILVER_OZ_PER_FACE_DOLLAR = 0.715
+
+
+@dataclass
+class MeltResult:
+    weight_grams: float
+    pure_ozt: float
+    spot: float
+    melt_value: float
+    payout_pct: float
+    payout_value: float
+    melt_per_gram: float          # value of 1 gram of this metal/purity at spot
+
+
+def melt_value(weight: float, unit: str, purity: float, spot_per_ozt: float, payout_pct: float = 100.0) -> MeltResult:
+    """weight in unit ('g', 'dwt', 'ozt' troy ounce, 'oz' kitchen-scale ounce); purity as a fraction (0.583)."""
+    if unit not in GRAMS_PER:
+        raise ValueError(f"Unknown unit {unit}")
+    grams = weight * GRAMS_PER[unit]
+    pure_ozt = grams * purity / GRAMS_PER["ozt"]
+    melt = pure_ozt * spot_per_ozt
+    return MeltResult(round(grams, 3), round(pure_ozt, 4), spot_per_ozt, _r(melt), payout_pct,
+                      _r(melt * payout_pct / 100), round(purity * spot_per_ozt / GRAMS_PER["ozt"], 2))
+
+
+def junk_silver_value(face_value: float, spot_per_ozt: float, payout_pct: float = 100.0) -> MeltResult:
+    """Circulated 90% US silver coins by face value ($1 face = about 0.715 ozt silver)."""
+    pure_ozt = face_value * JUNK_SILVER_OZ_PER_FACE_DOLLAR
+    melt = pure_ozt * spot_per_ozt
+    return MeltResult(round(pure_ozt / 0.9 * GRAMS_PER["ozt"], 3), round(pure_ozt, 4), spot_per_ozt, _r(melt),
+                      payout_pct, _r(melt * payout_pct / 100), round(0.9 * spot_per_ozt / GRAMS_PER["ozt"], 2))

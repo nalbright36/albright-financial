@@ -1,8 +1,10 @@
-"""Tests for the reselling app's main nav: Dashboard/Ledger/Bid Calculator/
-Tools at the top level, the Tools dropdown grouping AI Reviews/Auction
-Scanner/Legacy Historical Data/Sleeper Segments/Insights, and every one of
-those pages' URLs still resolving and loading after the regroup (URLs/
-views/functionality were never touched - only the nav markup moved)."""
+"""Tests for the reselling app's main nav: Dashboard/Ledger/Calculators/
+Tools at the top level (Calculators was "Bid Calculator" before the Melt
+value tab was added - same link, same position, just relabeled), the
+Tools dropdown grouping AI Reviews/Auction Scanner/Legacy Historical
+Data/Sleeper Segments/Insights, and every one of those pages' URLs still
+resolving and loading after the regroup (URLs/views/functionality were
+never touched - only the nav markup moved)."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -20,14 +22,15 @@ class NavStructureTests(TestCase):
         self.assertIn('class="navbar__links"', content)
         self.assertContains(response, ">Dashboard<")
         self.assertContains(response, ">Ledger<")
-        self.assertContains(response, ">Bid Calculator<")
+        self.assertContains(response, ">Calculators<")
         self.assertContains(response, "Tools")
 
-    def test_bid_calculator_moved_out_of_tools_dropdown(self):
-        """Bid Calculator is now a top-level link, between Ledger and the
-        Tools dropdown trigger - and no longer inside the dropdown menu
-        itself. Auction Scanner/AI Reviews/Historical Data/Sleeper
-        Segments/Insights are still grouped inside the dropdown."""
+    def test_calculator_link_not_in_tools_dropdown(self):
+        """The Calculators link (formerly "Bid Calculator") is a top-level
+        link, between Ledger and the Tools dropdown trigger - and no
+        longer inside the dropdown menu itself. Auction Scanner/AI
+        Reviews/Historical Data/Sleeper Segments/Insights are still
+        grouped inside the dropdown."""
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
         content = response.content.decode()
 
@@ -35,8 +38,8 @@ class NavStructureTests(TestCase):
         tools_trigger_pos = content.index("navbar__dropdown-trigger")
         between = content[ledger_pos:tools_trigger_pos]
 
-        self.assertIn(">Bid Calculator<", between)
-        self.assertEqual(between.count("<a href"), 1)  # only the Bid Calculator link lives here now
+        self.assertIn(">Calculators<", between)
+        self.assertEqual(between.count("<a href"), 1)  # only the Calculators link lives here now
 
         dropdown_start = content.index('id="tools-dropdown-menu"')
         dropdown_end = content.index("</div>", dropdown_start)

@@ -1,9 +1,10 @@
-"""Tests for the rebuilt Bid Calculator page (calculator_views.py): the
-JSON endpoint for both tabs, the Source dropdown's presets, "Pick from
-Ledger", prefill from a scanner lot, and the no-JS POST fallback. Every
-number is checked against scanner/simple_calc.py directly, since that is
-the only math this page is allowed to use. Nav placement is covered in
-test_nav.py."""
+"""Tests for the Calculators page (calculator_views.py, formerly "Bid
+Calculator"): the JSON endpoint for all three tabs, the Source dropdown's
+presets, "Pick from Ledger", prefill from a scanner lot, the Melt value
+tab (weight/junk modes, every unit, custom purity, spot prefill/override,
+payout), and the no-JS POST fallback. Every number is checked against
+scanner/simple_calc.py directly, since that is the only math this page is
+allowed to use. Nav placement is covered in test_nav.py."""
 import json
 from decimal import Decimal
 
@@ -12,8 +13,10 @@ from django.test import TestCase
 from django.urls import reverse
 
 from albright_reselling_app.models import LedgerEntry
-from albright_reselling_app.scanner.simple_calc import break_even_price, buy_cost, ebay_profit, price_for_profit
-from albright_reselling_app.scanner_models import SourcedLot
+from albright_reselling_app.scanner.simple_calc import (
+    break_even_price, buy_cost, ebay_profit, junk_silver_value, melt_value, price_for_profit,
+)
+from albright_reselling_app.scanner_models import SourcedLot, SpotPrice
 
 
 class CalculateApiBuyTests(TestCase):
@@ -244,9 +247,10 @@ class NoJsPostFallbackTests(TestCase):
     def test_page_loads_with_both_tabs(self):
         response = self.client.get(reverse("albright_reselling_app:calculator"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bid Calculator")
+        self.assertContains(response, "Calculators")
         self.assertContains(response, "Buy cost")
         self.assertContains(response, "eBay profit")
+        self.assertContains(response, "Melt value")
 
     def test_buy_tab_post_renders_breakdown(self):
         response = self.client.post(reverse("albright_reselling_app:calculator"), {
@@ -266,3 +270,177 @@ class NoJsPostFallbackTests(TestCase):
         self.assertEqual(response.status_code, 200)
         expected = ebay_profit(40, 100, shipping_cost=6, packaging=1, buyer_tax_pct=7)
         self.assertContains(response, f"${expected.profit:.2f}")
+
+
+class CalculateApiMeltTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def _post(self, **fields):
+        data = {"tab": "melt", **fields}
+        return self.client.post(
+            reverse("albright_reselling_app:calculator_calculate"), data=json.dumps(data),
+            content_type="application/json",
+        )
+
+    def test_by_weight_grams_matches_simple_calc(self):
+        response = self._post(mode="weight", metal="gold", purity="0.583", weight="10", unit="g", spot="2650")
+
+        self.assertEqual(response.status_code, 200)
+        expected = melt_value(10, "g", 0.583, 2650)
+        data = response.json()
+        self.assertEqual(data["melt_value"], expected.melt_value)
+        self.assertEqual(data["pure_ozt"], expected.pure_ozt)
+        self.assertEqual(data["melt_per_gram"], expected.melt_per_gram)
+
+    def test_every_unit_matches_simple_calc(self):
+        for unit in ("g", "dwt", "ozt", "oz"):
+            response = self._post(mode="weight", metal="silver", purity="0.925", weight="5", unit=unit, spot="31.5")
+            expected = melt_value(5, unit, 0.925, 31.5)
+            self.assertEqual(response.json()["melt_value"], expected.melt_value, f"unit={unit}")
+
+    def test_custom_purity(self):
+        response = self._post(
+            mode="weight", metal="gold", purity="custom", custom_purity="0.611", weight="3", unit="g", spot="2650",
+        )
+
+        expected = melt_value(3, "g", 0.611, 2650)
+        self.assertEqual(response.json()["melt_value"], expected.melt_value)
+
+    def test_junk_silver_mode(self):
+        response = self._post(mode="junk", metal="silver", face_value="10", spot="31.5")
+
+        self.assertEqual(response.status_code, 200)
+        expected = junk_silver_value(10, 31.5)
+        data = response.json()
+        self.assertEqual(data["melt_value"], expected.melt_value)
+        self.assertEqual(data["pure_ozt"], expected.pure_ozt)
+
+    def test_payout_percent_applied(self):
+        response = self._post(mode="weight", metal="gold", purity="0.583", weight="10", unit="g", spot="2650",
+                               payout_pct="80")
+
+        expected = melt_value(10, "g", 0.583, 2650, payout_pct=80)
+        data = response.json()
+        self.assertEqual(data["payout_value"], expected.payout_value)
+        self.assertLess(data["payout_value"], data["melt_value"])
+
+    def test_default_payout_is_100(self):
+        response = self._post(mode="weight", metal="gold", purity="0.583", weight="10", unit="g", spot="2650")
+
+        data = response.json()
+        self.assertEqual(data["payout_value"], data["melt_value"])
+
+
+class MeltSpotPrefillTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_page_embeds_latest_spot_price_and_date(self):
+        SpotPrice.objects.create(metal="gold", price_usd=Decimal("2650.00"), source="test")
+        SpotPrice.objects.create(metal="silver", price_usd=Decimal("31.50"), source="test")
+
+        response = self.client.get(reverse("albright_reselling_app:calculator"))
+        content = response.content.decode()
+
+        start = content.index("var LATEST_SPOT = ") + len("var LATEST_SPOT = ")
+        end = content.index(";", start)
+        spot = json.loads(content[start:end])
+
+        self.assertEqual(spot["gold"]["price"], 2650.0)
+        self.assertEqual(spot["silver"]["price"], 31.5)
+        self.assertIsNotNone(spot["gold"]["date"])
+
+    def test_latest_spot_price_used_when_multiple_exist(self):
+        SpotPrice.objects.create(metal="gold", price_usd=Decimal("2600.00"), source="test")
+        SpotPrice.objects.create(metal="gold", price_usd=Decimal("2650.00"), source="test")  # inserted later = latest
+
+        response = self.client.get(reverse("albright_reselling_app:calculator"))
+        content = response.content.decode()
+        start = content.index("var LATEST_SPOT = ") + len("var LATEST_SPOT = ")
+        end = content.index(";", start)
+        spot = json.loads(content[start:end])
+
+        self.assertEqual(spot["gold"]["price"], 2650.0)
+
+    def test_no_spot_price_on_file_gives_null(self):
+        SpotPrice.objects.filter(metal="gold").delete()
+
+        response = self.client.get(reverse("albright_reselling_app:calculator"))
+        content = response.content.decode()
+        start = content.index("var LATEST_SPOT = ") + len("var LATEST_SPOT = ")
+        end = content.index(";", start)
+        spot = json.loads(content[start:end])
+
+        self.assertIsNone(spot["gold"]["price"])
+        self.assertIsNone(spot["gold"]["date"])
+
+    def test_edited_spot_value_overrides_prefill_for_the_calculation(self):
+        SpotPrice.objects.create(metal="gold", price_usd=Decimal("2650.00"), source="test")
+
+        response = self.client.post(
+            reverse("albright_reselling_app:calculator_calculate"),
+            data=json.dumps({
+                "tab": "melt", "mode": "weight", "metal": "gold", "purity": "0.583", "weight": "10", "unit": "g",
+                "spot": "3000",  # manually overridden - should be used, not the stored 2650 price
+            }),
+            content_type="application/json",
+        )
+
+        expected = melt_value(10, "g", 0.583, 3000)
+        self.assertEqual(response.json()["melt_value"], expected.melt_value)
+
+
+class MeltNoJsPostTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_melt_tab_post_renders_result(self):
+        response = self.client.post(reverse("albright_reselling_app:calculator"), {
+            "tab": "melt", "mode": "weight", "metal": "gold", "purity": "0.583", "weight": "10", "unit": "g",
+            "spot": "2650", "payout_pct": "100",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        expected = melt_value(10, "g", 0.583, 2650)
+        self.assertContains(response, f"${expected.melt_value:.2f}")
+
+    def test_melt_tab_is_active_after_its_own_post(self):
+        response = self.client.post(reverse("albright_reselling_app:calculator"), {
+            "tab": "melt", "mode": "junk", "metal": "silver", "face_value": "10", "spot": "31.5",
+        })
+
+        self.assertContains(response, 'id="tab-melt"')
+        self.assertNotContains(response, 'id="tab-melt" hidden')
+
+
+class CalculatorNavAndUrlTests(TestCase):
+    """The nav label changed from "Bid Calculator" to "Calculators" but
+    every URL (page + JSON endpoint) is unchanged - old bookmarks/links
+    keep working."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_old_calculator_url_still_resolves(self):
+        response = self.client.get("/albright_reselling_app/calculator/")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_old_calculate_api_url_still_resolves(self):
+        response = self.client.post(
+            "/albright_reselling_app/calculator/calculate/",
+            data=json.dumps({"tab": "buy", "bid": "10"}), content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_nav_shows_calculators_not_bid_calculator(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, ">Calculators<")
+        self.assertNotContains(response, "Bid Calculator")

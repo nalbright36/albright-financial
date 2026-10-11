@@ -1,0 +1,11 @@
+{% if results %}
+<div class="grid grid-2" style="margin-bottom: 12px;">
+    <div><div class="row-count">Pure metal weight</div><span class="num">{{ results.pure_ozt|floatformat:4 }} ozt</span></div>
+    <div><div class="row-count">Value per gram</div><span class="num">${{ results.melt_per_gram|floatformat:2 }}</span></div>
+</div>
+<div class="row-count">Melt value</div>
+<span class="ledger-stat__value num" style="font-size: 2rem;">${{ results.melt_value|floatformat:2 }}</span>
+<p style="margin: 8px 0 0;">Payout at {{ results.payout_pct|floatformat:0 }}%: <span class="num" style="font-weight: 600;">${{ results.payout_value|floatformat:2 }}</span></p>
+{% else %}
+<p style="color: var(--text-secondary);">Enter a weight (or face value), then Calculate.</p>
+{% endif %}

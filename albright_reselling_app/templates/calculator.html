@@ -4,7 +4,7 @@
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
 
     <div class="card__header" style="margin-bottom: 20px;">
-        <h1 style="margin: 0;">Bid Calculator</h1>
+        <h1 style="margin: 0;">Calculators</h1>
     </div>
 
     <!-- No-JS fallback: each tab is its own real <form method="post">, and
@@ -17,6 +17,7 @@
     <nav class="scanner-tabs" id="calc-tabs">
         <a href="#buy" class="scanner-tab{% if active_tab == 'buy' %} is-active{% endif %}" data-tab="buy">Buy cost</a>
         <a href="#ebay" class="scanner-tab{% if active_tab == 'ebay' %} is-active{% endif %}" data-tab="ebay">eBay profit</a>
+        <a href="#melt" class="scanner-tab{% if active_tab == 'melt' %} is-active{% endif %}" data-tab="melt">Melt value</a>
     </nav>
 
     <!-- ============ Buy cost tab ============ -->
@@ -153,6 +154,106 @@
             </div>
         </form>
     </div>
+
+    <!-- ============ Melt value tab ============ -->
+    <div id="tab-melt"{% if active_tab != 'melt' %} hidden{% endif %}>
+        <form method="post" id="melt-form">
+            {% csrf_token %}
+            <input type="hidden" name="tab" value="melt">
+            <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+                <div class="card">
+                    <div class="card__header"><span class="card__label">Melt value</span></div>
+
+                    <div class="field">
+                        <label>Mode</label>
+                        <div style="display: flex; gap: var(--space-4); font-size: 0.8125rem; margin-bottom: 6px;">
+                            <label><input type="radio" name="mode" value="weight" id="melt-mode-weight"{% if melt_values %}{% if melt_values.mode == 'weight' %} checked{% endif %}{% else %} checked{% endif %}> By weight</label>
+                            <label><input type="radio" name="mode" value="junk" id="melt-mode-junk"{% if melt_values.mode == 'junk' %} checked{% endif %}> Junk silver (face value)</label>
+                        </div>
+                    </div>
+
+                    <div id="melt-weight-group">
+                        <div class="field"><label>Metal</label>
+                            <select name="metal" id="melt-metal" class="ledger-input">
+                                {% for value, label in metal_choices %}
+                                <option value="{{ value }}"{% if melt_values %}{% if melt_values.metal == value %} selected{% endif %}{% elif value == 'gold' %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field"><label>Purity</label>
+                            <select name="purity" id="melt-purity" class="ledger-input">
+                                {% for fraction, label in purity_choices %}
+                                <option value="{{ fraction }}"{% if melt_values.purity == fraction|stringformat:"s" %} selected{% endif %}>{{ label }} ({{ fraction }})</option>
+                                {% endfor %}
+                                <option value="custom"{% if melt_values.purity == 'custom' %} selected{% endif %}>Custom</option>
+                            </select>
+                        </div>
+                        <div class="field" id="melt-custom-purity-field" style="display: none;"><label>Custom purity (decimal, e.g. 0.583)</label>
+                            <input type="number" step="0.001" min="0" max="1" name="custom_purity" id="melt-custom_purity" class="ledger-input num" value="{% if melt_values %}{{ melt_values.custom_purity }}{% endif %}">
+                        </div>
+                        <div class="grid grid-2">
+                            <div class="field"><label>Weight</label>
+                                <input type="number" step="0.001" min="0" name="weight" id="melt-weight" class="ledger-input num" value="{% if melt_values %}{{ melt_values.weight }}{% endif %}">
+                            </div>
+                            <div class="field"><label>Unit</label>
+                                <select name="unit" id="melt-unit" class="ledger-input">
+                                    {% for value, label in unit_choices %}
+                                    <option value="{{ value }}"{% if melt_values %}{% if melt_values.unit == value %} selected{% endif %}{% elif value == 'g' %} selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="melt-junk-group" style="display: none;">
+                        <div class="field"><label>Face value of 90% US coins ($)</label>
+                            <input type="number" step="0.01" min="0" name="face_value" id="melt-face_value" class="ledger-input num" value="{% if melt_values %}{{ melt_values.face_value }}{% endif %}">
+                        </div>
+                    </div>
+
+                    <div class="field"><label>Spot price ($/ozt)</label>
+                        <input type="number" step="0.01" min="0" name="spot" id="melt-spot" class="ledger-input num" value="{% if melt_values %}{{ melt_values.spot }}{% endif %}">
+                        <span id="melt-spot-date" style="font-size: 0.75rem; color: var(--text-secondary);"></span>
+                    </div>
+                    <div class="field"><label>Payout (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" name="payout_pct" id="melt-payout_pct" class="ledger-input num" value="{% if melt_values %}{{ melt_values.payout_pct }}{% else %}100{% endif %}">
+                    </div>
+                    <div class="field"><label>Label (for the item list below)</label>
+                        <input type="text" id="melt-label" class="ledger-input" placeholder="e.g. Ring #3">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Calculate</button>
+                </div>
+
+                <div class="card">
+                    <div class="card__header"><span class="card__label">Results</span></div>
+                    <div id="melt-results-body">
+                        {% include "_calc_melt_results.html" with results=melt_results %}
+                    </div>
+                    <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 16px;">
+                        <button type="button" class="btn btn-secondary btn-sm" id="melt-add-to-list">Add to list</button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="melt-use-as-item-cost">Use melt value as item cost</button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="melt-use-as-listing-price">Use payout value as listing price</button>
+                    </div>
+
+                    <div class="card" style="margin-top: 16px; background: var(--surface-hover);">
+                        <div class="card__header">
+                            <span class="card__label">Item list</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Total payout: <span id="melt-items-total" class="num">$0.00</span></span>
+                        </div>
+                        <div class="table-scroll">
+                        <table class="holdings">
+                            <thead>
+                                <tr><th>Label</th><th>Metal</th><th>Purity</th><th class="num">Weight</th><th class="num">Melt</th><th class="num">Payout</th><th></th></tr>
+                            </thead>
+                            <tbody id="melt-items-body"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
@@ -160,14 +261,21 @@
     var SOURCE_PRESETS = {{ source_defaults_json|safe }};
     var LEDGER_ITEMS = {{ ledger_items_json|safe }};
     var LOT_PREFILL = {{ lot_prefill_json|safe }};
+    var PURITY_CHOICES = {{ purity_choices_json|safe }};
+    var LATEST_SPOT = {{ latest_spot_json|safe }};
     // A no-JS POST just rendered real, fresh results for its tab - skip
     // restoring that one tab from localStorage so JS doesn't immediately
     // clobber them with older saved values (the other tab, untouched by
     // this submit, still restores normally).
     var JUST_SUBMITTED_BUY = {% if buy_results %}true{% else %}false{% endif %};
     var JUST_SUBMITTED_EBAY = {% if ebay_results %}true{% else %}false{% endif %};
+    var JUST_SUBMITTED_MELT = {% if melt_results %}true{% else %}false{% endif %};
     var STORAGE_KEY_BUY = "bidcalc_buy_values";
     var STORAGE_KEY_EBAY = "bidcalc_ebay_values";
+    var STORAGE_KEY_MELT = "bidcalc_melt_values";
+    var STORAGE_KEY_MELT_ITEMS = "bidcalc_melt_items";
+    var STORAGE_KEY_TAB = "bidcalc_active_tab";
+    var TAB_NAMES = ["buy", "ebay", "melt"];
 
     var BUY_FIELDS = ["bid", "premium_pct", "tax_pct", "shipping", "other_fees", "budget"];
     var BUY_CHECKBOXES = ["tax_on_premium", "tax_on_shipping"];
@@ -321,14 +429,190 @@
         scheduleEbayCalculate();
     });
 
-    // ---------- Tabs ----------
+    // ---------- Melt value tab ----------
+    var MELT_FIELDS = ["metal", "purity", "custom_purity", "weight", "unit", "face_value", "spot", "payout_pct"];
+    var lastMeltValue = 0;
+    var lastPayoutValue = 0;
+
+    function meltMode() {
+        var checked = document.querySelector('input[name="mode"]:checked');
+        return checked ? checked.value : "weight";
+    }
+    function collectMeltData() {
+        var data = {tab: "melt", mode: meltMode()};
+        MELT_FIELDS.forEach(function (name) { data[name] = byId("melt-" + name).value; });
+        return data;
+    }
+    function applyMeltData(data) {
+        if (!data) return;
+        MELT_FIELDS.forEach(function (name) {
+            if (data[name] !== undefined && data[name] !== null) byId("melt-" + name).value = data[name];
+        });
+        if (data.mode) byId("melt-mode-" + data.mode).checked = true;
+        if (data.metal) populatePurityOptions(data.metal, data.purity);
+        syncMeltModeVisibility();
+        syncPurityVisibility();
+    }
+
+    function populatePurityOptions(metal, keepValue) {
+        var select = byId("melt-purity");
+        var currentValue = keepValue !== undefined ? keepValue : select.value;
+        select.innerHTML = "";
+        (PURITY_CHOICES[metal] || []).forEach(function (opt) {
+            var option = document.createElement("option");
+            option.value = opt.value;
+            option.textContent = opt.label;
+            select.appendChild(option);
+        });
+        var customOption = document.createElement("option");
+        customOption.value = "custom";
+        customOption.textContent = "Custom";
+        select.appendChild(customOption);
+        var hasValue = Array.prototype.some.call(select.options, function (o) { return o.value === currentValue; });
+        select.value = hasValue ? currentValue : select.options[0].value;
+    }
+
+    function refillSpotForMetal(metal) {
+        var info = LATEST_SPOT[metal];
+        var dateEl = byId("melt-spot-date");
+        if (!info) { dateEl.textContent = ""; return; }
+        if (info.price !== null && info.price !== undefined) byId("melt-spot").value = info.price;
+        dateEl.textContent = info.date ? ("as of " + info.date) : "no spot price on file yet - enter one manually";
+    }
+
+    function syncMeltModeVisibility() {
+        var mode = meltMode();
+        byId("melt-weight-group").style.display = mode === "weight" ? "" : "none";
+        byId("melt-junk-group").style.display = mode === "junk" ? "" : "none";
+    }
+    function syncPurityVisibility() {
+        byId("melt-custom-purity-field").style.display = byId("melt-purity").value === "custom" ? "" : "none";
+    }
+
+    function renderMeltResults(results) {
+        lastMeltValue = results.melt_value || 0;
+        lastPayoutValue = results.payout_value || 0;
+        byId("melt-results-body").innerHTML =
+            '<div class="grid grid-2" style="margin-bottom: 12px;">' +
+            '<div><div class="row-count">Pure metal weight</div><span class="num">' +
+            (results.pure_ozt != null ? results.pure_ozt.toFixed(4) : "0.0000") + ' ozt</span></div>' +
+            '<div><div class="row-count">Value per gram</div><span class="num">' + money(results.melt_per_gram) + '</span></div>' +
+            '</div>' +
+            '<div class="row-count">Melt value</div>' +
+            '<span class="ledger-stat__value num" style="font-size: 2rem;">' + money(results.melt_value) + '</span>' +
+            '<p style="margin: 8px 0 0;">Payout at ' + (results.payout_pct != null ? results.payout_pct : 100) +
+            '%: <span class="num" style="font-weight: 600;">' + money(results.payout_value) + '</span></p>';
+    }
+
+    var meltTimer = null;
+    function scheduleMeltCalculate() { window.clearTimeout(meltTimer); meltTimer = window.setTimeout(doMeltCalculate, 300); }
+    function doMeltCalculate() {
+        var data = collectMeltData();
+        try { localStorage.setItem(STORAGE_KEY_MELT, JSON.stringify(data)); } catch (e) {}
+        fetch("{% url 'albright_reselling_app:calculator_calculate' %}", {
+            method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+            body: JSON.stringify(data),
+        }).then(function (r) { return r.json(); }).then(renderMeltResults).catch(function () {});
+    }
+
+    byId("melt-form").addEventListener("input", scheduleMeltCalculate);
+    byId("melt-form").addEventListener("change", scheduleMeltCalculate);
+    byId("melt-form").addEventListener("submit", function (e) {
+        if (window.fetch) e.preventDefault();
+        doMeltCalculate();
+    });
+    document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
+        radio.addEventListener("change", function () { syncMeltModeVisibility(); scheduleMeltCalculate(); });
+    });
+    byId("melt-metal").addEventListener("change", function (e) {
+        populatePurityOptions(e.target.value);
+        refillSpotForMetal(e.target.value);
+        syncPurityVisibility();
+        scheduleMeltCalculate();
+    });
+    byId("melt-purity").addEventListener("change", function () { syncPurityVisibility(); scheduleMeltCalculate(); });
+
+    // ---------- Melt item list (localStorage only - "a whole jewelry lot") ----------
+    function escapeHtml(value) {
+        return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+    var meltItems = [];
+    try { meltItems = JSON.parse(localStorage.getItem(STORAGE_KEY_MELT_ITEMS) || "[]"); } catch (e) { meltItems = []; }
+
+    function saveMeltItems() {
+        try { localStorage.setItem(STORAGE_KEY_MELT_ITEMS, JSON.stringify(meltItems)); } catch (e) {}
+    }
+    function renderMeltItemList() {
+        var tbody = byId("melt-items-body");
+        tbody.innerHTML = "";
+        var total = 0;
+        meltItems.forEach(function (item, index) {
+            total += item.payout || 0;
+            var row = document.createElement("tr");
+            row.innerHTML =
+                "<td>" + escapeHtml(item.label || "(unlabeled)") + "</td>" +
+                "<td>" + escapeHtml(item.metal) + "</td>" +
+                "<td>" + escapeHtml(item.purity) + "</td>" +
+                '<td class="num">' + escapeHtml(item.weight) + "</td>" +
+                '<td class="num">' + money(item.melt) + "</td>" +
+                '<td class="num">' + money(item.payout) + "</td>" +
+                '<td><button type="button" class="btn btn-secondary btn-sm melt-remove-item" data-index="' + index + '">Remove</button></td>';
+            tbody.appendChild(row);
+        });
+        byId("melt-items-total").textContent = money(total);
+        tbody.querySelectorAll(".melt-remove-item").forEach(function (button) {
+            button.addEventListener("click", function () {
+                meltItems.splice(parseInt(button.dataset.index, 10), 1);
+                saveMeltItems();
+                renderMeltItemList();
+            });
+        });
+    }
+    byId("melt-add-to-list").addEventListener("click", function () {
+        var mode = meltMode();
+        var metal = byId("melt-metal").value;
+        var purityText;
+        if (mode === "junk") {
+            purityText = "90% (junk silver)";
+        } else {
+            var puritySelect = byId("melt-purity");
+            var selected = puritySelect.options[puritySelect.selectedIndex];
+            purityText = selected ? selected.textContent : "";
+        }
+        var weightText = mode === "junk"
+            ? ("$" + (byId("melt-face_value").value || "0") + " face")
+            : ((byId("melt-weight").value || "0") + " " + byId("melt-unit").value);
+        meltItems.push({
+            label: byId("melt-label").value, metal: metal, purity: purityText, weight: weightText,
+            melt: lastMeltValue, payout: lastPayoutValue,
+        });
+        saveMeltItems();
+        renderMeltItemList();
+        byId("melt-label").value = "";
+    });
+
+    // ---------- "Use melt/payout value on the eBay tab" ----------
+    byId("melt-use-as-item-cost").addEventListener("click", function () {
+        byId("ebay-item_cost").value = lastMeltValue.toFixed(2);
+        activateTab("ebay");
+        scheduleEbayCalculate();
+    });
+    byId("melt-use-as-listing-price").addEventListener("click", function () {
+        byId("ebay-sale_price").value = lastPayoutValue.toFixed(2);
+        activateTab("ebay");
+        scheduleEbayCalculate();
+    });
+
+    // ---------- Tabs (remembers the last-used tab in localStorage) ----------
     function activateTab(name) {
-        ["buy", "ebay"].forEach(function (tab) {
+        TAB_NAMES.forEach(function (tab) {
             byId("tab-" + tab).hidden = tab !== name;
         });
         document.querySelectorAll("#calc-tabs .scanner-tab").forEach(function (link) {
             link.classList.toggle("is-active", link.dataset.tab === name);
         });
+        try { localStorage.setItem(STORAGE_KEY_TAB, name); } catch (e) {}
     }
     document.querySelectorAll("#calc-tabs .scanner-tab").forEach(function (link) {
         link.addEventListener("click", function (e) { e.preventDefault(); activateTab(link.dataset.tab); });
@@ -343,6 +627,7 @@
 
     // ---------- Initial load: localStorage first, then an explicit lot
     // prefill (Open in Calculator) always wins for the Buy cost tab. ----------
+    var restoredMelt = false;
     try {
         if (!JUST_SUBMITTED_BUY) {
             var savedBuy = localStorage.getItem(STORAGE_KEY_BUY);
@@ -352,16 +637,40 @@
             var savedEbay = localStorage.getItem(STORAGE_KEY_EBAY);
             if (savedEbay) applyEbayData(JSON.parse(savedEbay));
         }
+        if (!JUST_SUBMITTED_MELT) {
+            var savedMelt = localStorage.getItem(STORAGE_KEY_MELT);
+            if (savedMelt) { applyMeltData(JSON.parse(savedMelt)); restoredMelt = true; }
+        }
     } catch (e) {}
 
     if (LOT_PREFILL && LOT_PREFILL.bid !== undefined) {
         applyBuyData(LOT_PREFILL);
         activateTab("buy");
+    } else {
+        var savedTab = null;
+        try { savedTab = localStorage.getItem(STORAGE_KEY_TAB); } catch (e) {}
+        var justSubmittedAny = JUST_SUBMITTED_BUY || JUST_SUBMITTED_EBAY || JUST_SUBMITTED_MELT;
+        if (!justSubmittedAny && savedTab && TAB_NAMES.indexOf(savedTab) !== -1) {
+            activateTab(savedTab);
+        }
     }
+
+    // A restored melt calculation already has its own metal/purity -
+    // otherwise, populate purity options and prefill spot for the
+    // server-rendered default metal (gold) so both are ready to use
+    // immediately, with or without JS having run yet.
+    if (!restoredMelt) {
+        populatePurityOptions(byId("melt-metal").value);
+        refillSpotForMetal(byId("melt-metal").value);
+    }
+    syncMeltModeVisibility();
+    syncPurityVisibility();
+    renderMeltItemList();
 
     syncCustomRateVisibility();
     scheduleBuyCalculate();
     scheduleEbayCalculate();
+    scheduleMeltCalculate();
 })();
 </script>
 {% endblock %}
