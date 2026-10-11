@@ -49,7 +49,9 @@
                     {% if user.is_authenticated %}
                         {% if in_reselling_app %}
                         <a href="{% url 'albright_reselling_app:dashboard' %}">Dashboard</a>
-                        <a href="{% url 'albright_reselling_app:ledger' %}">Ledger</a>
+                        <a href="{% url 'albright_reselling_app:ledger' %}" id="nav-ledger-link"
+                           data-overview-url="{% url 'albright_reselling_app:ledger_overview' %}"
+                           data-personal-url="{% url 'albright_reselling_app:ledger_personal' %}">Ledger</a>
                         <a href="{% url 'albright_reselling_app:calculator' %}">Bid Calculator</a>
 
                         <div class="navbar__dropdown">
@@ -149,6 +151,20 @@
                 toast.addEventListener('click', remove);
                 setTimeout(remove, 6000);
             });
+
+            // The Ledger nav link opens whichever of its 3 tabs was last
+            // visited (see templates/_ledger_tabs.html, which saves it on
+            // every ledger page load) - defaulting to Reselling, i.e. the
+            // plain href already on the link, which the no-JS /ledger/
+            // redirect (views.ledger) also lands on.
+            (function () {
+                var link = document.getElementById('nav-ledger-link');
+                if (!link) return;
+                var tab = null;
+                try { tab = localStorage.getItem('ledger_tab'); } catch (e) {}
+                if (tab === 'overview') link.href = link.dataset.overviewUrl;
+                else if (tab === 'personal') link.href = link.dataset.personalUrl;
+            })();
         </script>
     </body>
 </html>

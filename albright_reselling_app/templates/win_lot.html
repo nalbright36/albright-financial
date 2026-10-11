@@ -13,7 +13,7 @@
             You already logged this lot as <strong>{{ existing.item }}</strong>{% if existing.purchase_date %} (bought {{ existing.purchase_date }}){% endif %}.
         </div>
         <p>
-            <a href="{% url 'albright_reselling_app:ledger' %}#entry-{{ existing.pk }}" class="btn btn-secondary">View existing entry</a>
+            <a href="{% url 'albright_reselling_app:ledger_resale' %}#entry-{{ existing.pk }}" class="btn btn-secondary">View existing entry</a>
             <a href="{{ confirm_url }}" class="btn btn-secondary">Create another entry anyway</a>
         </p>
 

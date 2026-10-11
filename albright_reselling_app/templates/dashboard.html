@@ -24,13 +24,13 @@
             </div>
         </a>
 
-        <a href="{% url 'albright_reselling_app:ledger' %}?status=unsold" class="card" style="display: block;">
+        <a href="{% url 'albright_reselling_app:ledger_resale' %}?status=unsold" class="card" style="display: block;">
             <div class="card__header"><span class="card__label">Inventory</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.inventory_count }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ ledger_tiles.inventory_cost|floatformat:2 }} at cost</div>
         </a>
 
-        <a href="{% if ledger_tiles.markdown_count > 0 %}{% url 'albright_reselling_app:ledger' %}?status=unsold{% else %}{% url 'albright_reselling_app:dashboard' %}#my-bids{% endif %}" class="card" style="display: block;">
+        <a href="{% if ledger_tiles.markdown_count > 0 %}{% url 'albright_reselling_app:ledger_resale' %}?status=unsold{% else %}{% url 'albright_reselling_app:dashboard' %}#my-bids{% endif %}" class="card" style="display: block;">
             <div class="card__header"><span class="card__label">Needs Action</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if ledger_tiles.needs_action_count > 0 %}var(--warn){% else %}var(--text-tertiary){% endif %};">{{ ledger_tiles.needs_action_count }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">

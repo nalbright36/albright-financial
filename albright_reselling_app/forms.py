@@ -81,18 +81,36 @@ class EntryDetailsForm(forms.ModelForm):
 
 
 class LedgerSaleForm(forms.ModelForm):
+    """Shared by both ledgers' "record a sale" flow (ledger_views.record_sale) -
+    resale and Personal Items entries alike."""
     class Meta:
         model = LedgerSale
         fields = ["sale_date", "sale_price", "channel", "selling_fees", "outbound_shipping",
-                   "hours_spent", "notes"]
+                   "packaging", "hours_spent", "notes"]
         widgets = {
             "sale_date": forms.DateInput(attrs={"class": "ledger-input", "type": "date"}),
             "sale_price": _NUM_WIDGET(),
             "channel": forms.Select(attrs={"class": "ledger-input"}),
             "selling_fees": _NUM_WIDGET(),
             "outbound_shipping": _NUM_WIDGET(),
+            "packaging": _NUM_WIDGET(),
             "hours_spent": _NUM_WIDGET("Listing/packing hours"),
             "notes": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "e.g. half the lot"}),
+        }
+
+
+class PersonalItemForm(forms.ModelForm):
+    """Personal Items tab's quick-add form - no buy-side fields at all
+    (those stay at their model default of 0, and are never shown on this
+    form): just the item name, an optional note, and an optional asking
+    price for reference while it's still listed."""
+    class Meta:
+        model = LedgerEntry
+        fields = ["item", "notes", "asking_price"]
+        widgets = {
+            "item": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "Item name"}),
+            "notes": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "Notes (optional)"}),
+            "asking_price": _NUM_WIDGET("Asking price (optional)"),
         }
 
 

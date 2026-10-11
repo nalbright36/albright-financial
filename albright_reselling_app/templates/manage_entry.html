@@ -4,7 +4,7 @@
 
     <div class="card__header" style="margin-bottom: 20px;">
         <span class="card__label">Manage: {{ entry.item }}</span>
-        <a href="{% url 'albright_reselling_app:ledger' %}" style="font-size: 0.8125rem;">&larr; Back to ledger</a>
+        <a href="{% if entry.ledger_type == 'personal' %}{% url 'albright_reselling_app:ledger_personal' %}{% else %}{% url 'albright_reselling_app:ledger_resale' %}{% endif %}" style="font-size: 0.8125rem;">&larr; Back to ledger</a>
     </div>
 
     {% if entry.has_conflicting_sale_data %}

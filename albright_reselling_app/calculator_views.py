@@ -156,9 +156,18 @@ def _lot_prefill(lot) -> dict:
 def _ledger_pick_items(user):
     """Holding/partially-sold entries for the eBay tab's "Pick from
     Ledger" dropdown - their buy-side total (what the item actually cost,
-    all in) is what should become "Item cost" on this tab."""
+    all in) is what should become "Item cost" on this tab. Personal
+    items are included too (unlike every reselling calculation, which
+    excludes them via ledger_metrics.exclude_personal) - they were never
+    bought for resale, so their cost is always $0, and the label says so."""
     entries = LedgerEntry.objects.filter(owner=user, status__in=("holding", "partially_sold"))
-    return [{"id": e.pk, "label": e.item, "cost": float(e.buy_side_cost)} for e in entries]
+    items = []
+    for e in entries:
+        if e.ledger_type == "personal":
+            items.append({"id": e.pk, "label": f"{e.item} (personal)", "cost": 0.0})
+        else:
+            items.append({"id": e.pk, "label": e.item, "cost": float(e.buy_side_cost)})
+    return items
 
 
 @login_required

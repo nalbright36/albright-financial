@@ -1,0 +1,222 @@
+{% extends "index.html" %}
+{% load static %}
+{% load ledger_extras %}
+{% load cache_bust %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    {% include "_ledger_tabs.html" %}
+
+    <!-- Always every personal entry for this owner - see
+         ledger_views.ledger_personal()/ledger_metrics.personal_items_context().
+         Not affected by the table's own status filter below. -->
+    <div class="grid grid-3" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Revenue</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.revenue_all_time|money }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">This month: {{ tiles.revenue_this_month|money }}</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Net After Fees</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if tiles.net_after_fees >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{{ tiles.net_after_fees|money }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Revenue minus selling fees/shipping/packaging</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Items Still Listed</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.items_listed_count }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Holding or partially sold</div>
+        </div>
+    </div>
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">
+            Personal Items
+            {% if status_filter == 'unsold' %}
+            <span class="badge neutral" style="margin-left: 8px; vertical-align: middle;">Unsold only</span>
+            <a href="{% url 'albright_reselling_app:ledger_personal' %}" style="font-size: 0.75rem; margin-left: 4px;">Clear</a>
+            {% endif %}
+        </h1>
+    </div>
+
+    <!-- Quick-add: item name, optional notes, optional asking price - no
+         buy-side fields at all (hidden, not just blank) since these
+         items were never bought for resale. -->
+    <form method="post" style="margin-bottom: 24px;">
+        {% csrf_token %}
+        <div class="card" style="padding: 0; overflow-x: auto;">
+            <table class="holdings ledger-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Notes</th>
+                        <th class="num">Asking Price</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ add_form.item }}</td>
+                        <td>{{ add_form.notes }}</td>
+                        <td class="num">{{ add_form.asking_price }}</td>
+                        <td><button type="submit" name="add_entry" class="btn btn-primary">Add</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </form>
+
+    <!-- Read-only table: full names, sortable, filterable by status -->
+    <div class="card" style="margin-bottom: 16px;">
+        <div class="card__header">
+            <span class="card__label">Filter</span>
+        </div>
+        <div class="scanner-controls">
+            <select id="af-status">
+                <option value="">All statuses</option>
+                {% for value, label in status_choices %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+        <span id="count-personal" class="row-count" data-role="row-count"></span>
+    </div>
+
+    <div class="card" style="padding: 0; overflow-x: auto;">
+        <table class="holdings ledger-table ledger-view-table" id="table-personal" data-filterable="true" data-count-target="count-personal">
+            <thead>
+                <tr>
+                    <th class="ledger-item-col" data-sort-key="item">Item</th>
+                    <th data-sort-key="status">Status</th>
+                    <th class="num" data-sort-key="listed">Listed Date</th>
+                    <th class="num" data-sort-key="saledate">Sale Date</th>
+                    <th class="num" data-sort-key="soldfor">Sold For</th>
+                    <th class="num" data-sort-key="fees">eBay Fees</th>
+                    <th class="num" data-sort-key="shipping">Shipping</th>
+                    <th class="num" data-sort-key="packaging">Packaging</th>
+                    <th class="num" data-sort-key="net">Net</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr class="scanner-row" data-item="{{ entry.item }}" data-status="{{ entry.status }}"
+                    data-listed="{{ entry.purchase_date|default:entry.created_at|date:'Y-m-d' }}"
+                    data-saledate="{% if entry.last_sale_date %}{{ entry.last_sale_date|date:'Y-m-d' }}{% endif %}"
+                    data-soldfor="{{ entry.total_realized|default:0 }}" data-fees="{{ entry.sell_fees_total }}"
+                    data-shipping="{{ entry.sell_shipping_total }}" data-packaging="{{ entry.sell_packaging_total }}"
+                    data-net="{{ entry.profit }}">
+                    <td class="ledger-item-cell">
+                        <div class="ledger-item-name">{{ entry.item }}</div>
+                        <div style="margin-top: 4px; font-size: 0.75rem; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <span class="badge {% if entry.status == 'sold_out' %}gain{% elif entry.status == 'written_off' %}loss{% elif entry.status == 'partially_sold' %}neutral{% else %}warn{% endif %}">{{ entry.get_status_display }}</span>
+                            {% if entry.asking_price %}{% if entry.status == 'holding' or entry.status == 'partially_sold' %}<span class="badge neutral">Asking {{ entry.asking_price|money }}</span>{% endif %}{% endif %}
+                            {% if entry.notes %}<span style="color: var(--text-tertiary);">{{ entry.notes }}</span>{% endif %}
+                            <a href="{% url 'albright_reselling_app:ledger_record_sale' entry.pk %}">Record Sale</a>
+                            <a href="{% url 'albright_reselling_app:ledger_manage' entry.pk %}">Manage</a>
+                        </div>
+                    </td>
+                    <td>{{ entry.get_status_display }}</td>
+                    <td class="num">{{ entry.purchase_date|default:entry.created_at|date:"M j, Y" }}</td>
+                    <td class="num">{% if entry.last_sale_date %}{{ entry.last_sale_date|date:"M j, Y" }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{{ entry.total_realized|money }}</td>
+                    <td class="num">{{ entry.sell_fees_total|money }}</td>
+                    <td class="num">{{ entry.sell_shipping_total|money }}</td>
+                    <td class="num">{{ entry.sell_packaging_total|money }}</td>
+                    <td class="num {% if entry.profit >= 0 %}gain{% else %}loss{% endif %}">{{ entry.profit|money }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
+                    <td colspan="4">Totals</td>
+                    <td class="num" id="personal-total-soldfor">{{ totals.sold_for|money }}</td>
+                    <td class="num" id="personal-total-fees">{{ totals.sell_fees|money }}</td>
+                    <td class="num" id="personal-total-shipping">{{ totals.sell_shipping|money }}</td>
+                    <td class="num" id="personal-total-packaging">{{ totals.sell_packaging|money }}</td>
+                    <td class="num {% if totals.net >= 0 %}gain{% else %}loss{% endif %}" id="personal-total-net">{{ totals.net|money }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- Aging reminders - same markdown schedule as the Reselling
+         Scorecard's own Inventory Aging section, shown only on this tab. -->
+    <div class="card" style="margin-top: 24px;">
+        <div class="card__header">
+            <span class="card__label">Aging Reminders</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ tiles.items_listed_count }} item{{ tiles.items_listed_count|pluralize }} still listed</span>
+        </div>
+        {% if aging %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead>
+                <tr><th>Item</th><th class="num">Days Held</th><th>Suggested Action</th></tr>
+            </thead>
+            <tbody>
+                {% for row in aging %}
+                <tr>
+                    <td><a href="{% url 'albright_reselling_app:ledger_manage' row.entry.pk %}">{{ row.entry.item }}</a></td>
+                    <td class="num">{{ row.days_held }}</td>
+                    <td>{% if row.suggested_action %}<span class="badge warn">{{ row.suggested_action }}</span>{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">Nothing listed yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
+<script>
+    // Totals footer recompute on filter change - same deferred pattern as
+    // the Reselling tab (ledger.html), after auction_scanner.js's own
+    // filter handler has already updated which rows are hidden.
+    document.addEventListener("DOMContentLoaded", function () {
+        var table = document.getElementById("table-personal");
+        if (!table) return;
+        var statusSelect = document.getElementById("af-status");
+
+        function formatMoney(value) {
+            if (!value) return "-";
+            var sign = value < 0 ? "-" : "";
+            return sign + "$" + Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function setTotal(id, value) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = formatMoney(value);
+        }
+
+        function recomputeTotals() {
+            var rows = Array.prototype.slice.call(table.querySelectorAll("tbody tr.scanner-row"));
+            var soldFor = 0, fees = 0, shipping = 0, packaging = 0, net = 0;
+            rows.forEach(function (row) {
+                if (row.hidden) return;
+                soldFor += parseFloat(row.dataset.soldfor) || 0;
+                fees += parseFloat(row.dataset.fees) || 0;
+                shipping += parseFloat(row.dataset.shipping) || 0;
+                packaging += parseFloat(row.dataset.packaging) || 0;
+                net += parseFloat(row.dataset.net) || 0;
+            });
+            setTotal("personal-total-soldfor", soldFor);
+            setTotal("personal-total-fees", fees);
+            setTotal("personal-total-shipping", shipping);
+            setTotal("personal-total-packaging", packaging);
+            var netCell = document.getElementById("personal-total-net");
+            if (netCell) {
+                netCell.textContent = formatMoney(net);
+                netCell.classList.toggle("gain", net >= 0);
+                netCell.classList.toggle("loss", net < 0);
+            }
+        }
+
+        if (statusSelect) {
+            statusSelect.addEventListener("change", function () { setTimeout(recomputeTotals, 0); });
+        }
+    });
+</script>
+{% endblock %}

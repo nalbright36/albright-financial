@@ -5,7 +5,10 @@ app_name = "albright_reselling_app"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
-    path("ledger/", views.ledger, name="ledger"),
+    path("ledger/", views.ledger, name="ledger"),  # legacy URL: redirects to ledger_resale
+    path("ledger/overview/", ledger_views.ledger_overview, name="ledger_overview"),
+    path("ledger/resale/", ledger_views.ledger_resale, name="ledger_resale"),
+    path("ledger/personal/", ledger_views.ledger_personal, name="ledger_personal"),
     path("ledger/scorecard/", ledger_views.scorecard, name="ledger_scorecard"),
     path("ledger/<int:entry_id>/manage/", ledger_views.manage_entry, name="ledger_manage"),
     path("ledger/<int:entry_id>/sell/", ledger_views.record_sale, name="ledger_record_sale"),

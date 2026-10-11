@@ -1,8 +1,9 @@
 """Views connecting the scanner to the Ledger: "I won this" (create a
 LedgerEntry from a SourcedLot, optionally an AIReview), per-entry
 management (edit details, record a sale, mark sold out/written off, split
-legacy costs), and the Scorecard. Kept out of views.py per project
-convention - mirrors scanner_views.py.
+legacy costs), the Ledger page's 3 tabs (Overview, Reselling, Personal
+Items), and the Scorecard. Kept out of views.py per project convention -
+mirrors scanner_views.py.
 """
 from decimal import Decimal
 
@@ -13,8 +14,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from . import ledger_metrics
-from .forms import EntryDetailsForm, LedgerSaleForm, LegacySplitForm, WinLotForm
-from .models import LedgerEntry
+from .forms import (
+    EntryDetailsForm, LedgerEntryForm, LedgerEntryFormSet, LedgerSaleForm, LegacySplitForm, PersonalItemForm,
+    WinLotForm,
+)
+from .models import STATUS_CHOICES, LedgerEntry
 from .scanner.max_bid import BuyCosts, all_in_cost
 from .scanner.pipeline import _buyer_premium_pct, _inbound_shipping, _sales_tax_pct
 from .scanner_models import AIReview, SourcedLot
@@ -127,7 +131,7 @@ def win_lot(request, lot_id):
                 setattr(entry, field, value)
             entry.save()
             messages.success(request, f'Added "{entry.item}" to the ledger.')
-            return redirect("albright_reselling_app:ledger")
+            return redirect("albright_reselling_app:ledger_resale")
     else:
         form = WinLotForm(initial=computed["form_initial"])
 
@@ -231,3 +235,131 @@ def split_legacy(request, entry_id):
 def scorecard(request):
     context = ledger_metrics.scorecard_context(request.user)
     return render(request, "scorecard.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Ledger page tabs: Overview, Reselling, Personal Items
+# ---------------------------------------------------------------------------
+
+@login_required
+def ledger_resale(request):
+    """The Reselling tab - the original Ledger page, unchanged, now
+    scoped to ledger_type="resale" only."""
+    queryset = LedgerEntry.objects.filter(owner=request.user, ledger_type="resale")
+    status_filter = request.GET.get("status")
+    if status_filter == "unsold":
+        queryset = queryset.filter(status__in=ledger_metrics.UNSOLD_STATUSES)
+
+    add_form = LedgerEntryForm(prefix="add")
+    formset = LedgerEntryFormSet(queryset=queryset)
+    # Edit mode is a plain query param (not JS-only), so editing - and
+    # seeing validation errors on an invalid save - works with JavaScript
+    # off too; a successful save always lands back in the default
+    # read-only view.
+    edit_mode = request.method == "POST" or request.GET.get("edit") == "1"
+
+    if request.method == "POST":
+        if "add_entry" in request.POST:
+            add_form = LedgerEntryForm(request.POST, prefix="add")
+            if add_form.is_valid():
+                entry = add_form.save(commit=False)
+                entry.owner = request.user
+                entry.ledger_type = "resale"
+                entry.save()
+                return redirect("albright_reselling_app:ledger_resale")
+        elif "save_ledger" in request.POST:
+            formset = LedgerEntryFormSet(request.POST, queryset=queryset)
+            if formset.is_valid():
+                instances = formset.save(commit=False)
+                for instance in instances:
+                    instance.owner = request.user
+                    instance.ledger_type = "resale"
+                    instance.save()
+                for obj in formset.deleted_objects:
+                    obj.delete()
+                return redirect("albright_reselling_app:ledger_resale")
+
+    entries = list(queryset)
+    totals = {
+        "cost": sum((e.cost or 0) for e in entries),
+        "fees": sum((e.fees or 0) for e in entries),
+        "shipping": sum((e.shipping or 0) for e in entries),
+        "total": sum((e.total or 0) for e in entries),
+        "sold_for": sum((e.sold_for or 0) for e in entries),
+        "profit": sum((e.profit or 0) for e in entries),
+        "sell_costs": sum(((e.sell_fees or 0) + (e.sell_shipping or 0)) for e in entries),
+    }
+    distinct_sources = sorted({e.source for e in entries if e.source})
+    has_legacy = any(e.has_legacy_amounts for e in entries)
+    # Always every resale entry for this owner, regardless of the table's
+    # own status filter above - see ledger_metrics.ledger_summary_tiles.
+    summary_tiles = ledger_metrics.ledger_summary_tiles(request.user)
+
+    return render(request, "ledger.html", {
+        "add_form": add_form,
+        "formset": formset,
+        "entries": entries,
+        "totals": totals,
+        "status_filter": status_filter,
+        "edit_mode": edit_mode,
+        "distinct_sources": distinct_sources,
+        "has_legacy": has_legacy,
+        "status_choices": STATUS_CHOICES,
+        "summary_tiles": summary_tiles,
+        "ledger_tab": "resale",
+    })
+
+
+@login_required
+def ledger_personal(request):
+    """The Personal Items tab: things being sold that weren't bought for
+    resale - no buy-side cost fields on its quick-add form, sales
+    recorded through the same record_sale/LedgerSaleForm flow resale
+    items use."""
+    queryset = LedgerEntry.objects.filter(owner=request.user, ledger_type="personal")
+    status_filter = request.GET.get("status")
+    if status_filter == "unsold":
+        queryset = queryset.filter(status__in=ledger_metrics.UNSOLD_STATUSES)
+
+    add_form = PersonalItemForm(prefix="add")
+
+    if request.method == "POST" and "add_entry" in request.POST:
+        add_form = PersonalItemForm(request.POST, prefix="add")
+        if add_form.is_valid():
+            entry = add_form.save(commit=False)
+            entry.owner = request.user
+            entry.ledger_type = "personal"
+            entry.save()
+            return redirect("albright_reselling_app:ledger_personal")
+
+    entries = list(queryset.prefetch_related("sales"))
+    totals = {
+        "sold_for": sum((e.total_realized or 0) for e in entries),
+        "sell_fees": sum(e.sell_fees_total for e in entries),
+        "sell_shipping": sum(e.sell_shipping_total for e in entries),
+        "sell_packaging": sum(e.sell_packaging_total for e in entries),
+        "net": sum((e.profit for e in entries if e.is_realized), Decimal("0")),
+    }
+    # Always every personal entry for this owner, regardless of the
+    # table's own status filter above.
+    context = ledger_metrics.personal_items_context(request.user)
+
+    return render(request, "ledger_personal.html", {
+        "add_form": add_form,
+        "entries": entries,
+        "totals": totals,
+        "status_filter": status_filter,
+        "status_choices": STATUS_CHOICES,
+        "tiles": context["tiles"],
+        "aging": context["aging"],
+        "ledger_tab": "personal",
+    })
+
+
+@login_required
+def ledger_overview(request):
+    """The Overview tab: combined tiles, a per-ledger breakdown + total
+    row, and the last 12 months' revenue/net per ledger and combined."""
+    context = ledger_metrics.overview_context(request.user)
+    context["ledger_tab"] = "overview"
+    return render(request, "ledger_overview.html", context)

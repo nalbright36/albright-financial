@@ -1,8 +1,9 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from . import ledger_metrics
-from .forms import LedgerEntryForm, LedgerEntryFormSet, ScanRequestForm, HarvestRequestForm, AnalysisRequestForm
-from .models import LedgerEntry, ScanRequest, HarvestRequest, HistoricalLot, AnalysisRequest, STATUS_CHOICES
+from .forms import ScanRequestForm, HarvestRequestForm, AnalysisRequestForm
+from .models import ScanRequest, HarvestRequest, HistoricalLot, AnalysisRequest
 from .scanner.dashboard import get_scanner_dashboard_context
 from django.db.models import Avg, Count
 
@@ -22,68 +23,16 @@ def dashboard(request):
 
 @login_required
 def ledger(request):
-    queryset = LedgerEntry.objects.filter(owner=request.user)
-    status_filter = request.GET.get("status")
-    if status_filter == "unsold":
-        queryset = queryset.filter(status__in=ledger_metrics.UNSOLD_STATUSES)
-
-    add_form = LedgerEntryForm(prefix="add")
-    formset = LedgerEntryFormSet(queryset=queryset)
-    # Edit mode is a plain query param (not JS-only), so editing - and
-    # seeing validation errors on an invalid save - works with JavaScript
-    # off too; a successful save always lands back in the default
-    # read-only view.
-    edit_mode = request.method == "POST" or request.GET.get("edit") == "1"
-
-    if request.method == "POST":
-        if "add_entry" in request.POST:
-            add_form = LedgerEntryForm(request.POST, prefix="add")
-            if add_form.is_valid():
-                entry = add_form.save(commit=False)
-                entry.owner = request.user
-                entry.save()
-                return redirect("albright_reselling_app:ledger")
-        elif "save_ledger" in request.POST:
-            formset = LedgerEntryFormSet(request.POST, queryset=queryset)
-            if formset.is_valid():
-                instances = formset.save(commit=False)
-                for instance in instances:
-                    instance.owner = request.user
-                    instance.save()
-                for obj in formset.deleted_objects:
-                    obj.delete()
-                return redirect("albright_reselling_app:ledger")
-
-    entries = list(queryset)
-    totals = {
-        "cost": sum((e.cost or 0) for e in entries),
-        "fees": sum((e.fees or 0) for e in entries),
-        "shipping": sum((e.shipping or 0) for e in entries),
-        "total": sum((e.total or 0) for e in entries),
-        "sold_for": sum((e.sold_for or 0) for e in entries),
-        "profit": sum((e.profit or 0) for e in entries),
-        # New derived totals for the read-only table's footer (requirement
-        # 3) - sums of existing per-entry fields, not a new calculation.
-        "sell_costs": sum(((e.sell_fees or 0) + (e.sell_shipping or 0)) for e in entries),
-    }
-    distinct_sources = sorted({e.source for e in entries if e.source})
-    has_legacy = any(e.has_legacy_amounts for e in entries)
-    # Always every entry for this owner, regardless of the table's own
-    # status filter above - see ledger_metrics.ledger_summary_tiles.
-    summary_tiles = ledger_metrics.ledger_summary_tiles(request.user)
-
-    return render(request, "ledger.html", {
-        "add_form": add_form,
-        "formset": formset,
-        "entries": entries,
-        "totals": totals,
-        "status_filter": status_filter,
-        "edit_mode": edit_mode,
-        "distinct_sources": distinct_sources,
-        "has_legacy": has_legacy,
-        "status_choices": STATUS_CHOICES,
-        "summary_tiles": summary_tiles,
-    })
+    """Legacy URL (every old bookmark/link to plain /ledger/, and the
+    dashboard's own ?status=unsold deep links) - redirects to the
+    Reselling tab, preserving the query string, instead of 404ing or
+    silently dropping ?status=/?edit=. See ledger_views.ledger_resale for
+    the page this used to render directly."""
+    url = reverse("albright_reselling_app:ledger_resale")
+    query = request.META.get("QUERY_STRING", "")
+    if query:
+        url = f"{url}?{query}"
+    return redirect(url)
 
 
 @login_required

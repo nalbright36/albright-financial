@@ -34,6 +34,11 @@ STATUS_CHOICES = [
     ("written_off", "Written Off"),
 ]
 
+LEDGER_TYPE_CHOICES = [
+    ("resale", "Resale"),
+    ("personal", "Personal"),
+]
+
 
 class LedgerEntry(models.Model):
     owner = models.ForeignKey(
@@ -41,6 +46,17 @@ class LedgerEntry(models.Model):
     )
     item = models.CharField(max_length=255)
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # "resale": bought to resell - the original, default meaning of every
+    # entry below. "personal": something being sold that was never bought
+    # for resale (no buy-side cost) - see the Personal Items tab. Existing
+    # rows are untouched by the migration that added this (it only sets
+    # the column default, "resale", for them).
+    ledger_type = models.CharField(max_length=10, choices=LEDGER_TYPE_CHOICES, default="resale")
+    # Personal-items-only fields (optional, set from that tab's quick-add
+    # form) - left blank/null for resale entries.
+    notes = models.TextField(blank=True, default="")
+    asking_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     # Legacy, pre-scanner-integration fields. Every row created before this
     # feature has its buy/sell costs lumped into these two - they are never
@@ -154,12 +170,37 @@ class LedgerEntry(models.Model):
         return self.sold_for
 
     @property
-    def sell_side_cost(self):
+    def sell_fees_total(self):
         if self.has_itemized_sales:
-            fees = sum((s.selling_fees or 0 for s in self.sales.all()), Decimal("0"))
-            shipping = sum((s.outbound_shipping or 0 for s in self.sales.all()), Decimal("0"))
-            return fees + shipping
-        return (self.sell_fees or 0) + (self.sell_shipping or 0)
+            return sum((s.selling_fees or 0 for s in self.sales.all()), Decimal("0"))
+        return self.sell_fees or 0
+
+    @property
+    def sell_shipping_total(self):
+        if self.has_itemized_sales:
+            return sum((s.outbound_shipping or 0 for s in self.sales.all()), Decimal("0"))
+        return self.sell_shipping or 0
+
+    @property
+    def sell_packaging_total(self):
+        """No legacy packaging field (added alongside itemized sales), so
+        a legacy single-sale entry always has 0 here."""
+        if self.has_itemized_sales:
+            return sum((s.packaging or 0 for s in self.sales.all()), Decimal("0"))
+        return Decimal("0")
+
+    @property
+    def sell_side_cost(self):
+        return self.sell_fees_total + self.sell_shipping_total + self.sell_packaging_total
+
+    @property
+    def last_sale_date(self):
+        """The most recent itemized sale's date, or the legacy sold_date -
+        used by the Personal Items table's "Sale date" column (an entry
+        with multiple partial sales shows the latest one)."""
+        if self.has_itemized_sales:
+            return max((s.sale_date for s in self.sales.all()), default=None)
+        return self.sold_date
 
     @property
     def total_hours(self):
@@ -268,6 +309,7 @@ class LedgerSale(models.Model):
     channel = models.CharField(max_length=20, choices=SALE_CHANNEL_CHOICES, default="other")
     selling_fees = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     outbound_shipping = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    packaging = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     hours_spent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

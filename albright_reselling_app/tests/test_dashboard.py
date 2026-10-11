@@ -922,7 +922,7 @@ class LedgerTilesDashboardTests(TestCase):
     def test_inventory_tile_links_to_unsold_ledger_filter(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
-        self.assertContains(response, reverse("albright_reselling_app:ledger") + "?status=unsold")
+        self.assertContains(response, reverse("albright_reselling_app:ledger_resale") + "?status=unsold")
 
     def test_profit_and_sales_tiles_link_to_scorecard(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))

@@ -1,0 +1,103 @@
+{% extends "index.html" %}
+{% load ledger_extras %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    {% include "_ledger_tabs.html" %}
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Overview</h1>
+    </div>
+
+    <!-- Combined across both ledgers - see ledger_metrics.overview_context(). -->
+    <div class="grid grid-4" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Total Revenue</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.total_revenue|money }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Total Costs</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.total_costs|money }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Net</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if tiles.net >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{{ tiles.net|money }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Items Sold</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.items_sold }}</span>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">By Ledger</span></div>
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Ledger</th>
+                    <th class="num">Revenue</th>
+                    <th class="num">Costs</th>
+                    <th class="num">Net</th>
+                    <th class="num">Items Sold</th>
+                    <th class="num">Items Held</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td class="num">{{ row.revenue|money }}</td>
+                    <td class="num">{{ row.costs|money }}</td>
+                    <td class="num {% if row.net >= 0 %}gain{% else %}loss{% endif %}">{{ row.net|money }}</td>
+                    <td class="num">{{ row.items_sold }}</td>
+                    <td class="num">{{ row.items_held }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
+                    <td>{{ total_row.label }}</td>
+                    <td class="num">{{ total_row.revenue|money }}</td>
+                    <td class="num">{{ total_row.costs|money }}</td>
+                    <td class="num {% if total_row.net >= 0 %}gain{% else %}loss{% endif %}">{{ total_row.net|money }}</td>
+                    <td class="num">{{ total_row.items_sold }}</td>
+                    <td class="num">{{ total_row.items_held }}</td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__header"><span class="card__label">Last 12 Months</span></div>
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th class="num">Reselling Revenue</th>
+                    <th class="num">Reselling Net</th>
+                    <th class="num">Personal Revenue</th>
+                    <th class="num">Personal Net</th>
+                    <th class="num">Combined Revenue</th>
+                    <th class="num">Combined Net</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in monthly_rows %}
+                <tr>
+                    <td>{{ row.month|date:"M Y" }}</td>
+                    <td class="num">{{ row.resale_revenue|money }}</td>
+                    <td class="num {% if row.resale_net >= 0 %}gain{% else %}loss{% endif %}">{{ row.resale_net|money }}</td>
+                    <td class="num">{{ row.personal_revenue|money }}</td>
+                    <td class="num {% if row.personal_net >= 0 %}gain{% else %}loss{% endif %}">{{ row.personal_net|money }}</td>
+                    <td class="num">{{ row.combined_revenue|money }}</td>
+                    <td class="num {% if row.combined_net >= 0 %}gain{% else %}loss{% endif %}">{{ row.combined_net|money }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

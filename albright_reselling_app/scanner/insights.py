@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
+from ..ledger_metrics import exclude_personal
 from ..models import LedgerEntry
 from ..scanner_models import AIReview, CalibrationOverride, CalibrationSuggestion, SourcedLot
 
@@ -288,10 +289,9 @@ def _ledger_multiplier_suggestions(cfg):
     attribute to and are skipped), compare the actual realized sale price
     to the lot's on-record melt value."""
     created = []
-    entries = (
+    entries = exclude_personal(
         LedgerEntry.objects.filter(melt_value__isnull=False, melt_value__gt=0, scanner_lot__isnull=False)
-        .select_related("scanner_lot__evaluation").prefetch_related("sales")
-    )
+    ).select_related("scanner_lot__evaluation").prefetch_related("sales")
     multipliers = cfg["RESALE_MULTIPLIERS"]
     by_key = defaultdict(list)
     for entry in entries:
@@ -411,7 +411,7 @@ def _review_outcome(review):
     actually sold for in the Ledger (the most authoritative figure, if
     the lot was ever logged there as won) over the auction's own closing
     price. None if there's no outcome yet either way."""
-    ledger_entry = review.ledger_entries.exclude(status="written_off").first()
+    ledger_entry = exclude_personal(review.ledger_entries).exclude(status="written_off").first()
     if ledger_entry is not None:
         realized = ledger_entry.total_realized
         if realized is not None:

@@ -1,0 +1,15 @@
+<!-- Shared by ledger.html/ledger_personal.html/ledger_overview.html - real
+     page navigation (3 distinct URLs), not a JS tab switcher. Saves
+     which tab was last visited to localStorage so the nav bar's Ledger
+     link (templates/index.html) can jump straight back to it - see that
+     file's own inline script. Works with JavaScript off too: it's just a
+     normal set of links, and the nav's Ledger link falls back to the
+     Reselling tab via the /ledger/ redirect (views.ledger). -->
+<nav class="scanner-tabs" id="ledger-tabs" style="margin-bottom: 24px;">
+    <a href="{% url 'albright_reselling_app:ledger_overview' %}" class="scanner-tab{% if ledger_tab == 'overview' %} is-active{% endif %}">Overview</a>
+    <a href="{% url 'albright_reselling_app:ledger_resale' %}" class="scanner-tab{% if ledger_tab == 'resale' %} is-active{% endif %}">Reselling</a>
+    <a href="{% url 'albright_reselling_app:ledger_personal' %}" class="scanner-tab{% if ledger_tab == 'personal' %} is-active{% endif %}">Personal items</a>
+</nav>
+<script>
+    try { localStorage.setItem("ledger_tab", "{{ ledger_tab }}"); } catch (e) {}
+</script>

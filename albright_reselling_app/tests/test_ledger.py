@@ -83,7 +83,7 @@ class LegacyProfitUnchangedTests(TestCase):
         LedgerEntry.objects.create(owner=self.owner, item="No Scanner Link", cost=Decimal("20.00"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No Scanner Link")
@@ -151,7 +151,7 @@ class WinLotFlowTests(TestCase):
             "sales_tax": "0.84", "buy_fees": "0.00", "inbound_shipping": "10.00", "purchase_hours": "0.5",
         })
 
-        self.assertRedirects(response, reverse("albright_reselling_app:ledger"))
+        self.assertRedirects(response, reverse("albright_reselling_app:ledger_resale"))
         entry = LedgerEntry.objects.get(scanner_lot=lot)
         self.assertEqual(entry.owner, self.user)
         self.assertEqual(entry.predicted_sale_source, "scanner")
@@ -176,7 +176,7 @@ class WinLotFlowTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("albright_reselling_app:ledger"))
+        self.assertRedirects(response, reverse("albright_reselling_app:ledger_resale"))
         entry = LedgerEntry.objects.get(scanner_lot=lot)
         self.assertEqual(entry.ai_review_id, review.pk)
         self.assertEqual(entry.predicted_sale_source, "ai_review")
@@ -221,7 +221,7 @@ class WinLotFlowTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("albright_reselling_app:ledger"))
+        self.assertRedirects(response, reverse("albright_reselling_app:ledger_resale"))
         self.assertEqual(LedgerEntry.objects.filter(scanner_lot=lot).count(), 2)
 
     def test_requires_login(self):
@@ -243,7 +243,7 @@ class RecordSaleTests(TestCase):
 
         response = self.client.post(reverse("albright_reselling_app:ledger_record_sale", args=[entry.pk]), {
             "sale_date": timezone.localdate().isoformat(), "sale_price": "25.00", "channel": "ebay",
-            "selling_fees": "2.00", "outbound_shipping": "5.00", "hours_spent": "1.0", "notes": "",
+            "selling_fees": "2.00", "outbound_shipping": "5.00", "packaging": "0", "hours_spent": "1.0", "notes": "",
         })
 
         self.assertRedirects(response, reverse("albright_reselling_app:ledger_manage", args=[entry.pk]))
@@ -270,7 +270,7 @@ class RecordSaleTests(TestCase):
 
         self.client.post(reverse("albright_reselling_app:ledger_record_sale", args=[entry.pk]), {
             "sale_date": timezone.localdate().isoformat(), "sale_price": "10.00", "channel": "other",
-            "selling_fees": "0", "outbound_shipping": "0", "hours_spent": "0", "notes": "",
+            "selling_fees": "0", "outbound_shipping": "0", "packaging": "0", "hours_spent": "0", "notes": "",
         })
 
         entry.refresh_from_db()
@@ -854,8 +854,8 @@ class LedgerSummaryTilesTests(TestCase):
                     sold_date=timezone.localdate())
         self.client.login(username="tester", password="pw-not-real-12345")
 
-        unfiltered = self.client.get(reverse("albright_reselling_app:ledger"))
-        filtered = self.client.get(reverse("albright_reselling_app:ledger"), {"status": "unsold"})
+        unfiltered = self.client.get(reverse("albright_reselling_app:ledger_resale"))
+        filtered = self.client.get(reverse("albright_reselling_app:ledger_resale"), {"status": "unsold"})
 
         self.assertContains(unfiltered, "Unsold Inventory Cost")
         self.assertContains(unfiltered, "Current P&amp;L")
@@ -869,7 +869,7 @@ class LedgerSummaryTilesTests(TestCase):
     def test_dash_shown_for_zero_dollar_tiles(self):
         self.client.login(username="tester", password="pw-not-real-12345")
 
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
 
         self.assertContains(response, ">-<")
 
@@ -979,7 +979,7 @@ class NetCashFlowTests(TestCase):
         _make_entry(self.user, item="Profitable", cost="20.00", sold_for="100.00", status="sold_out")
         self.client.login(username="tester", password="pw-not-real-12345")
 
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
 
         self.assertContains(response, "Net Cash Flow")
         self.assertContains(response, "Revenue $100.00")
@@ -1029,7 +1029,7 @@ class LedgerPageRedesignTests(TestCase):
         long_name = "A very long descriptive item name that should wrap, never be truncated or ellipsized"
         _make_entry(self.user, item=long_name, cost="1234.50", sold_for="0")
 
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
@@ -1042,8 +1042,8 @@ class LedgerPageRedesignTests(TestCase):
     def test_delete_checkbox_only_present_in_edit_mode(self):
         _make_entry(self.user, item="Row One")
 
-        readonly = self.client.get(reverse("albright_reselling_app:ledger"))
-        edit = self.client.get(reverse("albright_reselling_app:ledger"), {"edit": "1"})
+        readonly = self.client.get(reverse("albright_reselling_app:ledger_resale"))
+        edit = self.client.get(reverse("albright_reselling_app:ledger_resale"), {"edit": "1"})
 
         self.assertNotIn("form-0-DELETE", readonly.content.decode())
         self.assertIn("form-0-DELETE", edit.content.decode())
@@ -1055,9 +1055,9 @@ class LedgerPageRedesignTests(TestCase):
 
         data = _formset_post_data([keep, remove], delete_pks={remove.pk})
         data["save_ledger"] = "Save Ledger"
-        response = self.client.post(reverse("albright_reselling_app:ledger"), data)
+        response = self.client.post(reverse("albright_reselling_app:ledger_resale"), data)
 
-        self.assertRedirects(response, reverse("albright_reselling_app:ledger"))
+        self.assertRedirects(response, reverse("albright_reselling_app:ledger_resale"))
         remaining = LedgerEntry.objects.filter(owner=self.user)
         self.assertEqual(list(remaining.values_list("item", flat=True)), ["Keep Me"])
 
@@ -1065,7 +1065,7 @@ class LedgerPageRedesignTests(TestCase):
         _make_entry(self.user, item="Entry A", cost="100.00", sold_for="150.00", status="sold_out")
         _make_entry(self.user, item="Entry B", cost="20.00", sold_for="10.00", status="written_off")
 
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
         content = response.content.decode()
 
         entry_a = LedgerEntry.objects.get(item="Entry A")
@@ -1087,7 +1087,7 @@ class LedgerPageRedesignTests(TestCase):
         )
         clean_entry = _make_entry(self.user, item="Clean Row", cost="10.00")
 
-        response = self.client.get(reverse("albright_reselling_app:ledger"))
+        response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
         content = response.content.decode()
 
         self.assertContains(response, "Old unsplit")

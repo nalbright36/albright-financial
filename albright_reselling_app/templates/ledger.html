@@ -4,7 +4,9 @@
 {% load cache_bust %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
-    <!-- Always every entry for this owner - see views.ledger()/
+    {% include "_ledger_tabs.html" %}
+
+    <!-- Always every resale entry for this owner - see ledger_views.ledger_resale()/
          ledger_metrics.ledger_summary_tiles(). Not affected by the table's
          own status filter below. -->
     <div class="grid grid-3" style="margin-bottom: 24px;">
@@ -30,12 +32,12 @@
             Ledger
             {% if status_filter == 'unsold' %}
             <span class="badge neutral" style="margin-left: 8px; vertical-align: middle;">Unsold only</span>
-            <a href="{% url 'albright_reselling_app:ledger' %}" style="font-size: 0.75rem; margin-left: 4px;">Clear</a>
+            <a href="{% url 'albright_reselling_app:ledger_resale' %}" style="font-size: 0.75rem; margin-left: 4px;">Clear</a>
             {% endif %}
         </h1>
         <div style="display: flex; gap: 16px; align-items: center;">
             {% if edit_mode %}
-            <a href="{% url 'albright_reselling_app:ledger' %}{% if status_filter %}?status={{ status_filter }}{% endif %}" class="btn btn-secondary btn-sm">Cancel</a>
+            <a href="{% url 'albright_reselling_app:ledger_resale' %}{% if status_filter %}?status={{ status_filter }}{% endif %}" class="btn btn-secondary btn-sm">Cancel</a>
             {% else %}
             <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}edit=1" class="btn btn-secondary btn-sm">Edit ledger</a>
             {% endif %}
