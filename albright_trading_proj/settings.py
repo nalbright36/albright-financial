@@ -262,4 +262,9 @@ RESELLING_SCANNER = {
     "ALERTS": {"enabled": True, "window_minutes": 90, "kinds": ["candidate", "lead", "zero_bid", "relisted"],
                "min_headroom": 5.0, "candidate_confidence": ["high", "medium"], "max_per_run": 10,
                "critical_alerts": True, "quiet_hours": [23, 7]},
+    # Today page / Selling Board (selling.py): the current sell-down goal -
+    # sales from both ledgers count toward "items" and "recover_usd" since
+    # start_date. Update start_date (and these numbers) when a goal is hit
+    # or the goal itself changes.
+    "SELL_GOAL": {"items": 10, "recover_usd": 676, "start_date": "2026-10-11"},
 }

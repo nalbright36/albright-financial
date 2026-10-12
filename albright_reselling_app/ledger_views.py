@@ -175,11 +175,16 @@ def record_sale(request, entry_id):
         if form.is_valid():
             sale = form.save(commit=False)
             sale.entry = entry
+            if form.cleaned_data.get("no_shipping_needed"):
+                sale.shipped_at = timezone.now()
             sale.save()
             if entry.status == "holding":
                 entry.status = "partially_sold"
                 entry.save(update_fields=["status"])
             messages.success(request, f"Recorded a sale of ${sale.sale_price} for {entry.item}.")
+            next_url = request.POST.get("next")
+            if next_url:
+                return redirect(next_url)
             return redirect("albright_reselling_app:ledger_manage", entry_id=entry.pk)
     else:
         form = LedgerSaleForm()

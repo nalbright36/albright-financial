@@ -1,0 +1,49 @@
+<!-- One Selling Board/Today card - shared by board.html and today.html.
+     Context: card (a selling._card() dict) and next_url (where the
+     action buttons should return to afterward). The load tag below is
+     needed here too, even though the including templates already load
+     ledger_extras themselves - an included template doesn't inherit the
+     including template's loaded tag libraries. -->
+{% load ledger_extras %}
+<div class="card" style="margin-bottom: 12px;">
+    <div style="font-weight: 600;">{{ card.entry.item }}</div>
+    <div style="margin: 6px 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 0.8125rem;">
+        <span class="badge {% if card.is_personal %}neutral{% else %}gain{% endif %}">{% if card.is_personal %}Personal{% else %}Reselling{% endif %}</span>
+        {% if not card.is_personal %}<span class="num">Cost {{ card.buy_side_cost|money }}</span>{% endif %}
+        {% if card.list_price %}<span class="num">List {{ card.list_price|money }}</span>{% endif %}
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-secondary);">
+        {% if card.listed %}{{ card.days }} day{{ card.days|pluralize }} listed{% else %}{{ card.days }} day{{ card.days|pluralize }} held{% endif %}
+    </div>
+    {% if card.next_step_label %}
+    <div style="font-size: 0.75rem; margin-top: 4px; color: {% if card.step_due %}var(--loss){% else %}var(--text-secondary){% endif %};">
+        {{ card.next_step_label }}{% if card.next_step_due_date %} (due {{ card.next_step_due_date|date:"M j" }}){% endif %}
+    </div>
+    {% endif %}
+    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;">
+        {% if not card.listed %}
+        <a href="{% url 'albright_reselling_app:ledger_mark_listed' card.entry.pk %}?next={{ next_url|urlencode }}" class="btn btn-secondary btn-sm">Mark listed</a>
+        {% else %}
+        <a href="{% url 'albright_reselling_app:ledger_edit_price' card.entry.pk %}?next={{ next_url|urlencode }}" class="btn btn-secondary btn-sm">Edit price</a>
+        {% endif %}
+        {% if card.entry.status != "sold_out" %}
+        <a href="{% url 'albright_reselling_app:ledger_record_sale' card.entry.pk %}?next={{ next_url|urlencode }}" class="btn btn-secondary btn-sm">Record sale</a>
+        {% endif %}
+        {% if card.entry.has_itemized_sales %}
+        <form method="post" action="{% url 'albright_reselling_app:ledger_mark_shipped' card.entry.pk %}" style="display: inline;">
+            {% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Mark shipped</button>
+        </form>
+        {% endif %}
+        {% if card.step_due %}
+            {% if card.step_is_price_change %}
+            <a href="{% url 'albright_reselling_app:ledger_edit_price' card.entry.pk %}?step={{ card.next_step }}&next={{ next_url|urlencode }}" class="btn btn-primary btn-sm">Lower price</a>
+            {% else %}
+            <form method="post" action="{% url 'albright_reselling_app:ledger_markdown_done' card.entry.pk %}" style="display: inline;">
+                {% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}">
+                <button type="submit" class="btn btn-primary btn-sm">Done</button>
+            </form>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>

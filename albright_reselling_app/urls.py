@@ -1,14 +1,20 @@
 from django.urls import path
-from . import calculator_views, insights_views, ledger_views, scanner_views, views
+from . import calculator_views, insights_views, ledger_views, scanner_views, selling_views, views
 
 app_name = "albright_reselling_app"
 
 urlpatterns = [
-    path("", views.dashboard, name="dashboard"),
+    path("", selling_views.today_page, name="today"),
+    path("dashboard/", views.dashboard, name="dashboard"),
     path("ledger/", views.ledger, name="ledger"),  # legacy URL: redirects to ledger_resale
     path("ledger/overview/", ledger_views.ledger_overview, name="ledger_overview"),
     path("ledger/resale/", ledger_views.ledger_resale, name="ledger_resale"),
     path("ledger/personal/", ledger_views.ledger_personal, name="ledger_personal"),
+    path("ledger/board/", selling_views.board_page, name="ledger_board"),
+    path("ledger/<int:entry_id>/mark-listed/", selling_views.mark_listed, name="ledger_mark_listed"),
+    path("ledger/<int:entry_id>/mark-shipped/", selling_views.mark_shipped, name="ledger_mark_shipped"),
+    path("ledger/<int:entry_id>/markdown-done/", selling_views.markdown_done, name="ledger_markdown_done"),
+    path("ledger/<int:entry_id>/edit-price/", selling_views.edit_price, name="ledger_edit_price"),
     path("ledger/scorecard/", ledger_views.scorecard, name="ledger_scorecard"),
     path("ledger/<int:entry_id>/manage/", ledger_views.manage_entry, name="ledger_manage"),
     path("ledger/<int:entry_id>/sell/", ledger_views.record_sale, name="ledger_record_sale"),

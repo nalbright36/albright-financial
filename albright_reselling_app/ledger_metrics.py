@@ -15,7 +15,6 @@ from .models import LedgerEntry
 from .scanner_models import BidWatch
 
 UNSOLD_STATUSES = ("holding", "partially_sold")
-MARKDOWN_STEPS = (14, 30, 60)  # 90+ is handled separately below - it never "expires" back out
 
 
 def exclude_personal(queryset):
@@ -68,11 +67,11 @@ def _group_summary(entries, key_func):
 
 
 def _aging_rows(unsold_entries):
-    rows = [
-        {"entry": e, "days_held": e.days_held, "suggested_action": e.aging_suggestion,
-         "value_at_cost": e.buy_side_cost}
-        for e in unsold_entries
-    ]
+    # Deferred import: selling.py sits on top of both this module and
+    # scanner/dashboard.py (which itself imports ledger_metrics) - a
+    # module-level import here would be circular.
+    from .selling import aging_row
+    rows = [aging_row(e) for e in unsold_entries]
     rows.sort(key=lambda r: -r["days_held"])
     return rows
 
@@ -127,15 +126,12 @@ def _is_sold_this_month(entry, month_start):
 
 
 def _needs_markdown_action(entry):
-    """Same step thresholds as LedgerEntry.aging_suggestion (14/30/60/90
-    days). There's no "action taken" flag on LedgerEntry to check against,
-    so this is the documented fallback: flagged for the 7 days after
-    crossing a step, or continuously once past 90 (nothing "undoes" that
-    one - you're always overdue until it sells or gets written off)."""
-    days = entry.days_held
-    if days >= 90:
-        return True
-    return any(step <= days < step + 7 for step in MARKDOWN_STEPS)
+    """selling.markdown_status()'s "due" flag - timed from listed_at (or
+    flagged as "not listed" past 7 days, for an item with no listed_at
+    yet) - the one shared definition dashboard_tiles()'s markdown_count
+    and the Ledger/Personal Items aging views all use."""
+    from .selling import needs_markdown_action
+    return needs_markdown_action(entry)
 
 
 def realized_summary(owner, now=None):

@@ -1,0 +1,21 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 480px;">
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">{% if step %}Lower Price{% else %}Edit Price{% endif %}</h1>
+    </div>
+    <div class="card">
+        <p style="margin-top: 0;">{{ entry.item }}</p>
+        <form method="post">
+            {% csrf_token %}
+            {% if step %}<input type="hidden" name="step" value="{{ step }}">{% endif %}
+            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+            <div class="field"><label>List Price</label>{{ form.list_price }}</div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <a href="{{ next|default:'javascript:history.back()' }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

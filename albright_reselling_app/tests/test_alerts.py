@@ -548,6 +548,17 @@ class QuietHoursGatingTests(TestCase):
 
 
 class DigestTests(TestCase):
+    def test_selling_section_included(self):
+        """build_digest_message() now ends with selling.selling_digest_lines()'s
+        "Selling" section (to ship/markdowns due/not listed + sell-goal
+        progress) - see test_selling.py for selling_digest_lines()'s own
+        content coverage."""
+        message = build_digest_message(now=timezone.now())
+
+        self.assertIn("Selling", message)
+        self.assertIn("To ship:", message)
+        self.assertIn("Markdowns due:", message)
+
     def test_hibid_included_in_health_section(self):
         """build_digest_message() loops every configured source
         (RESELLING_SCANNER["SOURCES"]), so adding hibid there is enough -

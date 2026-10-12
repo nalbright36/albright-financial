@@ -82,7 +82,15 @@ class EntryDetailsForm(forms.ModelForm):
 
 class LedgerSaleForm(forms.ModelForm):
     """Shared by both ledgers' "record a sale" flow (ledger_views.record_sale) -
-    resale and Personal Items entries alike."""
+    resale and Personal Items entries alike. no_shipping_needed isn't a
+    model field - checking it (a local-pickup sale) just sets shipped_at
+    immediately, in the view, instead of waiting for a later "Mark
+    shipped" click on the Selling Board."""
+    no_shipping_needed = forms.BooleanField(
+        required=False, label="No shipping needed (local pickup)",
+        widget=forms.CheckboxInput(attrs={"class": "ledger-input"}),
+    )
+
     class Meta:
         model = LedgerSale
         fields = ["sale_date", "sale_price", "channel", "selling_fees", "outbound_shipping",
@@ -97,6 +105,27 @@ class LedgerSaleForm(forms.ModelForm):
             "hours_spent": _NUM_WIDGET("Listing/packing hours"),
             "notes": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "e.g. half the lot"}),
         }
+
+
+class MarkListedForm(forms.ModelForm):
+    """Selling Board/Today "Mark listed" action: list price, platform,
+    and an optional listing URL - listed_at itself is set by the view
+    (today, the first time this is submitted)."""
+    class Meta:
+        model = LedgerEntry
+        fields = ["list_price", "platform", "listing_url"]
+        widgets = {
+            "list_price": _NUM_WIDGET("List price"),
+            "platform": forms.Select(attrs={"class": "ledger-input"}),
+            "listing_url": forms.URLInput(attrs={"class": "ledger-input", "placeholder": "Optional"}),
+        }
+
+
+class EditPriceForm(forms.Form):
+    """Selling Board/Today "Edit price" button, and a markdown step's
+    "Lower price" action (same form - the view records last_markdown_step
+    too, only for the latter)."""
+    list_price = forms.DecimalField(max_digits=10, decimal_places=2, min_value=0, widget=_NUM_WIDGET())
 
 
 class PersonalItemForm(forms.ModelForm):

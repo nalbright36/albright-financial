@@ -48,6 +48,7 @@
                 <div class="navbar__links">
                     {% if user.is_authenticated %}
                         {% if in_reselling_app %}
+                        <a href="{% url 'albright_reselling_app:today' %}">Today</a>
                         <a href="{% url 'albright_reselling_app:dashboard' %}">Dashboard</a>
                         <a href="{% url 'albright_reselling_app:ledger' %}" id="nav-ledger-link"
                            data-overview-url="{% url 'albright_reselling_app:ledger_overview' %}"

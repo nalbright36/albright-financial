@@ -26,6 +26,7 @@ from django.conf import settings
 from django.db.models import Count, Sum
 from django.utils import timezone
 
+from .. import selling
 from ..scanner_models import (
     AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
@@ -47,7 +48,7 @@ AI_REVIEW_BUDGET_WARN_PCT = 0.8
 # absolute URL from, so the host is read from the environment, falling
 # back to the PythonAnywhere deployment this is actually scheduled on.
 SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "https://natealbright36.pythonanywhere.com")
-DASHBOARD_PATH = "/albright_reselling_app/"
+DASHBOARD_PATH = "/albright_reselling_app/dashboard/"
 
 
 def send_telegram(text):
@@ -535,6 +536,9 @@ def build_digest_message(now=None):
 
     lines.append(f"Live now: {candidate_count} candidate(s), {lead_count} lead(s)")
     lines.append(f"My bids: {watching} watching, {likely_won} likely won, {lost} lost (last 24h)")
+    lines.append("")
+
+    lines += selling.selling_digest_lines(now=now)
 
     return "\n".join(lines)
 

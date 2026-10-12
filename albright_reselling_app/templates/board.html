@@ -1,0 +1,100 @@
+{% extends "index.html" %}
+{% load ledger_extras %}
+{% load static %}
+{% load cache_bust %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    {% include "_ledger_tabs.html" %}
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Selling Board</h1>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card__header"><span class="card__label">Filter</span></div>
+        <div class="scanner-controls">
+            <input type="text" id="board-search" placeholder="Search item..." autocomplete="off">
+            <select id="board-type">
+                <option value="" {% if not ledger_type %}selected{% endif %}>Both</option>
+                <option value="resale" {% if ledger_type == 'resale' %}selected{% endif %}>Reselling</option>
+                <option value="personal" {% if ledger_type == 'personal' %}selected{% endif %}>Personal</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="grid grid-4" id="board-columns" style="align-items: start;">
+        <div class="card board-column">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">To List <span class="row-count">({{ columns.to_list|length }})</span></span>
+            </div>
+            <div class="js-collapsible-body" data-board-column="to_list">
+                {% for card in columns.to_list %}
+                {% include "_selling_card.html" with card=card next_url=request.get_full_path %}
+                {% empty %}
+                <p style="color: var(--text-secondary); font-size: 0.8125rem;">Nothing to list.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card board-column">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Listed <span class="row-count">({{ columns.listed|length }})</span></span>
+            </div>
+            <div class="js-collapsible-body" data-board-column="listed">
+                {% for card in columns.listed %}
+                {% include "_selling_card.html" with card=card next_url=request.get_full_path %}
+                {% empty %}
+                <p style="color: var(--text-secondary); font-size: 0.8125rem;">Nothing listed right now.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card board-column">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Sold - To Ship <span class="row-count">({{ columns.to_ship|length }})</span></span>
+            </div>
+            <div class="js-collapsible-body" data-board-column="to_ship">
+                {% for card in columns.to_ship %}
+                {% include "_selling_card.html" with card=card next_url=request.get_full_path %}
+                {% empty %}
+                <p style="color: var(--text-secondary); font-size: 0.8125rem;">Nothing waiting to ship.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card board-column">
+            <div class="card__header js-collapsible-header">
+                <span class="card__label">Shipped <span class="row-count">({{ columns.shipped|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Last 30 days</span>
+            </div>
+            <div class="js-collapsible-body" data-board-column="shipped">
+                {% for card in columns.shipped %}
+                {% include "_selling_card.html" with card=card next_url=request.get_full_path %}
+                {% empty %}
+                <p style="color: var(--text-secondary); font-size: 0.8125rem;">Nothing shipped in the last 30 days.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var search = document.getElementById("board-search");
+        var typeSelect = document.getElementById("board-type");
+
+        function applyBoardFilters() {
+            var q = search.value.trim().toLowerCase();
+            document.querySelectorAll(".board-column .card").forEach(function (card) {
+                var text = card.textContent.toLowerCase();
+                card.hidden = q !== "" && text.indexOf(q) === -1;
+            });
+        }
+        search.addEventListener("input", applyBoardFilters);
+
+        typeSelect.addEventListener("change", function () {
+            var params = new URLSearchParams(window.location.search);
+            if (typeSelect.value) params.set("type", typeSelect.value); else params.delete("type");
+            window.location.search = params.toString();
+        });
+    });
+</script>
+{% endblock %}

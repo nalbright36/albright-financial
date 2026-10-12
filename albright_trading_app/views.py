@@ -221,13 +221,14 @@ def get_market_outlook():
  
  
 def home(request):
-    """"/" - redirects a logged-in user straight to the reseller dashboard
-    if that's the last app they used (see albright_trading_proj.middleware.
-    LastAppMiddleware); otherwise renders this app's own landing page,
-    exactly as before (the default for anonymous users and anyone whose
-    last_app cookie says "trading" or isn't set yet)."""
+    """"/" - redirects a logged-in user straight to the reseller app's
+    Today page if that's the last app they used (see
+    albright_trading_proj.middleware.LastAppMiddleware); otherwise renders
+    this app's own landing page, exactly as before (the default for
+    anonymous users and anyone whose last_app cookie says "trading" or
+    isn't set yet)."""
     if request.user.is_authenticated and request.COOKIES.get(LAST_APP_COOKIE) == "reseller":
-        return redirect("albright_reselling_app:dashboard")
+        return redirect("albright_reselling_app:today")
     outlook = get_market_outlook()
     context = {"outlook": outlook}
     return render(request, 'home.html', context=context)

@@ -106,12 +106,12 @@ class RootRedirectTests(TestCase):
         self.user = User.objects.create_user(username="tester2", password="pw-not-real-12345")
         self.client.login(username="tester2", password="pw-not-real-12345")
 
-    def test_redirects_to_reseller_dashboard_when_cookie_says_reseller(self):
+    def test_redirects_to_reseller_today_page_when_cookie_says_reseller(self):
         self.client.cookies[LAST_APP_COOKIE] = "reseller"
 
         response = self.client.get("/")
 
-        self.assertRedirects(response, reverse("albright_reselling_app:dashboard"))
+        self.assertRedirects(response, reverse("albright_reselling_app:today"))
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_defaults_to_trading_landing_page_without_cookie(self, mock_outlook):
@@ -152,13 +152,13 @@ class LoginRedirectTests(TestCase):
             reverse("user_login"), {"username": "tester3", "password": "pw-not-real-12345"},
         )
 
-        # "/" itself redirects again (to the reseller dashboard) once
-        # logged in with that cookie - fetch_redirect_response=False since
-        # assertRedirects' own follow-and-check-200 can't handle a chained
-        # redirect.
+        # "/" itself redirects again (to the reseller app's Today page)
+        # once logged in with that cookie - fetch_redirect_response=False
+        # since assertRedirects' own follow-and-check-200 can't handle a
+        # chained redirect.
         self.assertRedirects(response, "/", fetch_redirect_response=False)
         follow = self.client.get("/")
-        self.assertRedirects(follow, reverse("albright_reselling_app:dashboard"))
+        self.assertRedirects(follow, reverse("albright_reselling_app:today"))
 
     def test_login_with_next_honors_it(self):
         response = self.client.post(

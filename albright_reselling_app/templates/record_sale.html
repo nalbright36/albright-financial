@@ -12,6 +12,7 @@
         </p>
         <form method="post">
             {% csrf_token %}
+            {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
             <div class="grid grid-2">
                 <div class="field"><label>Sale Date</label>{{ form.sale_date }}</div>
                 <div class="field"><label>Sale Price</label>{{ form.sale_price }}</div>
@@ -23,6 +24,7 @@
                 <div class="field"><label>Packaging</label>{{ form.packaging }}</div>
             </div>
             <div class="field"><label>Hours Spent (listing/packing)</label>{{ form.hours_spent }}</div>
+            <div class="field"><label>{{ form.no_shipping_needed }} No shipping needed (local pickup)</label></div>
             <div class="field"><label>Notes</label>{{ form.notes }}</div>
 
             {% if form.errors %}

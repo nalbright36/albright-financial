@@ -39,6 +39,20 @@ LEDGER_TYPE_CHOICES = [
     ("personal", "Personal"),
 ]
 
+PLATFORM_CHOICES = [
+    ("ebay", "eBay"),
+    ("facebook", "Facebook"),
+    ("mercari", "Mercari"),
+    ("local", "Local"),
+    ("other", "Other"),
+]
+
+# Markdown schedule for the Selling Board/Today page, timed from listed_at
+# (not the purchase/created date) - see selling.markdown_status(). 0 means
+# "no step done yet"; an entry's last_markdown_step is the highest step
+# number it's been marked "Done" through.
+MARKDOWN_STEP_CHOICES = [(0, "None"), (14, "14 days"), (30, "30 days"), (60, "60 days"), (90, "90 days")]
+
 
 class LedgerEntry(models.Model):
     owner = models.ForeignKey(
@@ -86,6 +100,15 @@ class LedgerEntry(models.Model):
     source = models.CharField(max_length=40, blank=True)
     category = models.CharField(max_length=30, blank=True)
     listing_url = models.URLField(max_length=500, blank=True)
+
+    # Selling Board/Today page (selling.py) - when (and where, and at what
+    # price) this item was actually listed for sale. Set once, by "Mark
+    # listed"; list_price can change afterward via "Edit price" or a
+    # markdown step's "Lower price" action.
+    listed_at = models.DateField(null=True, blank=True)
+    list_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    platform = models.CharField(max_length=10, choices=PLATFORM_CHOICES, blank=True)
+    last_markdown_step = models.PositiveSmallIntegerField(choices=MARKDOWN_STEP_CHOICES, default=0)
 
     # Snapshots taken at "I won this" time, so later re-scans/re-evaluations
     # of the lot (or the lot being deleted) never change what the ledger
@@ -313,6 +336,10 @@ class LedgerSale(models.Model):
     hours_spent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Selling Board/Today page (selling.py) - null until "Mark shipped" (or
+    # "No shipping needed", for a local pickup sale, which sets this the
+    # same way - it just means "nothing left to do for this sale").
+    shipped_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-sale_date"]

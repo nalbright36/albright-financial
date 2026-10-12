@@ -1,0 +1,123 @@
+{% extends "index.html" %}
+{% load ledger_extras %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Today</h1>
+    </div>
+
+    <p style="font-size: 0.9375rem; margin-bottom: 20px;">
+        {% if todo_count %}{{ todo_count }} thing{{ todo_count|pluralize }} to do today{% else %}Nothing urgent today - nice.{% endif %}
+    </p>
+
+    <!-- ============ Sell-down goal ============ -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">Sell-Down Goal</span></div>
+        <div class="grid grid-2">
+            <div>
+                <div class="row-count">Sold {{ goal.items_sold }} of {{ goal.goal_items }} items</div>
+                <div style="background: var(--surface-hover); border-radius: var(--radius-full); height: 8px; margin-top: 6px; overflow: hidden;">
+                    <div style="background: var(--gain); height: 100%; width: {{ goal.items_pct }}%;"></div>
+                </div>
+            </div>
+            <div>
+                <div class="row-count">Recovered {{ goal.recovered|money }} of {{ goal.goal_recover|money }}</div>
+                <div style="background: var(--surface-hover); border-radius: var(--radius-full); height: 8px; margin-top: 6px; overflow: hidden;">
+                    <div style="background: var(--gain); height: 100%; width: {{ goal.recover_pct }}%;"></div>
+                </div>
+            </div>
+        </div>
+        {% if goal.goal_met %}
+        <p style="margin: 12px 0 0; color: var(--gain); font-weight: 600;">Buying freeze can lift 🎉</p>
+        {% endif %}
+    </div>
+
+    {% if to_ship %}
+    <!-- ============ a) To ship ============ -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">To Ship <span class="row-count">({{ to_ship|length }})</span></span></div>
+        {% for card in to_ship %}
+        {% include "_selling_card.html" with card=card next_url=request.path %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if markdowns_due or not_listed_flagged %}
+    <!-- ============ b) Markdowns due ============ -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">Markdowns Due <span class="row-count">({{ markdowns_due|length|add:not_listed_flagged|length }})</span></span></div>
+        {% for card in markdowns_due %}
+        {% include "_selling_card.html" with card=card next_url=request.path %}
+        {% endfor %}
+        {% for card in not_listed_flagged %}
+        {% include "_selling_card.html" with card=card next_url=request.path %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if to_list %}
+    <!-- ============ c) To list ============ -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">To List <span class="row-count">({{ to_list|length }})</span></span>
+            <span style="font-size: 0.8125rem; color: {% if listed_today_count >= daily_list_target %}var(--gain){% else %}var(--text-secondary){% endif %};">
+                List {{ daily_list_target }} today: {{ listed_today_count }} of {{ daily_list_target }}
+            </span>
+        </div>
+        {% for card in to_list %}
+        {% include "_selling_card.html" with card=card next_url=request.path %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if closing_soon or wins_to_log %}
+    <!-- ============ d) My bids ============ -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header"><span class="card__label">My Bids</span></div>
+        {% for watch in closing_soon %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+                <a href="{{ watch.lot.url }}" target="_blank" rel="noopener">{{ watch.lot.title }}</a>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Closing {{ watch.lot.end_time|date:"M j, g:i A" }} &middot; my max ${{ watch.my_max_bid|floatformat:2 }}</div>
+            </div>
+        </div>
+        {% endfor %}
+        {% for watch in wins_to_log %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+                <a href="{{ watch.lot.url }}" target="_blank" rel="noopener">{{ watch.lot.title }}</a>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Likely won - not yet logged</div>
+            </div>
+            <a href="{% url 'albright_reselling_app:ledger_win_lot' watch.lot.pk %}" class="btn btn-primary btn-sm">I Won This</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if candidates %}
+    <!-- ============ e) Candidates ending within 24h ============ -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card__header">
+            <span class="card__label">Candidates Ending Soon <span class="row-count">(top {{ candidates|length }} of {{ candidates_total }})</span></span>
+            <a href="{% url 'albright_reselling_app:dashboard' %}#act-now" style="font-size: 0.8125rem;">See all on dashboard &rarr;</a>
+        </div>
+        {% for row in candidates %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <a href="{{ row.lot_url }}" target="_blank" rel="noopener">{{ row.title }}</a>
+            <span class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }} headroom</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if warnings %}
+    <!-- ============ f) System warnings ============ -->
+    <div class="card">
+        <div class="card__header"><span class="card__label">System Warnings</span></div>
+        {% for warning in warnings %}
+        <div class="alert-warning" style="display: block; margin-bottom: 8px;">{{ warning }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
