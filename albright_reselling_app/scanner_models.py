@@ -256,6 +256,37 @@ class LotFeedback(models.Model):
         return f"LotFeedback({self.lot_id}, {self.kind})"
 
 
+class LotDismissal(models.Model):
+    """"I've already looked at this, stop showing it to me" - hides a lot
+    from the dashboard's Act Now tab (Candidates ending soon/Check by
+    hand/Leads to review), the Today page's candidates section, and
+    Telegram's per-lot alerts (see scanner/dashboard.py's dismissal
+    filtering and scanner/alerts.run_alerts()). Never deletes or changes
+    the lot/evaluation itself - purely a "don't show me this again"
+    marker, undoable at any time (the "Undo" action just deletes this
+    row). Reappears on its own once the lot's headroom has grown by at
+    least RESELLING_SCANNER["DISMISS_REOPEN_HEADROOM"] since dismissal -
+    headroom_at_dismissal is the baseline that's measured against, null
+    for a lead (which has no real headroom to compare)."""
+    REASON_CHOICES = [
+        ("not_interested", "Not interested"),
+        ("too_far", "Too far"),
+        ("bad_photos", "Bad photos"),
+        ("reviewed", "Reviewed"),
+    ]
+
+    lot = models.ForeignKey(SourcedLot, on_delete=models.CASCADE, related_name="dismissals")
+    dismissed_at = models.DateTimeField()
+    headroom_at_dismissal = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES, blank=True)
+
+    class Meta:
+        ordering = ["-dismissed_at"]
+
+    def __str__(self):
+        return f"Dismissal({self.lot_id}, {self.dismissed_at:%Y-%m-%d})"
+
+
 class BidCalculation(models.Model):
     """A saved Bid Calculator run (calculator_views.py / scanner/
     calculator.py) - inputs and results both stored as JSON (not

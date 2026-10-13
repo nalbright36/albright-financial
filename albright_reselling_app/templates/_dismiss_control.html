@@ -1,0 +1,22 @@
+{% comment %}
+The Act Now tables' "Dismiss" control: a one-click X (no reason) plus a
+tiny reason menu (selecting an option immediately dismisses with that
+reason) - see static/js/auction_scanner.js's initDismissals(). Expects
+`row` (with `row.lot_id`) in the current context.
+{% endcomment %}
+<span class="js-dismiss-group" style="display: inline-flex; gap: 4px; align-items: center; margin-left: 6px;">
+    <button type="button" class="btn btn-secondary btn-sm js-dismiss-btn"
+            data-dismiss-url="{% url 'albright_reselling_app:dismiss_lot' row.lot_id %}"
+            data-undo-url="{% url 'albright_reselling_app:undo_dismiss' row.lot_id %}"
+            title="Dismiss this lot">&#10005;</button>
+    <select class="js-dismiss-reason ledger-input" style="width: 32px; padding: 2px; font-size: 0.75rem;"
+            data-dismiss-url="{% url 'albright_reselling_app:dismiss_lot' row.lot_id %}"
+            data-undo-url="{% url 'albright_reselling_app:undo_dismiss' row.lot_id %}"
+            title="Dismiss with a reason" aria-label="Dismiss with a reason">
+        <option value="" selected>&#9662;</option>
+        <option value="not_interested">Not interested</option>
+        <option value="too_far">Too far</option>
+        <option value="bad_photos">Bad photos</option>
+        <option value="reviewed">Reviewed</option>
+    </select>
+</span>

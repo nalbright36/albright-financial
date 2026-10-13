@@ -321,7 +321,11 @@
             tables.forEach(function (table) {
                 var tbody = table.querySelector("tbody");
                 if (!tbody) return;
-                var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.scanner-row"));
+                // Dismissed rows (see initDismissals() below) are excluded
+                // from both "shown" and the total here - a filter change
+                // must never un-hide one, and "N of M shown" should never
+                // count them either.
+                var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.scanner-row:not(.is-dismissed)"));
                 var shown = 0;
 
                 rows.forEach(function (row) {
@@ -374,6 +378,110 @@
         applyFilters(); // initial pass: reflects any filters carried in the URL, sets initial counts
     }
 
+    // ---------- CSRF token (cookie, falling back to the page's own hidden
+    // field if cookies are blocked) - shared by any fetch() POST on this
+    // page, currently just the Dismiss/Undo controls below. ----------
+    function csrfToken() {
+        var match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : (document.querySelector("[name=csrfmiddlewaretoken]") || {}).value;
+    }
+
+    // ---------- Lot dismissal: the Act Now tables' "Dismiss" (X button or
+    // reason menu) and "Undo" controls (_dismiss_control.html's toast-undo,
+    // and the "Show dismissed" panel's own persistent Undo button). The
+    // dismiss/undo POSTs are fire-and-forget: the row's visibility is what
+    // the user sees, so it updates immediately rather than waiting on the
+    // network, same spirit as every other best-effort POST in this app
+    // (AI review buttons aside, which show their own "Reviewing..." state
+    // because that one call matters enough to wait for). ----------
+    function postForm(url, body) {
+        var headers = { "X-CSRFToken": csrfToken() };
+        if (body) headers["Content-Type"] = "application/x-www-form-urlencoded";
+        return fetch(url, { method: "POST", headers: headers, body: body || undefined }).catch(function () {});
+    }
+
+    function toastContainer() {
+        var el = document.getElementById("toast-container");
+        if (el) return el;
+        el = document.createElement("div");
+        el.className = "toast-container";
+        el.id = "toast-container";
+        el.setAttribute("role", "status");
+        el.setAttribute("aria-live", "polite");
+        document.body.appendChild(el);
+        return el;
+    }
+
+    function showUndoToast(message, onUndo) {
+        var toast = document.createElement("div");
+        toast.className = "toast";
+        var text = document.createElement("span");
+        text.textContent = message + " ";
+        var undo = document.createElement("a");
+        undo.href = "#";
+        undo.textContent = "Undo";
+        undo.addEventListener("click", function (event) {
+            event.preventDefault();
+            onUndo();
+            toast.remove();
+        });
+        toast.appendChild(text);
+        toast.appendChild(undo);
+        toastContainer().appendChild(toast);
+        window.setTimeout(function () { toast.remove(); }, 5000);
+    }
+
+    function adjustDismissedCount(delta) {
+        var el = document.getElementById("dismissed-count");
+        if (!el) return;
+        el.textContent = String(Math.max(0, (parseInt(el.textContent, 10) || 0) + delta));
+    }
+
+    function initDismissals() {
+        function dismiss(control, reason) {
+            var row = control.closest("tr.scanner-row");
+            if (!row) return;
+            row.hidden = true;
+            row.classList.add("is-dismissed");
+            updateTabCounts();
+            adjustDismissedCount(1);
+            postForm(control.dataset.dismissUrl, reason ? "reason=" + encodeURIComponent(reason) : "");
+
+            showUndoToast("Dismissed.", function () {
+                row.hidden = false;
+                row.classList.remove("is-dismissed");
+                updateTabCounts();
+                adjustDismissedCount(-1);
+                postForm(control.dataset.undoUrl);
+            });
+        }
+
+        document.querySelectorAll(".js-dismiss-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () { dismiss(btn, ""); });
+        });
+        document.querySelectorAll(".js-dismiss-reason").forEach(function (select) {
+            select.addEventListener("change", function () {
+                var reason = select.value;
+                select.value = "";
+                if (reason) dismiss(select, reason);
+            });
+        });
+        document.querySelectorAll(".js-undo-dismissed-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                postForm(btn.dataset.undoUrl);
+                var row = btn.closest("tr");
+                if (row) row.remove();
+                adjustDismissedCount(-1);
+            });
+        });
+
+        var toggle = document.getElementById("toggle-dismissed");
+        var panel = document.getElementById("dismissed-lots-panel");
+        if (toggle && panel) {
+            toggle.addEventListener("click", function () { panel.hidden = !panel.hidden; });
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         Array.prototype.slice.call(document.querySelectorAll("table.holdings")).forEach(initSortableTable);
         initExpandableRows();
@@ -381,6 +489,7 @@
         initAIReviewForms();
         initTabs();
         initFilters();
+        initDismissals();
         updateTabCounts(); // covers pages where initFilters() has nothing to wire up
     });
 })();

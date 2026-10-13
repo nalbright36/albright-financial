@@ -31,7 +31,7 @@ from ..scanner_models import (
     AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
 from .ai_review_service import months_review_cost
-from .dashboard import _expected_interval_hours, _source_display, _time_remaining
+from .dashboard import _expected_interval_hours, _source_display, _time_remaining, exclude_dismissed_evaluations
 
 log = logging.getLogger(__name__)
 
@@ -215,8 +215,11 @@ def run_alerts(now=None):
     is set, only lots in those categories qualify for any of the 5 kinds
     here - BidWatch alerts, critical alerts, and the daily digest don't go
     through run_alerts() at all, so they're unaffected; if the setting is
-    missing, every category alerts as before. Returns the list of
-    (lot_id, kind) pairs actually sent."""
+    missing, every category alerts as before. A lot dismissed from the
+    dashboard's Act Now tab is excluded here too (same reopen-on-headroom-
+    growth rule - see scanner/dashboard.exclude_dismissed_evaluations()),
+    unless it's reopened. Returns the list of (lot_id, kind) pairs
+    actually sent."""
     cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
     if not cfg.get("enabled"):
         return []
@@ -240,6 +243,9 @@ def run_alerts(now=None):
     categories = cfg.get("categories")
     if categories:
         candidates = [pair for pair in candidates if pair[1].category in categories]
+
+    kept_ids = {ev.pk for ev in exclude_dismissed_evaluations([ev for _kind, ev in candidates])}
+    candidates = [pair for pair in candidates if pair[1].pk in kept_ids]
 
     if _in_quiet_hours(now, cfg):
         candidates = [pair for pair in candidates if pair[0] not in QUIET_HOURS_GATED_KINDS]

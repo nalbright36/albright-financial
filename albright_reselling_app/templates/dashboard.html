@@ -183,6 +183,54 @@
     <div class="tab-panel" id="act-now">
         <h3 class="tab-panel__heading">Act now</h3>
 
+        <!-- Dismissed lots ("I've already looked at this") - hidden from
+             the 3 tables below (and their counts) by scanner/dashboard.py,
+             listed here only when toggled open. Undoing one here just
+             deletes the dismissal server-side; it reappears in its own
+             table on the next page load rather than being live-reinserted,
+             since that's simpler and this isn't a time-critical action. -->
+        <div style="margin-bottom: 16px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="toggle-dismissed">Show dismissed (<span id="dismissed-count">{{ dismissed_count }}</span>)</button>
+        </div>
+        <div class="card" id="dismissed-lots-panel" hidden style="margin-bottom: 20px;">
+            <div class="card__header"><span class="card__label">Dismissed Lots</span></div>
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-dismissed">
+                <thead>
+                    <tr>
+                        <th class="lot-title-col">Title</th>
+                        <th>From</th>
+                        <th>Source</th>
+                        <th>Category</th>
+                        <th class="num">Headroom at dismissal</th>
+                        <th>Dismissed</th>
+                        <th>Reason</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in dismissed_rows %}
+                    <tr data-lot-id="{{ row.lot_id }}">
+                        <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener">{{ row.title }}</a></td>
+                        <td>{{ row.dismiss_section }}</td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">{% if row.headroom is not None %}${{ row.headroom|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                        <td>{{ row.dismissed_at|date:"M j, g:i A" }}</td>
+                        <td>{{ row.dismiss_reason_display|default:"—" }}</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary btn-sm js-undo-dismissed-btn"
+                                    data-undo-url="{% url 'albright_reselling_app:undo_dismiss' row.lot_id %}">Undo</button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" style="color: var(--text-secondary);">No dismissed lots.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+
         <div class="card" style="margin-bottom: 20px;">
             <div class="card__header js-collapsible-header">
                 <span class="card__label">Candidates Ending Soon <span class="row-count">({{ live_candidates_ending_soon|length }})</span></span>
@@ -210,7 +258,7 @@
                 </thead>
                 <tbody>
                     {% for row in live_candidates_ending_soon %}
-                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                    <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
                         data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
                         <td class="row-toggle"></td>
@@ -219,6 +267,7 @@
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
+                            {% if row.reopened_headroom_increase is not None %}<span class="badge gain" style="margin-left: 6px;" title="Was dismissed - headroom has grown since then">Back: headroom up ${{ row.reopened_headroom_increase|floatformat:2 }}</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -226,7 +275,7 @@
                         <td class="num">${{ row.max_bid|floatformat:2 }}</td>
                         <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
                         <td class="num">{{ row.time_remaining }}</td>
-                        {% include "_ai_review_cell.html" %}
+                        {% include "_act_now_actions_cell.html" %}
                     </tr>
                     {% include "_scanner_row_detail.html" with row=row colspan=9 %}
                     {% endfor %}
@@ -266,7 +315,7 @@
                 </thead>
                 <tbody>
                     {% for row in check_by_hand %}
-                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                    <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
                         data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
                         <td class="row-toggle"></td>
@@ -275,6 +324,7 @@
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
+                            {% if row.reopened_headroom_increase is not None %}<span class="badge gain" style="margin-left: 6px;" title="Was dismissed - headroom has grown since then">Back: headroom up ${{ row.reopened_headroom_increase|floatformat:2 }}</span>{% endif %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -282,7 +332,7 @@
                         <td class="num">${{ row.max_bid|floatformat:2 }}</td>
                         <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
                         <td class="num">{{ row.time_remaining }}</td>
-                        {% include "_ai_review_cell.html" %}
+                        {% include "_act_now_actions_cell.html" %}
                     </tr>
                     {% include "_scanner_row_detail.html" with row=row colspan=9 %}
                     {% endfor %}
@@ -328,7 +378,7 @@
                 </thead>
                 <tbody>
                     {% for row in leads_to_review %}
-                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+                    <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-reason="{{ row.lead_reason }}"
                         data-endtime="{{ row.end_time_epoch_ms }}">
                         <td class="row-toggle"></td>
@@ -343,7 +393,7 @@
                         <td class="num">${{ row.current_bid|floatformat:2 }}</td>
                         <td>{{ row.lead_reason|default:"—" }}</td>
                         <td class="num">{{ row.time_remaining }}</td>
-                        {% include "_ai_review_cell.html" %}
+                        {% include "_act_now_actions_cell.html" %}
                     </tr>
                     {% include "_scanner_row_detail.html" with row=row colspan=8 %}
                     {% endfor %}

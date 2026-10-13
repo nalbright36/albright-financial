@@ -23,7 +23,9 @@ from django.conf import settings
 from django.utils import timezone
 
 from .. import ledger_metrics
-from ..scanner_models import AIReview, AlertSent, BidWatch, LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from ..scanner_models import (
+    AIReview, AlertSent, BidWatch, LotDismissal, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
+)
 from .ai_review_service import months_review_cost, todays_review_count
 
 DEFAULT_EXPECTED_INTERVAL_HOURS = 1  # RESELLING_SCANNER["SOURCES"][source]["expected_interval_hours"] fallback
@@ -183,6 +185,84 @@ def _hibid_detail(lot):
         "premium_pct": round(premium * 100, 1) if premium is not None else None,
         "end_time_estimated": hibid.get("end_time_source") == "auction_close",
     }
+
+
+# ---------------------------------------------------------------------------
+# Lot dismissal ("I've already looked at this, stop showing it to me") -
+# shared by the dashboard's Act Now tab (below) and scanner/alerts.py's
+# per-lot Telegram alerts, so both use exactly the same hide/reopen rule.
+# ---------------------------------------------------------------------------
+
+def dismiss_reopen_threshold():
+    return Decimal(str(settings.RESELLING_SCANNER.get("DISMISS_REOPEN_HEADROOM", 25)))
+
+
+def _active_dismissals(lot_ids):
+    lot_ids = {lid for lid in lot_ids if lid is not None}
+    if not lot_ids:
+        return {}
+    return {d.lot_id: d for d in LotDismissal.objects.filter(lot_id__in=lot_ids)}
+
+
+def _dismissal_state(dismissal, current_headroom, threshold):
+    """(is_still_dismissed, headroom_increase) for one lot's dismissal
+    against its current headroom. headroom_increase is only ever set when
+    the lot has reopened (for the "Back: headroom up $X" badge) - None
+    while it's still dismissed. A dismissal with no headroom baseline
+    (headroom_at_dismissal is null - true for a lead, which has no real
+    headroom to begin with) never reopens on its own; only Undo clears it."""
+    if dismissal.headroom_at_dismissal is None:
+        return True, None
+    increase = (current_headroom or Decimal("0")) - dismissal.headroom_at_dismissal
+    if increase >= threshold:
+        return False, increase
+    return True, None
+
+
+def _split_dismissed(rows, threshold):
+    """Splits `rows` (any list of row dicts with a "lot_id" key, and a
+    "headroom" key when one applies) into (active, dismissed) - a
+    still-dismissed row gets "dismissed_at"/"dismiss_reason"/
+    "dismiss_reason_display" attached and moves to `dismissed`; a reopened
+    one keeps "reopened_headroom_increase" set and stays in `active`
+    (everything else is untouched, so `active` is otherwise identical to
+    the input)."""
+    dismissals = _active_dismissals(row["lot_id"] for row in rows)
+    active, dismissed = [], []
+    for row in rows:
+        dismissal = dismissals.get(row["lot_id"])
+        if dismissal is None:
+            active.append(row)
+            continue
+        is_dismissed, increase = _dismissal_state(dismissal, row.get("headroom"), threshold)
+        if is_dismissed:
+            row["dismissed_at"] = dismissal.dismissed_at
+            row["dismiss_reason"] = dismissal.reason
+            row["dismiss_reason_display"] = dismissal.get_reason_display() if dismissal.reason else ""
+            dismissed.append(row)
+        else:
+            row["reopened_headroom_increase"] = increase
+            active.append(row)
+    return active, dismissed
+
+
+def exclude_dismissed_evaluations(evaluations, threshold=None):
+    """Filters out LotEvaluations whose lot is still dismissed - used by
+    scanner/alerts.py so Telegram's per-lot alerts (candidate/lead/
+    zero_bid/relisted/check_by_hand) respect the same dismissal/reopen
+    rule as the dashboard's Act Now tab, without duplicating it."""
+    threshold = threshold if threshold is not None else dismiss_reopen_threshold()
+    dismissals = _active_dismissals(ev.lot_id for ev in evaluations)
+    kept = []
+    for ev in evaluations:
+        dismissal = dismissals.get(ev.lot_id)
+        if dismissal is None:
+            kept.append(ev)
+            continue
+        is_dismissed, _increase = _dismissal_state(dismissal, ev.headroom, threshold)
+        if not is_dismissed:
+            kept.append(ev)
+    return kept
 
 
 def _lot_row(evaluation, now):
@@ -565,6 +645,28 @@ def get_scanner_dashboard_context(user=None):
         live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
     )
 
+    # Lot dismissal ("Dismiss" button on the Act Now tab) - only the 3
+    # Act Now tables (not Candidates Ending Later, Closest Calls, or My
+    # Bids/BidWatch, which are untouched - see this module's dismissal
+    # helpers). A reopened row (headroom grew past the threshold) stays
+    # in the active list with "reopened_headroom_increase" set.
+    dismiss_threshold = dismiss_reopen_threshold()
+    live_candidates_ending_soon, dismissed_candidates = _split_dismissed(
+        live_candidates_ending_soon, dismiss_threshold
+    )
+    check_by_hand, dismissed_check_by_hand = _split_dismissed(check_by_hand, dismiss_threshold)
+    leads_to_review, dismissed_leads = _split_dismissed(leads_to_review, dismiss_threshold)
+    for row in dismissed_candidates:
+        row["dismiss_section"] = "Candidates ending soon"
+    for row in dismissed_check_by_hand:
+        row["dismiss_section"] = "Check by hand"
+    for row in dismissed_leads:
+        row["dismiss_section"] = "Leads to review"
+    dismissed_rows = sorted(
+        dismissed_candidates + dismissed_check_by_hand + dismissed_leads,
+        key=lambda r: r["dismissed_at"], reverse=True,
+    )
+
     # Keys use underscores, not the "act-now" hyphenated form used in the
     # template's HTML ids/URL hash - Django template variable lookup
     # (tab_counts.act_now) can't parse a hyphen in the attribute name.
@@ -604,4 +706,7 @@ def get_scanner_dashboard_context(user=None):
             h["last_run"].lots_seen for h in scanner_health.values() if h["last_run"]
         ),
         "tab_counts": tab_counts,
+        "dismissed_rows": dismissed_rows,
+        "dismissed_count": len(dismissed_rows),
+        "dismiss_reopen_headroom": dismiss_threshold,
     }

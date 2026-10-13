@@ -271,4 +271,8 @@ RESELLING_SCANNER = {
     # start_date. Update start_date (and these numbers) when a goal is hit
     # or the goal itself changes.
     "SELL_GOAL": {"items": 10, "recover_usd": 676, "start_date": "2026-10-11"},
+    # Dashboard Act Now tab "Dismiss": a dismissed lot reappears (with a
+    # "Back: headroom up $X" badge) once its headroom has grown by at
+    # least this much since dismissal - see scanner/dashboard.py.
+    "DISMISS_REOPEN_HEADROOM": 25,
 }
