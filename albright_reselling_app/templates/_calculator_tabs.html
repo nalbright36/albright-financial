@@ -1,0 +1,265 @@
+{% comment %}
+The calculator's 3 tabs (Buy cost / eBay profit / Melt value) - shared,
+verbatim markup for both the full Calculators page (calculator.html) and
+the dashboard/Today pages' slide-in panel (_calculator_panel.html), driven
+by the one shared static/js/calculator.js module. Expects the context
+calculator_views.shared_calculator_context()/panel_context() build:
+source_choices, ebay_category_choices, metal_choices, unit_choices,
+purity_choices, melt_metal, calc_data_json, active_tab, buy_results,
+ebay_results, melt_results, buy_values, ebay_values, melt_values.
+
+No-JS fallback: each tab is its own real <form method="post">, and its
+"Calculate" button re-renders the page with server-computed results
+(calculator_views._buy_result()/_ebay_result(), both backed by
+scanner/simple_calc.py) - this only works on the full Calculators page,
+which is the only one of the two with a real server-rendered response to
+POST back into; the panel's forms still submit without raising an error
+(falling back to the Calculators page's own POST handling, since the
+<form> has no @, it just POSTs the current page's own URL... see note in
+static/js/calculator.js) but JS is what actually makes the panel useful.
+With JS, the same fields are read live and posted to calculate_api
+instead, debounced, so results update as you type - either way goes
+through the exact same simple_calc functions, so they can never disagree.
+{% endcomment %}
+<script type="application/json" id="calc-data">{{ calc_data_json|safe }}</script>
+
+<nav class="scanner-tabs" id="calc-tabs">
+    <a href="#buy" class="scanner-tab{% if active_tab == 'buy' %} is-active{% endif %}" data-tab="buy">Buy cost</a>
+    <a href="#ebay" class="scanner-tab{% if active_tab == 'ebay' %} is-active{% endif %}" data-tab="ebay">eBay profit</a>
+    <a href="#melt" class="scanner-tab{% if active_tab == 'melt' %} is-active{% endif %}" data-tab="melt">Melt value</a>
+</nav>
+
+<!-- ============ Buy cost tab ============ -->
+<div id="tab-buy"{% if active_tab != 'buy' %} hidden{% endif %}>
+    <form method="post" id="buy-form" action="{% url 'albright_reselling_app:calculator' %}">
+        {% csrf_token %}
+        <input type="hidden" name="tab" value="buy">
+        <div class="grid grid-2 calc-tab-grid" style="align-items: start; gap: var(--space-5);">
+            <div class="card">
+                <div class="card__header"><span class="card__label">Buy side</span></div>
+
+                <div class="field"><label>Source</label>
+                    <select id="buy-source" class="ledger-input">
+                        {% for value, label in source_choices %}
+                        <option value="{{ value }}"{% if buy_values %}{% if buy_values.source == value %} selected{% endif %}{% elif value == 'custom' %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field"><label>Bid ($)</label>
+                    <input type="number" step="0.01" min="0" name="bid" id="buy-bid" class="ledger-input num" value="{% if buy_values %}{{ buy_values.bid }}{% endif %}">
+                </div>
+                <div class="field"><label>Buyer's premium (%)</label>
+                    <input type="number" step="0.01" name="premium_pct" id="buy-premium_pct" class="ledger-input num" value="{% if buy_values %}{{ buy_values.premium_pct }}{% endif %}">
+                </div>
+                <div class="field"><label>Sales tax (%)</label>
+                    <input type="number" step="0.01" name="tax_pct" id="buy-tax_pct" class="ledger-input num" value="{% if buy_values %}{{ buy_values.tax_pct }}{% endif %}">
+                </div>
+                <div class="field"><label>Shipping / pickup ($)</label>
+                    <input type="number" step="0.01" name="shipping" id="buy-shipping" class="ledger-input num" value="{% if buy_values %}{{ buy_values.shipping }}{% endif %}">
+                </div>
+                <div class="field"><label>Other fees ($)</label>
+                    <input type="number" step="0.01" name="other_fees" id="buy-other_fees" class="ledger-input num" value="{% if buy_values %}{{ buy_values.other_fees }}{% endif %}">
+                </div>
+                <div class="field">
+                    <label><input type="checkbox" name="tax_on_premium" id="buy-tax_on_premium"{% if buy_values %}{% if buy_values.tax_on_premium %} checked{% endif %}{% else %} checked{% endif %}> Tax applies to premium</label>
+                </div>
+                <div class="field">
+                    <label><input type="checkbox" name="tax_on_shipping" id="buy-tax_on_shipping"{% if buy_values.tax_on_shipping %} checked{% endif %}> Tax applies to shipping</label>
+                </div>
+
+                <div class="card" style="margin-top: 16px; background: var(--surface-hover);">
+                    <div class="card__header"><span class="card__label">What's my max bid?</span></div>
+                    <div class="field" style="margin-bottom: 8px;"><label>Budget for out-the-door total ($)</label>
+                        <input type="number" step="0.01" name="budget" id="buy-budget" class="ledger-input num" value="{% if buy_values %}{{ buy_values.budget }}{% endif %}">
+                    </div>
+                    <p style="margin: 0; font-size: 0.8125rem; color: var(--text-secondary);">
+                        Highest bid that stays within budget: <span id="buy-max-bid-for-budget" class="num" style="font-weight: 600;">{% if buy_results.max_bid_for_budget is not None %}${{ buy_results.max_bid_for_budget|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+                    </p>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Calculate</button>
+            </div>
+
+            <div class="card">
+                <div class="card__header"><span class="card__label">Out-the-door breakdown</span></div>
+                <div id="buy-results-body">
+                    {% include "_calc_buy_results.html" with results=buy_results %}
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="use-total-on-ebay" style="margin-top: 16px;">Use this total on the eBay tab</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- ============ eBay profit tab ============ -->
+<div id="tab-ebay"{% if active_tab != 'ebay' %} hidden{% endif %}>
+    <form method="post" id="ebay-form" action="{% url 'albright_reselling_app:calculator' %}">
+        {% csrf_token %}
+        <input type="hidden" name="tab" value="ebay">
+        <div class="grid grid-2 calc-tab-grid" style="align-items: start; gap: var(--space-5);">
+            <div class="card">
+                <div class="card__header"><span class="card__label">eBay profit</span></div>
+
+                <div class="field"><label>Pick from Ledger</label>
+                    <select id="ebay-ledger-pick" class="ledger-input">
+                        <option value="">Choose a holding/partially sold item...</option>
+                    </select>
+                </div>
+                <div class="field"><label>Item cost ($)</label>
+                    <input type="number" step="0.01" name="item_cost" id="ebay-item_cost" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.item_cost }}{% endif %}">
+                </div>
+                <div class="field"><label>Listing price ($)</label>
+                    <input type="number" step="0.01" name="sale_price" id="ebay-sale_price" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.sale_price }}{% endif %}">
+                </div>
+                <div class="field"><label>Shipping charged to buyer ($, 0 = free shipping)</label>
+                    <input type="number" step="0.01" name="shipping_charged" id="ebay-shipping_charged" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.shipping_charged }}{% else %}0{% endif %}">
+                </div>
+                <div class="field"><label>My shipping cost ($)</label>
+                    <input type="number" step="0.01" name="shipping_cost" id="ebay-shipping_cost" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.shipping_cost }}{% endif %}">
+                </div>
+                <div class="field"><label>Packaging ($)</label>
+                    <input type="number" step="0.01" name="packaging" id="ebay-packaging" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.packaging }}{% endif %}">
+                </div>
+                <div class="field"><label>Other costs ($)</label>
+                    <input type="number" step="0.01" name="other_costs" id="ebay-other_costs" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.other_costs }}{% endif %}">
+                </div>
+                <div class="field"><label>eBay category</label>
+                    <select name="category" id="ebay-category" class="ledger-input">
+                        {% for value, label in ebay_category_choices %}
+                        <option value="{{ value }}"{% if ebay_values %}{% if ebay_values.category == value %} selected{% endif %}{% elif value == 'most' %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field" id="ebay-custom-rate-field" style="display: none;"><label>Custom rate (%)</label>
+                    <input type="number" step="0.01" name="custom_rate_pct" id="ebay-custom_rate_pct" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.custom_rate_pct }}{% else %}13.6{% endif %}">
+                </div>
+                <div class="field">
+                    <label>Buyer's sales tax estimate (%)
+                        <span class="badge neutral" style="cursor: default;" title="eBay charges its final value fee on the sales tax it collects too, not just the item price and shipping.">?</span>
+                    </label>
+                    <input type="number" step="0.01" name="buyer_tax_pct" id="ebay-buyer_tax_pct" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.buyer_tax_pct }}{% else %}7{% endif %}">
+                </div>
+                <div class="field"><label>Promoted listing (%)</label>
+                    <input type="number" step="0.01" name="promoted_pct" id="ebay-promoted_pct" class="ledger-input num" value="{% if ebay_values %}{{ ebay_values.promoted_pct }}{% else %}0{% endif %}">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Calculate</button>
+            </div>
+
+            <div class="card">
+                <div class="card__header"><span class="card__label">Results</span></div>
+                <div id="ebay-results-body">
+                    {% include "_calc_ebay_results.html" with results=ebay_results %}
+                </div>
+
+                <div class="field" style="margin-top: 16px; margin-bottom: 8px;">
+                    <label>Price for $___ profit</label>
+                    <input type="number" step="0.01" name="target_profit" id="ebay-target_profit" class="ledger-input num" style="width: 120px; display: inline-block;" value="{% if ebay_values %}{{ ebay_values.target_profit }}{% else %}20{% endif %}">
+                </div>
+                <p style="margin: 0;">Price for that profit: <span id="ebay-price-for-profit" class="num" style="font-weight: 600;">{% if ebay_results.price_for_profit is not None %}${{ ebay_results.price_for_profit|floatformat:2 }}{% else %}&mdash;{% endif %}</span></p>
+
+                <p style="margin: 16px 0 0; font-size: 0.75rem; color: var(--text-secondary);">eBay rates vary by category and store subscription. Check eBay's fee page.</p>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- ============ Melt value tab ============ -->
+<div id="tab-melt"{% if active_tab != 'melt' %} hidden{% endif %}>
+    <form method="post" id="melt-form" action="{% url 'albright_reselling_app:calculator' %}">
+        {% csrf_token %}
+        <input type="hidden" name="tab" value="melt">
+        <div class="grid grid-2 calc-tab-grid" style="align-items: start; gap: var(--space-5);">
+            <div class="card">
+                <div class="card__header"><span class="card__label">Melt value</span></div>
+
+                <div class="field">
+                    <label>Mode</label>
+                    <div style="display: flex; gap: var(--space-4); font-size: 0.8125rem; margin-bottom: 6px;">
+                        <label><input type="radio" name="mode" value="weight" id="melt-mode-weight"{% if melt_values %}{% if melt_values.mode == 'weight' %} checked{% endif %}{% else %} checked{% endif %}> By weight</label>
+                        <label><input type="radio" name="mode" value="junk" id="melt-mode-junk"{% if melt_values.mode == 'junk' %} checked{% endif %}> Junk silver (face value)</label>
+                    </div>
+                </div>
+
+                <div id="melt-weight-group">
+                    <div class="field"><label>Metal</label>
+                        <select name="metal" id="melt-metal" class="ledger-input">
+                            {% for value, label in metal_choices %}
+                            <option value="{{ value }}"{% if melt_values %}{% if melt_values.metal == value %} selected{% endif %}{% elif value == 'gold' %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field"><label>Purity</label>
+                        <select name="purity" id="melt-purity" class="ledger-input">
+                            {% for fraction, label in purity_choices %}
+                            <option value="{{ fraction }}"{% if melt_values.purity == fraction|stringformat:"s" %} selected{% endif %}>{{ label }} ({{ fraction }})</option>
+                            {% endfor %}
+                            <option value="custom"{% if melt_values.purity == 'custom' %} selected{% endif %}>Custom</option>
+                        </select>
+                    </div>
+                    <div class="field" id="melt-custom-purity-field" style="display: none;"><label>Custom purity (decimal, e.g. 0.583)</label>
+                        <input type="number" step="0.001" min="0" max="1" name="custom_purity" id="melt-custom_purity" class="ledger-input num" value="{% if melt_values %}{{ melt_values.custom_purity }}{% endif %}">
+                    </div>
+                    <div class="grid grid-2">
+                        <div class="field"><label>Weight</label>
+                            <input type="number" step="0.001" min="0" name="weight" id="melt-weight" class="ledger-input num" value="{% if melt_values %}{{ melt_values.weight }}{% endif %}">
+                        </div>
+                        <div class="field"><label>Unit</label>
+                            <select name="unit" id="melt-unit" class="ledger-input">
+                                {% for value, label in unit_choices %}
+                                <option value="{{ value }}"{% if melt_values %}{% if melt_values.unit == value %} selected{% endif %}{% elif value == 'g' %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="melt-junk-group" style="display: none;">
+                    <div class="field"><label>Face value of 90% US coins ($)</label>
+                        <input type="number" step="0.01" min="0" name="face_value" id="melt-face_value" class="ledger-input num" value="{% if melt_values %}{{ melt_values.face_value }}{% endif %}">
+                    </div>
+                </div>
+
+                <div class="field"><label>Spot price ($/ozt)</label>
+                    <input type="number" step="0.01" min="0" name="spot" id="melt-spot" class="ledger-input num" value="{% if melt_values %}{{ melt_values.spot }}{% endif %}">
+                    <span id="melt-spot-date" style="font-size: 0.75rem; color: var(--text-secondary);"></span>
+                </div>
+                <div class="field"><label>Payout (%)</label>
+                    <input type="number" step="0.01" min="0" max="100" name="payout_pct" id="melt-payout_pct" class="ledger-input num" value="{% if melt_values %}{{ melt_values.payout_pct }}{% else %}100{% endif %}">
+                </div>
+                <div class="field"><label>Label (for the item list below)</label>
+                    <input type="text" id="melt-label" class="ledger-input" placeholder="e.g. Ring #3">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Calculate</button>
+            </div>
+
+            <div class="card">
+                <div class="card__header"><span class="card__label">Results</span></div>
+                <div id="melt-results-body">
+                    {% include "_calc_melt_results.html" with results=melt_results %}
+                </div>
+                <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 16px;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="melt-add-to-list">Add to list</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="melt-use-as-item-cost">Use melt value as item cost</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="melt-use-as-listing-price">Use payout value as listing price</button>
+                </div>
+
+                <div class="card" style="margin-top: 16px; background: var(--surface-hover);">
+                    <div class="card__header">
+                        <span class="card__label">Item list</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Total payout: <span id="melt-items-total" class="num">$0.00</span></span>
+                    </div>
+                    <div class="table-scroll">
+                    <table class="holdings">
+                        <thead>
+                            <tr><th>Label</th><th>Metal</th><th>Purity</th><th class="num">Weight</th><th class="num">Melt</th><th class="num">Payout</th><th></th></tr>
+                        </thead>
+                        <tbody id="melt-items-body"></tbody>
+                    </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>

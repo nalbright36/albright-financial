@@ -277,6 +277,9 @@ def _lot_row(evaluation, now):
         "current_bid": lot.current_price,
         "max_bid": evaluation.max_bid,
         "headroom": evaluation.headroom,
+        # Calculator panel prefill (the row's "Calc" button) - the eBay
+        # profit tab's starting listing price.
+        "expected_sale": evaluation.expected_sale,
         "confidence": evaluation.confidence,
         "coin_keys": evaluation.coin_keys,
         "item_label": _item_labels(evaluation.coin_keys),
@@ -310,6 +313,7 @@ def _lead_row(evaluation, now):
         "source_display": _source_display(lot.source),
         "confidence": evaluation.confidence,
         "current_bid": lot.current_price,
+        "expected_sale": evaluation.expected_sale,
         "lead_reason": evaluation.lead_reason,
         "matched_keyword": lot.matched_keyword,
         "time_remaining": _time_remaining(lot, now),
@@ -548,6 +552,7 @@ def _watch_row(watch, now):
         "category": evaluation.category if evaluation else "unknown",
         "current_bid": lot.current_price,
         "my_max_bid": watch.my_max_bid,
+        "expected_sale": evaluation.expected_sale if evaluation else None,
         "time_remaining": _time_remaining(lot, now) if lot.end_time else "unknown",
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
         "pickup": (lot.raw or {}).get("_pickup"),

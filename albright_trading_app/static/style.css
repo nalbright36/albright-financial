@@ -508,6 +508,29 @@ a:hover { color: var(--accent-hover); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
+/* ---------- Calculator panel (dashboard/Today pages) ---------- */
+.calc-panel-toggle {
+  position: fixed; bottom: var(--space-5); right: var(--space-5); z-index: 150;
+  box-shadow: var(--shadow-lg);
+}
+.calc-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100vw;
+  background: var(--surface-raised); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg); z-index: 160;
+  overflow-y: auto; visibility: hidden; transform: translateX(100%);
+  transition: transform var(--transition), visibility var(--transition);
+}
+.calc-panel.is-open { visibility: visible; transform: translateX(0); }
+@media (prefers-reduced-motion: reduce) { .calc-panel { transition: none; } }
+.calc-panel__header {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
+  padding: var(--space-4); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--surface-raised); z-index: 1;
+}
+.calc-panel__lot-title { font-weight: 600; font-size: var(--text-sm); }
+.calc-panel__body { padding: var(--space-4); }
+.calc-panel .calc-tab-grid { grid-template-columns: 1fr; }
+
 /* ---------- Buttons ---------- */
 .btn {
   display: inline-flex;
@@ -921,4 +944,6 @@ tr.scanner-detail td {
   .scanner-controls input, .scanner-controls select { flex: 1 1 auto; width: 100%; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .sector-checkbox-grid { grid-template-columns: 1fr; }
+  .calc-panel { width: 100vw; border-left: none; }
+  .calc-panel-toggle { bottom: var(--space-4); right: var(--space-4); }
 }

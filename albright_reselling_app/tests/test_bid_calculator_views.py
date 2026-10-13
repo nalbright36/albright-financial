@@ -19,6 +19,16 @@ from albright_reselling_app.scanner.simple_calc import (
 from albright_reselling_app.scanner_models import SourcedLot, SpotPrice
 
 
+def _calc_data(content):
+    """Pulls the shared #calc-data JSON blob (_calculator_tabs.html) out of
+    a rendered page - sourcePresets/ledgerItems/lotPrefill/purityChoices/
+    latestSpot/calculateUrl/justSubmitted*, the same data both the full
+    Calculators page and the dashboard/Today panel embed."""
+    start = content.index('id="calc-data">') + len('id="calc-data">')
+    end = content.index("</script>", start)
+    return json.loads(content[start:end])
+
+
 class CalculateApiBuyTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
@@ -154,9 +164,7 @@ class SourcePresetsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
 
-        start = content.index("var SOURCE_PRESETS = ") + len("var SOURCE_PRESETS = ")
-        end = content.index(";", start)
-        presets = json.loads(content[start:end])
+        presets = _calc_data(content)["sourcePresets"]
 
         # shopgoodwill: 0% premium, 7% tax, $10 shipping (settings.py RESELLING_SCANNER)
         self.assertEqual(presets["shopgoodwill"], {"premium_pct": 0.0, "tax_pct": 7.0, "shipping": 10.0})
@@ -185,9 +193,7 @@ class LedgerPickTests(TestCase):
 
         response = self.client.get(reverse("albright_reselling_app:calculator"))
         content = response.content.decode()
-        start = content.index("var LEDGER_ITEMS = ") + len("var LEDGER_ITEMS = ")
-        end = content.index(";", start)
-        items = json.loads(content[start:end])
+        items = _calc_data(content)["ledgerItems"]
         by_label = {item["label"]: item["cost"] for item in items}
 
         self.assertEqual(by_label["Holding Coin"], float(holding.buy_side_cost))
@@ -218,9 +224,7 @@ class LotPrefillTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
 
-        start = content.index("var LOT_PREFILL = ") + len("var LOT_PREFILL = ")
-        end = content.index(";", start)
-        prefill = json.loads(content[start:end])
+        prefill = _calc_data(content)["lotPrefill"]
 
         self.assertEqual(prefill["bid"], 25.0)
         self.assertEqual(prefill["source"], "shopgoodwill")
@@ -229,9 +233,7 @@ class LotPrefillTests(TestCase):
     def test_no_lot_param_gives_empty_prefill(self):
         response = self.client.get(reverse("albright_reselling_app:calculator"))
         content = response.content.decode()
-        start = content.index("var LOT_PREFILL = ") + len("var LOT_PREFILL = ")
-        end = content.index(";", start)
-        self.assertEqual(json.loads(content[start:end]), {})
+        self.assertEqual(_calc_data(content)["lotPrefill"], {})
 
 
 class NoJsPostFallbackTests(TestCase):
@@ -345,9 +347,7 @@ class MeltSpotPrefillTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:calculator"))
         content = response.content.decode()
 
-        start = content.index("var LATEST_SPOT = ") + len("var LATEST_SPOT = ")
-        end = content.index(";", start)
-        spot = json.loads(content[start:end])
+        spot = _calc_data(content)["latestSpot"]
 
         self.assertEqual(spot["gold"]["price"], 2650.0)
         self.assertEqual(spot["silver"]["price"], 31.5)
@@ -359,9 +359,7 @@ class MeltSpotPrefillTests(TestCase):
 
         response = self.client.get(reverse("albright_reselling_app:calculator"))
         content = response.content.decode()
-        start = content.index("var LATEST_SPOT = ") + len("var LATEST_SPOT = ")
-        end = content.index(";", start)
-        spot = json.loads(content[start:end])
+        spot = _calc_data(content)["latestSpot"]
 
         self.assertEqual(spot["gold"]["price"], 2650.0)
 
@@ -370,9 +368,7 @@ class MeltSpotPrefillTests(TestCase):
 
         response = self.client.get(reverse("albright_reselling_app:calculator"))
         content = response.content.decode()
-        start = content.index("var LATEST_SPOT = ") + len("var LATEST_SPOT = ")
-        end = content.index(";", start)
-        spot = json.loads(content[start:end])
+        spot = _calc_data(content)["latestSpot"]
 
         self.assertIsNone(spot["gold"]["price"])
         self.assertIsNone(spot["gold"]["date"])

@@ -1,0 +1,9 @@
+{% comment %}
+Opens the Calculator panel on the Buy cost tab, prefilled from this row -
+see static/js/calculator.js's .js-calc-from-lot handler. Expects `row`
+(lot_id, title, current_bid, source, expected_sale) in context.
+{% endcomment %}
+<button type="button" class="btn btn-secondary btn-sm js-calc-from-lot"
+        data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-bid="{{ row.current_bid }}"
+        data-source="{{ row.source }}" data-expected-sale="{{ row.expected_sale|default_if_none:'' }}"
+        title="Open in the calculator panel">Calc</button>

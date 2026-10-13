@@ -424,6 +424,7 @@
                         <th class="num" data-sort-key="maxbid">My Max</th>
                         {% if watched_lots_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                         <th class="num" data-sort-key="endtime">Ends In</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -443,6 +444,7 @@
                         </td>
                         {% endif %}
                         <td class="num">{{ row.time_remaining }}</td>
+                        <td>{% include "_calc_button.html" %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -502,7 +504,7 @@
                         <td class="num">${{ row.max_bid|floatformat:2 }}</td>
                         <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
                         <td class="num">{{ row.time_remaining }}</td>
-                        {% include "_ai_review_cell.html" %}
+                        {% include "_ai_review_cell.html" with show_calc=True %}
                     </tr>
                     {% include "_scanner_row_detail.html" with row=row colspan=9 %}
                     {% endfor %}
@@ -558,7 +560,7 @@
                         <td class="num">${{ row.max_bid|floatformat:2 }}</td>
                         <td class="num" style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</td>
                         <td class="num">{{ row.time_remaining }}</td>
-                        {% include "_ai_review_cell.html" %}
+                        {% include "_ai_review_cell.html" with show_calc=True %}
                     </tr>
                     {% include "_scanner_row_detail.html" with row=row colspan=9 %}
                     {% endfor %}
@@ -754,5 +756,9 @@
     </div>
 
 </div>
+
+{% include "_calculator_panel.html" %}
+
 <script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
+<script src="{% static_version 'js/calculator.js' %}" defer></script>
 {% endblock %}

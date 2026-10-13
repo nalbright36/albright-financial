@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import selling
+from . import calculator_views, selling
 from .forms import EditPriceForm, MarkListedForm
 from .models import LedgerEntry
 
@@ -26,6 +26,9 @@ def _safe_next(request, default_name):
 @login_required
 def today_page(request):
     sections = selling.today_sections(request.user)
+    # The slide-in Calculator panel (_calculator_panel.html) - same shared
+    # context the full Calculators page uses, see calculator_views.panel_context().
+    sections.update(calculator_views.panel_context(request.user))
     return render(request, "today.html", sections)
 
 

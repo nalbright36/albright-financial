@@ -25,6 +25,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import dateformat, timezone
 from django.views.decorators.http import require_POST
 
@@ -228,6 +229,47 @@ def _ledger_pick_items(user):
     return items
 
 
+def shared_calculator_context(user, melt_metal="gold"):
+    """Everything _calculator_tabs.html needs that doesn't depend on the
+    current request's method/results - shared verbatim by calculator_page()
+    (the full Calculators page) and panel_context() (the dashboard/Today
+    pages' slide-in panel), so the two can never render different choices/
+    defaults for the same underlying data."""
+    return {
+        "source_choices": SOURCE_CHOICES,
+        "ebay_category_choices": EBAY_CATEGORY_CHOICES,
+        "metal_choices": METAL_CHOICES,
+        "unit_choices": UNIT_CHOICES,
+        "purity_choices": PURITY_PRESETS[melt_metal].items(),
+        "melt_metal": melt_metal,
+        "calc_data_json": json.dumps({
+            "calculateUrl": reverse("albright_reselling_app:calculator_calculate"),
+            "sourcePresets": all_source_defaults(),
+            "ledgerItems": _ledger_pick_items(user),
+            "lotPrefill": {},
+            "purityChoices": purity_choices_json(),
+            "latestSpot": all_latest_spot(),
+            "justSubmittedBuy": False,
+            "justSubmittedEbay": False,
+            "justSubmittedMelt": False,
+        }),
+    }
+
+
+def panel_context(user):
+    """The slide-in Calculator panel (dashboard.html/today.html, via
+    _calculator_panel.html) - the same shared tabs/forms calculator_page()
+    renders, just with no server-computed results: the panel never POSTs
+    a no-JS fallback, it only ever starts from localStorage plus a
+    client-side lot prefill (see static/js/calculator.js's openFromLot())."""
+    context = shared_calculator_context(user)
+    context.update({
+        "active_tab": "buy", "buy_results": None, "ebay_results": None, "melt_results": None,
+        "buy_values": None, "ebay_values": None, "melt_values": None,
+    })
+    return context
+
+
 @login_required
 def calculator_page(request):
     buy_results = None
@@ -254,18 +296,18 @@ def calculator_page(request):
     melt_values = request.POST if (request.method == "POST" and active_tab == "melt") else None
     melt_metal = (melt_values.get("metal") if melt_values else None) or "gold"
 
-    return render(request, "calculator.html", {
-        "source_choices": SOURCE_CHOICES,
-        "ebay_category_choices": EBAY_CATEGORY_CHOICES,
-        "metal_choices": METAL_CHOICES,
-        "unit_choices": UNIT_CHOICES,
-        "purity_choices": PURITY_PRESETS[melt_metal].items(),
-        "melt_metal": melt_metal,
-        "source_defaults_json": json.dumps(all_source_defaults()),
-        "ledger_items_json": json.dumps(_ledger_pick_items(request.user)),
-        "lot_prefill_json": json.dumps(lot_prefill),
-        "purity_choices_json": json.dumps(purity_choices_json()),
-        "latest_spot_json": json.dumps(all_latest_spot()),
+    context = shared_calculator_context(request.user, melt_metal=melt_metal)
+    # This page (unlike the panel) can have real server-computed results
+    # from a no-JS POST, and a GET ?lot= prefill - both override the
+    # shared calc_data_json's defaults (lotPrefill={}, justSubmitted*=False).
+    context["calc_data_json"] = json.dumps({
+        **json.loads(context["calc_data_json"]),
+        "lotPrefill": lot_prefill,
+        "justSubmittedBuy": bool(buy_results),
+        "justSubmittedEbay": bool(ebay_results),
+        "justSubmittedMelt": bool(melt_results),
+    })
+    context.update({
         "active_tab": active_tab,
         "buy_results": buy_results,
         "ebay_results": ebay_results,
@@ -274,6 +316,7 @@ def calculator_page(request):
         "ebay_values": request.POST if (request.method == "POST" and active_tab == "ebay") else None,
         "melt_values": melt_values,
     })
+    return render(request, "calculator.html", context)
 
 
 @login_required
