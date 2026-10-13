@@ -211,7 +211,11 @@ def run_alerts(now=None):
     records each send in AlertSent so it's never repeated for that kind.
     During ALERTS["quiet_hours"], candidate/lead/zero_bid/relisted are held
     back entirely (not sent, not recorded) rather than sent silently or
-    dropped for good - see QUIET_HOURS_GATED_KINDS. Returns the list of
+    dropped for good - see QUIET_HOURS_GATED_KINDS. If ALERTS["categories"]
+    is set, only lots in those categories qualify for any of the 5 kinds
+    here - BidWatch alerts, critical alerts, and the daily digest don't go
+    through run_alerts() at all, so they're unaffected; if the setting is
+    missing, every category alerts as before. Returns the list of
     (lot_id, kind) pairs actually sent."""
     cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
     if not cfg.get("enabled"):
@@ -232,6 +236,10 @@ def run_alerts(now=None):
         candidates += _zero_bid_to_consider(now, cutoff)
     if "relisted" in kinds:
         candidates += _relisted_to_consider(now, cutoff)
+
+    categories = cfg.get("categories")
+    if categories:
+        candidates = [pair for pair in candidates if pair[1].category in categories]
 
     if _in_quiet_hours(now, cfg):
         candidates = [pair for pair in candidates if pair[0] not in QUIET_HOURS_GATED_KINDS]

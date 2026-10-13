@@ -449,6 +449,127 @@ class RelistedAlertTests(TestCase):
         second_post.assert_not_called()
 
 
+class CategoryFilterTests(TestCase):
+    """ALERTS["categories"]: when set, candidate/lead/check_by_hand/
+    zero_bid/relisted alerts only fire for lots in those categories -
+    everything else (BidWatch alerts, critical alerts, the daily digest)
+    is untouched, and leaving the setting out alerts on every category,
+    same as before it existed."""
+
+    def test_candidate_outside_categories_not_alerted(self):
+        now = timezone.now()
+        _make_candidate("cat-cand-out", now + timedelta(minutes=30), category="games")
+        lot_in, _ev = _make_candidate("cat-cand-in", now + timedelta(minutes=30), category="coins")
+
+        sent, _mock_post = _call_run_alerts(now, categories=["coins", "jewelry"])
+
+        self.assertEqual(sent, [(lot_in.pk, "candidate")])
+
+    def test_lead_outside_categories_not_alerted(self):
+        now = timezone.now()
+        _make_lead("cat-lead-out", now + timedelta(minutes=30), category="games")
+        lot_in, _ev = _make_lead("cat-lead-in", now + timedelta(minutes=30), category="jewelry")
+
+        sent, _mock_post = _call_run_alerts(now, categories=["coins", "jewelry"])
+
+        self.assertEqual(sent, [(lot_in.pk, "lead")])
+
+    def test_check_by_hand_outside_categories_not_alerted(self):
+        now = timezone.now()
+        _make_check_by_hand("cat-cbh-out", now + timedelta(minutes=30), category="games")
+        lot_in, _ev = _make_check_by_hand("cat-cbh-in", now + timedelta(minutes=30), category="coins")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["candidate", "lead", "check_by_hand"],
+                                             categories=["coins", "jewelry"])
+
+        self.assertEqual(sent, [(lot_in.pk, "check_by_hand")])
+
+    def test_zero_bid_outside_categories_not_alerted(self):
+        now = timezone.now()
+        _make_zero_bid("cat-zb-out", now + timedelta(minutes=30), category="games")
+        lot_in, _ev = _make_zero_bid("cat-zb-in", now + timedelta(minutes=30), category="jewelry")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["zero_bid"], categories=["coins", "jewelry"])
+
+        self.assertEqual(sent, [(lot_in.pk, "zero_bid")])
+
+    def test_relisted_outside_categories_not_alerted(self):
+        now = timezone.now()
+        _make_relisted("cat-rl-out", now + timedelta(minutes=30), category="games")
+        lot_in, _ev = _make_relisted("cat-rl-in", now + timedelta(minutes=30), category="coins")
+
+        sent, _mock_post = _call_run_alerts(now, kinds=["relisted"], categories=["coins", "jewelry"])
+
+        self.assertEqual(sent, [(lot_in.pk, "relisted")])
+
+    def test_missing_categories_setting_alerts_every_category(self):
+        """No categories key at all (the default ALERTS_CFG test fixture,
+        same shape as RESELLING_SCANNER before this setting existed) -
+        a non-coins/jewelry category still alerts, same as always."""
+        now = timezone.now()
+        lot, _ev = _make_candidate("cat-missing-1", now + timedelta(minutes=30), category="games")
+
+        sent, _mock_post = _call_run_alerts(now)
+
+        self.assertEqual(sent, [(lot.pk, "candidate")])
+
+    def test_empty_categories_list_alerts_every_category(self):
+        """An explicit empty list is falsy, same as missing - also not a
+        "nothing qualifies" footgun."""
+        now = timezone.now()
+        lot, _ev = _make_candidate("cat-empty-1", now + timedelta(minutes=30), category="games")
+
+        sent, _mock_post = _call_run_alerts(now, categories=[])
+
+        self.assertEqual(sent, [(lot.pk, "candidate")])
+
+    def test_bidwatch_closing_alert_unaffected_by_category_filter(self):
+        """send_closing_soon_alerts() (scanner/bid_watch.py) never looks at
+        ALERTS["categories"] at all - a watched lot outside coins/jewelry
+        still gets its closing-soon alert."""
+        from albright_reselling_app.scanner.bid_watch import send_closing_soon_alerts
+
+        now = timezone.now()
+        lot = _make_lot("cat-watch-1", now + timedelta(minutes=30))
+        LotEvaluation.objects.create(lot=lot, category="games", max_bid=Decimal("20.00"))
+        BidWatch.objects.create(lot=lot, my_max_bid=Decimal("20.00"), status="watching")
+
+        cfg = _cfg(categories=["coins", "jewelry"])
+        with override_settings(RESELLING_SCANNER=cfg):
+            with mock.patch(TELEGRAM_POST) as mock_post, mock.patch.dict(os.environ, CREDS):
+                mock_post.return_value = _ok_response()
+                sent = send_closing_soon_alerts(now=now)
+
+        self.assertEqual(sent, [lot.pk])
+        mock_post.assert_called_once()
+
+    def test_critical_alert_unaffected_by_category_filter(self):
+        """send_critical_alert() is source-level, not lot/category-level -
+        ALERTS["categories"] has nothing to do with it."""
+        cfg = _cfg(categories=["coins", "jewelry"], critical_alerts=True)
+        with override_settings(RESELLING_SCANNER=cfg):
+            with mock.patch(TELEGRAM_POST) as mock_post, mock.patch.dict(os.environ, CREDS):
+                mock_post.return_value = _ok_response()
+                sent = send_critical_alert("shopgoodwill", "zero_lots", "Scan saw 0 lots.")
+
+        self.assertTrue(sent)
+        mock_post.assert_called_once()
+
+    def test_daily_digest_unaffected_by_category_filter(self):
+        """build_digest_message()'s live-candidate/lead counts are not
+        filtered by ALERTS["categories"] - that setting only scopes
+        run_alerts()'s per-lot pushes, not the digest's own tallies."""
+        now = timezone.now()
+        _make_candidate("cat-digest-1", now + timedelta(hours=2), category="games")
+
+        cfg = {**settings.RESELLING_SCANNER, "ALERTS": {**settings.RESELLING_SCANNER["ALERTS"],
+                                                          "categories": ["coins", "jewelry"]}}
+        with override_settings(RESELLING_SCANNER=cfg):
+            message = build_digest_message(now=now)
+
+        self.assertIn("1 candidate(s)", message)
+
+
 class InQuietHoursTests(TestCase):
     """Direct boundary tests for the pure _in_quiet_hours helper - 23 -> 7
     wraps past midnight and is inclusive of 23:00, exclusive of 07:00."""
