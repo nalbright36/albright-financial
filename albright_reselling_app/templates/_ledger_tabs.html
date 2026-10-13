@@ -10,6 +10,7 @@
     <a href="{% url 'albright_reselling_app:ledger_resale' %}" class="scanner-tab{% if ledger_tab == 'resale' %} is-active{% endif %}">Reselling</a>
     <a href="{% url 'albright_reselling_app:ledger_personal' %}" class="scanner-tab{% if ledger_tab == 'personal' %} is-active{% endif %}">Personal items</a>
     <a href="{% url 'albright_reselling_app:ledger_board' %}" class="scanner-tab{% if ledger_tab == 'board' %} is-active{% endif %}">Board</a>
+    <a href="{% url 'albright_reselling_app:ledger_expenses' %}" class="scanner-tab{% if ledger_tab == 'expenses' %} is-active{% endif %}">Expenses</a>
 </nav>
 <script>
     try { localStorage.setItem("ledger_tab", "{{ ledger_tab }}"); } catch (e) {}

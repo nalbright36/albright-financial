@@ -226,16 +226,17 @@ class OverviewTabTests(TestCase):
         self.assertEqual(personal_row["revenue"], Decimal("20.00"))
         self.assertEqual(personal_row["costs"], Decimal("0.00"))
 
+        # No expenses in this test - costs/net match the pre-expenses formula exactly.
         self.assertEqual(total_row["revenue"], resale_row["revenue"] + personal_row["revenue"])
         self.assertEqual(total_row["costs"], resale_row["costs"] + personal_row["costs"])
         self.assertEqual(total_row["net"], resale_row["net"] + personal_row["net"])
         self.assertEqual(total_row["items_sold"], resale_row["items_sold"] + personal_row["items_sold"])
         self.assertEqual(total_row["items_held"], resale_row["items_held"] + personal_row["items_held"])
 
-        self.assertEqual(context["tiles"]["total_revenue"], total_row["revenue"])
-        self.assertEqual(context["tiles"]["total_costs"], total_row["costs"])
+        self.assertEqual(context["tiles"]["total_revenue"], resale_row["revenue"] + personal_row["revenue"])
+        self.assertEqual(context["tiles"]["item_costs"], resale_row["costs"] + personal_row["costs"])
+        self.assertEqual(context["tiles"]["expenses"], Decimal("0"))
         self.assertEqual(context["tiles"]["net"], total_row["net"])
-        self.assertEqual(context["tiles"]["items_sold"], total_row["items_sold"])
 
     def test_monthly_breakdown_attributes_sale_to_its_own_month(self):
         now = timezone.now()

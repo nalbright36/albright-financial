@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from .models import LedgerEntry
+from .models import LedgerEntry, LedgerExpense
 from .scanner_models import BidWatch
 
 UNSOLD_STATUSES = ("holding", "partially_sold")
@@ -334,27 +334,46 @@ def _ledger_totals_row(label, entries):
 
 
 def overview_context(owner, now=None):
-    """The Ledger page's Overview tab: top tiles (combined revenue/costs/
-    net/items-sold across both ledgers), a per-ledger breakdown + total
-    row, and a month-by-month breakdown (revenue/net per ledger and
-    combined) for the last 12 months. "Net" per entry per month reuses
-    entry.profit (the same figure dashboard_tiles()'s profit_this_month
-    uses) - for a personal entry that's already exactly revenue minus
-    selling costs, since its buy-side cost is always 0."""
+    """The Ledger page's Overview tab: top tiles (Revenue, Item Costs,
+    Expenses, Net - combined across both ledgers plus business-wide
+    expenses), a per-ledger breakdown + total row (Reselling, Personal,
+    Expenses, Total), and a month-by-month breakdown (revenue/net per
+    ledger, expenses, and combined) for the last 12 months. "Net" per
+    entry per month reuses entry.profit (the same figure dashboard_tiles()'s
+    profit_this_month uses) - for a personal entry that's already exactly
+    revenue minus selling costs, since its buy-side cost is always 0.
+
+    Expenses (LedgerExpense) are business-wide, not tied to either ledger -
+    they only ever show up here and on their own Expenses tab, never in
+    the Reselling/Personal tabs' own numbers or in the Reselling-only
+    metrics (dashboard_tiles/scorecard_context/calibration/Insights).
+    A dated expense counts toward its own month below; an undated one
+    only ever counts in the all-time tiles/total_row (see
+    undated_expenses_total) - there's no month to attribute it to."""
     now = now or timezone.now()
 
     resale_entries = list(LedgerEntry.objects.filter(owner=owner, ledger_type="resale").prefetch_related("sales"))
     personal_entries = list(
         LedgerEntry.objects.filter(owner=owner, ledger_type="personal").prefetch_related("sales")
     )
+    expenses = list(LedgerExpense.objects.filter(owner=owner))
 
     resale_row = _ledger_totals_row("Reselling", resale_entries)
     personal_row = _ledger_totals_row("Personal", personal_entries)
+    expenses_total = sum((e.amount for e in expenses), Decimal("0"))
+    expenses_row = {
+        "label": "Expenses", "revenue": None, "costs": expenses_total, "net": None,
+        "items_sold": None, "items_held": None,
+    }
+
+    item_costs = resale_row["costs"] + personal_row["costs"]
+    total_revenue = resale_row["revenue"] + personal_row["revenue"]
+    net = total_revenue - item_costs - expenses_total
     total_row = {
         "label": "Total",
-        "revenue": resale_row["revenue"] + personal_row["revenue"],
-        "costs": resale_row["costs"] + personal_row["costs"],
-        "net": resale_row["net"] + personal_row["net"],
+        "revenue": total_revenue,
+        "costs": item_costs + expenses_total,
+        "net": net,
         "items_sold": resale_row["items_sold"] + personal_row["items_sold"],
         "items_held": resale_row["items_held"] + personal_row["items_held"],
     }
@@ -370,22 +389,29 @@ def overview_context(owner, now=None):
             (e.total_realized for e in personal_month if e.total_realized is not None), Decimal("0"),
         )
         personal_net = sum((e.profit for e in personal_month), Decimal("0"))
+        month_expenses = sum(
+            (e.amount for e in expenses if e.date and month_start <= e.date < month_end), Decimal("0"),
+        )
         monthly_rows.append({
             "month": month_start,
             "resale_revenue": resale_revenue, "resale_net": resale_net,
             "personal_revenue": personal_revenue, "personal_net": personal_net,
+            "expenses": month_expenses,
             "combined_revenue": resale_revenue + personal_revenue,
-            "combined_net": resale_net + personal_net,
+            "combined_net": resale_net + personal_net - month_expenses,
         })
+
+    undated_expenses_total = sum((e.amount for e in expenses if e.date is None), Decimal("0"))
 
     return {
         "tiles": {
-            "total_revenue": total_row["revenue"],
-            "total_costs": total_row["costs"],
-            "net": total_row["net"],
-            "items_sold": total_row["items_sold"],
+            "total_revenue": total_revenue,
+            "item_costs": item_costs,
+            "expenses": expenses_total,
+            "net": net,
         },
-        "rows": [resale_row, personal_row],
+        "rows": [resale_row, personal_row, expenses_row],
         "total_row": total_row,
         "monthly_rows": monthly_rows,
+        "undated_expenses_total": undated_expenses_total,
     }

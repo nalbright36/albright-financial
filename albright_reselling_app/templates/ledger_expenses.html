@@ -1,0 +1,159 @@
+{% extends "index.html" %}
+{% load static %}
+{% load ledger_extras %}
+{% load cache_bust %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    {% include "_ledger_tabs.html" %}
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Expenses</h1>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            {% if edit_mode %}
+            <a href="{% url 'albright_reselling_app:ledger_expenses' %}{% if category_filter %}?category={{ category_filter }}{% endif %}" class="btn btn-secondary btn-sm">Cancel</a>
+            {% else %}
+            <a href="?{% if category_filter %}category={{ category_filter }}&amp;{% endif %}edit=1" class="btn btn-secondary btn-sm">Edit expenses</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Single-line add-expense form - available in both view modes -->
+    <form method="post" style="margin-bottom: 24px;">
+        {% csrf_token %}
+        <div class="card" style="padding: 0; overflow-x: auto;">
+            <table class="holdings ledger-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th class="num">Amount</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ add_form.date }}</td>
+                        <td>{{ add_form.description }}</td>
+                        <td>{{ add_form.category }}</td>
+                        <td class="num">{{ add_form.amount }}</td>
+                        <td><button type="submit" name="add_entry" class="btn btn-primary">Add</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </form>
+
+    <div class="card" style="margin-bottom: 16px;">
+        <div class="card__header"><span class="card__label">Filter</span></div>
+        <div class="scanner-controls">
+            <select id="ef-category">
+                <option value="" {% if not category_filter %}selected{% endif %}>All categories</option>
+                {% for value, label in category_choices %}
+                <option value="{{ value }}" {% if category_filter == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    {% if edit_mode %}
+    <!-- Edit mode: the spreadsheet-style formset, with a labeled Delete column -->
+    <form method="post" id="expenses-edit-form">
+        {% csrf_token %}
+        {{ formset.management_form }}
+        <div class="card" style="padding: 0; overflow-x: auto;">
+            <table class="holdings ledger-table ledger-edit-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th class="num">Amount</th>
+                        <th class="ledger-delete-col">Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in formset %}
+                    <tr id="expense-{{ form.instance.pk }}">
+                        {{ form.id }}
+                        <td>{{ form.date }}</td>
+                        <td>{{ form.description }}</td>
+                        <td>{{ form.category }}</td>
+                        <td class="num">{{ form.amount }}</td>
+                        <td class="ledger-delete-col">{{ form.DELETE }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
+                        <td colspan="3">Total</td>
+                        <td class="num">{{ total|money }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <button type="submit" name="save_expenses" class="btn btn-primary" style="margin-top: 16px;">Save Expenses</button>
+    </form>
+    {% else %}
+    <!-- Read-only mode -->
+    <div class="card" style="padding: 0; overflow-x: auto;">
+        <table class="holdings ledger-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th class="num">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in entries %}
+                <tr>
+                    <td>
+                        {% if expense.date %}{{ expense.date|date:"M j, Y" }}{% else %}<span class="badge neutral">Undated</span>{% endif %}
+                    </td>
+                    <td>{{ expense.description }}</td>
+                    <td><span class="badge neutral">{{ expense.get_category_display }}</span></td>
+                    <td class="num">{{ expense.amount|money }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" style="color: var(--text-secondary);">No expenses recorded.</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: 600; border-top: 2px solid var(--border-strong);">
+                    <td colspan="3">Total</td>
+                    <td class="num">{{ total|money }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var categorySelect = document.getElementById("ef-category");
+        if (categorySelect) {
+            categorySelect.addEventListener("change", function () {
+                var params = new URLSearchParams(window.location.search);
+                if (categorySelect.value) params.set("category", categorySelect.value); else params.delete("category");
+                params.delete("edit");
+                window.location.search = params.toString();
+            });
+        }
+
+        var editForm = document.getElementById("expenses-edit-form");
+        if (editForm) {
+            editForm.addEventListener("submit", function (event) {
+                var checked = editForm.querySelectorAll('input[type="checkbox"][name$="-DELETE"]:checked').length;
+                if (checked > 0 && !window.confirm("Delete " + checked + " expense" + (checked === 1 ? "" : "s") + "?")) {
+                    event.preventDefault();
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

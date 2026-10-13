@@ -8,8 +8,11 @@
 
     <!-- Always every resale entry for this owner - see ledger_views.ledger_resale()/
          ledger_metrics.ledger_summary_tiles(). Not affected by the table's
-         own status filter below. -->
-    <div class="grid grid-3" style="margin-bottom: 24px;">
+         own status filter below. Resale-only, same as everything else on
+         this tab - the whole-business cash-flow figure (which includes
+         expenses) lives on the Overview tab's Net tile instead, since this
+         tab's own numbers must stay expense-free. -->
+    <div class="grid grid-2" style="margin-bottom: 24px;">
         <div class="card">
             <div class="card__header"><span class="card__label">Unsold Inventory Cost</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ summary_tiles.inventory_cost|money }}</span>
@@ -19,11 +22,6 @@
             <div class="card__header"><span class="card__label">Current P&amp;L</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if summary_tiles.all_time_profit >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{{ summary_tiles.all_time_profit|money }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">This month: {{ summary_tiles.profit_this_month|money }}</div>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Net Cash Flow</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if summary_tiles.net_cash_flow >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{{ summary_tiles.net_cash_flow|money }}</span>
-            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Revenue {{ summary_tiles.revenue|money }} &middot; Costs {{ summary_tiles.costs|money }}</div>
         </div>
     </div>
 

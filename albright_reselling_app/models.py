@@ -348,6 +348,36 @@ class LedgerSale(models.Model):
         return f"{self.entry.item} sold {self.sale_date} for {self.sale_price}"
 
 
+EXPENSE_CATEGORY_CHOICES = [
+    ("supplies", "Supplies"),
+    ("grading", "Grading"),
+    ("fees", "Fees"),
+    ("other", "Other"),
+]
+
+
+class LedgerExpense(models.Model):
+    """A business-wide expense (supplies, grading, etc.) - deliberately
+    NOT tied to the Reselling or Personal ledger (no ledger_type field):
+    it shows up on its own Expenses tab and in the Overview tab's totals,
+    but never touches either ledger's own numbers (dashboard tiles,
+    Scorecard, calibration, Insights stay resale-only and expense-free -
+    see ledger_metrics.overview_context())."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="expenses")
+    date = models.DateField(null=True, blank=True)
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    category = models.CharField(max_length=10, choices=EXPENSE_CATEGORY_CHOICES, default="supplies")
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.description
+
+
 class ScanRequest(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),

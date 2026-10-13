@@ -8,23 +8,27 @@
         <h1 style="margin: 0;">Overview</h1>
     </div>
 
-    <!-- Combined across both ledgers - see ledger_metrics.overview_context(). -->
+    <!-- Combined across both ledgers plus business-wide expenses - see
+         ledger_metrics.overview_context(). This Net tile is the
+         whole-business net cash flow figure (revenue minus item costs
+         minus expenses) - see ledger.html's own tiles for why it isn't
+         shown on the Reselling tab. -->
     <div class="grid grid-4" style="margin-bottom: 24px;">
         <div class="card">
-            <div class="card__header"><span class="card__label">Total Revenue</span></div>
+            <div class="card__header"><span class="card__label">Revenue</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.total_revenue|money }}</span>
         </div>
         <div class="card">
-            <div class="card__header"><span class="card__label">Total Costs</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.total_costs|money }}</span>
+            <div class="card__header"><span class="card__label">Item Costs</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.item_costs|money }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Expenses</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.expenses|money }}</span>
         </div>
         <div class="card">
             <div class="card__header"><span class="card__label">Net</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if tiles.net >= 0 %}var(--gain){% else %}var(--loss){% endif %};">{{ tiles.net|money }}</span>
-        </div>
-        <div class="card">
-            <div class="card__header"><span class="card__label">Items Sold</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.items_sold }}</span>
         </div>
     </div>
 
@@ -45,12 +49,12 @@
             <tbody>
                 {% for row in rows %}
                 <tr>
-                    <td>{{ row.label }}</td>
+                    <td>{{ row.label }}{% if row.label == "Expenses" %} <span style="font-size: 0.75rem; color: var(--text-secondary);">(costs only)</span>{% endif %}</td>
                     <td class="num">{{ row.revenue|money }}</td>
                     <td class="num">{{ row.costs|money }}</td>
-                    <td class="num {% if row.net >= 0 %}gain{% else %}loss{% endif %}">{{ row.net|money }}</td>
-                    <td class="num">{{ row.items_sold }}</td>
-                    <td class="num">{{ row.items_held }}</td>
+                    <td class="num {% if row.net is not None %}{% if row.net >= 0 %}gain{% else %}loss{% endif %}{% endif %}">{{ row.net|money }}</td>
+                    <td class="num">{{ row.items_sold|default:"-" }}</td>
+                    <td class="num">{{ row.items_held|default:"-" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -79,6 +83,7 @@
                     <th class="num">Reselling Net</th>
                     <th class="num">Personal Revenue</th>
                     <th class="num">Personal Net</th>
+                    <th class="num">Expenses</th>
                     <th class="num">Combined Revenue</th>
                     <th class="num">Combined Net</th>
                 </tr>
@@ -91,6 +96,7 @@
                     <td class="num {% if row.resale_net >= 0 %}gain{% else %}loss{% endif %}">{{ row.resale_net|money }}</td>
                     <td class="num">{{ row.personal_revenue|money }}</td>
                     <td class="num {% if row.personal_net >= 0 %}gain{% else %}loss{% endif %}">{{ row.personal_net|money }}</td>
+                    <td class="num">{{ row.expenses|money }}</td>
                     <td class="num">{{ row.combined_revenue|money }}</td>
                     <td class="num {% if row.combined_net >= 0 %}gain{% else %}loss{% endif %}">{{ row.combined_net|money }}</td>
                 </tr>
@@ -98,6 +104,11 @@
             </tbody>
         </table>
         </div>
+        {% if undated_expenses_total %}
+        <p style="margin: 12px 0 0; font-size: 0.8125rem; color: var(--text-secondary);">
+            {{ undated_expenses_total|money }} in undated expenses are included in the Expenses tile and Total above, but not broken out by month.
+        </p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import modelformset_factory
-from .models import LedgerEntry, LedgerSale, ScanRequest, HarvestRequest, AnalysisRequest
+from .models import LedgerEntry, LedgerExpense, LedgerSale, ScanRequest, HarvestRequest, AnalysisRequest
 from .scanner_models import BidWatch, LotFeedback
 
 _NUM_WIDGET = lambda placeholder=None: forms.NumberInput(attrs={  # noqa: E731
@@ -126,6 +126,30 @@ class EditPriceForm(forms.Form):
     "Lower price" action (same form - the view records last_markdown_step
     too, only for the latter)."""
     list_price = forms.DecimalField(max_digits=10, decimal_places=2, min_value=0, widget=_NUM_WIDGET())
+
+
+class LedgerExpenseForm(forms.ModelForm):
+    """The Expenses tab's add row and its edit-mode formset (same split
+    as LedgerEntryForm/LedgerEntryFormSet below) - date is optional since
+    an imported expense may not have one (see import_personal_ledger)."""
+    class Meta:
+        model = LedgerExpense
+        fields = ["date", "description", "amount", "category", "notes"]
+        widgets = {
+            "date": forms.DateInput(attrs={"class": "ledger-input", "type": "date"}),
+            "description": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "Description"}),
+            "amount": _NUM_WIDGET(),
+            "category": forms.Select(attrs={"class": "ledger-input"}),
+            "notes": forms.TextInput(attrs={"class": "ledger-input", "placeholder": "Notes (optional)"}),
+        }
+
+
+LedgerExpenseFormSet = modelformset_factory(
+    LedgerExpense,
+    form=LedgerExpenseForm,
+    extra=0,
+    can_delete=True,
+)
 
 
 class PersonalItemForm(forms.ModelForm):

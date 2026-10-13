@@ -859,7 +859,6 @@ class LedgerSummaryTilesTests(TestCase):
 
         self.assertContains(unfiltered, "Unsold Inventory Cost")
         self.assertContains(unfiltered, "Current P&amp;L")
-        self.assertContains(unfiltered, "Net Cash Flow")
         self.assertContains(unfiltered, "$10.00")  # inventory cost: only the holding item
         self.assertContains(unfiltered, "$35.00")  # all-time P&L: 55-20
         # The table's own ?status=unsold filter must not change the tiles.
@@ -975,16 +974,19 @@ class NetCashFlowTests(TestCase):
         self.assertEqual(result["costs"], Decimal("105.00"))
         self.assertEqual(result["net"], Decimal("-15.00"))
 
-    def test_rendered_on_ledger_page(self):
+    def test_not_rendered_on_resale_tab(self):
+        """Net Cash Flow is a whole-business figure (includes expenses,
+        see test_expenses.py) - it no longer lives on the Reselling tab,
+        which must stay expense-free like every other number there. The
+        function itself (tested above) is unchanged and still resale-only
+        by default; it's only the Ledger page's own tile that moved, to
+        the Overview tab's Net tile."""
         _make_entry(self.user, item="Profitable", cost="20.00", sold_for="100.00", status="sold_out")
         self.client.login(username="tester", password="pw-not-real-12345")
 
         response = self.client.get(reverse("albright_reselling_app:ledger_resale"))
 
-        self.assertContains(response, "Net Cash Flow")
-        self.assertContains(response, "Revenue $100.00")
-        self.assertContains(response, "Costs $20.00")
-        self.assertContains(response, "$80.00")
+        self.assertNotContains(response, "Net Cash Flow")
 
 
 def _formset_post_data(entries, delete_pks=()):

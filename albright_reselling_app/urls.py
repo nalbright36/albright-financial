@@ -11,6 +11,7 @@ urlpatterns = [
     path("ledger/resale/", ledger_views.ledger_resale, name="ledger_resale"),
     path("ledger/personal/", ledger_views.ledger_personal, name="ledger_personal"),
     path("ledger/board/", selling_views.board_page, name="ledger_board"),
+    path("ledger/expenses/", ledger_views.ledger_expenses, name="ledger_expenses"),
     path("ledger/<int:entry_id>/mark-listed/", selling_views.mark_listed, name="ledger_mark_listed"),
     path("ledger/<int:entry_id>/mark-shipped/", selling_views.mark_shipped, name="ledger_mark_shipped"),
     path("ledger/<int:entry_id>/markdown-done/", selling_views.markdown_done, name="ledger_markdown_done"),

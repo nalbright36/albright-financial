@@ -15,10 +15,10 @@ from django.utils import timezone
 
 from . import ledger_metrics
 from .forms import (
-    EntryDetailsForm, LedgerEntryForm, LedgerEntryFormSet, LedgerSaleForm, LegacySplitForm, PersonalItemForm,
-    WinLotForm,
+    EntryDetailsForm, LedgerEntryForm, LedgerEntryFormSet, LedgerExpenseForm, LedgerExpenseFormSet, LedgerSaleForm,
+    LegacySplitForm, PersonalItemForm, WinLotForm,
 )
-from .models import STATUS_CHOICES, LedgerEntry
+from .models import EXPENSE_CATEGORY_CHOICES, STATUS_CHOICES, LedgerEntry, LedgerExpense
 from .scanner.max_bid import BuyCosts, all_in_cost
 from .scanner.pipeline import _buyer_premium_pct, _inbound_shipping, _sales_tax_pct
 from .scanner_models import AIReview, SourcedLot
@@ -368,3 +368,51 @@ def ledger_overview(request):
     context = ledger_metrics.overview_context(request.user)
     context["ledger_tab"] = "overview"
     return render(request, "ledger_overview.html", context)
+
+
+@login_required
+def ledger_expenses(request):
+    """The Expenses tab: business-wide expenses (supplies/grading/fees/
+    other) - not tied to either ledger, see LedgerExpense's docstring.
+    Same add-row + edit-mode-formset pattern as the Reselling tab."""
+    queryset = LedgerExpense.objects.filter(owner=request.user)
+    category_filter = request.GET.get("category")
+    if category_filter:
+        queryset = queryset.filter(category=category_filter)
+
+    add_form = LedgerExpenseForm(prefix="add")
+    formset = LedgerExpenseFormSet(queryset=queryset)
+    edit_mode = request.method == "POST" or request.GET.get("edit") == "1"
+
+    if request.method == "POST":
+        if "add_entry" in request.POST:
+            add_form = LedgerExpenseForm(request.POST, prefix="add")
+            if add_form.is_valid():
+                expense = add_form.save(commit=False)
+                expense.owner = request.user
+                expense.save()
+                return redirect("albright_reselling_app:ledger_expenses")
+        elif "save_expenses" in request.POST:
+            formset = LedgerExpenseFormSet(request.POST, queryset=queryset)
+            if formset.is_valid():
+                instances = formset.save(commit=False)
+                for instance in instances:
+                    instance.owner = request.user
+                    instance.save()
+                for obj in formset.deleted_objects:
+                    obj.delete()
+                return redirect("albright_reselling_app:ledger_expenses")
+
+    entries = list(queryset)
+    total = sum((e.amount for e in entries), Decimal("0"))
+
+    return render(request, "ledger_expenses.html", {
+        "add_form": add_form,
+        "formset": formset,
+        "entries": entries,
+        "total": total,
+        "category_filter": category_filter or "",
+        "category_choices": EXPENSE_CATEGORY_CHOICES,
+        "edit_mode": edit_mode,
+        "ledger_tab": "expenses",
+    })
