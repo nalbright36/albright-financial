@@ -1,0 +1,25 @@
+{% comment %}
+The Calculator modal - a native <dialog> opened with showModal(), shared
+with the full Calculators page via _calculator_tabs.html (and static/js/
+calculator.js), so the two can never drift apart. See
+calculator_views.panel_context() for the context this needs.
+
+Replaces an earlier slide-in side panel that didn't work properly: its
+forms pointed their `action` at the full Calculators page as a no-JS
+fallback, so any slip in JS's preventDefault (a stray Enter keypress, a
+timing hiccup) actually navigated the whole dashboard away; separately,
+focusing the panel while it was still mid CSS-transition (off-screen,
+sliding in) could make the browser jump/scroll the page before the
+animation settled. A native <dialog> sidesteps both: the browser owns
+focus-on-open, Esc-to-close, and the backdrop, and nothing in here is a
+real <form> submission.
+{% endcomment %}
+<dialog id="calc-dialog" class="calc-dialog" aria-label="Calculator">
+    <div class="calc-dialog__header">
+        <span id="calc-dialog-lot-title" class="calc-dialog__lot-title" hidden></span>
+        <button type="button" id="calc-dialog-close" class="btn btn-secondary btn-sm" aria-label="Close calculator">&#10005;</button>
+    </div>
+    <div class="calc-dialog__body">
+        {% include "_calculator_tabs.html" %}
+    </div>
+</dialog>

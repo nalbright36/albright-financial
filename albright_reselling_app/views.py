@@ -18,7 +18,7 @@ def dashboard(request):
     # auction_scanner.html/historical_data.html/sleeper_segments.html.
     context = {"ledger_tiles": ledger_metrics.dashboard_tiles(user)}
     context.update(get_scanner_dashboard_context(user=user))
-    # The slide-in Calculator panel (_calculator_panel.html) - same shared
+    # The Calculator dialog (_calculator_dialog.html) - same shared
     # context the full Calculators page uses, see calculator_views.panel_context().
     context.update(calculator_views.panel_context(user))
     return render(request, "dashboard.html", context)

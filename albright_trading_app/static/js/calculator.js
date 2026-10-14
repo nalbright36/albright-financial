@@ -448,66 +448,64 @@
     scheduleMeltCalculate();
 
     // =====================================================================
-    // The slide-in Calculator panel (dashboard.html/today.html only - a
-    // no-op everywhere else, since #calc-panel doesn't exist there).
+    // The Calculator dialog (dashboard.html only - a no-op everywhere else,
+    // since #calc-dialog doesn't exist there). A native <dialog> via
+    // showModal(): the browser handles the dimmed backdrop, centering,
+    // moving focus in on open, and Esc-to-close - all we add is backdrop-
+    // click-to-close and restoring scroll position/focus on close.
     // =====================================================================
-    var panel = byId("calc-panel");
-    var toggleButton = byId("calc-panel-toggle");
-    var closeButton = byId("calc-panel-close");
-    var lotTitleEl = byId("calc-panel-lot-title");
+    var dialog = byId("calc-dialog");
+    var dialogToggleButton = byId("calc-dialog-toggle");
+    var closeButton = byId("calc-dialog-close");
+    var lotTitleEl = byId("calc-dialog-lot-title");
 
-    if (panel && toggleButton) {
-        function panelIsOpen() { return panel.classList.contains("is-open"); }
+    if (dialog && typeof dialog.showModal === "function") {
+        var savedScrollY = 0;
+        var openerElement = null;
 
-        function openPanel() {
-            if (panelIsOpen()) return;
-            panel.classList.add("is-open");
-            panel.removeAttribute("inert");
-            panel.setAttribute("aria-hidden", "false");
-            panel.focus();
-        }
-        function closePanel() {
-            if (!panelIsOpen()) return;
-            panel.classList.remove("is-open");
-            panel.setAttribute("inert", "");
-            panel.setAttribute("aria-hidden", "true");
-            toggleButton.focus();
-        }
-        function togglePanel() {
-            if (panelIsOpen()) closePanel(); else openPanel();
+        function openDialog(opener) {
+            savedScrollY = window.scrollY;
+            openerElement = opener || null;
+            if (!dialog.open) dialog.showModal();
         }
 
-        // Closed by default - inert from the start so a hidden-but-off-
-        // screen panel can't be Tabbed into.
-        panel.setAttribute("inert", "");
-        panel.setAttribute("aria-hidden", "true");
-
-        toggleButton.addEventListener("click", togglePanel);
-        if (closeButton) closeButton.addEventListener("click", closePanel);
-
-        document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") {
-                if (panelIsOpen()) closePanel();
-                return;
-            }
-            if (event.key !== "c" && event.key !== "C") return;
-            if (event.metaKey || event.ctrlKey || event.altKey) return;
-            var active = document.activeElement;
-            var tag = active ? active.tagName : "";
-            var typing = ["INPUT", "TEXTAREA", "SELECT"].indexOf(tag) !== -1 || (active && active.isContentEditable);
-            if (typing) return;
-            event.preventDefault();
-            togglePanel();
+        // One place for "closed, regardless of how" (✕ button, Esc, or a
+        // backdrop click - see below) - dialog's native "close" event
+        // fires for all three, so there's nothing close-button-specific
+        // to wire beyond calling .close().
+        dialog.addEventListener("close", function () {
+            window.scrollTo(0, savedScrollY);
+            if (openerElement) openerElement.focus();
+            openerElement = null;
         });
 
-        // ---------- "Calc" buttons on dashboard/Today lot rows (Act Now,
-        // Watch, My Bids) - opens the panel on the Buy cost tab, prefilled
-        // from that row's own data-* attributes (current bid + source,
-        // same defaults the Source dropdown would apply by hand), with the
-        // lot's title shown at the top of the panel. Once the Buy cost
+        if (closeButton) closeButton.addEventListener("click", function () { dialog.close(); });
+
+        // Backdrop click: a click lands directly on <dialog> itself (not a
+        // descendant) only when it hits the backdrop-adjacent padding
+        // outside the ::backdrop-covered content box - clicking anything
+        // inside .calc-dialog__body/__header hits that element instead.
+        dialog.addEventListener("click", function (event) {
+            if (event.target === dialog) dialog.close();
+        });
+
+        if (dialogToggleButton) {
+            dialogToggleButton.addEventListener("click", function () {
+                if (lotTitleEl) { lotTitleEl.textContent = ""; lotTitleEl.hidden = true; }
+                openDialog(dialogToggleButton);
+            });
+        }
+
+        // ---------- "Calc" buttons on dashboard lot rows (Act Now, Watch,
+        // My Bids) - opens the dialog on the Buy cost tab, prefilled from
+        // that row's own data-* attributes (current bid + source, same
+        // defaults the Source dropdown would apply by hand), with the
+        // lot's title shown in the dialog's title bar. Once the Buy cost
         // total comes back, the eBay tab is prefilled too (that total as
         // item cost, the scanner's expected sale as listing price) -
-        // without switching to it, since the panel opens on Buy cost. ----------
+        // without switching to it, since the dialog opens on Buy cost.
+        // Plain type="button" elements, never inside a <form> of their
+        // own, so clicking one can never submit/navigate/scroll. ----------
         document.querySelectorAll(".js-calc-from-lot").forEach(function (button) {
             button.addEventListener("click", function () {
                 var title = button.dataset.title || "";
@@ -519,10 +517,10 @@
                     lotTitleEl.textContent = title;
                     lotTitleEl.hidden = !title;
                 }
-                openPanel();
                 activateTab("buy");
                 applyBuyData({bid: bid, source: source});
                 applySourcePreset(source);
+                openDialog(button);
                 doBuyCalculate().then(function (buyResults) {
                     if (!buyResults) return;
                     applyEbayData({item_cost: buyResults.total.toFixed(2), sale_price: expectedSale});

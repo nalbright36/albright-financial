@@ -1,11 +1,17 @@
-"""Tests for the dashboard/Today pages' slide-in Calculator panel
-(_calculator_panel.html, calculator_views.panel_context(), static/js/
-calculator.js): the panel markup itself renders on both pages, the
-"Calc" button's prefill data attributes on Act Now/Watch/My Bids rows
-carry the right values, and the full Calculators page (which shares the
-same _calculator_tabs.html partial) still renders and calculates -
-beyond what test_bid_calculator_views.py already covers in detail."""
+"""Tests for the dashboard's Calculator dialog (_calculator_dialog.html,
+calculator_views.panel_context(), static/js/calculator.js): the dialog
+markup renders once on the dashboard (and nowhere else), every "Calc"
+button is a real type="button" element (never a link or a form submit,
+so it can never navigate/reload/scroll the page) with the right prefill
+data attributes on Act Now/Watch/My Bids rows, and the full Calculators
+page (which shares the same _calculator_tabs.html partial) still renders
+and calculates - beyond what test_bid_calculator_views.py already covers
+in detail.
+
+This replaces an earlier slide-in side panel that didn't work properly -
+see _calculator_dialog.html's own docstring for why."""
 import json
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -20,7 +26,7 @@ from albright_reselling_app.scanner_models import BidWatch, LotEvaluation, Sourc
 def _make_lot(external_id, end_time, current_price="10.00", source="shopgoodwill"):
     return SourcedLot.objects.create(
         source=source, external_id=external_id, url=f"https://example.com/{external_id}",
-        title=f"Panel Test Lot {external_id}", current_price=Decimal(current_price), end_time=end_time,
+        title=f"Dialog Test Lot {external_id}", current_price=Decimal(current_price), end_time=end_time,
     )
 
 
@@ -38,39 +44,56 @@ def _make_lead(lot, category="games", lead_reason="n64: bulk lot", expected_sale
     )
 
 
-class PanelMarkupTests(TestCase):
+class DialogMarkupTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
         self.client.login(username="tester", password="pw-not-real-12345")
 
-    def test_panel_renders_on_dashboard(self):
+    def test_dialog_renders_once_on_dashboard(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
         content = response.content.decode()
 
-        self.assertContains(response, 'id="calc-panel-toggle"')
-        self.assertContains(response, 'id="calc-panel"')
-        self.assertContains(response, 'id="calc-panel-close"')
+        self.assertContains(response, 'id="calc-dialog-toggle"')
+        self.assertContains(response, '<dialog id="calc-dialog"')
+        self.assertContains(response, 'id="calc-dialog-close"')
+        self.assertContains(response, 'id="calc-dialog-lot-title"')
         self.assertContains(response, 'id="calc-tabs"')
         self.assertContains(response, 'id="calc-data"')
+        self.assertEqual(content.count("<dialog"), 1)
         self.assertIn("calculator.js", content)
 
-    def test_panel_renders_on_today_page(self):
+    def test_old_slide_in_panel_markup_is_gone(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+
+        self.assertNotIn("calc-panel", content)
+
+    def test_calc_dialog_toggle_is_a_real_button(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+
+        idx = content.index('id="calc-dialog-toggle"')
+        tag_start = content.rindex("<button", 0, idx)
+        tag = content[tag_start:idx]
+        self.assertIn('type="button"', tag)
+
+    def test_dialog_not_present_on_today_page(self):
+        """The Calculator dialog lives only on the dashboard now - the
+        Today page never had "Calc" buttons of its own to open it from."""
         response = self.client.get(reverse("albright_reselling_app:today"))
+        content = response.content.decode()
 
-        self.assertContains(response, 'id="calc-panel-toggle"')
-        self.assertContains(response, 'id="calc-panel"')
-        self.assertContains(response, 'id="calc-tabs"')
-        self.assertContains(response, 'id="calc-data"')
+        self.assertNotIn("calc-dialog", content)
+        self.assertNotIn("calculator.js", content)
 
-    def test_panel_not_present_on_full_calculators_page(self):
+    def test_dialog_not_present_on_full_calculators_page(self):
         response = self.client.get(reverse("albright_reselling_app:calculator"))
 
-        self.assertNotContains(response, 'id="calc-panel-toggle"')
-        self.assertNotContains(response, 'id="calc-panel"')
+        self.assertNotContains(response, "calc-dialog")
         self.assertContains(response, 'id="calc-tabs"')
 
-    def test_panel_calc_data_has_no_lot_prefill(self):
-        """Unlike the full page's ?lot= GET flow, the panel's prefill is
+    def test_dialog_calc_data_has_no_lot_prefill(self):
+        """Unlike the full page's ?lot= GET flow, the dialog's prefill is
         entirely client-side (the "Calc" button's own data attributes) -
         its server-rendered calc-data always has an empty lotPrefill."""
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
@@ -82,11 +105,33 @@ class PanelMarkupTests(TestCase):
 
         self.assertEqual(calc_data["lotPrefill"], {})
 
+    def test_calculator_forms_have_no_action_attribute(self):
+        """The old panel's forms pointed their action at the full
+        Calculators page as a no-JS fallback - if JS ever slipped (a
+        stray Enter keypress, a timing hiccup), that silently navigated
+        the whole dashboard away. The dialog can't even open without JS,
+        so there's no action to fall back to at all now."""
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+
+        for form_id in ("buy-form", "ebay-form", "melt-form"):
+            match = re.search(r'<form[^>]*id="%s"[^>]*>' % form_id, content)
+            self.assertIsNotNone(match, f"{form_id} not found")
+            self.assertNotIn("action=", match.group(0))
+
 
 class CalcButtonPrefillDataTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
         self.client.login(username="tester", password="pw-not-real-12345")
+
+    def _assert_is_plain_button(self, content, lot_pk):
+        idx = content.index(f'data-lot-id="{lot_pk}"')
+        tag_start = content.rindex("<button", 0, idx)
+        tag_end = content.index(">", idx)
+        tag = content[tag_start:tag_end]
+        self.assertIn('type="button"', tag)
+        self.assertNotIn("<a ", tag)
 
     def test_candidate_row_carries_prefill_attributes(self):
         lot = _make_lot("calc-cand-1", timezone.now() + timedelta(hours=3), current_price="22.50")
@@ -96,10 +141,11 @@ class CalcButtonPrefillDataTests(TestCase):
         content = response.content.decode()
 
         self.assertIn(f'data-lot-id="{lot.pk}"', content)
-        self.assertIn('data-title="Panel Test Lot calc-cand-1"', content)
+        self.assertIn('data-title="Dialog Test Lot calc-cand-1"', content)
         self.assertIn('data-bid="22.50"', content)
         self.assertIn('data-source="shopgoodwill"', content)
         self.assertIn('data-expected-sale="75.00"', content)
+        self._assert_is_plain_button(content, lot.pk)
 
     def test_check_by_hand_row_carries_prefill_attributes(self):
         lot = _make_lot("calc-cbh-1", timezone.now() + timedelta(hours=3), current_price="5.00")
@@ -111,6 +157,7 @@ class CalcButtonPrefillDataTests(TestCase):
 
         self.assertIn('data-bid="5.00"', content)
         self.assertIn('data-expected-sale="40.00"', content)
+        self._assert_is_plain_button(content, lot.pk)
 
     def test_lead_row_carries_prefill_attributes(self):
         lot = _make_lot("calc-lead-1", timezone.now() + timedelta(hours=3), current_price="8.00")
@@ -121,6 +168,7 @@ class CalcButtonPrefillDataTests(TestCase):
 
         self.assertIn(f'data-lot-id="{lot.pk}"', content)
         self.assertIn('data-bid="8.00"', content)
+        self._assert_is_plain_button(content, lot.pk)
 
     def test_candidates_ending_later_row_carries_prefill_attributes(self):
         lot = _make_lot("calc-later-1", timezone.now() + timedelta(days=2), current_price="12.00")
@@ -171,6 +219,7 @@ class CalcButtonPrefillDataTests(TestCase):
         performance_section = content.split('id="performance"')[1]
         results_section = performance_section.split('id="table-results"')[1].split("</table>")[0]
         self.assertNotIn("js-calc-from-lot", results_section)
+
 
 class FullCalculatorPageStillWorksTests(TestCase):
     """Confirms the shared-partial/shared-JS refactor didn't break the

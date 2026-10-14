@@ -232,8 +232,8 @@ def _ledger_pick_items(user):
 def shared_calculator_context(user, melt_metal="gold"):
     """Everything _calculator_tabs.html needs that doesn't depend on the
     current request's method/results - shared verbatim by calculator_page()
-    (the full Calculators page) and panel_context() (the dashboard/Today
-    pages' slide-in panel), so the two can never render different choices/
+    (the full Calculators page) and panel_context() (the dashboard's
+    Calculator dialog), so the two can never render different choices/
     defaults for the same underlying data."""
     return {
         "source_choices": SOURCE_CHOICES,
@@ -257,11 +257,12 @@ def shared_calculator_context(user, melt_metal="gold"):
 
 
 def panel_context(user):
-    """The slide-in Calculator panel (dashboard.html/today.html, via
-    _calculator_panel.html) - the same shared tabs/forms calculator_page()
-    renders, just with no server-computed results: the panel never POSTs
-    a no-JS fallback, it only ever starts from localStorage plus a
-    client-side lot prefill (see static/js/calculator.js's openFromLot())."""
+    """The dashboard's Calculator dialog (dashboard.html, via
+    _calculator_dialog.html) - the same shared tabs/forms calculator_page()
+    renders, just with no server-computed results: the dialog never POSTs
+    a no-JS fallback (it can't even open without JS - see
+    _calculator_dialog.html), it only ever starts from localStorage plus a
+    client-side lot prefill (see static/js/calculator.js)."""
     context = shared_calculator_context(user)
     context.update({
         "active_tab": "buy", "buy_results": None, "ebay_results": None, "melt_results": None,
@@ -297,7 +298,7 @@ def calculator_page(request):
     melt_metal = (melt_values.get("metal") if melt_values else None) or "gold"
 
     context = shared_calculator_context(request.user, melt_metal=melt_metal)
-    # This page (unlike the panel) can have real server-computed results
+    # This page (unlike the dialog) can have real server-computed results
     # from a no-JS POST, and a GET ?lot= prefill - both override the
     # shared calc_data_json's defaults (lotPrefill={}, justSubmitted*=False).
     context["calc_data_json"] = json.dumps({

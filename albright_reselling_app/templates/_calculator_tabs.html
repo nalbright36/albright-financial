@@ -1,25 +1,25 @@
 {% comment %}
 The calculator's 3 tabs (Buy cost / eBay profit / Melt value) - shared,
 verbatim markup for both the full Calculators page (calculator.html) and
-the dashboard/Today pages' slide-in panel (_calculator_panel.html), driven
-by the one shared static/js/calculator.js module. Expects the context
+the dashboard's Calculator dialog (_calculator_dialog.html), driven by
+the one shared static/js/calculator.js module. Expects the context
 calculator_views.shared_calculator_context()/panel_context() build:
 source_choices, ebay_category_choices, metal_choices, unit_choices,
 purity_choices, melt_metal, calc_data_json, active_tab, buy_results,
 ebay_results, melt_results, buy_values, ebay_values, melt_values.
 
-No-JS fallback: each tab is its own real <form method="post">, and its
-"Calculate" button re-renders the page with server-computed results
-(calculator_views._buy_result()/_ebay_result(), both backed by
-scanner/simple_calc.py) - this only works on the full Calculators page,
-which is the only one of the two with a real server-rendered response to
-POST back into; the panel's forms still submit without raising an error
-(falling back to the Calculators page's own POST handling, since the
-<form> has no @, it just POSTs the current page's own URL... see note in
-static/js/calculator.js) but JS is what actually makes the panel useful.
-With JS, the same fields are read live and posted to calculate_api
-instead, debounced, so results update as you type - either way goes
-through the exact same simple_calc functions, so they can never disagree.
+No-JS fallback: each tab is its own real <form method="post"> with no
+explicit action, so a native submit always POSTs back to whatever page
+it's actually on - correct for the full Calculators page (its own
+"Calculate" button re-renders it with server-computed results, from
+calculator_views._buy_result()/_ebay_result(), both backed by
+scanner/simple_calc.py). The dialog has no real no-JS story anyway (a
+<dialog> needs JS's showModal() to even open), so there's deliberately no
+action pointing elsewhere for it to fall back to - these forms must never
+be able to navigate the dashboard away to a different page. With JS, the
+same fields are read live and posted to calculate_api instead, debounced,
+so results update as you type - either way goes through the exact same
+simple_calc functions, so they can never disagree.
 {% endcomment %}
 <script type="application/json" id="calc-data">{{ calc_data_json|safe }}</script>
 
@@ -31,7 +31,7 @@ through the exact same simple_calc functions, so they can never disagree.
 
 <!-- ============ Buy cost tab ============ -->
 <div id="tab-buy"{% if active_tab != 'buy' %} hidden{% endif %}>
-    <form method="post" id="buy-form" action="{% url 'albright_reselling_app:calculator' %}">
+    <form method="post" id="buy-form">
         {% csrf_token %}
         <input type="hidden" name="tab" value="buy">
         <div class="grid grid-2 calc-tab-grid" style="align-items: start; gap: var(--space-5);">
@@ -93,7 +93,7 @@ through the exact same simple_calc functions, so they can never disagree.
 
 <!-- ============ eBay profit tab ============ -->
 <div id="tab-ebay"{% if active_tab != 'ebay' %} hidden{% endif %}>
-    <form method="post" id="ebay-form" action="{% url 'albright_reselling_app:calculator' %}">
+    <form method="post" id="ebay-form">
         {% csrf_token %}
         <input type="hidden" name="tab" value="ebay">
         <div class="grid grid-2 calc-tab-grid" style="align-items: start; gap: var(--space-5);">
@@ -166,7 +166,7 @@ through the exact same simple_calc functions, so they can never disagree.
 
 <!-- ============ Melt value tab ============ -->
 <div id="tab-melt"{% if active_tab != 'melt' %} hidden{% endif %}>
-    <form method="post" id="melt-form" action="{% url 'albright_reselling_app:calculator' %}">
+    <form method="post" id="melt-form">
         {% csrf_token %}
         <input type="hidden" name="tab" value="melt">
         <div class="grid grid-2 calc-tab-grid" style="align-items: start; gap: var(--space-5);">
