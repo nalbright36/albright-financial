@@ -213,15 +213,23 @@ def run_alerts(now=None):
     back entirely (not sent, not recorded) rather than sent silently or
     dropped for good - see QUIET_HOURS_GATED_KINDS. If ALERTS["categories"]
     is set, only lots in those categories qualify for any of the 5 kinds
-    here - BidWatch alerts, critical alerts, and the daily digest don't go
+    here - watchlist alerts, critical alerts, and the daily digest don't go
     through run_alerts() at all, so they're unaffected; if the setting is
     missing, every category alerts as before. A lot dismissed from the
     dashboard's Act Now tab is excluded here too (same reopen-on-headroom-
     growth rule - see scanner/dashboard.exclude_dismissed_evaluations()),
-    unless it's reopened. Returns the list of (lot_id, kind) pairs
-    actually sent."""
+    unless it's reopened.
+
+    ALERTS["mode"] defaults to "watchlist_only" - in that mode this sends
+    nothing at all (every per-lot kind here is suppressed; the watchlist's
+    own "closing soon" push is a separate, one-place concern - see the
+    watchlist_alerts management command). Any other mode value restores
+    this function's normal per-lot alerting. Returns the list of
+    (lot_id, kind) pairs actually sent."""
     cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
     if not cfg.get("enabled"):
+        return []
+    if cfg.get("mode", "watchlist_only") == "watchlist_only":
         return []
 
     now = now or timezone.now()
@@ -258,6 +266,64 @@ def run_alerts(now=None):
         send_telegram(_format_message(ev, kind))
         AlertSent.objects.create(lot=ev.lot, kind=kind)
         sent.append((ev.lot_id, kind))
+    return sent
+
+
+# ---------------------------------------------------------------------------
+# Watchlist: exactly one "closing soon" alert per watched lot - the only
+# place this fires from (see the watchlist_alerts management command).
+# ---------------------------------------------------------------------------
+
+def _format_watchlist_message(watch, now):
+    lot = watch.lot
+    local_end = timezone.localtime(lot.end_time)
+    minutes_left = max(0, int((lot.end_time - now).total_seconds() // 60))
+    last_seen_local = timezone.localtime(lot.last_seen)
+    lines = [
+        "<b>Watchlist: closing soon</b>",
+        f"{_source_display(lot.source)} · {lot.title[:120]}",
+        f"Current bid: ${lot.current_price:.2f} (as of {last_seen_local.strftime('%I:%M %p')})",
+    ]
+    if watch.my_max_bid is not None:
+        headroom = watch.my_max_bid - lot.current_price
+        lines.append(f"Your max: ${watch.my_max_bid:.2f} · headroom: ${headroom:.2f}")
+    lines.append(f"Ends: {local_end.strftime('%b %d, %I:%M %p')} ({minutes_left}m left)")
+    lines.append(f'<a href="{lot.url}">View listing</a>')
+    return "\n".join(lines)
+
+
+def send_watchlist_alerts(now=None):
+    """Exactly one Telegram alert per watchlisted lot, the first time its
+    auction is ALERTS["watchlist_minutes"] (default 60) or less from
+    closing - never before, never twice (AlertSent, kind="watchlist" -
+    get_or_create so two overlapping calls, e.g. the management command's
+    --loop-minutes and a scan_lots run both landing at once, can never
+    double-send). Ignores quiet hours by construction, same as every
+    watchlist alert always has. Doesn't touch run_alerts()'s "enabled"-
+    gated per-lot kinds or send_critical_alert()'s own setting - just its
+    own ALERTS["enabled"] master check."""
+    cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
+    if not cfg.get("enabled"):
+        return []
+
+    now = now or timezone.now()
+    minutes = cfg.get("watchlist_minutes", 60)
+    cutoff = now + timedelta(minutes=minutes)
+
+    already_alerted = set(AlertSent.objects.filter(kind="watchlist").values_list("lot_id", flat=True))
+    watches = (
+        BidWatch.objects.filter(status="watching", lot__end_time__gt=now, lot__end_time__lte=cutoff)
+        .exclude(lot_id__in=already_alerted)
+        .select_related("lot")
+    )
+
+    sent = []
+    for watch in watches:
+        _record, created = AlertSent.objects.get_or_create(lot=watch.lot, kind="watchlist")
+        if not created:
+            continue  # a concurrent call already claimed this one
+        send_telegram(_format_watchlist_message(watch, now))
+        sent.append(watch.lot_id)
     return sent
 
 
@@ -558,11 +624,15 @@ def build_digest_message(now=None):
 
 
 def send_daily_digest(now=None):
+    """Always builds (and returns) the message, even with
+    ALERTS["digest"] off, so alert_digest's own stdout output still shows
+    what would have gone out - only the actual Telegram send is gated."""
     now = now or timezone.now()
     cfg = settings.RESELLING_SCANNER
     for source in cfg["SOURCES"].keys():
         check_stale_source(source, now=now)
 
     message = build_digest_message(now=now)
-    send_telegram(message)
+    if cfg.get("ALERTS", {}).get("digest", True):
+        send_telegram(message)
     return message

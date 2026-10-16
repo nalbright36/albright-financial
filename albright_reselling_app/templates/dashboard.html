@@ -43,8 +43,8 @@
         </a>
 
         <a href="{% url 'albright_reselling_app:dashboard' %}#my-bids" class="card" style="display: block;">
-            <div class="card__header"><span class="card__label">My Bids</span></div>
-            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.watching_count }}</span>
+            <div class="card__header"><span class="card__label">Watchlist</span></div>
+            <span id="watchlist-tile-count" class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.watching_count }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ ledger_tiles.likely_won_this_week }} likely won this week</div>
         </a>
     </div>
@@ -412,8 +412,8 @@
 
         <div class="card" id="my-bids">
             <div class="card__header js-collapsible-header">
-                <span class="card__label">My Bids <span class="row-count">({{ watched_lots|length }})</span></span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">Lots you've actually bid on, not just scanner candidates</span>
+                <span class="card__label">Watchlist <span class="row-count">({{ watched_lots|length }})</span></span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Lots you're watching - sorted by end time. A closed lot leaves this automatically.</span>
             </div>
             <div class="js-collapsible-body">
             {% if watched_lots %}
@@ -426,6 +426,7 @@
                         <th data-sort-key="category">Category</th>
                         <th class="num" data-sort-key="bid">Current Bid</th>
                         <th class="num" data-sort-key="maxbid">My Max</th>
+                        <th class="num" data-sort-key="headroom">Headroom</th>
                         {% if watched_lots_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
                         <th class="num" data-sort-key="endtime">Ends In</th>
                         <th>Actions</th>
@@ -434,12 +435,24 @@
                 <tbody>
                     {% for row in watched_lots %}
                     <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                        data-bid="{{ row.current_bid }}" data-maxbid="{{ row.my_max_bid }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        data-bid="{{ row.current_bid }}" data-maxbid="{{ row.my_max_bid|default_if_none:'' }}"
+                        data-headroom="{{ row.headroom|default_if_none:'' }}" data-endtime="{{ row.end_time_epoch_ms }}">
                         <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
                         <td class="num">${{ row.current_bid|floatformat:2 }}</td>
-                        <td class="num" style="color: {% if row.current_bid <= row.my_max_bid %}var(--gain){% else %}var(--loss){% endif %};">${{ row.my_max_bid|floatformat:2 }}</td>
+                        <td class="num">
+                            {% if row.my_max_bid is not None %}
+                            <span style="color: {% if row.current_bid <= row.my_max_bid %}var(--gain){% else %}var(--loss){% endif %};">${{ row.my_max_bid|floatformat:2 }}</span>
+                            {% else %}
+                            <a href="{% url 'albright_reselling_app:watch_lot' row.lot_id %}" style="font-size: 0.8125rem;">Set max bid</a>
+                            {% endif %}
+                        </td>
+                        <td class="num">
+                            {% if row.headroom is not None %}
+                            <span style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</span>
+                            {% else %}&mdash;{% endif %}
+                        </td>
                         {% if watched_lots_has_maxsold %}
                         <td class="hide-mobile">
                             {% if row.pickup %}
@@ -448,14 +461,17 @@
                         </td>
                         {% endif %}
                         <td class="num">{{ row.time_remaining }}</td>
-                        <td>{% include "_calc_button.html" %}</td>
+                        <td>
+                            {% include "_calc_button.html" %}
+                            <button type="button" class="btn btn-secondary btn-sm js-watch-remove" data-toggle-url="{% url 'albright_reselling_app:toggle_watch' row.lot_id %}">Remove</button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             </div>
             {% else %}
-            <p style="color: var(--text-secondary);">Not watching any live bids right now.</p>
+            <p style="color: var(--text-secondary);">Not watching anything right now.</p>
             {% endif %}
             </div>
         </div>

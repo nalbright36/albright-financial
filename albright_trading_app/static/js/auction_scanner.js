@@ -482,6 +482,54 @@
         }
     }
 
+    // ---------- Watchlist: the star toggle (every lot row + the AI review
+    // page) and the Watchlist block's own "Remove" button. One click each,
+    // no page reload - fire-and-forget POSTs, same spirit as Dismiss
+    // above. Toggling a row's star updates just that button (plus the
+    // Watchlist tile's count) rather than live-building a new row in the
+    // Watchlist table below - it'll show up there on the next load, same
+    // trade-off Dismiss's own "Show dismissed" list already makes. ----------
+    function adjustWatchlistTileCount(delta) {
+        var el = document.getElementById("watchlist-tile-count");
+        if (!el) return;
+        el.textContent = String(Math.max(0, (parseInt(el.textContent, 10) || 0) + delta));
+    }
+
+    function applyWatchState(group, isWatching) {
+        var button = group.querySelector(".js-watch-toggle");
+        var link = group.querySelector(".js-watch-set-max-bid");
+        if (!button) return;
+        button.classList.toggle("is-watching", isWatching);
+        button.title = isWatching ? "Remove from watchlist" : "Add to watchlist";
+        var star = button.querySelector(".js-watch-star");
+        if (star) star.textContent = isWatching ? "★" : "☆";
+        var label = button.querySelector(".js-watch-label");
+        if (label) label.textContent = isWatching ? "Watching" : "Add to Watchlist";
+        if (link) link.hidden = !isWatching;
+    }
+
+    function initWatchToggles() {
+        document.querySelectorAll(".js-watch-toggle").forEach(function (button) {
+            button.addEventListener("click", function () {
+                var group = button.closest(".js-watch-group");
+                var next = !button.classList.contains("is-watching");
+                if (group) applyWatchState(group, next);
+                adjustWatchlistTileCount(next ? 1 : -1);
+                postForm(button.dataset.toggleUrl);
+            });
+        });
+
+        document.querySelectorAll(".js-watch-remove").forEach(function (button) {
+            button.addEventListener("click", function () {
+                postForm(button.dataset.toggleUrl);
+                var row = button.closest("tr");
+                if (row) row.remove();
+                adjustWatchlistTileCount(-1);
+                updateTabCounts();
+            });
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         Array.prototype.slice.call(document.querySelectorAll("table.holdings")).forEach(initSortableTable);
         initExpandableRows();
@@ -490,6 +538,7 @@
         initTabs();
         initFilters();
         initDismissals();
+        initWatchToggles();
         updateTabCounts(); // covers pages where initFilters() has nothing to wire up
     });
 })();

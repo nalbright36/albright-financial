@@ -261,11 +261,24 @@ RESELLING_SCANNER = {
     "SPOT": {"monthly_api_limit": 90, "max_age_days": 3, "manual": {"silver": None, "gold": None}},
     "ALERTS": {"enabled": True, "window_minutes": 90, "kinds": ["candidate", "lead", "zero_bid", "relisted"],
                "min_headroom": 5.0, "candidate_confidence": ["high", "medium"], "max_per_run": 10,
-               "critical_alerts": True, "quiet_hours": [23, 7],
+               "quiet_hours": [23, 7],
                # Per-lot alerts (candidate/lead/zero_bid/relisted/check_by_hand) only
-               # fire for these categories. Doesn't affect BidWatch alerts, critical
+               # fire for these categories. Doesn't affect watchlist alerts, critical
                # alerts, or the daily digest - see run_alerts()'s docstring.
-               "categories": ["coins", "jewelry"]},
+               "categories": ["coins", "jewelry"],
+               # "watchlist_only" (the default): run_alerts() sends none of its
+               # per-lot kinds above at all - the only per-lot Telegram alert is
+               # the watchlist_alerts management command's one-per-lot "closing
+               # soon" push, at or under this many minutes from close. Any other
+               # value restores the per-lot kinds above.
+               "mode": "watchlist_only", "watchlist_minutes": 60,
+               # Off by default - the old BidWatch "closing soon"/"result" pushes
+               # were noisy; likely_won/lost is still resolved quietly either way
+               # (see scanner/bid_watch.py) for the dashboard/Ledger to show.
+               "watchlist_result_alerts": False,
+               # Master switches for the two alert types the watchlist doesn't
+               # touch at all - turn either off independently.
+               "critical_alerts": True, "digest": True},
     # Today page / Selling Board (selling.py): the current sell-down goal -
     # sales from both ledgers count toward "items" and "recover_usd" since
     # start_date. Update start_date (and these numbers) when a goal is hit

@@ -14,9 +14,10 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .forms import BidWatchForm
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
@@ -35,7 +36,7 @@ from .scanner.review_history import (
     summary_stats,
     time_remaining_at_review,
 )
-from .scanner_models import AIReview, SourcedLot
+from .scanner_models import AIReview, BidWatch, SourcedLot
 
 RECENT_REVIEW_WINDOW = timedelta(hours=24)
 
@@ -75,11 +76,13 @@ def review_detail(request, review_id):
     evaluation = getattr(lot, "evaluation", None)
     result = review.result or {}
     time_remaining = _time_remaining(lot, timezone.now()) if lot.end_time else "unknown"
+    lot_is_open = lot.end_time is None or lot.end_time > timezone.now()
 
     return render(request, "ai_review_detail.html", {
         "review": review,
         "lot": lot,
         "evaluation": evaluation,
+        "lot_is_open": lot_is_open,
         "time_remaining": time_remaining,
         "time_remaining_at_review": time_remaining_at_review(review),
         "identified_items": result.get("identified_items") or [],
@@ -93,18 +96,16 @@ def review_detail(request, review_id):
 
 @login_required
 def watch_lot(request, lot_id):
-    """"I bid on this" - creates a BidWatch for a lot, pre-filled with the
-    AI review's suggested max bid if one exists, else the scanner's own
-    max bid (see scanner.bid_watch.default_max_bid). One watch per lot
-    (BidWatch.lot is OneToOne) - if one already exists, this just redirects
-    back with a message instead of showing the form again."""
+    """Set (or edit) a watchlisted lot's max bid - pre-filled with the AI
+    review's suggested max bid if one exists, else the scanner's own max
+    bid (see scanner.bid_watch.default_max_bid), unless the watch already
+    has a max bid of its own, which always wins. The quick one-click
+    "Add to Watchlist" star (toggle_watch below) is what actually creates
+    the BidWatch now - landing here with no watch yet at all (e.g. an old
+    bookmark) just creates one on save, same as before."""
     lot = get_object_or_404(SourcedLot.objects.select_related("evaluation"), pk=lot_id)
     evaluation = getattr(lot, "evaluation", None)
-
     existing = getattr(lot, "bid_watch", None)
-    if existing:
-        messages.info(request, f'Already watching "{lot.title}" (your max: ${existing.my_max_bid}).')
-        return redirect("albright_reselling_app:dashboard")
 
     review_id = request.GET.get("review") or request.POST.get("review")
     review = None
@@ -114,20 +115,45 @@ def watch_lot(request, lot_id):
         review = AIReview.objects.filter(lot=lot, status="done").order_by("-created_at").first()
 
     if request.method == "POST":
-        form = BidWatchForm(request.POST)
+        form = BidWatchForm(request.POST, instance=existing)
         if form.is_valid():
             watch = form.save(commit=False)
             watch.lot = lot
             watch.save()
             messages.success(request, f'Watching "{lot.title}" - max ${watch.my_max_bid}.')
             return redirect("albright_reselling_app:dashboard")
+    elif existing is not None and existing.my_max_bid is not None:
+        form = BidWatchForm(instance=existing)
     else:
         default = default_max_bid(evaluation, review)
-        form = BidWatchForm(initial={"my_max_bid": default} if default is not None else None)
+        form = BidWatchForm(instance=existing, initial={"my_max_bid": default} if default is not None else None)
 
     return render(request, "watch_lot.html", {
-        "lot": lot, "evaluation": evaluation, "review": review, "form": form,
+        "lot": lot, "evaluation": evaluation, "review": review, "form": form, "existing": existing,
     })
+
+
+@login_required
+@require_POST
+def toggle_watch(request, lot_id):
+    """The "Add to Watchlist" star - one click adds a lot to the
+    watchlist with no max bid yet (set later via watch_lot above, or
+    never - it's optional); clicking again removes it outright. Only for
+    a lot whose auction is still open - matches the dashboard's own rule
+    that every Act Now/Watch table row is already open-only, but checked
+    again here since this is reachable directly by URL too."""
+    lot = get_object_or_404(SourcedLot, pk=lot_id)
+    existing = getattr(lot, "bid_watch", None)
+
+    if existing is not None:
+        existing.delete()
+        return JsonResponse({"watching": False})
+
+    if lot.end_time is not None and lot.end_time <= timezone.now():
+        return JsonResponse({"error": "This lot has already closed."}, status=400)
+
+    BidWatch.objects.create(lot=lot, status="watching")
+    return JsonResponse({"watching": True})
 
 
 @login_required

@@ -1,0 +1,16 @@
+{% comment %}
+"Add to Watchlist" star toggle - one click adds the lot (no max bid
+required - that can be set later via the "Set max bid" link, which only
+shows once watching); clicking the star again removes it. No page reload
+- see static/js/auction_scanner.js's initWatchToggles(). Expects
+`watch_lot_id` (the lot's pk) and `is_watching` (bool) in context.
+{% endcomment %}
+<span class="js-watch-group" style="display: inline-flex; align-items: center; gap: 4px;">
+    <button type="button" class="btn btn-secondary btn-sm js-watch-toggle{% if is_watching %} is-watching{% endif %}"
+            data-toggle-url="{% url 'albright_reselling_app:toggle_watch' watch_lot_id %}"
+            title="{% if is_watching %}Remove from watchlist{% else %}Add to watchlist{% endif %}">
+        <span class="js-watch-star">{% if is_watching %}&#9733;{% else %}&#9734;{% endif %}</span>
+        <span class="js-watch-label">{% if is_watching %}Watching{% else %}Add to Watchlist{% endif %}</span>
+    </button>
+    <a href="{% url 'albright_reselling_app:watch_lot' watch_lot_id %}" class="js-watch-set-max-bid" style="font-size: 0.75rem;"{% if not is_watching %} hidden{% endif %}>Set max bid</a>
+</span>

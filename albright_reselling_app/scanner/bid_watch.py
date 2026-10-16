@@ -1,25 +1,28 @@
-"""BidWatch: lots the user has actually placed a bid on, as opposed to a
-lot the scanner merely flagged as a candidate. Three pieces:
-  - default_max_bid(): the "I bid on this" form's pre-fill value.
-  - send_closing_soon_alerts(): one Telegram alert per watch, once, when
-    its lot is about to close.
+"""BidWatch: the watchlist. Two pieces:
+  - default_max_bid(): the "set max bid" form's pre-fill value.
   - resolve_watches(): once a watched lot's end_time has passed, finds its
     final price (already-tracked, or one search_closed() lookup) and
-    settles the watch to likely_won/lost/unknown, with one result alert.
+    settles the watch to likely_won/lost/unknown, with an optional result
+    alert (ALERTS["watchlist_result_alerts"], off by default).
 
-Both sweeps are global (every source, every call) and are called
+The "closing soon" Telegram push (the lot's own alert, as opposed to a
+likely-won/lost result) is NOT here - that's the watchlist_alerts
+management command's job, reading straight from the database on its own
+schedule, so there's exactly one place in the codebase that sends it
+(see that command's docstring for why scan_lots used to send it too, and
+no longer does).
+
+resolve_watches() is global (every source, every call) and is called
 unconditionally from every scan_lots run, the same way scanner.alerts.
 run_alerts() already is - a lot closing on MaxSold still needs to be
 checked even if this particular scan_lots invocation was --source
 shopgoodwill. Telegram sending itself is scanner.alerts.send_telegram();
 this module owns the BidWatch lifecycle, not the wire format of alerts.
 
-Watchlist alerts ignore quiet hours by construction: ALERTS["quiet_hours"]
-(scanner/alerts.py) only gates run_alerts()'s per-lot kinds
-(candidate/lead/zero_bid/relisted) - these two sweeps call send_telegram()
-directly and were never routed through that gate, so a closing-soon or
-result alert goes out any time of day/night, same as a BidWatch you
-actually placed a real bid on deserves.
+A result alert (when enabled) ignores quiet hours by construction:
+ALERTS["quiet_hours"] (scanner/alerts.py) only gates run_alerts()'s
+per-lot kinds (candidate/lead/zero_bid/relisted) - this sweep calls
+send_telegram() directly and was never routed through that gate.
 """
 import logging
 from datetime import timedelta
@@ -35,7 +38,7 @@ from .adapters.hibid import HiBidAdapter
 from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .alerts import SITE_BASE_URL, send_telegram
-from .dashboard import _source_display, _time_remaining
+from .dashboard import _source_display
 
 log = logging.getLogger(__name__)
 
@@ -44,51 +47,13 @@ RESOLVE_GIVE_UP_AFTER = timedelta(days=2)
 
 
 def default_max_bid(evaluation, review):
-    """Pre-fill for the "I bid on this" form: the AI review's suggested
+    """Pre-fill for the "set max bid" form: the AI review's suggested
     max bid if one exists, else the scanner's own max bid."""
     if review is not None and review.suggested_max_bid is not None:
         return review.suggested_max_bid
     if evaluation is not None:
         return evaluation.max_bid
     return None
-
-
-def _format_closing_message(watch):
-    lot = watch.lot
-    local_end = timezone.localtime(lot.end_time)
-    lines = [
-        "<b>Your bid closes soon</b>",
-        f"{(_source_display(lot.source))} · {lot.title[:120]}",
-        f"Current bid: ${lot.current_price:.2f} · your max: ${watch.my_max_bid:.2f}",
-        f"Ends: {local_end.strftime('%b %d, %I:%M %p')} ({_time_remaining(lot, timezone.now())})",
-        f'<a href="{lot.url}">View listing</a>',
-    ]
-    return "\n".join(lines)
-
-
-def send_closing_soon_alerts(now=None):
-    """One alert per watch, the first time its lot falls inside the
-    configured alert window (ALERTS["window_minutes"], same window
-    run_alerts() uses) - never repeated, via closing_alert_sent."""
-    cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
-    if not cfg.get("enabled"):
-        return []
-
-    now = now or timezone.now()
-    cutoff = now + timedelta(minutes=cfg.get("window_minutes", 90))
-    watches = (
-        BidWatch.objects.filter(status="watching", closing_alert_sent=False)
-        .select_related("lot")
-        .filter(lot__end_time__gt=now, lot__end_time__lte=cutoff)
-    )
-
-    sent = []
-    for watch in watches:
-        send_telegram(_format_closing_message(watch))
-        watch.closing_alert_sent = True
-        watch.save(update_fields=["closing_alert_sent"])
-        sent.append(watch.lot_id)
-    return sent
 
 
 def _search_closed_for_lot(adapter, lot, now):
@@ -119,12 +84,19 @@ def _find_final_price(lot, adapter, now):
 
 
 def _send_result_alert(watch):
+    """Off by default - ALERTS["watchlist_result_alerts"]. Likely_won/lost
+    is still settled either way (_resolve_one always runs); this only
+    gates the Telegram push about it."""
+    cfg = settings.RESELLING_SCANNER.get("ALERTS", {})
+    if not cfg.get("watchlist_result_alerts", False):
+        return False
     if watch.result_alert_sent:
         return False
     lot = watch.lot
     lines = [f"<b>Bid result: {watch.get_status_display()}</b>", f"{_source_display(lot.source)} · {lot.title[:120]}"]
     if lot.final_price is not None:
-        lines.append(f"Final price: ${lot.final_price:.2f} · your max was ${watch.my_max_bid:.2f}")
+        max_bid_text = f"${watch.my_max_bid:.2f}" if watch.my_max_bid is not None else "not set"
+        lines.append(f"Final price: ${lot.final_price:.2f} · your max was {max_bid_text}")
     if watch.status == "likely_won":
         win_url = SITE_BASE_URL + reverse("albright_reselling_app:ledger_win_lot", args=[lot.pk])
         lines.append(f'<a href="{win_url}">Log it in the ledger</a>')
@@ -154,7 +126,10 @@ def _resolve_one(watch, adapters_cache, now):
             lot.save(update_fields=["final_price", "is_closed", "final_checked_at"])
 
     if final_price is not None:
-        watch.status = "likely_won" if final_price <= watch.my_max_bid else "lost"
+        if watch.my_max_bid is None:
+            watch.status = "unknown"  # no max bid on record - nothing to compare the final price against
+        else:
+            watch.status = "likely_won" if final_price <= watch.my_max_bid else "lost"
     elif now - lot.end_time > RESOLVE_GIVE_UP_AFTER:
         watch.status = "unknown"
     else:

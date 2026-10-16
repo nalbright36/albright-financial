@@ -179,10 +179,10 @@ class DashboardDismissalFilteringTests(TestCase):
         self.assertEqual(context["dismissed_count"], 1)
 
     def test_watched_lot_unaffected_by_dismissal(self):
-        """BidWatch (My Bids) never consults LotDismissal at all - a watched
-        lot that also happens to carry a dismissal (shouldn't normally
-        happen through the UI, but nothing stops it at the DB level)
-        still shows up in My Bids."""
+        """Watchlisted lots are never hidden by Dismiss - a watched lot
+        that also happens to carry a dismissal (shouldn't normally happen
+        through the UI, but nothing stops it at the DB level) still shows
+        up both in the Watchlist block and in its normal Act Now table."""
         lot = _make_lot("dsm-watch-1", timezone.now() + timedelta(hours=3))
         _make_evaluation(lot, is_candidate=True, headroom="20.00")
         BidWatch.objects.create(lot=lot, my_max_bid=Decimal("25.00"), status="watching")
@@ -191,7 +191,8 @@ class DashboardDismissalFilteringTests(TestCase):
         context = get_scanner_dashboard_context()
 
         self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
-        self.assertEqual(context["live_candidates_ending_soon"], [])  # still hidden from Act Now
+        self.assertEqual([r["title"] for r in context["live_candidates_ending_soon"]], [lot.title])
+        self.assertEqual(context["dismissed_rows"], [])
 
 
 class TodayPageDismissalTests(TestCase):
@@ -232,7 +233,11 @@ class AlertDismissalTests(TestCase):
 
     def _call_run_alerts(self, now, **cfg_overrides):
         base = {"enabled": True, "window_minutes": 180, "kinds": ["candidate", "lead", "zero_bid"],
-                "min_headroom": -1000.0, "candidate_confidence": ["high", "medium", "low", ""], "max_per_run": 10}
+                "min_headroom": -1000.0, "candidate_confidence": ["high", "medium", "low", ""], "max_per_run": 10,
+                # These tests predate the watchlist and exercise run_alerts()'s
+                # per-lot logic directly, so opt out of the real "watchlist_only"
+                # default - see test_alerts.ModeTests for that default itself.
+                "mode": "all"}
         cfg = {**settings.RESELLING_SCANNER, "ALERTS": {**base, **cfg_overrides}}
         with override_settings(RESELLING_SCANNER=cfg):
             with mock.patch(TELEGRAM_POST) as mock_post, mock.patch.dict(os.environ, CREDS):

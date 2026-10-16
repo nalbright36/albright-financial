@@ -560,6 +560,10 @@ a:hover { color: var(--accent-hover); }
 .btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--text-primary); }
 .btn-secondary:hover { background: var(--surface-hover); border-color: var(--text-tertiary); }
 
+/* Watchlist star toggle, once watching - see _watch_button.html. */
+.js-watch-toggle.is-watching { border-color: var(--gain); color: var(--gain); }
+.js-watch-toggle .js-watch-star { margin-right: 2px; }
+
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
 .btn-ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
 

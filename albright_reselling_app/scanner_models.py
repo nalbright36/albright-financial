@@ -120,7 +120,7 @@ class AlertSent(models.Model):
     reaches an IntegrityError."""
     KIND_CHOICES = [
         ("candidate", "Candidate"), ("lead", "Lead"), ("check_by_hand", "Check by Hand"),
-        ("zero_bid", "Zero Bid"), ("relisted", "Relisted"),
+        ("zero_bid", "Zero Bid"), ("relisted", "Relisted"), ("watchlist", "Watchlist"),
     ]
 
     lot = models.ForeignKey(SourcedLot, on_delete=models.CASCADE, related_name="alerts_sent")
@@ -154,22 +154,25 @@ class CriticalAlertSent(models.Model):
 
 
 class BidWatch(models.Model):
-    """A lot the user has actually placed a bid on, as opposed to one the
-    scanner merely flagged as a candidate - watching/likely_won/lost/
-    unknown is the user's own real-world outcome, tracked independently of
-    (and alongside) the scanner's own evaluation. Created from the "I bid
-    on this" button (dashboard row / AI review page); resolved by the
-    scheduled scan's watch-resolution sweep (scanner/bid_watch.py)."""
+    """A lot on the user's watchlist - watching/likely_won/lost/unknown is
+    the user's own real-world outcome, tracked independently of (and
+    alongside) the scanner's own evaluation. Created with a single click
+    ("Add to Watchlist" - the star button on any open lot row, or the AI
+    review page); my_max_bid is optional and can be added/edited later
+    (see scanner_views.watch_lot) - it's only needed to tell likely_won
+    from lost once the auction closes. Resolved by the scheduled scan's
+    watch-resolution sweep (scanner/bid_watch.py); the actual "closing
+    soon" Telegram alert is a separate, one-place concern - see the
+    watchlist_alerts management command and scanner/alerts.py."""
     STATUS_CHOICES = [
         ("watching", "Watching"), ("likely_won", "Likely Won"),
         ("lost", "Lost"), ("unknown", "Unknown"),
     ]
 
     lot = models.OneToOneField(SourcedLot, on_delete=models.CASCADE, related_name="bid_watch")
-    my_max_bid = models.DecimalField(max_digits=10, decimal_places=2)
+    my_max_bid = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="watching")
-    closing_alert_sent = models.BooleanField(default=False)
     result_alert_sent = models.BooleanField(default=False)
     # Not in the original field list - added so the digest's "likely won/
     # lost in the last 24h" (and the dashboard tile's "this week") can be

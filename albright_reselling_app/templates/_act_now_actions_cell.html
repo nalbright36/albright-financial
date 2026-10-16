@@ -1,11 +1,13 @@
 {% comment %}
 The Actions cell for the 3 Act Now tables only (Candidates Ending Soon,
 Check by Hand, Leads to Review) - the same AI-review content every other
-lot table's Actions cell has, plus the Dismiss control and the Calculator
-panel's "Calc" button. Expects `row` in the current context.
+lot table's Actions cell has, plus the Dismiss control, the Calculator
+panel's "Calc" button, and the watchlist star. Expects `row` in the
+current context.
 {% endcomment %}
 <td>
     {% include "_ai_review_actions.html" %}
     {% include "_calc_button.html" %}
+    {% include "_watch_button.html" with watch_lot_id=row.lot_id is_watching=row.bid_watch %}
     {% include "_dismiss_control.html" %}
 </td>

@@ -78,7 +78,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
             <div>
                 <a href="{{ watch.lot.url }}" target="_blank" rel="noopener">{{ watch.lot.title }}</a>
-                <div style="font-size: 0.75rem; color: var(--text-secondary);">Closing {{ watch.lot.end_time|date:"M j, g:i A" }} &middot; my max ${{ watch.my_max_bid|floatformat:2 }}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Closing {{ watch.lot.end_time|date:"M j, g:i A" }} &middot; my max {% if watch.my_max_bid is not None %}${{ watch.my_max_bid|floatformat:2 }}{% else %}not set{% endif %}</div>
             </div>
         </div>
         {% endfor %}

@@ -30,7 +30,13 @@ CREDS = {"TELEGRAM_BOT_TOKEN": "test-token", "TELEGRAM_CHAT_ID": "12345"}
 NO_CREDS = {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}
 
 ALERTS_CFG = {"enabled": True, "window_minutes": 90, "kinds": ["candidate", "lead"], "min_headroom": 5.0,
-              "candidate_confidence": ["high", "medium"], "max_per_run": 10}
+              "candidate_confidence": ["high", "medium"], "max_per_run": 10,
+              # Every existing test below predates the watchlist and is
+              # specifically exercising run_alerts()'s per-lot alerting
+              # logic in detail, so it opts out of the real settings.py
+              # default ("watchlist_only", which sends none of this) -
+              # see ModeTests for the default itself.
+              "mode": "all"}
 
 
 def _cfg(**overrides):
@@ -523,11 +529,11 @@ class CategoryFilterTests(TestCase):
 
         self.assertEqual(sent, [(lot.pk, "candidate")])
 
-    def test_bidwatch_closing_alert_unaffected_by_category_filter(self):
-        """send_closing_soon_alerts() (scanner/bid_watch.py) never looks at
-        ALERTS["categories"] at all - a watched lot outside coins/jewelry
-        still gets its closing-soon alert."""
-        from albright_reselling_app.scanner.bid_watch import send_closing_soon_alerts
+    def test_watchlist_alert_unaffected_by_category_filter(self):
+        """send_watchlist_alerts() (the watchlist's own "closing soon"
+        push) never looks at ALERTS["categories"] at all - a watched lot
+        outside coins/jewelry still gets its alert."""
+        from albright_reselling_app.scanner.alerts import send_watchlist_alerts
 
         now = timezone.now()
         lot = _make_lot("cat-watch-1", now + timedelta(minutes=30))
@@ -538,7 +544,7 @@ class CategoryFilterTests(TestCase):
         with override_settings(RESELLING_SCANNER=cfg):
             with mock.patch(TELEGRAM_POST) as mock_post, mock.patch.dict(os.environ, CREDS):
                 mock_post.return_value = _ok_response()
-                sent = send_closing_soon_alerts(now=now)
+                sent = send_watchlist_alerts(now=now)
 
         self.assertEqual(sent, [lot.pk])
         mock_post.assert_called_once()
@@ -568,6 +574,57 @@ class CategoryFilterTests(TestCase):
             message = build_digest_message(now=now)
 
         self.assertIn("1 candidate(s)", message)
+
+
+class ModeTests(TestCase):
+    """ALERTS["mode"] - "watchlist_only" (the real settings.py default)
+    sends none of run_alerts()'s per-lot kinds at all; any other value
+    restores them. Every other test in this file opts into mode="all"
+    via ALERTS_CFG so it can keep exercising that per-lot logic in
+    detail - this class is the one place testing the default itself."""
+
+    def test_watchlist_only_is_the_real_default(self):
+        self.assertEqual(settings.RESELLING_SCANNER["ALERTS"].get("mode"), "watchlist_only")
+
+    def test_watchlist_only_mode_sends_nothing(self):
+        now = timezone.now()
+        _make_candidate("mode-1", now + timedelta(minutes=30))
+        _make_lead("mode-2", now + timedelta(minutes=30))
+
+        cfg = {**settings.RESELLING_SCANNER, "ALERTS": {
+            "enabled": True, "window_minutes": 90, "kinds": ["candidate", "lead", "zero_bid", "relisted"],
+            "min_headroom": -1000.0, "candidate_confidence": ["high", "medium", "low", ""], "max_per_run": 10,
+            "mode": "watchlist_only",
+        }}
+        with override_settings(RESELLING_SCANNER=cfg):
+            with mock.patch(TELEGRAM_POST) as mock_post, mock.patch.dict(os.environ, CREDS):
+                mock_post.return_value = _ok_response()
+                sent = run_alerts(now=now)
+
+        self.assertEqual(sent, [])
+        mock_post.assert_not_called()
+
+    def test_mode_defaults_to_watchlist_only_when_key_missing_entirely(self):
+        now = timezone.now()
+        _make_candidate("mode-3", now + timedelta(minutes=30))
+
+        cfg = {**settings.RESELLING_SCANNER, "ALERTS": {
+            "enabled": True, "window_minutes": 90, "kinds": ["candidate"], "min_headroom": -1000.0,
+            "candidate_confidence": ["high", "medium", "low", ""], "max_per_run": 10,
+        }}
+        with override_settings(RESELLING_SCANNER=cfg):
+            sent = run_alerts(now=now)
+
+        self.assertEqual(sent, [])
+
+    def test_any_other_mode_restores_per_lot_alerts(self):
+        now = timezone.now()
+        lot, _ev = _make_candidate("mode-4", now + timedelta(minutes=30))
+
+        sent, mock_post = _call_run_alerts(now, mode="all")
+
+        self.assertEqual(sent, [(lot.pk, "candidate")])
+        mock_post.assert_called_once()
 
 
 class InQuietHoursTests(TestCase):
@@ -727,6 +784,27 @@ class DigestTests(TestCase):
 
         mock_post.assert_called_once()
         self.assertEqual(mock_post.call_args.kwargs["json"]["text"], message)
+
+    @mock.patch(TELEGRAM_POST)
+    @mock.patch.dict(os.environ, CREDS)
+    def test_digest_setting_off_skips_the_telegram_send_but_still_returns_the_message(self, mock_post):
+        cfg = {**settings.RESELLING_SCANNER, "ALERTS": {**settings.RESELLING_SCANNER["ALERTS"], "digest": False}}
+
+        with override_settings(RESELLING_SCANNER=cfg):
+            message = send_daily_digest(now=timezone.now())
+
+        mock_post.assert_not_called()
+        self.assertIn("Scanner Daily Digest", message)
+
+    @mock.patch(TELEGRAM_POST)
+    @mock.patch.dict(os.environ, CREDS)
+    def test_digest_setting_on_by_default(self, mock_post):
+        mock_post.return_value = _ok_response()
+        self.assertTrue(settings.RESELLING_SCANNER["ALERTS"].get("digest", True))
+
+        send_daily_digest(now=timezone.now())
+
+        mock_post.assert_called_once()
 
 
 class ManagementCommandTests(TestCase):

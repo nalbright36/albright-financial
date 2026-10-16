@@ -884,7 +884,7 @@ class LedgerTilesDashboardTests(TestCase):
         self.assertContains(response, "Sales This Month")
         self.assertContains(response, "Inventory")
         self.assertContains(response, "Needs Action")
-        self.assertContains(response, "My Bids")
+        self.assertContains(response, "Watchlist")
 
     def test_empty_state_renders_without_errors(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))

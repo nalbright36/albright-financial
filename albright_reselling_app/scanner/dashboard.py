@@ -226,10 +226,16 @@ def _split_dismissed(rows, threshold):
     "dismiss_reason_display" attached and moves to `dismissed`; a reopened
     one keeps "reopened_headroom_increase" set and stays in `active`
     (everything else is untouched, so `active` is otherwise identical to
-    the input)."""
+    the input). A watchlisted row (row["bid_watch"] set - this must run
+    after _attach_bid_watches()) always stays active, regardless of any
+    dismissal on record - once you've added a lot to the watchlist, Dismiss
+    never hides it again."""
     dismissals = _active_dismissals(row["lot_id"] for row in rows)
     active, dismissed = [], []
     for row in rows:
+        if row.get("bid_watch") is not None:
+            active.append(row)
+            continue
         dismissal = dismissals.get(row["lot_id"])
         if dismissal is None:
             active.append(row)
@@ -552,6 +558,7 @@ def _watch_row(watch, now):
         "category": evaluation.category if evaluation else "unknown",
         "current_bid": lot.current_price,
         "my_max_bid": watch.my_max_bid,
+        "headroom": (watch.my_max_bid - lot.current_price) if watch.my_max_bid is not None else None,
         "expected_sale": evaluation.expected_sale if evaluation else None,
         "time_remaining": _time_remaining(lot, now) if lot.end_time else "unknown",
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
@@ -651,10 +658,12 @@ def get_scanner_dashboard_context(user=None):
     )
 
     # Lot dismissal ("Dismiss" button on the Act Now tab) - only the 3
-    # Act Now tables (not Candidates Ending Later, Closest Calls, or My
-    # Bids/BidWatch, which are untouched - see this module's dismissal
-    # helpers). A reopened row (headroom grew past the threshold) stays
-    # in the active list with "reopened_headroom_increase" set.
+    # Act Now tables (not Candidates Ending Later, Closest Calls, or the
+    # Watchlist, which are untouched). Any row that's on the watchlist is
+    # exempted from dismissal entirely, even within these 3 tables - see
+    # _split_dismissed(). A reopened row (headroom grew past the
+    # threshold) stays in the active list with "reopened_headroom_increase"
+    # set.
     dismiss_threshold = dismiss_reopen_threshold()
     live_candidates_ending_soon, dismissed_candidates = _split_dismissed(
         live_candidates_ending_soon, dismiss_threshold

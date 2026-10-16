@@ -1,12 +1,16 @@
 {% comment %}
 Reused by every lot-row table that offers an AI review but not Dismiss
-(Candidates Ending Later, Closest Calls) - see _act_now_actions_cell.html
-for the Act Now tables' own version, which adds a Dismiss control to this
-same cell. Pass `show_calc=True` to also add the Calculator panel's
-"Calc" button (both Watch-tab callers do). Expects `row` in the current
-context.
+(Candidates Ending Later, Closest Calls, Results) - see
+_act_now_actions_cell.html for the Act Now tables' own version, which
+adds a Dismiss control to this same cell. Pass `show_calc=True` to also
+add the Calculator panel's "Calc" button and the watchlist star (both
+Watch-tab callers do; Results doesn't - out of scope for either).
+Expects `row` in the current context.
 {% endcomment %}
 <td>
     {% include "_ai_review_actions.html" %}
-    {% if show_calc %}{% include "_calc_button.html" %}{% endif %}
+    {% if show_calc %}
+    {% include "_calc_button.html" %}
+    {% include "_watch_button.html" with watch_lot_id=row.lot_id is_watching=row.bid_watch %}
+    {% endif %}
 </td>
