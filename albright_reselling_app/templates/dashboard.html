@@ -287,6 +287,7 @@
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                             {% if row.reopened_headroom_increase is not None %}<span class="badge gain" style="margin-left: 6px;" title="Was dismissed - headroom has grown since then">Back: headroom up ${{ row.reopened_headroom_increase|floatformat:2 }}</span>{% endif %}
+                            {% include "_my_estimate_note.html" %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -344,6 +345,7 @@
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
                             {% if row.reopened_headroom_increase is not None %}<span class="badge gain" style="margin-left: 6px;" title="Was dismissed - headroom has grown since then">Back: headroom up ${{ row.reopened_headroom_increase|floatformat:2 }}</span>{% endif %}
+                            {% include "_my_estimate_note.html" %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -406,6 +408,7 @@
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
+                            {% include "_my_estimate_note.html" %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -467,6 +470,7 @@
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
+                            {% include "_my_estimate_note.html" %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -523,6 +527,7 @@
                             <span class="badge {% if row.confidence == 'high' %}gain{% elif row.confidence == 'medium' %}neutral{% elif row.confidence == 'low' %}warn{% else %}neutral{% endif %}" style="margin-left: 6px;">{{ row.confidence }}</span>
                             {% if row.is_relisted %}<span class="badge warn" style="margin-left: 6px;" title="ShopGoodwill relistId > 0">Relisted</span>{% endif %}
                             {% if row.reserve_not_met %}<span class="badge loss" style="margin-left: 6px;" title="HiBid reserve not yet met - the current bid isn't a real signal">Reserve not met</span>{% endif %}
+                            {% include "_my_estimate_note.html" %}
                         </td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>

@@ -62,6 +62,7 @@ def insights_page(request):
         "applied_overrides": applied_overrides,
         "open_feedback": open_feedback,
         "ai_accuracy": insights.ai_review_accuracy(),
+        "prediction_accuracy": insights.prediction_accuracy_by_source(),
     })
 
 

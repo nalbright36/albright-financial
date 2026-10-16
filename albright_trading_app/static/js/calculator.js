@@ -13,6 +13,8 @@
  *      panel, so this is a no-op there).
  *   3. "Calc" buttons on dashboard lot rows that open the panel prefilled
  *      from that lot (only where .js-calc-from-lot buttons exist).
+ *   4. The dialog's "My resale estimate" panel (#calc-estimate) for that
+ *      lot - save/clear/reset, prefilled from the lot's saved estimate.
  */
 (function () {
     "use strict";
@@ -492,7 +494,241 @@
         if (dialogToggleButton) {
             dialogToggleButton.addEventListener("click", function () {
                 if (lotTitleEl) { lotTitleEl.textContent = ""; lotTitleEl.hidden = true; }
+                hideEstimatePanel();
                 openDialog(dialogToggleButton);
+            });
+        }
+
+        // ---------- "My resale estimate" (only when opened from a lot's
+        // Calc button). Saved per lot server-side (calculator_views.
+        // lot_estimate), which also computes My max bid from the estimate
+        // plus this dialog's Buy cost/eBay tab values - this file never
+        // does that math itself, it only asks calculate_api for a preview
+        // (tab "estimate", the same server function). A saved estimate's
+        // own calculator values win over the scanner's defaults when the
+        // lot is reopened; "Reset to scanner values" goes back to those. ----------
+        var estimatePanel = byId("calc-estimate");
+        var estimateValueEl = byId("calc-estimate-value");
+        var estimateNotesEl = byId("calc-estimate-notes");
+        var estimateMaxEl = byId("calc-estimate-max");
+        var estimateStatusEl = byId("calc-estimate-status");
+        var estimateSavedLabelEl = byId("calc-estimate-saved-label");
+        var estimateSavedDateEl = byId("calc-estimate-saved-date");
+        var estimateClearButton = byId("calc-estimate-clear");
+        var estimateUseMaxButton = byId("calc-estimate-use-max");
+        // The lot the dialog is currently open for: {id, bid, estimateUrl,
+        // clearUrl, scanner, watch} - null when opened from the toolbar.
+        var currentLot = null;
+
+        function hideEstimatePanel() {
+            currentLot = null;
+            if (estimatePanel) estimatePanel.hidden = true;
+        }
+
+        function setEstimateStatus(text) {
+            if (estimateStatusEl) estimateStatusEl.textContent = text || "";
+        }
+
+        function showSavedState(saved) {
+            estimateSavedLabelEl.hidden = !saved;
+            estimateClearButton.hidden = !saved;
+            estimateSavedDateEl.textContent = saved ? "Your saved estimate from " + saved.updated_date : "";
+            syncUseMaxButton(saved);
+        }
+
+        function syncUseMaxButton(saved) {
+            var watch = currentLot && currentLot.watch;
+            estimateUseMaxButton.hidden = !(saved && watch && watch.watching && watch.watch_max_bid === null);
+            if (!estimateUseMaxButton.hidden) {
+                estimateUseMaxButton.textContent = "Use as my max bid (" + money(saved.my_max_bid) + ")";
+            }
+        }
+
+        // The "My est. $X · My max $Y" notes under this lot's title in
+        // every dashboard table/detail row (_my_estimate_note.html).
+        function updateEstimateNotes(lotId, saved) {
+            document.querySelectorAll('.js-my-est[data-lot-id="' + lotId + '"]').forEach(function (el) {
+                var textEl = el.querySelector(".js-my-est-text");
+                if (textEl) {
+                    textEl.textContent = saved
+                        ? "My est. " + money(saved.resale_estimate) + " · My max " + money(saved.my_max_bid) : "";
+                }
+                el.hidden = !saved;
+            });
+        }
+
+        function collectEstimateInputs() {
+            return {buy: collectBuyData(), ebay: collectEbayData()};
+        }
+
+        var estimatePreviewTimer = null;
+        function scheduleEstimatePreview() {
+            if (!currentLot) return;
+            window.clearTimeout(estimatePreviewTimer);
+            estimatePreviewTimer = window.setTimeout(doEstimatePreview, 300);
+        }
+        function doEstimatePreview() {
+            if (!currentLot) return;
+            var data = collectEstimateInputs();
+            data.tab = "estimate";
+            data.resale_estimate = estimateValueEl.value;
+            postCalculate(data).then(function (results) {
+                estimateMaxEl.innerHTML = money(results.my_max_bid);
+            }).catch(function () {});
+        }
+
+        // Bid + source defaults, then once the Buy cost total is back, the
+        // eBay tab's item cost (that total) and listing price. prefillGen
+        // makes sure only the latest prefill's eBay step lands - the
+        // scanner prefill and the saved-estimate prefill that follows it
+        // race each other's calculate responses on open.
+        var prefillGen = 0;
+        function prefillThenEbay(buyData, salePrice) {
+            var gen = ++prefillGen;
+            applyBuyData(buyData);
+            return doBuyCalculate().then(function (buyResults) {
+                if (!buyResults || gen !== prefillGen) return;
+                var ebayData = {item_cost: buyResults.total.toFixed(2)};
+                if (salePrice !== null && salePrice !== undefined && salePrice !== "") ebayData.sale_price = salePrice;
+                applyEbayData(ebayData);
+                scheduleEbayCalculate();
+                scheduleEstimatePreview();
+            });
+        }
+
+        function applyScannerValues(scanner) {
+            estimateValueEl.value = "";
+            estimateNotesEl.value = "";
+            estimateMaxEl.innerHTML = "&mdash;";
+            applyBuyData({bid: scanner.bid, source: scanner.source});
+            applySourcePreset(scanner.source);
+            return prefillThenEbay({}, scanner.expected_sale);
+        }
+
+        function applySavedValues(saved) {
+            var inputs = saved.calc_inputs || {};
+            // The saved calculator values win over the scanner's source
+            // defaults - except the bid itself, which is always the lot's
+            // live current bid (My max bid doesn't depend on it anyway).
+            var buy = Object.assign({}, inputs.buy || {}, {bid: currentLot.bid});
+            applyEbayData(inputs.ebay || {});
+            estimateValueEl.value = saved.resale_estimate;
+            estimateNotesEl.value = saved.notes || "";
+            estimateMaxEl.innerHTML = money(saved.my_max_bid);
+            return prefillThenEbay(buy, saved.resale_estimate);
+        }
+
+        function openEstimatePanel(button) {
+            currentLot = {id: button.dataset.lotId, bid: button.dataset.bid || "", estimateUrl: button.dataset.estimateUrl};
+            var lot = currentLot;
+            if (!estimatePanel || !lot.estimateUrl) return Promise.resolve(null);
+            estimatePanel.hidden = false;
+            estimateValueEl.value = "";
+            estimateNotesEl.value = "";
+            estimateMaxEl.innerHTML = "&mdash;";
+            setEstimateStatus("");
+            estimateSavedLabelEl.hidden = true;
+            estimateClearButton.hidden = true;
+            estimateUseMaxButton.hidden = true;
+            return fetch(lot.estimateUrl, {headers: {"X-Requested-With": "XMLHttpRequest"}})
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (!data || currentLot !== lot) return null;  // reopened on another lot meanwhile
+                    lot.scanner = data.scanner;
+                    lot.watch = data.watch;
+                    lot.clearUrl = data.clear_url;
+                    showSavedState(data.saved);
+                    return data;
+                })
+                .catch(function () { return null; });
+        }
+
+        function estimatePost(url, body) {
+            return fetch(url, {
+                method: "POST",
+                headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
+                body: JSON.stringify(body || {}),
+            }).then(function (r) {
+                return r.json().then(function (data) { return {ok: r.ok, data: data}; });
+            });
+        }
+
+        if (estimatePanel) {
+            estimateValueEl.addEventListener("input", function () {
+                // My estimate is the eBay tab's listing price too, so its
+                // profit/fees always reflect the number being saved.
+                if (estimateValueEl.value !== "") {
+                    byId("ebay-sale_price").value = estimateValueEl.value;
+                    scheduleEbayCalculate();
+                }
+                scheduleEstimatePreview();
+            });
+            ["buy-form", "ebay-form"].forEach(function (id) {
+                byId(id).addEventListener("input", scheduleEstimatePreview);
+                byId(id).addEventListener("change", scheduleEstimatePreview);
+            });
+
+            byId("calc-estimate-save").addEventListener("click", function () {
+                if (!currentLot) return;
+                var lot = currentLot;
+                if (!(parseFloat(estimateValueEl.value) > 0)) {
+                    setEstimateStatus("Enter your resale estimate first.");
+                    estimateValueEl.focus();
+                    return;
+                }
+                var body = collectEstimateInputs();
+                body.resale_estimate = estimateValueEl.value;
+                body.notes = estimateNotesEl.value;
+                setEstimateStatus("Saving...");
+                estimatePost(lot.estimateUrl, body).then(function (res) {
+                    if (currentLot !== lot) return;
+                    if (!res.ok) { setEstimateStatus(res.data.error || "Couldn't save."); return; }
+                    lot.watch = res.data.watch;
+                    lot.clearUrl = res.data.clear_url;
+                    var saved = res.data.saved;
+                    estimateMaxEl.innerHTML = money(saved.my_max_bid);
+                    showSavedState(saved);
+                    setEstimateStatus("Saved ✓ " + saved.updated_time);
+                    updateEstimateNotes(lot.id, saved);
+                    document.dispatchEvent(new CustomEvent("watchlist:changed"));
+                }).catch(function () { setEstimateStatus("Couldn't save."); });
+            });
+
+            estimateClearButton.addEventListener("click", function () {
+                if (!currentLot || !currentLot.clearUrl) return;
+                var lot = currentLot;
+                estimatePost(lot.clearUrl).then(function (res) {
+                    if (currentLot !== lot || !res.ok) return;
+                    estimateValueEl.value = "";
+                    estimateNotesEl.value = "";
+                    estimateMaxEl.innerHTML = "&mdash;";
+                    showSavedState(null);
+                    setEstimateStatus("Estimate cleared");
+                    updateEstimateNotes(lot.id, null);
+                    document.dispatchEvent(new CustomEvent("watchlist:changed"));
+                }).catch(function () {});
+            });
+
+            estimateUseMaxButton.addEventListener("click", function () {
+                if (!currentLot || !currentLot.watch) return;
+                var lot = currentLot;
+                estimatePost(lot.watch.use_my_max_url).then(function (res) {
+                    if (currentLot !== lot) return;
+                    if (!res.ok) { setEstimateStatus(res.data.error || "Couldn't set max bid."); return; }
+                    lot.watch.watch_max_bid = res.data.watch_max_bid;
+                    estimateUseMaxButton.hidden = true;
+                    setEstimateStatus("Watchlist max bid set to " + money(res.data.watch_max_bid));
+                    document.dispatchEvent(new CustomEvent("watchlist:changed"));
+                }).catch(function () {});
+            });
+
+            byId("calc-estimate-reset").addEventListener("click", function (e) {
+                e.preventDefault();
+                if (!currentLot || !currentLot.scanner) return;
+                // Only refills the dialog - the saved estimate stays until
+                // "Save to this lot" overwrites it or "Clear estimate".
+                applyScannerValues(currentLot.scanner);
+                setEstimateStatus("Showing scanner values - not saved");
             });
         }
 
@@ -525,13 +761,14 @@
                         lotTitleEl.hidden = !title;
                     }
                     activateTab("buy");
-                    applyBuyData({bid: bid, source: source});
-                    applySourcePreset(source);
                     openDialog(button);
-                    doBuyCalculate().then(function (buyResults) {
-                        if (!buyResults) return;
-                        applyEbayData({item_cost: buyResults.total.toFixed(2), sale_price: expectedSale});
-                        scheduleEbayCalculate();
+                    // Scanner values right away (so the dialog is never
+                    // blank), then - once the lot's saved estimate (if
+                    // any) is back - those saved values on top.
+                    applyScannerValues({bid: bid, source: source, expected_sale: expectedSale});
+                    var lotEstimate = openEstimatePanel(button);
+                    lotEstimate.then(function (data) {
+                        if (data && data.saved) applySavedValues(data.saved);
                     });
                 });
             });

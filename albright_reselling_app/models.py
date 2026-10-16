@@ -25,6 +25,7 @@ SALE_CHANNEL_CHOICES = [
 PREDICTION_SOURCE_CHOICES = [
     ("scanner", "Scanner"),
     ("ai_review", "AI Review"),
+    ("manual", "Manual"),
 ]
 
 STATUS_CHOICES = [
@@ -574,5 +575,5 @@ class HistoricalLot(models.Model):
 
 from .scanner_models import (  # noqa: E402,F401
     SourcedLot, LotEvaluation, SpotPrice, ScanRun, AIReview, AlertSent, CriticalAlertSent, BidWatch,
-    CalibrationOverride, CalibrationSuggestion, LotFeedback, BidCalculation,
+    CalibrationOverride, CalibrationSuggestion, LotFeedback, BidCalculation, LotUserEstimate,
 )

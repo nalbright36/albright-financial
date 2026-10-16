@@ -31,7 +31,9 @@ from ..scanner_models import (
     AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
 from .ai_review_service import months_review_cost
-from .dashboard import _expected_interval_hours, _source_display, _time_remaining, exclude_dismissed_evaluations
+from .dashboard import (
+    _expected_interval_hours, _source_display, _time_remaining, exclude_dismissed_evaluations, watch_headroom,
+)
 
 log = logging.getLogger(__name__)
 
@@ -287,6 +289,13 @@ def _format_watchlist_message(watch, now):
     if watch.my_max_bid is not None:
         headroom = watch.my_max_bid - lot.current_price
         lines.append(f"Your max: ${watch.my_max_bid:.2f} · headroom: ${headroom:.2f}")
+    estimate = getattr(lot, "user_estimate", None)
+    if estimate is not None:
+        _basis_max, my_headroom, _basis = watch_headroom(watch)
+        lines.append(
+            f"My est.: ${estimate.resale_estimate:.2f} · My max: ${estimate.my_max_bid:.2f}"
+            f" · headroom vs my max: ${my_headroom:.2f}"
+        )
     lines.append(f"Ends: {local_end.strftime('%b %d, %I:%M %p')} ({minutes_left}m left)")
     lines.append(f'<a href="{lot.url}">View listing</a>')
     return "\n".join(lines)
@@ -314,7 +323,7 @@ def send_watchlist_alerts(now=None):
     watches = (
         BidWatch.objects.filter(status="watching", lot__end_time__gt=now, lot__end_time__lte=cutoff)
         .exclude(lot_id__in=already_alerted)
-        .select_related("lot")
+        .select_related("lot", "lot__evaluation", "lot__user_estimate")
     )
 
     sent = []

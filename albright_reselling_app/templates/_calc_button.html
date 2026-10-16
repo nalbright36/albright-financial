@@ -6,6 +6,6 @@ navigate, reload, or scroll the page. Expects `row` (lot_id, title,
 current_bid, source, expected_sale) in context.
 {% endcomment %}
 <button type="button" class="btn btn-secondary btn-sm js-calc-from-lot"
-        data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-bid="{{ row.current_bid }}"
+        data-lot-id="{{ row.lot_id }}" data-estimate-url="{% url 'albright_reselling_app:lot_estimate' row.lot_id %}" data-title="{{ row.title }}" data-bid="{{ row.current_bid }}"
         data-source="{{ row.source }}" data-expected-sale="{{ row.expected_sale|default_if_none:'' }}"
         title="Open in the calculator">Calc</button>

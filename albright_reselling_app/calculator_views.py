@@ -20,6 +20,7 @@ wasn't worth re-building for this simpler page.
 """
 import json
 from dataclasses import asdict
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -27,14 +28,14 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import dateformat, timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from .models import LedgerEntry
 from .scanner.simple_calc import (
     EBAY_PRESETS, GRAMS_PER, PURITY_PRESETS, break_even_price, buy_cost, ebay_profit, junk_silver_value,
     max_bid_for_total, melt_value, price_for_profit,
 )
-from .scanner_models import SourcedLot, SpotPrice
+from .scanner_models import BidWatch, LotUserEstimate, SourcedLot, SpotPrice
 
 SOURCE_CHOICES = [
     ("shopgoodwill", "ShopGoodwill"),
@@ -90,26 +91,26 @@ def all_source_defaults() -> dict:
     return {source: source_defaults(source) for source, _ in SOURCE_CHOICES}
 
 
-def _buy_result(data) -> dict:
-    bid = _num(data.get("bid"))
-    premium_pct = _num(data.get("premium_pct"))
-    tax_pct = _num(data.get("tax_pct"))
-    shipping = _num(data.get("shipping"))
-    other_fees = _num(data.get("other_fees"))
-    tax_on_premium = _checkbox(data, "tax_on_premium", True)
-    tax_on_shipping = _checkbox(data, "tax_on_shipping", False)
+def _buy_kwargs(data) -> dict:
+    """The Buy cost tab's fields (everything but the bid itself), as
+    keyword args for simple_calc.buy_cost()/max_bid_for_total()."""
+    return dict(
+        premium_pct=_num(data.get("premium_pct")),
+        tax_pct=_num(data.get("tax_pct")),
+        shipping=_num(data.get("shipping")),
+        other_fees=_num(data.get("other_fees")),
+        tax_on_premium=_checkbox(data, "tax_on_premium", True),
+        tax_on_shipping=_checkbox(data, "tax_on_shipping", False),
+    )
 
-    result = asdict(buy_cost(
-        bid, premium_pct=premium_pct, tax_pct=tax_pct, shipping=shipping, other_fees=other_fees,
-        tax_on_premium=tax_on_premium, tax_on_shipping=tax_on_shipping,
-    ))
+
+def _buy_result(data) -> dict:
+    kwargs = _buy_kwargs(data)
+    result = asdict(buy_cost(_num(data.get("bid")), **kwargs))
 
     budget = data.get("budget")
     if budget not in (None, ""):
-        result["max_bid_for_budget"] = max_bid_for_total(
-            _num(budget), premium_pct=premium_pct, tax_pct=tax_pct, shipping=shipping, other_fees=other_fees,
-            tax_on_premium=tax_on_premium, tax_on_shipping=tax_on_shipping,
-        )
+        result["max_bid_for_budget"] = max_bid_for_total(_num(budget), **kwargs)
     else:
         result["max_bid_for_budget"] = None
     return result
@@ -125,10 +126,12 @@ def _ebay_tiers(data):
     return category, preset["tiers"]
 
 
-def _ebay_result(data) -> dict:
-    item_cost = _num(data.get("item_cost"))
-    category, tiers = _ebay_tiers(data)
-    kwargs = dict(
+def _ebay_kwargs(data) -> dict:
+    """The eBay profit tab's sell-side fields (everything but item cost,
+    listing price, and target profit), as keyword args for
+    simple_calc.ebay_profit()/price_for_profit()."""
+    _category, tiers = _ebay_tiers(data)
+    return dict(
         shipping_charged=_num(data.get("shipping_charged")),
         shipping_cost=_num(data.get("shipping_cost")),
         packaging=_num(data.get("packaging")),
@@ -137,12 +140,22 @@ def _ebay_result(data) -> dict:
         buyer_tax_pct=_num(data.get("buyer_tax_pct"), 7.0),
         promoted_pct=_num(data.get("promoted_pct")),
     )
+
+
+def _target_profit(data) -> float:
+    return _num(data.get("target_profit"), 20.0)
+
+
+def _ebay_result(data) -> dict:
+    item_cost = _num(data.get("item_cost"))
+    category, _tiers = _ebay_tiers(data)
+    kwargs = _ebay_kwargs(data)
     sale_price = _num(data.get("sale_price"))
 
     result = asdict(ebay_profit(item_cost, sale_price, **kwargs))
     result["category"] = category
 
-    target_profit = _num(data.get("target_profit"), 20.0)
+    target_profit = _target_profit(data)
     result["target_profit"] = target_profit
     try:
         result["break_even_price"] = break_even_price(item_cost, **kwargs)
@@ -332,4 +345,143 @@ def calculate_api(request):
         return JsonResponse(_ebay_result(data))
     if data.get("tab") == "melt":
         return JsonResponse(_melt_result(data))
+    if data.get("tab") == "estimate":
+        # The dialog's live "My max bid" preview as you type - the exact
+        # same my_max_bid() lot_estimate stores, so the two can't differ.
+        estimate = _num(data.get("resale_estimate"), None)
+        if estimate is None or not (0 < estimate < float(MAX_RESALE_ESTIMATE)):
+            return JsonResponse({"my_max_bid": None})
+        calc_inputs = _clean_calc_inputs(data)
+        return JsonResponse({"my_max_bid": my_max_bid(estimate, calc_inputs["buy"], calc_inputs["ebay"])})
     return JsonResponse(_buy_result(data))
+
+
+# ---------------------------------------------------------------------------
+# "My resale estimate" - saved per lot from the Calculator dialog
+# ---------------------------------------------------------------------------
+
+# What's kept in LotUserEstimate.calc_inputs - just the calculator's own
+# Buy cost/eBay profit tab fields (the same names static/js/calculator.js
+# collects), so a reopened dialog can restore exactly what was used.
+ESTIMATE_BUY_KEYS = (
+    "source", "bid", "premium_pct", "tax_pct", "shipping", "other_fees", "tax_on_premium", "tax_on_shipping",
+)
+ESTIMATE_EBAY_KEYS = (
+    "category", "custom_rate_pct", "shipping_charged", "shipping_cost", "packaging", "other_costs",
+    "buyer_tax_pct", "promoted_pct", "target_profit",
+)
+MAX_RESALE_ESTIMATE = Decimal("1000000")  # well inside LotUserEstimate's max_digits=10
+
+
+def my_max_bid(resale_estimate: float, buy_inputs: dict, ebay_inputs: dict) -> float:
+    """The highest bid that still leaves the eBay tab's target profit if
+    the lot sells for resale_estimate - after every sell-side cost (eBay's
+    tiered fee incl. on buyer tax, per-order/promoted fees, shipping out,
+    packaging, other costs) and every buy-side cost (premium, tax,
+    shipping in, other fees). All of the math is simple_calc's:
+    ebay_profit() with a $0 item cost is the cash a sale leaves before
+    paying for the lot; less the target profit, that's the out-the-door
+    budget, which max_bid_for_total() turns back into a bid."""
+    sale = ebay_profit(0.0, float(resale_estimate), **_ebay_kwargs(ebay_inputs))
+    budget = sale.profit - _target_profit(ebay_inputs)
+    return max_bid_for_total(budget, **_buy_kwargs(buy_inputs))
+
+
+def _clean_calc_inputs(data) -> dict:
+    buy = data.get("buy") if isinstance(data.get("buy"), dict) else {}
+    ebay = data.get("ebay") if isinstance(data.get("ebay"), dict) else {}
+    return {
+        "buy": {key: buy[key] for key in ESTIMATE_BUY_KEYS if key in buy},
+        "ebay": {key: ebay[key] for key in ESTIMATE_EBAY_KEYS if key in ebay},
+    }
+
+
+def _scanner_prefill(lot) -> dict:
+    """What the dialog fills in for a lot with no saved estimate (and
+    what "Reset to scanner values" goes back to): the lot's current bid
+    and its source's buy-side defaults, plus the scanner's expected sale
+    as the eBay tab's listing price."""
+    evaluation = getattr(lot, "evaluation", None)
+    prefill = _lot_prefill(lot)
+    prefill["expected_sale"] = float(evaluation.expected_sale) if evaluation and evaluation.expected_sale else None
+    return prefill
+
+
+def estimate_payload(estimate):
+    if estimate is None:
+        return None
+    updated = timezone.localtime(estimate.updated_at)
+    return {
+        "resale_estimate": float(estimate.resale_estimate),
+        "my_max_bid": float(estimate.my_max_bid),
+        "calc_inputs": estimate.calc_inputs or {},
+        "notes": estimate.notes,
+        "updated_at": updated.isoformat(),
+        "updated_date": dateformat.format(updated, "M j, Y"),
+        "updated_time": dateformat.format(updated, "g:i A"),
+    }
+
+
+def _watch_payload(lot) -> dict:
+    watch = BidWatch.objects.filter(lot=lot).first()
+    return {
+        "watching": watch is not None,
+        "watch_max_bid": float(watch.my_max_bid) if watch and watch.my_max_bid is not None else None,
+        "use_my_max_url": reverse("albright_reselling_app:use_my_max_bid", args=[lot.pk]),
+    }
+
+
+def _lot_estimate_response(lot, estimate):
+    return JsonResponse({
+        "saved": estimate_payload(estimate),
+        "scanner": _scanner_prefill(lot),
+        "watch": _watch_payload(lot),
+        "clear_url": reverse("albright_reselling_app:clear_lot_estimate", args=[lot.pk]),
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def lot_estimate(request, lot_id):
+    """GET: this lot's saved estimate (or null) plus the scanner's own
+    prefill values, so the dialog can prefill from either (saved wins)
+    and "Reset to scanner values" never needs another round trip. POST
+    (JSON: resale_estimate, notes, buy, ebay): saves it, computing
+    my_max_bid here from the posted calculator inputs - never trusting a
+    max bid from the browser."""
+    lot = get_object_or_404(SourcedLot.objects.select_related("evaluation"), pk=lot_id)
+
+    if request.method == "GET":
+        return _lot_estimate_response(lot, LotUserEstimate.objects.filter(lot=lot).first())
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+    try:
+        resale_estimate = Decimal(str(data.get("resale_estimate")))
+        if not resale_estimate.is_finite() or not (0 < resale_estimate < MAX_RESALE_ESTIMATE):
+            raise ValueError
+        resale_estimate = resale_estimate.quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return JsonResponse({"error": "Enter your resale estimate."}, status=400)
+
+    calc_inputs = _clean_calc_inputs(data)
+    max_bid = my_max_bid(float(resale_estimate), calc_inputs["buy"], calc_inputs["ebay"])
+    estimate, _created = LotUserEstimate.objects.update_or_create(lot=lot, defaults={
+        "resale_estimate": resale_estimate,
+        "my_max_bid": Decimal(str(max_bid)).quantize(Decimal("0.01")),
+        "calc_inputs": calc_inputs,
+        "notes": str(data.get("notes") or "").strip(),
+    })
+    return _lot_estimate_response(lot, estimate)
+
+
+@login_required
+@require_POST
+def clear_lot_estimate(request, lot_id):
+    """The dialog's "Clear estimate" - deletes the saved estimate outright;
+    every place it was shown falls back to the scanner's own numbers."""
+    lot = get_object_or_404(SourcedLot.objects.select_related("evaluation"), pk=lot_id)
+    LotUserEstimate.objects.filter(lot=lot).delete()
+    return _lot_estimate_response(lot, None)

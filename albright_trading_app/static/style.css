@@ -532,6 +532,9 @@ a:hover { color: var(--accent-hover); }
 }
 
 /* ---------- Buttons ---------- */
+/* .btn's display: inline-flex would otherwise beat the [hidden] attribute
+   (the Calculator dialog's estimate panel toggles buttons with it). */
+.btn[hidden] { display: none; }
 .btn {
   display: inline-flex;
   align-items: center;

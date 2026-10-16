@@ -13,7 +13,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from ..ledger_metrics import exclude_personal
-from ..models import LedgerEntry
+from ..models import PREDICTION_SOURCE_CHOICES, LedgerEntry
 from ..scanner_models import AIReview, CalibrationOverride, CalibrationSuggestion, SourcedLot
 
 DEFAULT_HISTORY_DAYS = 30
@@ -457,3 +457,41 @@ def ai_review_accuracy(category=""):
         }
         for cat, stats in sorted(by_category.items())
     }
+
+
+# ---------------------------------------------------------------------------
+# Part D (cont.): Ledger prediction accuracy by source - scanner, AI review,
+# and the user's own manual estimate, each reported separately
+# ---------------------------------------------------------------------------
+
+def prediction_accuracy_by_source():
+    """For won (Ledger) items that have both a snapshotted prediction and
+    a real sale: per prediction source (always every source - scanner,
+    AI review, manual - even with no data yet, so "manual" sits alongside
+    the others), how many, and the median signed and absolute error of
+    what it actually sold for vs. the prediction's midpoint
+    (LedgerEntry.prediction_mid), as % of that midpoint - the same error
+    the Scorecard's "By Prediction Source" table reports. Written-off
+    entries are left out (no sale to compare against), same as
+    ai_review_accuracy()."""
+    entries = (
+        exclude_personal(LedgerEntry.objects.exclude(predicted_sale_source=""))
+        .exclude(status="written_off").prefetch_related("sales")
+    )
+    errors_by_source = {key: [] for key, _label in PREDICTION_SOURCE_CHOICES}
+    for entry in entries:
+        error_pct = entry.prediction_error_pct
+        if error_pct is not None:
+            errors_by_source.setdefault(entry.predicted_sale_source, []).append(error_pct)
+
+    labels = dict(PREDICTION_SOURCE_CHOICES)
+    return [
+        {
+            "source": key,
+            "label": labels.get(key, key),
+            "count": len(errors),
+            "median_error_pct": _median(errors),
+            "median_abs_error_pct": _median([abs(e) for e in errors]),
+        }
+        for key, errors in errors_by_source.items()
+    ]

@@ -1,0 +1,13 @@
+{% comment %}
+"My est. $X · My max $Y" under a lot's title (dashboard lot tables) and in
+its expandable detail row - the user's own saved estimate from the
+Calculator dialog (LotUserEstimate, attached as row.my_estimate by
+scanner/dashboard.py's _attach_user_estimates()). Always rendered, just
+hidden when there's no estimate, so static/js/calculator.js can fill it in
+(or hide it again) right after a Save/Clear in the dialog, without a page
+reload - it finds every .js-my-est for that lot by data-lot-id. Expects
+`row` in context.
+{% endcomment %}
+<div class="js-my-est" data-lot-id="{{ row.lot_id }}" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;"{% if not row.my_estimate %} hidden{% endif %}>
+    <span class="js-my-est-text">{% if row.my_estimate %}My est. ${{ row.my_estimate.resale_estimate|floatformat:2 }} &middot; My max ${{ row.my_estimate.my_max_bid|floatformat:2 }}{% endif %}</span>
+</div>

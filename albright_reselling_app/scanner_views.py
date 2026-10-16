@@ -36,7 +36,7 @@ from .scanner.review_history import (
     summary_stats,
     time_remaining_at_review,
 )
-from .scanner_models import AIReview, BidWatch, SourcedLot
+from .scanner_models import AIReview, BidWatch, LotUserEstimate, SourcedLot
 
 RECENT_REVIEW_WINDOW = timedelta(hours=24)
 
@@ -154,6 +154,40 @@ def toggle_watch(request, lot_id):
 
     BidWatch.objects.create(lot=lot, status="watching")
     return JsonResponse({"watching": True})
+
+
+@login_required
+@require_POST
+def use_my_max_bid(request, lot_id):
+    """One click "Use as my max bid": copies the lot's saved estimate's
+    my_max_bid (LotUserEstimate, from the Calculator dialog) onto its
+    Watchlist entry - only when that entry has no max bid of its own yet,
+    so it never silently overwrites one set by hand (edit that via
+    watch_lot instead). JSON for the dialog/Watchlist's fetch() calls;
+    a plain form POST (no JS) redirects back to the dashboard."""
+    lot = get_object_or_404(SourcedLot, pk=lot_id)
+    watch = BidWatch.objects.filter(lot=lot).first()
+    estimate = LotUserEstimate.objects.filter(lot=lot).first()
+    wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    if watch is None or estimate is None or watch.my_max_bid is not None:
+        if watch is None:
+            error = "This lot isn't on your watchlist."
+        elif estimate is None:
+            error = "No saved estimate for this lot."
+        else:
+            error = "This lot already has a max bid - edit it instead."
+        if wants_json:
+            return JsonResponse({"error": error}, status=400)
+        messages.error(request, error)
+        return redirect("albright_reselling_app:dashboard")
+
+    watch.my_max_bid = estimate.my_max_bid
+    watch.save(update_fields=["my_max_bid"])
+    if wants_json:
+        return JsonResponse({"watch_max_bid": float(watch.my_max_bid)})
+    messages.success(request, f'Max bid for "{lot.title}" set to ${watch.my_max_bid}.')
+    return redirect("albright_reselling_app:dashboard")
 
 
 @login_required

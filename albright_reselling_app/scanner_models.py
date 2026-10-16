@@ -330,3 +330,25 @@ class ScanRun(models.Model):
 
     def __str__(self):
         return f"{self.source} @ {self.started_at}"
+
+
+class LotUserEstimate(models.Model):
+    """The user's own resale estimate for a lot, saved from the Calculator
+    dialog's "Save to this lot" (calculator_views.save_lot_estimate) and
+    reused everywhere the lot appears - the Watchlist's My est./My max
+    columns and headroom, dashboard rows, Telegram watchlist alerts, and
+    "I won this" (as a "manual" prediction). my_max_bid is always computed
+    server-side at save time from resale_estimate + calc_inputs (via
+    calculator_views.my_max_bid(), backed by scanner/simple_calc.py) -
+    never trusted from the browser. calc_inputs holds the calculator's
+    own Buy cost/eBay tab values as {"buy": {...}, "ebay": {...}}, so
+    reopening Calc on this lot restores exactly what was used."""
+    lot = models.OneToOneField(SourcedLot, on_delete=models.CASCADE, related_name="user_estimate")
+    resale_estimate = models.DecimalField(max_digits=10, decimal_places=2)
+    my_max_bid = models.DecimalField(max_digits=10, decimal_places=2)
+    calc_inputs = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"LotUserEstimate({self.lot_id}: ${self.resale_estimate} -> max ${self.my_max_bid})"

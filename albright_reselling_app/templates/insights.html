@@ -145,6 +145,29 @@
         {% endif %}
     </div>
 
+    <!-- Every prediction source side by side - scanner, AI review, and
+         your own manual estimate (Calculator dialog's "Save to this lot")
+         - from what won Ledger items actually sold for. -->
+    <div class="card" style="margin-bottom: 20px;" id="prediction-accuracy">
+        <div class="card__header">
+            <span class="card__label">Prediction Accuracy by Source</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">Ledger sales vs. the prediction saved at "I won this"</span>
+        </div>
+        <table class="holdings">
+            <thead><tr><th>Source</th><th class="num">Count</th><th class="num">Median Error %</th><th class="num">Median |Error| %</th></tr></thead>
+            <tbody>
+                {% for row in prediction_accuracy %}
+                <tr data-prediction-source="{{ row.source }}">
+                    <td>{{ row.label }}</td>
+                    <td class="num">{{ row.count }}</td>
+                    <td class="num">{% if row.median_error_pct is not None %}{{ row.median_error_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if row.median_abs_error_pct is not None %}{{ row.median_abs_error_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     <!-- ============ Part B: calibration suggestions ============ -->
     <div class="card" style="margin-bottom: 20px;">
         <div class="card__header">

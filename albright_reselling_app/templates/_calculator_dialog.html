@@ -20,6 +20,42 @@ real <form> submission.
         <button type="button" id="calc-dialog-close" class="btn btn-secondary btn-sm" aria-label="Close calculator">&#10005;</button>
     </div>
     <div class="calc-dialog__body">
+        {% comment %}
+        "My resale estimate" - only shown when the dialog is opened from a
+        lot's Calc button (calculator.js un-hides it and points it at that
+        lot). Saved per lot via calculator_views.lot_estimate, which works
+        out My max bid itself from the estimate plus the Buy cost/eBay tab
+        values below - the live preview here goes through the same
+        function (calculate_api's "estimate" tab). Not a <form>: Save/Clear
+        are plain buttons, so nothing here can ever submit/navigate.
+        {% endcomment %}
+        <div class="card" id="calc-estimate" style="margin-bottom: 16px; background: var(--surface-hover);" hidden>
+            <div class="card__header">
+                <span class="card__label">My resale estimate</span>
+                <span id="calc-estimate-saved-label" style="font-size: 0.75rem; color: var(--text-secondary);" hidden>
+                    <span id="calc-estimate-saved-date"></span>
+                    &middot; <a href="#" id="calc-estimate-reset">Reset to scanner values</a>
+                </span>
+            </div>
+            <div class="grid grid-2" style="gap: var(--space-3);">
+                <div class="field" style="margin-bottom: 8px;"><label for="calc-estimate-value">My resale estimate ($)</label>
+                    <input type="number" step="0.01" min="0" id="calc-estimate-value" class="ledger-input num">
+                </div>
+                <div class="field" style="margin-bottom: 8px;"><label for="calc-estimate-notes">Note (optional)</label>
+                    <input type="text" id="calc-estimate-notes" class="ledger-input" maxlength="500">
+                </div>
+            </div>
+            <p style="margin: 0 0 8px; font-size: 0.8125rem;">
+                My max bid: <span id="calc-estimate-max" class="num" style="font-weight: 600;">&mdash;</span>
+                <span style="color: var(--text-secondary);">(hits the eBay tab's target profit after all buy and sell costs)</span>
+            </p>
+            <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center;">
+                <button type="button" class="btn btn-primary btn-sm" id="calc-estimate-save">Save to this lot</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="calc-estimate-use-max" hidden>Use as my max bid</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="calc-estimate-clear" hidden>Clear estimate</button>
+                <span id="calc-estimate-status" style="font-size: 0.75rem; color: var(--text-secondary);" role="status"></span>
+            </div>
+        </div>
         {% include "_calculator_tabs.html" %}
     </div>
 </dialog>

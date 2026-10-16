@@ -57,7 +57,14 @@ def _win_lot_initial(lot, evaluation, review):
     scanner_max_bid = evaluation.max_bid if evaluation else None
     ai_suggested_max_bid = review.suggested_max_bid if review else None
 
-    if review is not None and review.resale_low is not None:
+    # The user's own saved estimate (Calculator dialog's "Save to this
+    # lot") is the most deliberate prediction there is - it wins over both
+    # the AI review's range and the scanner's expected sale.
+    user_estimate = getattr(lot, "user_estimate", None)
+    if user_estimate is not None:
+        predicted_low = predicted_high = user_estimate.resale_estimate
+        predicted_source = "manual"
+    elif review is not None and review.resale_low is not None:
         predicted_low, predicted_high, predicted_source = review.resale_low, review.resale_high, "ai_review"
     elif evaluation is not None and evaluation.expected_sale:
         predicted_low = predicted_high = evaluation.expected_sale

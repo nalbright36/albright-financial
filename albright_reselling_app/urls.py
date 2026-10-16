@@ -47,4 +47,8 @@ urlpatterns = [
     path("scanner/lot/<int:lot_id>/feedback/", insights_views.create_lot_feedback, name="lot_feedback"),
     path("calculator/", calculator_views.calculator_page, name="calculator"),
     path("calculator/calculate/", calculator_views.calculate_api, name="calculator_calculate"),
+    path("calculator/lot/<int:lot_id>/estimate/", calculator_views.lot_estimate, name="lot_estimate"),
+    path("calculator/lot/<int:lot_id>/estimate/clear/", calculator_views.clear_lot_estimate,
+         name="clear_lot_estimate"),
+    path("scanner/lot/<int:lot_id>/use-my-max/", scanner_views.use_my_max_bid, name="use_my_max_bid"),
 ]

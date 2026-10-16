@@ -28,6 +28,9 @@ Expects `row` and `colspan` in context.
                 {% if row.end_time_estimated %}<span class="badge neutral" title="No live countdown from the site - using the auction's stated close time instead">est. end time</span>{% endif %}
             </span>
             {% endif %}
+            <span class="js-my-est" data-lot-id="{{ row.lot_id }}"{% if not row.my_estimate %} hidden{% endif %}>
+                <strong>Mine:</strong> <span class="js-my-est-text">{% if row.my_estimate %}My est. ${{ row.my_estimate.resale_estimate|floatformat:2 }} &middot; My max ${{ row.my_estimate.my_max_bid|floatformat:2 }}{% endif %}</span>
+            </span>
             {% if row.matched_keyword %}<span><strong>Matched keyword:</strong> {{ row.matched_keyword }}</span>{% endif %}
             {% if row.ai_review %}
             <span>

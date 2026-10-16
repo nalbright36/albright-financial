@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from .. import ledger_metrics
 from ..scanner_models import (
-    AIReview, AlertSent, BidWatch, LotDismissal, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
+    AIReview, AlertSent, BidWatch, LotDismissal, LotEvaluation, LotUserEstimate, ScanRun, SourcedLot, SpotPrice,
 )
 from .ai_review_service import months_review_cost, todays_review_count
 
@@ -536,9 +536,39 @@ def _attach_ai_reviews(*row_lists):
         row["ai_review"] = latest.get(row["lot_id"])
 
 
+def _attach_user_estimates(*row_lists):
+    """Adds a "my_estimate" key (the lot's LotUserEstimate, saved from the
+    Calculator dialog, or None) to every row across all the given lists,
+    via one shared lookup query - same pattern as _attach_ai_reviews()."""
+    all_rows = [row for rows in row_lists for row in rows]
+    lot_ids = {row["lot_id"] for row in all_rows if row.get("lot_id") is not None}
+    estimates = {e.lot_id: e for e in LotUserEstimate.objects.filter(lot_id__in=lot_ids)} if lot_ids else {}
+    for row in all_rows:
+        row["my_estimate"] = estimates.get(row.get("lot_id"))
+
+
+def watch_headroom(watch):
+    """(basis_max, headroom, basis) for a watched lot: measured against
+    the user's own estimate-derived max bid (LotUserEstimate.my_max_bid,
+    basis "mine") when one is saved, otherwise the scanner's max bid
+    (basis "scanner"), otherwise (None, None, None). Shared by the
+    Watchlist section and the Telegram watchlist alert so the two always
+    agree on which max a headroom figure means."""
+    lot = watch.lot
+    estimate = getattr(lot, "user_estimate", None)
+    if estimate is not None:
+        return estimate.my_max_bid, estimate.my_max_bid - lot.current_price, "mine"
+    evaluation = getattr(lot, "evaluation", None)
+    if evaluation is not None and evaluation.max_bid and evaluation.max_bid > 0:
+        return evaluation.max_bid, evaluation.max_bid - lot.current_price, "scanner"
+    return None, None, None
+
+
 def _watch_row(watch, now):
     lot = watch.lot
     evaluation = getattr(lot, "evaluation", None)
+    estimate = getattr(lot, "user_estimate", None)
+    _basis_max, headroom, headroom_basis = watch_headroom(watch)
     return {
         "watch": watch,
         "lot_id": lot.pk,
@@ -548,8 +578,13 @@ def _watch_row(watch, now):
         "source_display": _source_display(lot.source),
         "category": evaluation.category if evaluation else "unknown",
         "current_bid": lot.current_price,
+        # The Watchlist entry's own max bid (set by hand via watch_lot, or
+        # copied from the estimate by "Use as my max bid").
         "my_max_bid": watch.my_max_bid,
-        "headroom": (watch.my_max_bid - lot.current_price) if watch.my_max_bid is not None else None,
+        "my_estimate": estimate,
+        "can_use_my_max": estimate is not None and watch.my_max_bid is None,
+        "headroom": headroom,
+        "headroom_basis": headroom_basis,
         "expected_sale": evaluation.expected_sale if evaluation else None,
         "time_remaining": _time_remaining(lot, now) if lot.end_time else "unknown",
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
@@ -563,7 +598,7 @@ def _watched_lots(now):
     Performance tabs."""
     watches = (
         BidWatch.objects.filter(status="watching", lot__end_time__gt=now)
-        .select_related("lot", "lot__evaluation").order_by("lot__end_time")
+        .select_related("lot", "lot__evaluation", "lot__user_estimate").order_by("lot__end_time")
     )
     return [_watch_row(w, now) for w in watches]
 
@@ -659,6 +694,9 @@ def get_scanner_dashboard_context(user=None):
     # a lot sitting over the scanner's melt-based max is exactly the case
     # where a second (market-comps-based) opinion is most worth paying for.
     _attach_ai_reviews(
+        live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
+    )
+    _attach_user_estimates(
         live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
     )
 

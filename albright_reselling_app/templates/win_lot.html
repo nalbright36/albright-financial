@@ -20,7 +20,8 @@
         {% else %}
         <h3 style="margin-bottom: 4px;"><a href="{{ lot.url }}" target="_blank" rel="noopener">{{ lot.title }}</a></h3>
         <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 20px;">
-            {% if review %}Prediction will use the AI review's resale range (${{ review.resale_low|floatformat:0 }}&ndash;${{ review.resale_high|floatformat:0 }}).
+            {% if lot.user_estimate %}Prediction will use your saved estimate (${{ lot.user_estimate.resale_estimate|floatformat:2 }}).
+            {% elif review %}Prediction will use the AI review's resale range (${{ review.resale_low|floatformat:0 }}&ndash;${{ review.resale_high|floatformat:0 }}).
             {% elif evaluation %}Prediction will use the scanner's expected sale (${{ evaluation.expected_sale|floatformat:2 }}).
             {% else %}No prediction available for this lot.{% endif %}
         </p>
