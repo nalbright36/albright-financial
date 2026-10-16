@@ -548,6 +548,106 @@ class ScannerDashboardContextTests(TestCase):
         self.assertFalse(context["live_candidates_ending_soon"][0]["reserve_not_met"])
 
 
+class WatchlistExclusionTests(TestCase):
+    """A watchlisted lot appears only in the Watchlist section - never
+    also duplicated into whichever Act Now/Watch table it would otherwise
+    qualify for (candidates ending soon/later, check by hand, leads,
+    closest calls, MaxSold by estate), and tab/category counts reflect
+    that exclusion too. See get_scanner_dashboard_context()'s
+    excluded_lot_ids and _watched_lot_ids()."""
+
+    def test_watched_candidate_excluded_from_ending_soon(self):
+        lot = _make_lot("wl-soon-1", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["live_candidates_ending_soon"], [])
+        self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
+
+    def test_watched_candidate_excluded_from_ending_later(self):
+        lot = _make_lot("wl-later-1", timezone.now() + timedelta(days=3))
+        _make_evaluation(lot, is_candidate=True)
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["live_candidates_ending_later"], [])
+        self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
+
+    def test_watched_lot_excluded_from_check_by_hand(self):
+        lot = _make_lot("wl-check-1", timezone.now() + timedelta(hours=3))
+        LotEvaluation.objects.create(
+            lot=lot, is_candidate=False, max_bid=Decimal("20.0"), headroom=Decimal("5.0"), confidence="low",
+        )
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["check_by_hand"], [])
+        self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
+
+    def test_watched_lead_excluded_from_leads_to_review(self):
+        lot = _make_lot("wl-lead-1", timezone.now() + timedelta(hours=3))
+        _make_lead_evaluation(lot, category="games")
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["leads_to_review"], [])
+        self.assertEqual(context["lead_counts_by_category"], {})
+        self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
+
+    def test_watched_lot_excluded_from_closest_calls(self):
+        lot = _make_lot("wl-closest-1", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=False, max_bid=20.0, headroom=-5.0, confidence="high")
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["closest_calls"], [])
+        self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
+
+    def test_watched_lot_excluded_from_maxsold_estates(self):
+        lot = _make_maxsold_lot("wl-maxsold-1", timezone.now() + timedelta(hours=3), auction_id=501)
+        _make_evaluation(lot, is_candidate=True)
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["maxsold_estates"], [])
+        self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
+
+    def test_tab_counts_exclude_watchlisted_lots(self):
+        soon_lot = _make_lot("wl-tab-soon", timezone.now() + timedelta(hours=3))
+        _make_evaluation(soon_lot, is_candidate=True)
+        BidWatch.objects.create(lot=soon_lot, status="watching")
+        later_lot = _make_lot("wl-tab-later", timezone.now() + timedelta(days=3))
+        _make_evaluation(later_lot, is_candidate=True)
+        BidWatch.objects.create(lot=later_lot, status="watching")
+
+        context = get_scanner_dashboard_context()
+
+        self.assertEqual(context["tab_counts"]["act_now"], 0)
+        self.assertEqual(context["tab_counts"]["watch"], 0)
+        self.assertEqual(len(context["watched_lots"]), 2)
+
+    def test_removing_the_watch_returns_the_lot_to_its_table(self):
+        lot = _make_lot("wl-remove-1", timezone.now() + timedelta(hours=3))
+        _make_evaluation(lot, is_candidate=True)
+        watch = BidWatch.objects.create(lot=lot, status="watching")
+
+        before = get_scanner_dashboard_context()
+        self.assertEqual(before["live_candidates_ending_soon"], [])
+
+        watch.delete()
+        after = get_scanner_dashboard_context()
+
+        self.assertEqual([r["title"] for r in after["live_candidates_ending_soon"]], [lot.title])
+        self.assertEqual(after["watched_lots"], [])
+
+
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
 
@@ -606,6 +706,30 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
         self.assertContains(response, "status-dot--warn")
+
+    def test_watchlist_empty_state_message(self):
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+
+        self.assertContains(response, "Nothing on your watchlist. Use")
+        self.assertContains(response, "Add to Watchlist on any lot.")
+
+    def test_watchlist_section_renders_above_the_tabs(self):
+        """The Watchlist section is its own card above the Act now/Watch/
+        Performance tabs, not nested inside any one of them - so it must
+        appear in the markup before the tab nav and before the Act now
+        panel, and outside the Act now panel's own closing tag."""
+        lot = _make_lot("wl-position-1", timezone.now() + timedelta(hours=3))
+        BidWatch.objects.create(lot=lot, status="watching")
+
+        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        content = response.content.decode()
+
+        my_bids_index = content.index('id="my-bids"')
+        tabs_nav_index = content.index('id="scanner-tabs"')
+        act_now_index = content.index('id="act-now"')
+
+        self.assertLess(my_bids_index, tabs_nav_index)
+        self.assertLess(my_bids_index, act_now_index)
 
     def test_tabs_render_with_badge_counts(self):
         lot = _make_lot("tab-page-soon", timezone.now() + timedelta(hours=3))

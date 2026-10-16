@@ -1,7 +1,7 @@
 """Tests for lot dismissal: the dashboard's Act Now "Dismiss" button
 (LotDismissal, scanner/dashboard.py's hide/reopen rule, dismiss_views.py),
 its effect on the Today page's candidates section and Telegram's per-lot
-alerts, and confirmation that BidWatch (My Bids)/the Watch and
+alerts, and confirmation that the Watchlist section/the Watch and
 Performance tabs/AI review history are all untouched by it."""
 import os
 from datetime import timedelta
@@ -182,7 +182,11 @@ class DashboardDismissalFilteringTests(TestCase):
         """Watchlisted lots are never hidden by Dismiss - a watched lot
         that also happens to carry a dismissal (shouldn't normally happen
         through the UI, but nothing stops it at the DB level) still shows
-        up both in the Watchlist block and in its normal Act Now table."""
+        up in the Watchlist section. It's also excluded from its own Act
+        Now table entirely (a watchlisted lot appears only in the
+        Watchlist section - see get_scanner_dashboard_context()), so the
+        stale dismissal on it is moot - it doesn't show up as dismissed
+        either."""
         lot = _make_lot("dsm-watch-1", timezone.now() + timedelta(hours=3))
         _make_evaluation(lot, is_candidate=True, headroom="20.00")
         BidWatch.objects.create(lot=lot, my_max_bid=Decimal("25.00"), status="watching")
@@ -191,7 +195,7 @@ class DashboardDismissalFilteringTests(TestCase):
         context = get_scanner_dashboard_context()
 
         self.assertEqual([r["title"] for r in context["watched_lots"]], [lot.title])
-        self.assertEqual([r["title"] for r in context["live_candidates_ending_soon"]], [lot.title])
+        self.assertEqual(context["live_candidates_ending_soon"], [])
         self.assertEqual(context["dismissed_rows"], [])
 
 

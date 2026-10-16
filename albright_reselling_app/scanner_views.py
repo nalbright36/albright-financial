@@ -22,7 +22,7 @@ from django.views.decorators.http import require_POST
 from .forms import BidWatchForm
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from .scanner.bid_watch import default_max_bid
-from .scanner.dashboard import _time_remaining
+from .scanner.dashboard import _has_maxsold, _time_remaining, _watched_lots
 from .scanner.review_history import (
     CATEGORY_CHOICES,
     CONFIDENCE_CHOICES,
@@ -154,6 +154,20 @@ def toggle_watch(request, lot_id):
 
     BidWatch.objects.create(lot=lot, status="watching")
     return JsonResponse({"watching": True})
+
+
+@login_required
+def watchlist_section(request):
+    """Just the Watchlist card's body (table or empty state) - fetched by
+    static/js/auction_scanner.js after a lot is added via any table's star,
+    so the newly-watched lot shows up there immediately without a full
+    page reload, without duplicating this markup in JS. See
+    _watchlist_section.html and dashboard.html's #watchlist-body."""
+    now = timezone.now()
+    watched_lots = _watched_lots(now)
+    return render(request, "_watchlist_section.html", {
+        "watched_lots": watched_lots, "watched_lots_has_maxsold": _has_maxsold(watched_lots),
+    })
 
 
 @login_required

@@ -226,16 +226,13 @@ def _split_dismissed(rows, threshold):
     "dismiss_reason_display" attached and moves to `dismissed`; a reopened
     one keeps "reopened_headroom_increase" set and stays in `active`
     (everything else is untouched, so `active` is otherwise identical to
-    the input). A watchlisted row (row["bid_watch"] set - this must run
-    after _attach_bid_watches()) always stays active, regardless of any
-    dismissal on record - once you've added a lot to the watchlist, Dismiss
-    never hides it again."""
+    the input). A watchlisted lot never reaches this function at all -
+    get_scanner_dashboard_context() excludes it from every table's query
+    up front (see _watched_lot_ids()), so Dismiss never has a say over it
+    either."""
     dismissals = _active_dismissals(row["lot_id"] for row in rows)
     active, dismissed = [], []
     for row in rows:
-        if row.get("bid_watch") is not None:
-            active.append(row)
-            continue
         dismissal = dismissals.get(row["lot_id"])
         if dismissal is None:
             active.append(row)
@@ -344,14 +341,16 @@ def _split_by_window(live_qs, now, window_hours):
     return ending_soon, ending_later
 
 
-def _check_by_hand(now):
+def _check_by_hand(now, excluded_lot_ids):
     """Live, priced, affordable (headroom >= 0) lots the parser itself
     flagged as low-confidence - not disqualified, just worth a human look
     before bidding. evaluation.flags carries why (e.g. weight_mismatch,
-    key_date_verify, numismatic_upside)."""
+    key_date_verify, numismatic_upside). excluded_lot_ids keeps a
+    watchlisted lot out - see _watched_lot_ids()."""
     check_qs = (
         LotEvaluation.objects.select_related("lot")
         .filter(confidence="low", max_bid__gt=0, headroom__gte=0, lot__end_time__gt=now)
+        .exclude(lot_id__in=excluded_lot_ids)
         .order_by("lot__end_time")
     )
     return [_lot_row(ev, now) for ev in check_qs]
@@ -394,13 +393,15 @@ def _source_health(source, now):
     }
 
 
-def _maxsold_estates(now):
+def _maxsold_estates(now, excluded_lot_ids):
     """Live MaxSold candidates grouped by auction (estate) - winning several
     lots at one estate means one pickup trip, so this is the view that
-    actually matters for deciding whether a trip out is worth it."""
+    actually matters for deciding whether a trip out is worth it.
+    excluded_lot_ids keeps a watchlisted lot out - see _watched_lot_ids()."""
     live_qs = (
         LotEvaluation.objects.select_related("lot")
         .filter(is_candidate=True, lot__end_time__gt=now, lot__source="maxsold")
+        .exclude(lot_id__in=excluded_lot_ids)
     )
 
     estates = {}
@@ -423,15 +424,17 @@ def _maxsold_estates(now):
     return sorted(estates.values(), key=lambda e: e["total_headroom"], reverse=True)
 
 
-def _leads_to_review(now, window_hours):
+def _leads_to_review(now, window_hours, excluded_lot_ids):
     """Leads worth a look right now: early bids on a lead are meaningless
     (nobody's seriously bid yet), so only lots ending soon - within
     window_hours - are shown. One query, evaluated once, so both the capped
-    row list and the full per-category counts come from the same data."""
+    row list and the full per-category counts come from the same data.
+    excluded_lot_ids keeps a watchlisted lot out - see _watched_lot_ids()."""
     cutoff = now + timedelta(hours=window_hours)
     evaluations = list(
         LotEvaluation.objects.select_related("lot")
         .filter(is_lead=True, lot__end_time__gt=now, lot__end_time__lte=cutoff)
+        .exclude(lot_id__in=excluded_lot_ids)
         .order_by("lot__end_time")
     )
 
@@ -533,18 +536,6 @@ def _attach_ai_reviews(*row_lists):
         row["ai_review"] = latest.get(row["lot_id"])
 
 
-def _attach_bid_watches(*row_lists):
-    """Adds a "bid_watch" key (a BidWatch or None) to every row across all
-    the given lists, via one shared lookup query - mirrors
-    _attach_ai_reviews above. Used to show a "Watching ($X)" badge instead
-    of the "I bid on this" button on a lot that's already watched."""
-    all_rows = [row for rows in row_lists for row in rows]
-    lot_ids = {row["lot_id"] for row in all_rows if row["lot_id"] is not None}
-    watches = {w.lot_id: w for w in BidWatch.objects.filter(lot_id__in=lot_ids)} if lot_ids else {}
-    for row in all_rows:
-        row["bid_watch"] = watches.get(row["lot_id"])
-
-
 def _watch_row(watch, now):
     lot = watch.lot
     evaluation = getattr(lot, "evaluation", None)
@@ -568,12 +559,24 @@ def _watch_row(watch, now):
 
 def _watched_lots(now):
     """Live (still "watching") BidWatch rows, soonest-ending first - the
-    dashboard's "My Bids" card in the Act Now tab."""
+    dashboard's standalone Watchlist section, above the Act now/Watch/
+    Performance tabs."""
     watches = (
         BidWatch.objects.filter(status="watching", lot__end_time__gt=now)
         .select_related("lot", "lot__evaluation").order_by("lot__end_time")
     )
     return [_watch_row(w, now) for w in watches]
+
+
+def _watched_lot_ids():
+    """Every lot id with a BidWatch at all, any status - a watchlisted lot
+    belongs only in the Watchlist section (see get_scanner_dashboard_context),
+    never duplicated into any Act Now/Watch table it would otherwise also
+    qualify for. Not filtered to status="watching" like _watched_lots()
+    above - but a resolved (closed) watch's lot already fails every one of
+    those tables' own lot__end_time__gt=now filter, so it makes no
+    practical difference."""
+    return set(BidWatch.objects.values_list("lot_id", flat=True))
 
 
 def _alerts_status():
@@ -600,9 +603,15 @@ def get_scanner_dashboard_context(user=None):
     max_age_days = cfg["SPOT"]["max_age_days"]
     sources = tuple(cfg["SOURCES"].keys())  # whatever's configured, e.g. ("shopgoodwill", "maxsold")
 
+    # A watchlisted lot appears only in the Watchlist section, never also
+    # in whichever Act Now/Watch table it would otherwise qualify for - so
+    # every one of those queries excludes it up front, here.
+    excluded_lot_ids = _watched_lot_ids()
+
     live_qs = (
         LotEvaluation.objects.select_related("lot")
         .filter(is_candidate=True, lot__end_time__gt=now)
+        .exclude(lot_id__in=excluded_lot_ids)
         .order_by("lot__end_time")
     )
     candidate_window_hours = cfg["CANDIDATE_WINDOW_HOURS"]
@@ -617,14 +626,15 @@ def get_scanner_dashboard_context(user=None):
     closest_qs = (
         LotEvaluation.objects.select_related("lot")
         .filter(is_candidate=False, max_bid__gt=0, headroom__lt=0, lot__end_time__gt=now)
+        .exclude(lot_id__in=excluded_lot_ids)
         .order_by("-headroom")[:CLOSEST_CALLS_LIMIT]
     )
     closest_calls = [_lot_row(ev, now) for ev in closest_qs]
 
-    check_by_hand = _check_by_hand(now)
+    check_by_hand = _check_by_hand(now, excluded_lot_ids)
 
     lead_window_hours = cfg["LEAD_WINDOW_HOURS"]
-    leads_to_review, lead_counts_by_category = _leads_to_review(now, lead_window_hours)
+    leads_to_review, lead_counts_by_category = _leads_to_review(now, lead_window_hours, excluded_lot_ids)
 
     recent_runs = [
         {
@@ -642,7 +652,7 @@ def get_scanner_dashboard_context(user=None):
     scanner_health = {source: _source_health(source, now) for source in sources}
 
     closed_results_summary, closed_results_rows = _closed_results(now)
-    maxsold_estates = _maxsold_estates(now)
+    maxsold_estates = _maxsold_estates(now, excluded_lot_ids)
     watched_lots = _watched_lots(now)
 
     # AI review button/badge on every lot table, Closest Calls included -
@@ -651,19 +661,12 @@ def get_scanner_dashboard_context(user=None):
     _attach_ai_reviews(
         live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
     )
-    # "I bid on this" button vs. a "Watching" badge - same tables, plus
-    # leads (you can bid on a lead you've priced by hand too).
-    _attach_bid_watches(
-        live_candidates_ending_soon, live_candidates_ending_later, check_by_hand, leads_to_review, closest_calls,
-    )
 
     # Lot dismissal ("Dismiss" button on the Act Now tab) - only the 3
     # Act Now tables (not Candidates Ending Later, Closest Calls, or the
-    # Watchlist, which are untouched). Any row that's on the watchlist is
-    # exempted from dismissal entirely, even within these 3 tables - see
-    # _split_dismissed(). A reopened row (headroom grew past the
-    # threshold) stays in the active list with "reopened_headroom_increase"
-    # set.
+    # Watchlist, which are untouched). A reopened row (headroom grew past
+    # the threshold) stays in the active list with
+    # "reopened_headroom_increase" set.
     dismiss_threshold = dismiss_reopen_threshold()
     live_candidates_ending_soon, dismissed_candidates = _split_dismissed(
         live_candidates_ending_soon, dismiss_threshold
@@ -685,7 +688,7 @@ def get_scanner_dashboard_context(user=None):
     # template's HTML ids/URL hash - Django template variable lookup
     # (tab_counts.act_now) can't parse a hyphen in the attribute name.
     tab_counts = {
-        "act_now": len(live_candidates_ending_soon) + len(check_by_hand) + len(leads_to_review) + len(watched_lots),
+        "act_now": len(live_candidates_ending_soon) + len(check_by_hand) + len(leads_to_review),
         "watch": len(live_candidates_ending_later) + len(closest_calls) + len(maxsold_estates),
         "performance": len(closed_results_rows) + len(recent_runs),
     }

@@ -497,7 +497,7 @@
         }
 
         // ---------- "Calc" buttons on dashboard lot rows (Act Now, Watch,
-        // My Bids) - opens the dialog on the Buy cost tab, prefilled from
+        // Watchlist) - opens the dialog on the Buy cost tab, prefilled from
         // that row's own data-* attributes (current bid + source, same
         // defaults the Source dropdown would apply by hand), with the
         // lot's title shown in the dialog's title bar. Once the Buy cost
@@ -505,28 +505,41 @@
         // item cost, the scanner's expected sale as listing price) -
         // without switching to it, since the dialog opens on Buy cost.
         // Plain type="button" elements, never inside a <form> of their
-        // own, so clicking one can never submit/navigate/scroll. ----------
-        document.querySelectorAll(".js-calc-from-lot").forEach(function (button) {
-            button.addEventListener("click", function () {
-                var title = button.dataset.title || "";
-                var bid = button.dataset.bid || "";
-                var source = button.dataset.source || "custom";
-                var expectedSale = button.dataset.expectedSale || "";
+        // own, so clicking one can never submit/navigate/scroll.
+        //
+        // wireCalcButtons(root) is re-run (root scoped to just the
+        // replaced markup) whenever static/js/auction_scanner.js swaps in
+        // fresh HTML without a full page reload - currently just the
+        // Watchlist section after a lot is added there - since a button
+        // cloned in via innerHTML has no listener of its own yet. ----------
+        function wireCalcButtons(root) {
+            root.querySelectorAll(".js-calc-from-lot").forEach(function (button) {
+                button.addEventListener("click", function () {
+                    var title = button.dataset.title || "";
+                    var bid = button.dataset.bid || "";
+                    var source = button.dataset.source || "custom";
+                    var expectedSale = button.dataset.expectedSale || "";
 
-                if (lotTitleEl) {
-                    lotTitleEl.textContent = title;
-                    lotTitleEl.hidden = !title;
-                }
-                activateTab("buy");
-                applyBuyData({bid: bid, source: source});
-                applySourcePreset(source);
-                openDialog(button);
-                doBuyCalculate().then(function (buyResults) {
-                    if (!buyResults) return;
-                    applyEbayData({item_cost: buyResults.total.toFixed(2), sale_price: expectedSale});
-                    scheduleEbayCalculate();
+                    if (lotTitleEl) {
+                        lotTitleEl.textContent = title;
+                        lotTitleEl.hidden = !title;
+                    }
+                    activateTab("buy");
+                    applyBuyData({bid: bid, source: source});
+                    applySourcePreset(source);
+                    openDialog(button);
+                    doBuyCalculate().then(function (buyResults) {
+                        if (!buyResults) return;
+                        applyEbayData({item_cost: buyResults.total.toFixed(2), sale_price: expectedSale});
+                        scheduleEbayCalculate();
+                    });
                 });
             });
+        }
+
+        wireCalcButtons(document);
+        document.addEventListener("dashboard-section:refreshed", function (event) {
+            wireCalcButtons(event.detail.root);
         });
     }
 })();

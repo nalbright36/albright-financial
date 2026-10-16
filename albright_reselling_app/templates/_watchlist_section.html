@@ -1,0 +1,68 @@
+{% comment %}
+The Watchlist section's body - the table (or empty state) only, not the
+surrounding collapsible card/header (those stay put in dashboard.html so
+collapsing isn't disturbed by a refresh). Rendered twice: once inline by
+dashboard.html on page load, and again standalone by
+scanner_views.watchlist_section for static/js/auction_scanner.js's AJAX
+refresh after a lot is added via any table's "Add to Watchlist" star (see
+initWatchToggles() - that's also what re-wires this table's sort headers
+and its own Remove buttons, since they're fresh DOM nodes each time).
+Expects `watched_lots`/`watched_lots_has_maxsold` in context.
+{% endcomment %}
+{% if watched_lots %}
+<div style="overflow-x: auto;">
+<table class="holdings" id="table-watchlist">
+    <thead>
+        <tr>
+            <th class="lot-title-col" data-sort-key="title">Title</th>
+            <th data-sort-key="source">Source</th>
+            <th data-sort-key="category">Category</th>
+            <th class="num" data-sort-key="bid">Current Bid</th>
+            <th class="num" data-sort-key="maxbid">My Max</th>
+            <th class="num" data-sort-key="headroom">Headroom</th>
+            {% if watched_lots_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
+            <th class="num" data-sort-key="endtime">Ends In</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in watched_lots %}
+        <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
+            data-bid="{{ row.current_bid }}" data-maxbid="{{ row.my_max_bid|default_if_none:'' }}"
+            data-headroom="{{ row.headroom|default_if_none:'' }}" data-endtime="{{ row.end_time_epoch_ms }}">
+            <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
+            <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+            <td><span class="badge neutral">{{ row.category|title }}</span></td>
+            <td class="num">${{ row.current_bid|floatformat:2 }}</td>
+            <td class="num">
+                {% if row.my_max_bid is not None %}
+                <span style="color: {% if row.current_bid <= row.my_max_bid %}var(--gain){% else %}var(--loss){% endif %};">${{ row.my_max_bid|floatformat:2 }}</span>
+                {% else %}
+                <a href="{% url 'albright_reselling_app:watch_lot' row.lot_id %}" style="font-size: 0.8125rem;">Set max bid</a>
+                {% endif %}
+            </td>
+            <td class="num">
+                {% if row.headroom is not None %}
+                <span style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</span>
+                {% else %}&mdash;{% endif %}
+            </td>
+            {% if watched_lots_has_maxsold %}
+            <td class="hide-mobile">
+                {% if row.pickup %}
+                {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
+                {% else %}&mdash;{% endif %}
+            </td>
+            {% endif %}
+            <td class="num">{{ row.time_remaining }}</td>
+            <td>
+                {% include "_calc_button.html" %}
+                <button type="button" class="btn btn-secondary btn-sm js-watch-remove" data-toggle-url="{% url 'albright_reselling_app:toggle_watch' row.lot_id %}">Remove</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p style="color: var(--text-secondary);">Nothing on your watchlist. Use &#9734; Add to Watchlist on any lot.</p>
+{% endif %}

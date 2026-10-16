@@ -200,7 +200,7 @@ class CalcButtonPrefillDataTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
         content = response.content.decode()
 
-        my_bids_section = content.split('id="my-bids"')[1].split('<div class="tab-panel" id="watch"')[0]
+        my_bids_section = content.split('id="my-bids"')[1].split('<nav class="scanner-tabs"')[0]
         self.assertIn('data-bid="18.00"', my_bids_section)
         self.assertIn('data-expected-sale="60.00"', my_bids_section)
 

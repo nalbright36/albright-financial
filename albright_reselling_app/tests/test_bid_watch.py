@@ -1,11 +1,15 @@
 """Tests for BidWatch: default_max_bid's prefill rule, the "set max bid"
 view (watch_lot - creating or editing a watch), the one-click watchlist
-toggle (toggle_watch), and the watch-resolution sweep (scanner/
+toggle (toggle_watch), the Watchlist section's own AJAX refresh partial
+(watchlist_section), and the watch-resolution sweep (scanner/
 bid_watch.py) - including that a result alert is off by default and only
 fires once enabled. The "closing soon" alert itself has moved to
 scanner/alerts.send_watchlist_alerts() - see test_alerts.py and
-test_watchlist_alerts_command.py. Every HTTP call (Telegram, the
-adapters' own requests) is mocked - nothing here reaches a real site."""
+test_watchlist_alerts_command.py. Dashboard exclusion (a watchlisted lot
+never also appears in an Act Now/Watch table) is covered in
+test_dashboard.py's WatchlistExclusionTests, not here. Every HTTP call
+(Telegram, the adapters' own requests) is mocked - nothing here reaches a
+real site."""
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
@@ -122,6 +126,47 @@ class ToggleWatchViewTests(TestCase):
         response = self.client.get(reverse("albright_reselling_app:toggle_watch", args=[lot.pk]))
 
         self.assertEqual(response.status_code, 405)
+
+
+class WatchlistSectionViewTests(TestCase):
+    """The #watchlist-body AJAX partial (scanner_views.watchlist_section) -
+    static/js/auction_scanner.js fetches this after a lot is added to the
+    watchlist via any table's star, so the Watchlist section updates
+    without a full page reload. Just the table/empty-state fragment, not
+    a full page - see _watchlist_section.html."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.login(username="tester", password="pw-not-real-12345")
+
+    def test_renders_watched_lot(self):
+        lot = _make_lot("wl-section-1", timezone.now() + timedelta(hours=3))
+        BidWatch.objects.create(lot=lot, status="watching", my_max_bid=Decimal("25.00"))
+
+        response = self.client.get(reverse("albright_reselling_app:watchlist_section"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, lot.title)
+        self.assertContains(response, "25.00")
+
+    def test_renders_empty_state(self):
+        response = self.client.get(reverse("albright_reselling_app:watchlist_section"))
+
+        self.assertContains(response, "Nothing on your watchlist.")
+
+    def test_is_just_the_fragment_not_a_full_page(self):
+        response = self.client.get(reverse("albright_reselling_app:watchlist_section"))
+
+        content = response.content.decode()
+        self.assertNotIn("<html", content)
+        self.assertNotIn('id="scanner-tabs"', content)
+
+    def test_requires_login(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("albright_reselling_app:watchlist_section"))
+
+        self.assertEqual(response.status_code, 302)
 
 
 class WatchLotViewTests(TestCase):

@@ -177,6 +177,21 @@
         </div>
     </div>
 
+    <!-- ============ Watchlist: always visible above the tabs, never also
+         duplicated into any Act Now/Watch table - scanner/dashboard.py
+         excludes a watchlisted lot from every one of those queries up
+         front. Collapsed/expanded state is remembered per browser (see
+         initCollapsible()'s data-collapse-key handling). ============ -->
+    <div class="card" id="my-bids" style="margin-bottom: 20px;">
+        <div class="card__header js-collapsible-header" data-collapse-key="watchlist">
+            <span class="card__label">Watchlist <span class="row-count" id="watchlist-row-count">({{ watched_lots|length }})</span></span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">Lots you're watching - sorted by end time. A closed lot leaves this automatically.</span>
+        </div>
+        <div class="js-collapsible-body" id="watchlist-body" data-refresh-url="{% url 'albright_reselling_app:watchlist_section' %}">
+            {% include "_watchlist_section.html" %}
+        </div>
+    </div>
+
     <nav class="scanner-tabs" id="scanner-tabs">
         <a href="#act-now" class="scanner-tab is-active" data-tab="act-now">Act now <span class="tab-badge" id="tab-badge-act-now">{{ tab_counts.act_now }}</span></a>
         <a href="#watch" class="scanner-tab" data-tab="watch">Watch <span class="tab-badge" id="tab-badge-watch">{{ tab_counts.watch }}</span></a>
@@ -410,71 +425,6 @@
             </div>
         </div>
 
-        <div class="card" id="my-bids">
-            <div class="card__header js-collapsible-header">
-                <span class="card__label">Watchlist <span class="row-count">({{ watched_lots|length }})</span></span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">Lots you're watching - sorted by end time. A closed lot leaves this automatically.</span>
-            </div>
-            <div class="js-collapsible-body">
-            {% if watched_lots %}
-            <div style="overflow-x: auto;">
-            <table class="holdings">
-                <thead>
-                    <tr>
-                        <th class="lot-title-col" data-sort-key="title">Title</th>
-                        <th data-sort-key="source">Source</th>
-                        <th data-sort-key="category">Category</th>
-                        <th class="num" data-sort-key="bid">Current Bid</th>
-                        <th class="num" data-sort-key="maxbid">My Max</th>
-                        <th class="num" data-sort-key="headroom">Headroom</th>
-                        {% if watched_lots_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
-                        <th class="num" data-sort-key="endtime">Ends In</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in watched_lots %}
-                    <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-                        data-bid="{{ row.current_bid }}" data-maxbid="{{ row.my_max_bid|default_if_none:'' }}"
-                        data-headroom="{{ row.headroom|default_if_none:'' }}" data-endtime="{{ row.end_time_epoch_ms }}">
-                        <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
-                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
-                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                        <td class="num">${{ row.current_bid|floatformat:2 }}</td>
-                        <td class="num">
-                            {% if row.my_max_bid is not None %}
-                            <span style="color: {% if row.current_bid <= row.my_max_bid %}var(--gain){% else %}var(--loss){% endif %};">${{ row.my_max_bid|floatformat:2 }}</span>
-                            {% else %}
-                            <a href="{% url 'albright_reselling_app:watch_lot' row.lot_id %}" style="font-size: 0.8125rem;">Set max bid</a>
-                            {% endif %}
-                        </td>
-                        <td class="num">
-                            {% if row.headroom is not None %}
-                            <span style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};">${{ row.headroom|floatformat:2 }}</span>
-                            {% else %}&mdash;{% endif %}
-                        </td>
-                        {% if watched_lots_has_maxsold %}
-                        <td class="hide-mobile">
-                            {% if row.pickup %}
-                            {{ row.pickup.city }}{% if row.pickup.distance_miles is not None %} &middot; {{ row.pickup.distance_miles }}mi{% endif %}
-                            {% else %}&mdash;{% endif %}
-                        </td>
-                        {% endif %}
-                        <td class="num">{{ row.time_remaining }}</td>
-                        <td>
-                            {% include "_calc_button.html" %}
-                            <button type="button" class="btn btn-secondary btn-sm js-watch-remove" data-toggle-url="{% url 'albright_reselling_app:toggle_watch' row.lot_id %}">Remove</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            </div>
-            {% else %}
-            <p style="color: var(--text-secondary);">Not watching anything right now.</p>
-            {% endif %}
-            </div>
-        </div>
     </div>
 
     <!-- ============ Watch: ending later, closest calls, MaxSold estates ============ -->

@@ -32,6 +32,7 @@ urlpatterns = [
     path("scanner/win/<int:lot_id>/", ledger_views.win_lot, name="ledger_win_lot"),
     path("scanner/watch/<int:lot_id>/", scanner_views.watch_lot, name="watch_lot"),
     path("scanner/lot/<int:lot_id>/toggle-watch/", scanner_views.toggle_watch, name="toggle_watch"),
+    path("scanner/watchlist-section/", scanner_views.watchlist_section, name="watchlist_section"),
     path("scanner/lot/<int:lot_id>/dismiss/", dismiss_views.dismiss_lot, name="dismiss_lot"),
     path("scanner/lot/<int:lot_id>/undo-dismiss/", dismiss_views.undo_dismiss, name="undo_dismiss"),
     path("insights/", insights_views.insights_page, name="insights"),

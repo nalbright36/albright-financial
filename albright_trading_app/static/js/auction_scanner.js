@@ -107,6 +107,27 @@
     }
 
     // ---------- Collapsible card headers ----------
+    // A header carrying data-collapse-key (currently just the Watchlist
+    // section) remembers its open/closed state per browser via
+    // localStorage; every other collapsible card stays session-only
+    // (defaults open on every load), same as before. Storage can throw or
+    // come back empty (private windows, blocked site data) - never lets
+    // that break the toggle itself, just falls back to "always starts
+    // open" in that case.
+    function readCollapseState(key) {
+        try {
+            return window.localStorage.getItem("scanner-collapse:" + key);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function writeCollapseState(key, collapsed) {
+        try {
+            window.localStorage.setItem("scanner-collapse:" + key, collapsed ? "1" : "0");
+        } catch (e) {}
+    }
+
     function initCollapsible() {
         var headers = document.querySelectorAll(".js-collapsible-header");
         headers.forEach(function (header) {
@@ -114,13 +135,20 @@
             if (!body) return;
             header.setAttribute("tabindex", "0");
             header.setAttribute("role", "button");
-            header.setAttribute("aria-expanded", "true");
+
+            var storageKey = header.dataset.collapseKey;
+            if (storageKey && readCollapseState(storageKey) === "1") {
+                body.hidden = true;
+                header.classList.add("is-collapsed");
+            }
+            header.setAttribute("aria-expanded", String(!body.hidden));
 
             function toggle() {
                 var isHidden = body.hidden;
                 body.hidden = !isHidden;
                 header.classList.toggle("is-collapsed", !isHidden);
                 header.setAttribute("aria-expanded", String(isHidden));
+                if (storageKey) writeCollapseState(storageKey, !isHidden);
             }
 
             header.addEventListener("click", toggle);
@@ -194,6 +222,23 @@
             var badge = document.getElementById("tab-badge-" + name);
             if (!panel || !badge) return;
             badge.textContent = panel.querySelectorAll("tr.scanner-row:not([hidden])").length;
+        });
+    }
+
+    // Recomputes each filterable table's own "N of M shown" count straight
+    // from the DOM's current hidden/dismissed state, with no dependency on
+    // the current filter field values (initFilters()'s own applyFilters()
+    // already keeps this current whenever a filter changes) - just what's
+    // needed after a row is added to or removed from a table outside of
+    // filtering, e.g. initWatchToggles() moving a row to the Watchlist.
+    function refreshFilterCounts() {
+        document.querySelectorAll("table[data-filterable]").forEach(function (table) {
+            var tbody = table.querySelector("tbody");
+            if (!tbody) return;
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.scanner-row:not(.is-dismissed)"));
+            var shown = rows.filter(function (row) { return !row.hidden; }).length;
+            var countEl = document.getElementById(table.dataset.countTarget);
+            if (countEl) countEl.textContent = shown + " of " + rows.length + " shown";
         });
     }
 
@@ -483,12 +528,24 @@
     }
 
     // ---------- Watchlist: the star toggle (every lot row + the AI review
-    // page) and the Watchlist block's own "Remove" button. One click each,
-    // no page reload - fire-and-forget POSTs, same spirit as Dismiss
-    // above. Toggling a row's star updates just that button (plus the
-    // Watchlist tile's count) rather than live-building a new row in the
-    // Watchlist table below - it'll show up there on the next load, same
-    // trade-off Dismiss's own "Show dismissed" list already makes. ----------
+    // page) and the Watchlist section's own "Remove" button.
+    //
+    // A table row's star (always "Add to Watchlist", never "Watching" -
+    // scanner/dashboard.py excludes every watchlisted lot from these
+    // tables up front) removes that row immediately, no page reload, and
+    // asks the server to re-render just the Watchlist section's body
+    // (#watchlist-body) so the newly-added lot shows up there without
+    // duplicating its row markup here in JS - see refreshWatchlistSection()
+    // and _watchlist_section.html. An "Added to Watchlist · Undo" toast
+    // puts the row back exactly where it was and un-watches the lot again.
+    //
+    // The AI review detail page's star isn't inside a table row at all, so
+    // it keeps the simpler plain toggle it always had.
+    //
+    // The Watchlist section's own "Remove" button reloads the page once
+    // the removal is saved, rather than figuring out which table (if any)
+    // the lot belongs back in and building that row here too - simpler,
+    // and removing a watch is already a deliberate, infrequent action. ----------
     function adjustWatchlistTileCount(delta) {
         var el = document.getElementById("watchlist-tile-count");
         if (!el) return;
@@ -508,9 +565,93 @@
         if (link) link.hidden = !isWatching;
     }
 
+    function refreshWatchlistSection() {
+        var body = document.getElementById("watchlist-body");
+        if (!body || !body.dataset.refreshUrl) return Promise.resolve();
+        return fetch(body.dataset.refreshUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (resp) { return resp.ok ? resp.text() : null; })
+            .then(function (html) {
+                if (html === null) return;
+                body.innerHTML = html;
+                var countEl = document.getElementById("watchlist-row-count");
+                if (countEl) countEl.textContent = "(" + body.querySelectorAll("tr.scanner-row").length + ")";
+                var table = body.querySelector("table.holdings");
+                if (table) initSortableTable(table);
+                wireWatchlistRemoveButtons();
+                // Lets static/js/calculator.js re-wire any "Calc" button
+                // in the markup just swapped in - it has no listener of
+                // its own yet, since it was never there for calculator.js's
+                // own one-time wiring pass at page load to find.
+                document.dispatchEvent(new CustomEvent("dashboard-section:refreshed", { detail: { root: body } }));
+            })
+            .catch(function () {});
+    }
+
+    function wireWatchlistRemoveButtons() {
+        document.querySelectorAll(".js-watch-remove").forEach(function (button) {
+            if (button.dataset.wired) return;
+            button.dataset.wired = "1";
+            button.addEventListener("click", function () {
+                postForm(button.dataset.toggleUrl).then(function () {
+                    window.location.reload();
+                });
+            });
+        });
+    }
+
+    // Removes `row` (and its detail row, if any) from its table and moves
+    // it to the Watchlist, with an Undo that puts everything back exactly
+    // where it was (same parent, same position) and un-watches the lot
+    // again - mirrors initDismissals()'s dismiss()/Undo pairing above.
+    function moveRowToWatchlist(row, toggleUrl) {
+        var parent = row.parentNode;
+        var detail = detailOf(row);
+        var insertBefore = detail ? detail.nextElementSibling : row.nextElementSibling;
+
+        row.remove();
+        if (detail) detail.remove();
+        adjustWatchlistTileCount(1);
+        updateTabCounts();
+        refreshFilterCounts();
+        postForm(toggleUrl).then(refreshWatchlistSection);
+
+        showUndoToast("Added to Watchlist.", function () {
+            if (insertBefore && insertBefore.parentNode === parent) {
+                parent.insertBefore(row, insertBefore);
+                if (detail) parent.insertBefore(detail, insertBefore);
+            } else {
+                parent.appendChild(row);
+                if (detail) parent.appendChild(detail);
+            }
+            adjustWatchlistTileCount(-1);
+            updateTabCounts();
+            refreshFilterCounts();
+            postForm(toggleUrl).then(refreshWatchlistSection);
+        });
+    }
+
+    // A star can sit in the main row's own Actions cell, or in its
+    // expandable detail row (_scanner_row_detail.html) - either way it
+    // belongs to the same lot, so both resolve to that lot's tr.scanner-row
+    // (the detail row is always rendered as its immediately preceding
+    // sibling, same convention detailOf() above relies on).
+    function mainRowOf(button) {
+        var tr = button.closest("tr");
+        if (!tr) return null;
+        if (tr.classList.contains("scanner-row")) return tr;
+        if (tr.classList.contains("scanner-detail")) return tr.previousElementSibling;
+        return null;
+    }
+
     function initWatchToggles() {
         document.querySelectorAll(".js-watch-toggle").forEach(function (button) {
+            var tableRow = mainRowOf(button);
+
             button.addEventListener("click", function () {
+                if (tableRow) {
+                    moveRowToWatchlist(tableRow, button.dataset.toggleUrl);
+                    return;
+                }
                 var group = button.closest(".js-watch-group");
                 var next = !button.classList.contains("is-watching");
                 if (group) applyWatchState(group, next);
@@ -519,15 +660,7 @@
             });
         });
 
-        document.querySelectorAll(".js-watch-remove").forEach(function (button) {
-            button.addEventListener("click", function () {
-                postForm(button.dataset.toggleUrl);
-                var row = button.closest("tr");
-                if (row) row.remove();
-                adjustWatchlistTileCount(-1);
-                updateTabCounts();
-            });
-        });
+        wireWatchlistRemoveButtons();
     }
 
     document.addEventListener("DOMContentLoaded", function () {
