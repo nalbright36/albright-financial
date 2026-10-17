@@ -23,6 +23,15 @@ TELEGRAM_POST = "albright_reselling_app.scanner.alerts.requests.post"
 CREDS = {"TELEGRAM_BOT_TOKEN": "test-token", "TELEGRAM_CHAT_ID": "12345"}
 
 
+# These fixtures predate RESELLING_SCANNER["REVIEW"] (small headroom, lots
+# ending a day or more out) - the review settings themselves are tested in
+# test_review_queue.py, so keep them from hiding rows here.
+PERMISSIVE_REVIEW = {
+    **settings.RESELLING_SCANNER,
+    "REVIEW": {"window_hours": 24 * 365, "min_headroom": 0, "hide_categories": [], "hide_sources": []},
+}
+
+
 def _make_lot(external_id, end_time, current_price="10.00", source="shopgoodwill", bid_count=None):
     return SourcedLot.objects.create(
         source=source, external_id=external_id, url=f"https://example.com/{external_id}",
@@ -63,6 +72,7 @@ class LotDismissalModelTests(TestCase):
         self.assertIsNone(dismissal.headroom_at_dismissal)
 
 
+@override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class DashboardDismissalFilteringTests(TestCase):
     """get_scanner_dashboard_context()'s hide/reopen rule, applied to all
     3 Act Now tables (candidates ending soon, check by hand, leads)."""
@@ -384,6 +394,7 @@ class DismissViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class DashboardTemplateDismissalTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")

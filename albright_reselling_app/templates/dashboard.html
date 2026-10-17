@@ -296,9 +296,13 @@
         <div class="card" style="margin-bottom: 20px;">
             <div class="card__header js-collapsible-header">
                 <span class="card__label">Check by Hand <span class="row-count">({{ check_by_hand|length }})</span></span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">Affordable but low-confidence - the parser isn't sure, you decide</span>
+                <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Affordable but low-confidence - the parser isn't sure, you decide</span>
+                    <a href="{% url 'albright_reselling_app:review_queue' %}" class="btn btn-primary btn-sm">Start review</a>
+                </span>
             </div>
             <div class="js-collapsible-body">
+            <p class="review-filter-note" id="review-note-check-by-hand">Showing {{ check_by_hand|length }} ({{ check_by_hand_hidden }} hidden by review settings)</p>
             {% if check_by_hand %}
             <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
                 <span id="count-check-by-hand" class="row-count" data-role="row-count"></span>
@@ -307,6 +311,7 @@
             <table class="holdings" id="table-check-by-hand" data-filterable="true" data-count-target="count-check-by-hand">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="row-toggle-col"></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
@@ -323,6 +328,7 @@
                     <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
                         data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="row-toggle"></td>
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
@@ -340,7 +346,7 @@
                         <td class="num">{{ row.time_remaining }}</td>
                         {% include "_act_now_actions_cell.html" %}
                     </tr>
-                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% include "_scanner_row_detail.html" with row=row colspan=10 %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -354,9 +360,13 @@
         <div class="card">
             <div class="card__header js-collapsible-header">
                 <span class="card__label">Leads to Review <span class="row-count">({{ leads_to_review|length }})</span></span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">Ending within {{ lead_window_hours }}h &mdash; price these by hand</span>
+                <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Ending within {{ review_settings.window_hours }}h &mdash; price these by hand</span>
+                    <a href="{% url 'albright_reselling_app:review_queue' %}" class="btn btn-primary btn-sm">Start review</a>
+                </span>
             </div>
             <div class="js-collapsible-body">
+            <p class="review-filter-note" id="review-note-leads">Showing {{ leads_to_review|length }} ({{ leads_hidden }} hidden by review settings)</p>
             {% if lead_counts_by_category %}
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
                 {% for category, count in lead_counts_by_category.items %}
@@ -372,6 +382,7 @@
             <table class="holdings" id="table-leads" data-filterable="true" data-count-target="count-leads">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="row-toggle-col"></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
@@ -387,6 +398,7 @@
                     <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-reason="{{ row.lead_reason }}"
                         data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="row-toggle"></td>
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
@@ -402,7 +414,7 @@
                         <td class="num">{{ row.time_remaining }}</td>
                         {% include "_act_now_actions_cell.html" %}
                     </tr>
-                    {% include "_scanner_row_detail.html" with row=row colspan=8 %}
+                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -718,7 +730,9 @@
 </div>
 
 {% include "_calculator_dialog.html" %}
+{% include "_lightbox.html" %}
 
 <script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
 <script src="{% static_version 'js/calculator.js' %}" defer></script>
+<script src="{% static_version 'js/lightbox.js' %}" defer></script>
 {% endblock %}

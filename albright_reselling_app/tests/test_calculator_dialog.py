@@ -15,12 +15,22 @@ import re
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner_models import BidWatch, LotEvaluation, SourcedLot
+
+
+# These fixtures predate RESELLING_SCANNER["REVIEW"] (small headroom, lots
+# ending a day or more out) - the review settings themselves are tested in
+# test_review_queue.py, so keep them from hiding rows here.
+PERMISSIVE_REVIEW = {
+    **settings.RESELLING_SCANNER,
+    "REVIEW": {"window_hours": 24 * 365, "min_headroom": 0, "hide_categories": [], "hide_sources": []},
+}
 
 
 def _make_lot(external_id, end_time, current_price="10.00", source="shopgoodwill"):
@@ -59,7 +69,7 @@ class DialogMarkupTests(TestCase):
         self.assertContains(response, 'id="calc-dialog-lot-title"')
         self.assertContains(response, 'id="calc-tabs"')
         self.assertContains(response, 'id="calc-data"')
-        self.assertEqual(content.count("<dialog"), 1)
+        self.assertEqual(content.count('<dialog id="calc-dialog"'), 1)  # (the photo lightbox is a <dialog> too)
         self.assertIn("calculator.js", content)
 
     def test_old_slide_in_panel_markup_is_gone(self):
@@ -120,18 +130,18 @@ class DialogMarkupTests(TestCase):
             self.assertNotIn("action=", match.group(0))
 
 
+@override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class CalcButtonPrefillDataTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def _assert_is_plain_button(self, content, lot_pk):
-        idx = content.index(f'data-lot-id="{lot_pk}"')
-        tag_start = content.rindex("<button", 0, idx)
-        tag_end = content.index(">", idx)
-        tag = content[tag_start:tag_end]
-        self.assertIn('type="button"', tag)
-        self.assertNotIn("<a ", tag)
+        """This lot's Calc control is a real type="button" <button> (never a link)."""
+        match = re.search(rf'<(\w+)[^>]*js-calc-from-lot[^>]*data-lot-id="{lot_pk}"[^>]*>', content)
+        self.assertIsNotNone(match, f"no Calc control for lot {lot_pk}")
+        self.assertEqual(match.group(1), "button")
+        self.assertIn('type="button"', match.group(0))
 
     def test_candidate_row_carries_prefill_attributes(self):
         lot = _make_lot("calc-cand-1", timezone.now() + timedelta(hours=3), current_price="22.50")

@@ -1,6 +1,8 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from . import calculator_views, dismiss_views, insights_views, ledger_views, scanner_views, selling_views, views
+from . import (
+    calculator_views, dismiss_views, insights_views, ledger_views, review_views, scanner_views, selling_views, views,
+)
 
 app_name = "albright_reselling_app"
 
@@ -10,6 +12,11 @@ urlpatterns = [
     path("", RedirectView.as_view(pattern_name="albright_reselling_app:dashboard"), name="home"),
     path("today/", selling_views.today_page, name="today"),
     path("watchlist/", scanner_views.watchlist_page, name="watchlist"),
+    path("review/", review_views.review_page, name="review_queue"),
+    path("review/<int:lot_id>/watch/", review_views.review_watch, name="review_watch"),
+    path("review/<int:lot_id>/dismiss/", review_views.review_dismiss, name="review_dismiss"),
+    path("review/<int:lot_id>/undo/", review_views.review_undo, name="review_undo"),
+    path("review/<int:lot_id>/ai-review/", review_views.review_ai, name="review_ai"),
     path("scanner/watchlist-summary/", scanner_views.watchlist_summary, name="watchlist_summary"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("ledger/", views.ledger, name="ledger"),  # legacy URL: redirects to ledger_resale

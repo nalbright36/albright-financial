@@ -1,0 +1,14 @@
+{% comment %}
+A lot's ~72px photo thumbnail (lazy-loaded from SourcedLot.image_url) -
+a plain type="button" so clicking it opens the full-size image in the
+shared lightbox (_lightbox.html / static/js/lightbox.js) and never
+toggles the row's detail (auction_scanner.js skips clicks on buttons).
+No image: a neutral placeholder instead. Expects `row` (title, image_url).
+{% endcomment %}
+{% if row.image_url %}
+<button type="button" class="lot-thumb js-lightbox" data-full-src="{{ row.image_url }}" data-caption="{{ row.title }}" title="View photo">
+    <img src="{{ row.image_url }}" alt="Photo of {{ row.title }}" loading="lazy" width="72" height="72">
+</button>
+{% else %}
+<span class="lot-thumb lot-thumb--empty" title="No photo" aria-label="No photo">No photo</span>
+{% endif %}

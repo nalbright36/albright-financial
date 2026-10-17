@@ -290,6 +290,7 @@ def _lot_row(evaluation, now):
         "gold_oz": evaluation.gold_oz,
         "metal_label": _metal_label(evaluation.silver_oz, evaluation.gold_oz),
         "flags": evaluation.flags,
+        "image_url": lot.image_url,
         "matched_keyword": lot.matched_keyword,
         "time_remaining": _time_remaining(lot, now),
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
@@ -318,6 +319,7 @@ def _lead_row(evaluation, now):
         "current_bid": lot.current_price,
         "expected_sale": evaluation.expected_sale,
         "lead_reason": evaluation.lead_reason,
+        "image_url": lot.image_url,
         "matched_keyword": lot.matched_keyword,
         "time_remaining": _time_remaining(lot, now),
         "end_time_epoch_ms": _end_time_epoch_ms(lot),
@@ -341,19 +343,76 @@ def _split_by_window(live_qs, now, window_hours):
     return ending_soon, ending_later
 
 
-def _check_by_hand(now, excluded_lot_ids):
-    """Live, priced, affordable (headroom >= 0) lots the parser itself
-    flagged as low-confidence - not disqualified, just worth a human look
-    before bidding. evaluation.flags carries why (e.g. weight_mismatch,
-    key_date_verify, numismatic_upside). excluded_lot_ids keeps a
-    watchlisted lot out - see _watched_lot_ids()."""
-    check_qs = (
+# ---------------------------------------------------------------------------
+# Review settings (RESELLING_SCANNER["REVIEW"]) - narrow Check by hand and
+# Leads to review (both dashboard tables and the /review/ queue, see
+# scanner/review_queue.py) down to what's actually worth a look today.
+# ---------------------------------------------------------------------------
+
+DEFAULT_REVIEW_SETTINGS = {"window_hours": 24, "min_headroom": 30, "hide_categories": [], "hide_sources": []}
+
+
+def review_settings():
+    """RESELLING_SCANNER["REVIEW"] over the defaults, so a settings.py that
+    only sets some keys still gets sensible values for the rest."""
+    return {**DEFAULT_REVIEW_SETTINGS, **settings.RESELLING_SCANNER.get("REVIEW", {})}
+
+
+def passes_review_settings(evaluation, now, rs, apply_min_headroom):
+    """Whether one Check by hand/lead evaluation survives the review
+    settings: ends within window_hours, isn't a hidden category/source,
+    and - for Check by hand only (apply_min_headroom; leads have no
+    headroom) - has at least min_headroom of headroom."""
+    lot = evaluation.lot
+    if lot.end_time is None or lot.end_time > now + timedelta(hours=rs["window_hours"]):
+        return False
+    if evaluation.category in rs["hide_categories"] or lot.source in rs["hide_sources"]:
+        return False
+    if apply_min_headroom and (evaluation.headroom or 0) < Decimal(str(rs["min_headroom"])):
+        return False
+    return True
+
+
+def check_by_hand_evaluations(now, excluded_lot_ids, rs=None):
+    """(kept, hidden_count): live, priced, affordable (headroom >= 0) lots
+    the parser itself flagged as low-confidence - not disqualified, just
+    worth a human look before bidding (evaluation.flags carries why, e.g.
+    weight_mismatch, key_date_verify) - soonest-ending first, narrowed by
+    the review settings; hidden_count is how many those settings removed.
+    excluded_lot_ids keeps a watchlisted lot out - see _watched_lot_ids()."""
+    rs = rs or review_settings()
+    evaluations = list(
         LotEvaluation.objects.select_related("lot")
         .filter(confidence="low", max_bid__gt=0, headroom__gte=0, lot__end_time__gt=now)
         .exclude(lot_id__in=excluded_lot_ids)
         .order_by("lot__end_time")
     )
-    return [_lot_row(ev, now) for ev in check_qs]
+    kept = [ev for ev in evaluations if passes_review_settings(ev, now, rs, apply_min_headroom=True)]
+    return kept, len(evaluations) - len(kept)
+
+
+def lead_evaluations(now, window_hours, excluded_lot_ids, rs=None):
+    """(kept, hidden_count): leads ending within window_hours (LEAD_WINDOW_HOURS
+    - early bids on a lead are meaningless, nobody's seriously bid yet),
+    soonest-ending first, narrowed by the review settings (never
+    min_headroom - leads have no headroom); hidden_count is how many those
+    settings removed. excluded_lot_ids keeps a watchlisted lot out."""
+    rs = rs or review_settings()
+    cutoff = now + timedelta(hours=window_hours)
+    evaluations = list(
+        LotEvaluation.objects.select_related("lot")
+        .filter(is_lead=True, lot__end_time__gt=now, lot__end_time__lte=cutoff)
+        .exclude(lot_id__in=excluded_lot_ids)
+        .order_by("lot__end_time")
+    )
+    kept = [ev for ev in evaluations if passes_review_settings(ev, now, rs, apply_min_headroom=False)]
+    return kept, len(evaluations) - len(kept)
+
+
+def _check_by_hand(now, excluded_lot_ids):
+    """(rows, hidden_count) for the dashboard's Check by hand table."""
+    evaluations, hidden = check_by_hand_evaluations(now, excluded_lot_ids)
+    return [_lot_row(ev, now) for ev in evaluations], hidden
 
 
 def _source_health(source, now):
@@ -425,25 +484,17 @@ def _maxsold_estates(now, excluded_lot_ids):
 
 
 def _leads_to_review(now, window_hours, excluded_lot_ids):
-    """Leads worth a look right now: early bids on a lead are meaningless
-    (nobody's seriously bid yet), so only lots ending soon - within
-    window_hours - are shown. One query, evaluated once, so both the capped
-    row list and the full per-category counts come from the same data.
-    excluded_lot_ids keeps a watchlisted lot out - see _watched_lot_ids()."""
-    cutoff = now + timedelta(hours=window_hours)
-    evaluations = list(
-        LotEvaluation.objects.select_related("lot")
-        .filter(is_lead=True, lot__end_time__gt=now, lot__end_time__lte=cutoff)
-        .exclude(lot_id__in=excluded_lot_ids)
-        .order_by("lot__end_time")
-    )
+    """(rows, counts_by_category, hidden_count) for the dashboard's Leads to
+    review table - the row list capped at LEADS_TO_REVIEW_LIMIT, the
+    per-category counts over every kept lead (same data, one query)."""
+    evaluations, hidden = lead_evaluations(now, window_hours, excluded_lot_ids)
 
     counts_by_category = {}
     for ev in evaluations:
         counts_by_category[ev.category] = counts_by_category.get(ev.category, 0) + 1
 
     rows = [_lead_row(ev, now) for ev in evaluations[:LEADS_TO_REVIEW_LIMIT]]
-    return rows, counts_by_category
+    return rows, counts_by_category, hidden
 
 
 def _closed_results(now):
@@ -727,10 +778,12 @@ def get_scanner_dashboard_context(user=None):
     )
     closest_calls = [_lot_row(ev, now) for ev in closest_qs]
 
-    check_by_hand = _check_by_hand(now, excluded_lot_ids)
+    check_by_hand, check_by_hand_hidden = _check_by_hand(now, excluded_lot_ids)
 
     lead_window_hours = cfg["LEAD_WINDOW_HOURS"]
-    leads_to_review, lead_counts_by_category = _leads_to_review(now, lead_window_hours, excluded_lot_ids)
+    leads_to_review, lead_counts_by_category, leads_hidden = _leads_to_review(
+        now, lead_window_hours, excluded_lot_ids,
+    )
 
     recent_runs = [
         {
@@ -807,6 +860,10 @@ def get_scanner_dashboard_context(user=None):
         "leads_to_review": leads_to_review,
         "leads_to_review_has_maxsold": _has_maxsold(leads_to_review),
         "lead_counts_by_category": lead_counts_by_category,
+        # "Showing N (M hidden by review settings)" under each table header.
+        "check_by_hand_hidden": check_by_hand_hidden,
+        "leads_hidden": leads_hidden,
+        "review_settings": review_settings(),
         "lead_window_hours": lead_window_hours,
         "recent_runs": recent_runs,
         "maxsold_estates": maxsold_estates,

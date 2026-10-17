@@ -1,0 +1,167 @@
+{% extends 'index.html' %}
+{% load static %}
+{% load cache_bust %}
+
+{% block content %}
+{% comment %}
+The review queue (review_views.review_page): one lot at a time through
+Check by hand then Leads (scanner/review_queue.py). The whole queue is
+embedded below as JSON; static/js/review_queue.js renders the card,
+handles every button and keyboard shortcut, and calls review_views' JSON
+endpoints. The shortcut legend, help overlay, and phone buttons are all
+rendered from review_views.SHORTCUTS, so they always list the same keys.
+{% endcomment %}
+<div class="container review-page" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 16px;">
+        <h1 style="margin: 0;">Review</h1>
+        <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+            <span id="rq-progress" class="review-progress num" aria-live="polite">{% if queue %}1 of {{ queue|length }}{% endif %}</span>
+            <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">Back to dashboard</a>
+        </span>
+    </div>
+
+    {% if queue %}
+    {{ queue|json_script:"review-queue-data" }}
+    <div id="review-config" hidden data-today="{{ today }}"></div>
+
+    <div class="review-layout" id="review-layout">
+        <div class="review-main">
+            <!-- ============ The card - filled in by review_queue.js ============ -->
+            <section class="card review-card" id="rq-card" aria-live="polite">
+                <div id="rq-status" class="review-status" hidden></div>
+                <div class="review-card__top">
+                    <div class="review-photo-wrap">
+                        <button type="button" class="review-photo js-lightbox" id="rq-photo" title="Enlarge photo">
+                            <img id="rq-photo-img" alt="">
+                        </button>
+                        <span class="review-photo review-photo--empty" id="rq-photo-empty" hidden>No photo</span>
+                    </div>
+                    <div class="review-card__info">
+                        <div class="review-card__badges">
+                            <span class="badge warn" id="rq-kind"></span>
+                            <span class="badge neutral" id="rq-source"></span>
+                            <span class="badge neutral" id="rq-category"></span>
+                        </div>
+                        <h2 class="review-card__title"><a id="rq-title" href="#" target="_blank" rel="noopener"></a></h2>
+                        <div class="grid grid-2 review-stats">
+                            <div><div class="row-count">Current bid</div><span class="num" id="rq-bid"></span></div>
+                            <div><div class="row-count">Time left</div><span class="num" id="rq-time"></span></div>
+                            <div id="rq-max-wrap"><div class="row-count">Scanner max bid</div><span class="num" id="rq-max"></span></div>
+                            <div id="rq-headroom-wrap"><div class="row-count">Headroom</div><span class="num" id="rq-headroom"></span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="review-why" id="rq-why-box">
+                    <div class="review-why__label">Why it's here</div>
+                    <ul id="rq-why"></ul>
+                </div>
+
+                <div class="review-ai" id="rq-ai" hidden></div>
+
+                <div class="review-desc">
+                    <div class="row-count">Description</div>
+                    <p id="rq-desc"></p>
+                    <button type="button" class="btn btn-secondary btn-sm" id="rq-desc-more" hidden>Show more</button>
+                </div>
+
+                <!-- Dismiss reason picker: shown for 3 seconds right after D. -->
+                <div class="review-reasons" id="rq-reasons" hidden>
+                    <span class="review-reasons__label">Dismissed &middot; reason?</span>
+                    {% for key, value, label in dismiss_reasons %}
+                    <button type="button" class="btn btn-secondary btn-sm" data-reason="{{ value }}"><kbd class="kbd">{{ key }}</kbd> {{ label }}</button>
+                    {% endfor %}
+                    <span class="review-reasons__timer" id="rq-reasons-timer"></span>
+                </div>
+
+                <!-- One button per action - small on desktop, large on a phone
+                     (where the legend is hidden). -->
+                <div class="review-actions" id="rq-actions">
+                    {% for keys, label, action in shortcuts %}{% if action != "help" %}
+                    <button type="button" class="btn btn-secondary review-action" data-action="{{ action }}">
+                        <span class="review-action__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% endfor %}</span>
+                        <span>{% if action == "dismiss" %}Dismiss{% else %}{{ label }}{% endif %}</span>
+                    </button>
+                    {% endif %}{% endfor %}
+                </div>
+
+                <!-- The Calculator dialog's opener for this card's lot -
+                     review_queue.js updates its data-* before clicking it
+                     (calculator.js reads them at click time). -->
+                <button type="button" class="js-calc-from-lot" id="rq-calc-button" hidden
+                        data-lot-id="" data-estimate-url="" data-title="" data-bid="" data-source="" data-expected-sale="">Calc</button>
+            </section>
+
+            <!-- ============ End of queue ============ -->
+            <section class="card review-done" id="rq-done" hidden>
+                <h2 id="rq-done-title">All caught up</h2>
+                <p id="rq-done-text" style="color: var(--text-secondary);"></p>
+                <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="rq-review-skipped" hidden>Review skipped</button>
+                    <a href="{% url 'albright_reselling_app:dashboard' %}" class="btn btn-primary">Back to dashboard</a>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============ Shortcut legend (desktop only; collapsible,
+             remembered per browser, default open) ============ -->
+        <aside class="card review-legend" id="rq-legend" aria-label="Keyboard shortcuts">
+            <div class="card__header">
+                <span class="card__label">Shortcuts</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="rq-legend-collapse" aria-label="Hide shortcuts">&rsaquo;</button>
+            </div>
+            <ul class="review-legend__list" id="rq-legend-main">
+                {% for keys, label, action in shortcuts %}
+                <li data-legend="{{ action }}">
+                    <span class="review-legend__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% if not forloop.last %}<span class="review-legend__or">/</span>{% endif %}{% endfor %}</span>
+                    <span>{{ label }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <ul class="review-legend__list" id="rq-legend-reasons" hidden>
+                <li class="review-legend__hint">Dismiss reason:</li>
+                {% for key, value, label in dismiss_reasons %}
+                <li data-legend="reason-{{ key }}"><span class="review-legend__keys"><kbd class="kbd">{{ key }}</kbd></span><span>{{ label }}</span></li>
+                {% endfor %}
+            </ul>
+        </aside>
+        <button type="button" class="review-legend-tab" id="rq-legend-tab" hidden aria-label="Show shortcuts">Shortcuts</button>
+    </div>
+
+    <!-- ============ "?" help overlay ============ -->
+    <div class="review-help" id="rq-help" hidden role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+        <div class="card review-help__panel">
+            <div class="card__header">
+                <span class="card__label">Keyboard shortcuts</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="rq-help-close" aria-label="Close help">&#10005;</button>
+            </div>
+            <ul class="review-legend__list">
+                {% for keys, label, action in shortcuts %}
+                <li><span class="review-legend__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% if not forloop.last %}<span class="review-legend__or">/</span>{% endif %}{% endfor %}</span><span>{{ label }}</span></li>
+                {% endfor %}
+                {% for key, value, label in dismiss_reasons %}
+                <li><span class="review-legend__keys"><kbd class="kbd">D</kbd><kbd class="kbd">{{ key }}</kbd></span><span>Dismiss: {{ label }}</span></li>
+                {% endfor %}
+                <li><span class="review-legend__keys"><kbd class="kbd">Esc</kbd></span><span>Close the calculator, photo, or this help</span></li>
+            </ul>
+            <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Shortcuts pause while you're typing or the calculator is open.</p>
+        </div>
+    </div>
+    {% else %}
+    <section class="card review-done" id="rq-done">
+        <h2>All caught up</h2>
+        <p style="color: var(--text-secondary);">Nothing in Check by hand or Leads needs a look right now.</p>
+        <a href="{% url 'albright_reselling_app:dashboard' %}" class="btn btn-primary">Back to dashboard</a>
+    </section>
+    {% endif %}
+</div>
+
+{% if queue %}
+{% include "_calculator_dialog.html" %}
+{% include "_lightbox.html" %}
+<script src="{% static_version 'js/calculator.js' %}" defer></script>
+<script src="{% static_version 'js/lightbox.js' %}" defer></script>
+<script src="{% static_version 'js/review_queue.js' %}" defer></script>
+{% endif %}
+{% endblock %}

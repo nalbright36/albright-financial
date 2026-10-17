@@ -1,0 +1,12 @@
+{% comment %}
+Full-size photo viewer for every .js-lightbox element on the page (lot
+thumbnails, the review queue's large photo) - a native <dialog> opened
+with showModal(), so the browser owns Esc-to-close, focus, and the
+backdrop; static/js/lightbox.js just fills in the image and closes on any
+click. Include once per page.
+{% endcomment %}
+<dialog id="lightbox" class="lightbox" aria-label="Photo">
+    <img id="lightbox-img" alt="">
+    <p id="lightbox-caption" class="lightbox__caption"></p>
+    <button type="button" class="btn btn-secondary btn-sm lightbox__close" aria-label="Close photo">&#10005;</button>
+</dialog>

@@ -8,8 +8,9 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,6 +19,15 @@ from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_conte
 from albright_reselling_app.scanner_models import (
     AIReview, AlertSent, BidWatch, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
+
+
+# These fixtures predate RESELLING_SCANNER["REVIEW"] (small headroom, lots
+# ending a day or more out) - the review settings themselves are tested in
+# test_review_queue.py, so keep them from hiding rows here.
+PERMISSIVE_REVIEW = {
+    **settings.RESELLING_SCANNER,
+    "REVIEW": {"window_hours": 24 * 365, "min_headroom": 0, "hide_categories": [], "hide_sources": []},
+}
 
 
 def _make_lot(external_id, end_time, current_price=10.0, source="shopgoodwill", raw=None):
@@ -72,6 +82,7 @@ def _make_lead_evaluation(lot, category="games", lead_reason="n64: bulk lot"):
     )
 
 
+@override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class ScannerDashboardContextTests(TestCase):
     """Unit-level: exercises get_scanner_dashboard_context() directly."""
 
@@ -648,6 +659,7 @@ class WatchlistExclusionTests(TestCase):
         self.assertEqual(after["watched_lots"], [])
 
 
+@override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
 

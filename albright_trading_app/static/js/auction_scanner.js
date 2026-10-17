@@ -151,9 +151,15 @@
                 if (storageKey) writeCollapseState(storageKey, !isHidden);
             }
 
-            header.addEventListener("click", toggle);
+            header.addEventListener("click", function (event) {
+                // A link/button inside the header (e.g. "Start review")
+                // does its own thing - never also collapses the card.
+                if (event.target.closest("a, button")) return;
+                toggle();
+            });
             header.addEventListener("keydown", function (event) {
                 if (event.key !== "Enter" && event.key !== " ") return;
+                if (event.target !== header) return;  // Enter on a link inside it follows the link
                 event.preventDefault();
                 toggle();
             });

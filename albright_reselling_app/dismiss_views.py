@@ -15,26 +15,30 @@ from .scanner_models import LotDismissal, SourcedLot
 VALID_REASONS = dict(LotDismissal.REASON_CHOICES)
 
 
-@login_required
-@require_POST
-def dismiss_lot(request, lot_id):
+def record_dismissal(lot, reason=""):
     """Creates (or refreshes, if the lot was dismissed before and then
     reopened) one LotDismissal for this lot - headroom_at_dismissal is
     always the lot's current headroom, snapshotted fresh here rather than
     trusted from the request, so the reopen threshold is measured from a
-    real baseline even on a re-dismiss."""
-    lot = get_object_or_404(SourcedLot.objects.select_related("evaluation"), pk=lot_id)
-    reason = request.POST.get("reason", "")
+    real baseline even on a re-dismiss. An unknown reason saves as none.
+    Shared with the /review/ queue's Dismiss (review_views.py)."""
     if reason not in VALID_REASONS:
         reason = ""
     evaluation = getattr(lot, "evaluation", None)
     headroom = evaluation.headroom if evaluation else None
-
-    LotDismissal.objects.update_or_create(
+    dismissal, _created = LotDismissal.objects.update_or_create(
         lot=lot, defaults={
             "headroom_at_dismissal": headroom, "reason": reason, "dismissed_at": timezone.now(),
         },
     )
+    return dismissal
+
+
+@login_required
+@require_POST
+def dismiss_lot(request, lot_id):
+    lot = get_object_or_404(SourcedLot.objects.select_related("evaluation"), pk=lot_id)
+    record_dismissal(lot, request.POST.get("reason", ""))
     return JsonResponse({"ok": True, "lot_id": lot.pk})
 
 

@@ -289,4 +289,9 @@ RESELLING_SCANNER = {
     # "Back: headroom up $X" badge) once its headroom has grown by at
     # least this much since dismissal - see scanner/dashboard.py.
     "DISMISS_REOPEN_HEADROOM": 25,
+    # Check by hand / Leads to review (dashboard tables and the /review/
+    # queue): only lots ending within window_hours; Check by hand also
+    # needs at least min_headroom of headroom (leads have none); hidden
+    # categories/sources never show. See scanner/dashboard.review_settings().
+    "REVIEW": {"window_hours": 24, "min_headroom": 30, "hide_categories": [], "hide_sources": []},
 }
