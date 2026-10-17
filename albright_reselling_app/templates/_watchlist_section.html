@@ -9,11 +9,11 @@ initWatchToggles() - that's also what re-wires this table's sort headers
 and its own Remove buttons, since they're fresh DOM nodes each time).
 Expects `watched_lots`/`watched_lots_has_maxsold` in context.
 
-Max Bid is the Watchlist entry's own max bid (BidWatch.my_max_bid, set by
-hand or via "Use as my max bid"); My est./My max are the lot's saved
-Calculator estimate (LotUserEstimate). Headroom is measured against My max
-when there is one (marked "mine"), otherwise the scanner's max bid - see
-scanner/dashboard.watch_headroom().
+My bid is the Watchlist entry's own max bid (BidWatch.my_max_bid, set by
+hand or via "Use as my max bid") when set, otherwise the scanner's max bid
+(marked "scanner"). Headroom is exactly My bid minus Current bid, and both
+turn red once the current bid is above My bid - see
+scanner/dashboard.watch_my_bid().
 {% endcomment %}
 {% if watched_lots %}
 <div style="overflow-x: auto;">
@@ -24,9 +24,7 @@ scanner/dashboard.watch_headroom().
             <th data-sort-key="source">Source</th>
             <th data-sort-key="category">Category</th>
             <th class="num" data-sort-key="bid">Current Bid</th>
-            <th class="num" data-sort-key="maxbid">Max Bid</th>
-            <th class="num" data-sort-key="myest">My est.</th>
-            <th class="num" data-sort-key="mymax">My max</th>
+            <th class="num" data-sort-key="mybid">My bid</th>
             <th class="num" data-sort-key="headroom">Headroom</th>
             {% if watched_lots_has_maxsold %}<th class="hide-mobile">Pickup</th>{% endif %}
             <th class="num" data-sort-key="endtime">Ends In</th>
@@ -36,33 +34,32 @@ scanner/dashboard.watch_headroom().
     <tbody>
         {% for row in watched_lots %}
         <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
-            data-bid="{{ row.current_bid }}" data-maxbid="{{ row.my_max_bid|default_if_none:'' }}"
-            data-myest="{{ row.my_estimate.resale_estimate|default_if_none:'' }}" data-mymax="{{ row.my_estimate.my_max_bid|default_if_none:'' }}"
+            data-bid="{{ row.current_bid }}" data-mybid="{{ row.my_bid|default_if_none:'' }}"
             data-headroom="{{ row.headroom|default_if_none:'' }}" data-endtime="{{ row.end_time_epoch_ms }}">
             <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
             <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
             <td><span class="badge neutral">{{ row.category|title }}</span></td>
             <td class="num">${{ row.current_bid|floatformat:2 }}</td>
             <td class="num">
-                {% if row.my_max_bid is not None %}
-                <span style="color: {% if row.current_bid <= row.my_max_bid %}var(--gain){% else %}var(--loss){% endif %};">${{ row.my_max_bid|floatformat:2 }}</span>
-                {% else %}
-                {% if row.can_use_my_max %}
-                <form method="post" action="{% url 'albright_reselling_app:use_my_max_bid' row.lot_id %}" style="display: inline;">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-secondary btn-sm" title="Copy My max (${{ row.my_estimate.my_max_bid|floatformat:2 }}) to this watchlist entry">Use as my max bid</button>
-                </form>
-                {% endif %}
-                <a href="{% url 'albright_reselling_app:watch_lot' row.lot_id %}" style="font-size: 0.8125rem;">Set max bid</a>
+                {% if row.my_bid is not None %}
+                <span class="js-my-bid" style="color: {% if row.is_over_my_bid %}var(--loss){% else %}var(--gain){% endif %};">${{ row.my_bid|floatformat:2 }}</span>
+                {% if row.my_bid_source == 'scanner' %}<span class="js-my-bid-scanner" style="font-size: 0.6875rem; color: var(--text-secondary); margin-left: 2px;" title="No max bid set - showing the scanner's max bid">scanner</span>{% endif %}
+                {% else %}&mdash;{% endif %}
+                {% if row.my_max_bid is None %}
+                <div style="margin-top: 2px;">
+                    {% if row.can_use_my_max %}
+                    <form method="post" action="{% url 'albright_reselling_app:use_my_max_bid' row.lot_id %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-sm" title="Copy your saved estimate's max bid (${{ row.my_estimate.my_max_bid|floatformat:2 }}) to this watchlist entry">Use as my max bid</button>
+                    </form>
+                    {% endif %}
+                    <a href="{% url 'albright_reselling_app:watch_lot' row.lot_id %}" style="font-size: 0.8125rem;">Set max bid</a>
+                </div>
                 {% endif %}
             </td>
-            <td class="num">{% if row.my_estimate %}${{ row.my_estimate.resale_estimate|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
-            <td class="num">{% if row.my_estimate %}${{ row.my_estimate.my_max_bid|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">
                 {% if row.headroom is not None %}
-                <span style="color: {% if row.headroom >= 0 %}var(--gain){% else %}var(--loss){% endif %};"
-                      title="{% if row.headroom_basis == 'mine' %}Against My max (your saved estimate){% else %}Against the scanner's max bid{% endif %}">${{ row.headroom|floatformat:2 }}</span>
-                {% if row.headroom_basis == 'mine' %}<span class="badge neutral" style="margin-left: 4px;" title="Headroom vs. your own My max, not the scanner's">mine</span>{% endif %}
+                <span class="js-headroom" style="color: {% if row.is_over_my_bid %}var(--loss){% else %}var(--gain){% endif %};">${{ row.headroom|floatformat:2 }}</span>
                 {% else %}&mdash;{% endif %}
             </td>
             {% if watched_lots_has_maxsold %}

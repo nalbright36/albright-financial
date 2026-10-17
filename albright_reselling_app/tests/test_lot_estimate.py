@@ -1,12 +1,13 @@
 """Tests for "My resale estimate" (LotUserEstimate): saving it from the
 Calculator dialog (calculator_views.lot_estimate/clear_lot_estimate),
 the server-computed my_max_bid (scanner/simple_calc.py math only),
-prefill/reset/clear payloads, the Watchlist's My est./My max columns and
-headroom basis, "Use as my max bid", dashboard row notes, Telegram
+prefill/reset/clear payloads, the Watchlist's "My bid" column and
+headroom, "Use as my max bid", dashboard row notes, Telegram
 watchlist alerts, "I won this" as a "manual" prediction, and manual as
 its own source on Insights and the Scorecard. No network calls."""
 import json
 import os
+import re
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
@@ -255,62 +256,136 @@ class PrefillResetClearTests(LoggedInTestCase):
         )
 
 
+def _watchlist_row_html(content, lot):
+    """Just this lot's <tr> from the rendered Watchlist section."""
+    match = re.search(rf'<tr class="scanner-row" data-lot-id="{lot.pk}".*?</tr>', content, re.S)
+    assert match, f"no Watchlist row for lot {lot.pk}"
+    return match.group(0)
+
+
 class WatchlistTests(LoggedInTestCase):
-    def test_headroom_uses_my_max_when_present(self):
+    """The Watchlist's "My bid" column (watch max bid, else the scanner's)
+    and Headroom (always exactly My bid - Current bid)."""
+
+    def section(self):
+        return self.client.get(reverse("albright_reselling_app:watchlist_section")).content.decode()
+
+    def test_my_bid_is_watch_max_and_headroom_is_my_bid_minus_current(self):
         lot = _make_lot("wl-1", current_price="10.00")
+        _make_evaluation(lot, max_bid="30.00")
+        _make_estimate(lot, my_max_bid="42.29")  # never used for My bid/headroom
+        BidWatch.objects.create(lot=lot, status="watching", my_max_bid=Decimal("25.00"))
+
+        row = _watched_lots(timezone.now())[0]
+
+        self.assertEqual(row["my_bid"], Decimal("25.00"))
+        self.assertEqual(row["my_bid_source"], "mine")
+        self.assertEqual(row["headroom"], row["my_bid"] - row["current_bid"])
+        self.assertEqual(row["headroom"], Decimal("15.00"))
+
+    def test_my_bid_falls_back_to_scanner_max_and_headroom_follows_it(self):
+        lot = _make_lot("wl-2", current_price="10.00")
         _make_evaluation(lot, max_bid="30.00")
         _make_estimate(lot, my_max_bid="42.29")
         BidWatch.objects.create(lot=lot, status="watching")
 
         row = _watched_lots(timezone.now())[0]
 
-        self.assertEqual(row["headroom"], Decimal("32.29"))
-        self.assertEqual(row["headroom_basis"], "mine")
-        self.assertEqual(row["my_estimate"].resale_estimate, Decimal("100.00"))
+        self.assertEqual(row["my_bid"], Decimal("30.00"))
+        self.assertEqual(row["my_bid_source"], "scanner")
+        self.assertEqual(row["headroom"], row["my_bid"] - row["current_bid"])
+        self.assertEqual(row["headroom"], Decimal("20.00"))
 
-    def test_headroom_falls_back_to_scanner_max(self):
-        lot = _make_lot("wl-2", current_price="10.00")
+    def test_rendered_my_bid_and_headroom_agree(self):
+        for external_id, my_max, expected_bid, expected_headroom in (
+            ("wl-3a", "25.00", "$25.00", "$15.00"),   # my max set
+            ("wl-3b", None, "$30.00", "$20.00"),      # scanner fallback
+        ):
+            with self.subTest(external_id=external_id):
+                lot = _make_lot(external_id, current_price="10.00")
+                _make_evaluation(lot, max_bid="30.00")
+                BidWatch.objects.create(
+                    lot=lot, status="watching", my_max_bid=Decimal(my_max) if my_max else None,
+                )
+
+                row_html = _watchlist_row_html(self.section(), lot)
+
+                self.assertRegex(row_html, rf'class="js-my-bid"[^>]*>\{expected_bid}<')
+                self.assertRegex(row_html, rf'class="js-headroom"[^>]*>\{expected_headroom}<')
+
+    def test_scanner_marker_only_on_scanner_fallback(self):
+        mine = _make_lot("wl-4a")
+        _make_evaluation(mine)
+        BidWatch.objects.create(lot=mine, status="watching", my_max_bid=Decimal("25.00"))
+        scanner = _make_lot("wl-4b")
+        _make_evaluation(scanner)
+        BidWatch.objects.create(lot=scanner, status="watching")
+
+        content = self.section()
+
+        self.assertNotIn("js-my-bid-scanner", _watchlist_row_html(content, mine))
+        self.assertIn('class="js-my-bid-scanner"', _watchlist_row_html(content, scanner))
+        self.assertIn(">scanner</span>", _watchlist_row_html(content, scanner))
+
+    def test_red_only_when_current_bid_above_my_bid(self):
+        cases = (
+            ("wl-5a", "30.00", False),   # above My bid -> red, headroom -5
+            ("wl-5b", "25.00", True),    # equal -> green
+            ("wl-5c", "20.00", True),    # below -> green
+        )
+        content = None
+        lots = []
+        for external_id, current, _green in cases:
+            lot = _make_lot(external_id, current_price=current)
+            BidWatch.objects.create(lot=lot, status="watching", my_max_bid=Decimal("25.00"))
+            lots.append(lot)
+        content = self.section()
+
+        for (external_id, _current, green), lot in zip(cases, lots):
+            with self.subTest(external_id=external_id):
+                row_html = _watchlist_row_html(content, lot)
+                my_bid = re.search(r'class="js-my-bid" style="color: ([^;]+);"', row_html).group(1)
+                headroom = re.search(r'class="js-headroom" style="color: ([^;]+);"', row_html).group(1)
+                expected = "var(--gain)" if green else "var(--loss)"
+                self.assertEqual(my_bid, expected)
+                self.assertEqual(headroom, expected)
+        self.assertIn(">$-5.00<", _watchlist_row_html(content, lots[0]))
+
+    def test_red_on_scanner_fallback_too(self):
+        lot = _make_lot("wl-6", current_price="40.00")
         _make_evaluation(lot, max_bid="30.00")
         BidWatch.objects.create(lot=lot, status="watching")
 
-        row = _watched_lots(timezone.now())[0]
+        row_html = _watchlist_row_html(self.section(), lot)
 
-        self.assertEqual(row["headroom"], Decimal("20.00"))
-        self.assertEqual(row["headroom_basis"], "scanner")
-        self.assertIsNone(row["my_estimate"])
+        self.assertIn('class="js-my-bid" style="color: var(--loss);"', row_html)
+        self.assertIn('class="js-headroom" style="color: var(--loss);">$-10.00<', row_html)
 
-    def test_no_max_anywhere_means_no_headroom(self):
-        lot = _make_lot("wl-3")
+    def test_no_max_anywhere_means_no_my_bid_or_headroom(self):
+        lot = _make_lot("wl-7")
         BidWatch.objects.create(lot=lot, status="watching")
 
         row = _watched_lots(timezone.now())[0]
 
+        self.assertIsNone(row["my_bid"])
         self.assertIsNone(row["headroom"])
-        self.assertIsNone(row["headroom_basis"])
+        self.assertFalse(row["is_over_my_bid"])
 
-    def test_section_renders_my_columns_and_mine_marker(self):
-        lot = _make_lot("wl-4")
+    def test_header_renamed_and_estimate_columns_removed(self):
+        lot = _make_lot("wl-8")
         _make_evaluation(lot)
         _make_estimate(lot)
         BidWatch.objects.create(lot=lot, status="watching")
 
-        response = self.client.get(reverse("albright_reselling_app:watchlist_section"))
+        content = self.section()
 
-        self.assertContains(response, "My est.</th>", html=False)
-        self.assertContains(response, "My max</th>", html=False)
-        self.assertContains(response, 'data-myest="100.00"')
-        self.assertContains(response, 'data-mymax="42.29"')
-        self.assertContains(response, ">mine</span>")
-        self.assertContains(response, "$32.29")
-
-    def test_no_mine_marker_on_scanner_headroom(self):
-        lot = _make_lot("wl-5")
-        _make_evaluation(lot)
-        BidWatch.objects.create(lot=lot, status="watching")
-
-        response = self.client.get(reverse("albright_reselling_app:watchlist_section"))
-
-        self.assertNotContains(response, ">mine</span>")
+        self.assertIn(">My bid</th>", content)
+        self.assertNotIn(">Max Bid</th>", content)
+        self.assertNotIn(">My est.</th>", content)
+        self.assertNotIn(">My max</th>", content)
+        self.assertNotIn("data-myest=", content)
+        self.assertNotIn("data-mymax=", content)
+        self.assertNotIn("$100.00", content)  # the saved estimate itself isn't shown here
 
     def test_use_as_my_max_offered_only_when_watch_has_no_max(self):
         lot = _make_lot("wl-6")

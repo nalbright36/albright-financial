@@ -589,8 +589,9 @@
 
     // static/js/calculator.js fires this after saving/clearing a lot's
     // resale estimate or "Use as my max bid" in the Calculator dialog -
-    // the Watchlist's My est./My max/Headroom/Max Bid cells all depend on
-    // those, so re-render it the same way a newly-watched lot does.
+    // the Watchlist's My bid/Headroom cells (and its "Use as my max bid"
+    // offer) depend on those, so re-render it the same way a newly-watched
+    // lot does.
     document.addEventListener("watchlist:changed", refreshWatchlistSection);
 
     function wireWatchlistRemoveButtons() {

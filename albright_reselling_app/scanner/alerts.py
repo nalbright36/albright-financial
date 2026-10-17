@@ -32,7 +32,7 @@ from ..scanner_models import (
 )
 from .ai_review_service import months_review_cost
 from .dashboard import (
-    _expected_interval_hours, _source_display, _time_remaining, exclude_dismissed_evaluations, watch_headroom,
+    _expected_interval_hours, _source_display, _time_remaining, exclude_dismissed_evaluations,
 )
 
 log = logging.getLogger(__name__)
@@ -291,7 +291,7 @@ def _format_watchlist_message(watch, now):
         lines.append(f"Your max: ${watch.my_max_bid:.2f} · headroom: ${headroom:.2f}")
     estimate = getattr(lot, "user_estimate", None)
     if estimate is not None:
-        _basis_max, my_headroom, _basis = watch_headroom(watch)
+        my_headroom = estimate.my_max_bid - lot.current_price
         lines.append(
             f"My est.: ${estimate.resale_estimate:.2f} · My max: ${estimate.my_max_bid:.2f}"
             f" · headroom vs my max: ${my_headroom:.2f}"

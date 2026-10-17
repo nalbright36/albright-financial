@@ -335,8 +335,8 @@ class ScanRun(models.Model):
 class LotUserEstimate(models.Model):
     """The user's own resale estimate for a lot, saved from the Calculator
     dialog's "Save to this lot" (calculator_views.save_lot_estimate) and
-    reused everywhere the lot appears - the Watchlist's My est./My max
-    columns and headroom, dashboard rows, Telegram watchlist alerts, and
+    reused where the lot appears - dashboard rows, the Watchlist's
+    "Use as my max bid", Telegram watchlist alerts, and
     "I won this" (as a "manual" prediction). my_max_bid is always computed
     server-side at save time from resale_estimate + calc_inputs (via
     calculator_views.my_max_bid(), backed by scanner/simple_calc.py) -
