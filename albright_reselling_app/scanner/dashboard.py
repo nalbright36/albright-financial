@@ -604,6 +604,66 @@ def _watched_lots(now):
     return [_watch_row(w, now) for w in watches]
 
 
+RECENTLY_CLOSED_WATCH_DAYS = 7
+
+
+def _closed_watch_row(watch):
+    """One "Recently closed" row on the Watchlist page. The outcome
+    compares the final price against the same My bid the open table shows
+    (watch_my_bid() - the watch's own max, else the scanner's), so a lot
+    watched without a max bid of its own still gets a Likely won/Lost;
+    with no final price (or no My bid at all) yet, it falls back to the
+    watch's own resolution status (scanner/bid_watch.py) - "Pending"
+    while that sweep hasn't settled it."""
+    lot = watch.lot
+    evaluation = getattr(lot, "evaluation", None)
+    my_bid, my_bid_source = watch_my_bid(watch)
+    final_price = lot.final_price
+    if final_price is not None and my_bid is not None:
+        outcome = "likely_won" if final_price <= my_bid else "lost"
+    elif watch.status == "watching":
+        outcome = "pending"
+    else:
+        outcome = watch.status
+    return {
+        "watch": watch,
+        "lot_id": lot.pk,
+        "title": lot.title,
+        "lot_url": lot.url,
+        "source": lot.source,
+        "source_display": _source_display(lot.source),
+        "category": evaluation.category if evaluation else "unknown",
+        "end_time": timezone.localtime(lot.end_time) if lot.end_time else None,
+        "final_price": final_price,
+        "my_bid": my_bid,
+        "my_bid_source": my_bid_source,
+        "outcome": outcome,
+        "outcome_display": {
+            "likely_won": "Likely won", "lost": "Lost", "pending": "Pending", "unknown": "Unknown",
+        }.get(outcome, outcome),
+    }
+
+
+def recently_closed_watches(now):
+    """Watchlisted lots whose auction ended in the last
+    RECENTLY_CLOSED_WATCH_DAYS days, most recently ended first - any watch
+    status (resolved or still waiting on the resolution sweep)."""
+    cutoff = now - timedelta(days=RECENTLY_CLOSED_WATCH_DAYS)
+    watches = (
+        BidWatch.objects.filter(lot__end_time__gt=cutoff, lot__end_time__lte=now)
+        .select_related("lot", "lot__evaluation").order_by("-lot__end_time")
+    )
+    return [_closed_watch_row(w) for w in watches]
+
+
+def watchlist_nav_summary(now=None):
+    """The nav's Watchlist badge: how many lots are being watched (the
+    same live rows the Watchlist page's table shows) and whether any of
+    them has a current bid above My bid (badge turns red)."""
+    rows = _watched_lots(now or timezone.now())
+    return {"count": len(rows), "any_over": any(row["is_over_my_bid"] for row in rows)}
+
+
 def _watched_lot_ids():
     """Every lot id with a BidWatch at all, any status - a watchlisted lot
     belongs only in the Watchlist section (see get_scanner_dashboard_context),

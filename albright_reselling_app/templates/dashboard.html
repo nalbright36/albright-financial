@@ -34,7 +34,7 @@
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ ledger_tiles.inventory_cost|floatformat:2 }} at cost</div>
         </a>
 
-        <a href="{% if ledger_tiles.markdown_count > 0 %}{% url 'albright_reselling_app:ledger_resale' %}?status=unsold{% else %}{% url 'albright_reselling_app:dashboard' %}#my-bids{% endif %}" class="card" style="display: block;">
+        <a href="{% if ledger_tiles.markdown_count > 0 %}{% url 'albright_reselling_app:ledger_resale' %}?status=unsold{% else %}{% url 'albright_reselling_app:watchlist' %}{% endif %}" class="card" style="display: block;">
             <div class="card__header"><span class="card__label">Needs Action</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0; color: {% if ledger_tiles.needs_action_count > 0 %}var(--warn){% else %}var(--text-tertiary){% endif %};">{{ ledger_tiles.needs_action_count }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">
@@ -42,7 +42,7 @@
             </div>
         </a>
 
-        <a href="{% url 'albright_reselling_app:dashboard' %}#my-bids" class="card" style="display: block;">
+        <a href="{% url 'albright_reselling_app:watchlist' %}" class="card" style="display: block;" id="watchlist-tile">
             <div class="card__header"><span class="card__label">Watchlist</span></div>
             <span id="watchlist-tile-count" class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ ledger_tiles.watching_count }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ ledger_tiles.likely_won_this_week }} likely won this week</div>
@@ -174,21 +174,6 @@
             </div>
 
             <button type="button" class="btn btn-secondary btn-sm" id="af-clear">Clear filters</button>
-        </div>
-    </div>
-
-    <!-- ============ Watchlist: always visible above the tabs, never also
-         duplicated into any Act Now/Watch table - scanner/dashboard.py
-         excludes a watchlisted lot from every one of those queries up
-         front. Collapsed/expanded state is remembered per browser (see
-         initCollapsible()'s data-collapse-key handling). ============ -->
-    <div class="card" id="my-bids" style="margin-bottom: 20px;">
-        <div class="card__header js-collapsible-header" data-collapse-key="watchlist">
-            <span class="card__label">Watchlist <span class="row-count" id="watchlist-row-count">({{ watched_lots|length }})</span></span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Lots you're watching - sorted by end time. A closed lot leaves this automatically.</span>
-        </div>
-        <div class="js-collapsible-body" id="watchlist-body" data-refresh-url="{% url 'albright_reselling_app:watchlist_section' %}">
-            {% include "_watchlist_section.html" %}
         </div>
     </div>
 

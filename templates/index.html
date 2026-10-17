@@ -48,7 +48,10 @@
                 <div class="navbar__links">
                     {% if user.is_authenticated %}
                         {% if in_reselling_app %}
-                        <a href="{% url 'albright_reselling_app:today' %}">Today</a>
+                        <a href="{% url 'albright_reselling_app:watchlist' %}" id="nav-watchlist-link"
+                           data-summary-url="{% url 'albright_reselling_app:watchlist_summary' %}">Watchlist<span
+                           id="nav-watchlist-badge" class="badge {% if watchlist_nav.any_over %}loss{% else %}neutral{% endif %}"
+                           style="margin-left: 4px;"{% if watchlist_nav.any_over %} title="A current bid is above My bid"{% endif %}{% if not watchlist_nav.count %} hidden{% endif %}>{{ watchlist_nav.count|default:0 }}</span></a>
                         <a href="{% url 'albright_reselling_app:dashboard' %}">Dashboard</a>
                         <a href="{% url 'albright_reselling_app:ledger' %}" id="nav-ledger-link"
                            data-overview-url="{% url 'albright_reselling_app:ledger_overview' %}"

@@ -457,11 +457,20 @@
         return el;
     }
 
-    function showUndoToast(message, onUndo) {
+    // `viewLink` (optional, {text, href}) adds a plain link between the
+    // message and Undo - "Added to Watchlist · View · Undo".
+    function showUndoToast(message, onUndo, viewLink) {
         var toast = document.createElement("div");
         toast.className = "toast";
         var text = document.createElement("span");
         text.textContent = message + " ";
+        if (viewLink) {
+            var view = document.createElement("a");
+            view.href = viewLink.href;
+            view.textContent = viewLink.text;
+            text.appendChild(view);
+            text.appendChild(document.createTextNode(" · "));
+        }
         var undo = document.createElement("a");
         undo.href = "#";
         undo.textContent = "Undo";
@@ -528,29 +537,51 @@
     }
 
     // ---------- Watchlist: the star toggle (every lot row + the AI review
-    // page) and the Watchlist section's own "Remove" button.
+    // page) and the Watchlist page's own "Remove" button.
     //
-    // A table row's star (always "Add to Watchlist", never "Watching" -
-    // scanner/dashboard.py excludes every watchlisted lot from these
-    // tables up front) removes that row immediately, no page reload, and
-    // asks the server to re-render just the Watchlist section's body
-    // (#watchlist-body) so the newly-added lot shows up there without
-    // duplicating its row markup here in JS - see refreshWatchlistSection()
-    // and _watchlist_section.html. An "Added to Watchlist · Undo" toast
-    // puts the row back exactly where it was and un-watches the lot again.
+    // A dashboard table row's star (always "Add to Watchlist", never
+    // "Watching" - scanner/dashboard.py excludes every watchlisted lot from
+    // these tables up front) removes that row immediately, no page reload,
+    // and refreshes the nav's Watchlist badge. An "Added to Watchlist ·
+    // View · Undo" toast links to the Watchlist page, or puts the row back
+    // exactly where it was and un-watches the lot again.
     //
     // The AI review detail page's star isn't inside a table row at all, so
     // it keeps the simpler plain toggle it always had.
     //
-    // The Watchlist section's own "Remove" button reloads the page once
-    // the removal is saved, rather than figuring out which table (if any)
-    // the lot belongs back in and building that row here too - simpler,
-    // and removing a watch is already a deliberate, infrequent action. ----------
+    // On the Watchlist page (watchlist.html), refreshWatchlistSection()
+    // re-renders the table (#watchlist-body) after the Calculator dialog
+    // changes something on a lot; its "Remove" button reloads the page once
+    // the removal is saved - removing a watch is a deliberate, infrequent
+    // action, and the reload also refreshes Recently closed and the badge. ----------
     function adjustWatchlistTileCount(delta) {
         var el = document.getElementById("watchlist-tile-count");
         if (!el) return;
         el.textContent = String(Math.max(0, (parseInt(el.textContent, 10) || 0) + delta));
     }
+
+    // The nav's Watchlist badge (templates/index.html): count of watched
+    // lots, red when any is over My bid - re-fetched from the server
+    // (scanner_views.watchlist_summary) rather than guessed here, since
+    // "over My bid" depends on the watch's own max vs. the scanner's.
+    function refreshWatchlistNavBadge() {
+        var link = document.getElementById("nav-watchlist-link");
+        var badge = document.getElementById("nav-watchlist-badge");
+        if (!link || !badge || !link.dataset.summaryUrl) return;
+        fetch(link.dataset.summaryUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (resp) { return resp.ok ? resp.json() : null; })
+            .then(function (summary) {
+                if (!summary) return;
+                badge.textContent = String(summary.count);
+                badge.hidden = !summary.count;
+                badge.classList.toggle("loss", !!summary.any_over);
+                badge.classList.toggle("neutral", !summary.any_over);
+                if (summary.any_over) badge.title = "A current bid is above My bid";
+                else badge.removeAttribute("title");
+            })
+            .catch(function () {});
+    }
+    document.addEventListener("watchlist:changed", refreshWatchlistNavBadge);
 
     function applyWatchState(group, isWatching) {
         var button = group.querySelector(".js-watch-toggle");
@@ -620,9 +651,11 @@
         adjustWatchlistTileCount(1);
         updateTabCounts();
         refreshFilterCounts();
-        postForm(toggleUrl).then(refreshWatchlistSection);
+        postForm(toggleUrl).then(refreshWatchlistNavBadge);
 
-        showUndoToast("Added to Watchlist.", function () {
+        var watchlistLink = document.getElementById("nav-watchlist-link");
+        var viewLink = watchlistLink ? {text: "View", href: watchlistLink.href} : null;
+        showUndoToast("Added to Watchlist ·", function () {
             if (insertBefore && insertBefore.parentNode === parent) {
                 parent.insertBefore(row, insertBefore);
                 if (detail) parent.insertBefore(detail, insertBefore);
@@ -633,8 +666,8 @@
             adjustWatchlistTileCount(-1);
             updateTabCounts();
             refreshFilterCounts();
-            postForm(toggleUrl).then(refreshWatchlistSection);
-        });
+            postForm(toggleUrl).then(refreshWatchlistNavBadge);
+        }, viewLink);
     }
 
     // A star can sit in the main row's own Actions cell, or in its
@@ -663,7 +696,7 @@
                 var next = !button.classList.contains("is-watching");
                 if (group) applyWatchState(group, next);
                 adjustWatchlistTileCount(next ? 1 : -1);
-                postForm(button.dataset.toggleUrl);
+                postForm(button.dataset.toggleUrl).then(refreshWatchlistNavBadge);
             });
         });
 

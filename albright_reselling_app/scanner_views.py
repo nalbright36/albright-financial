@@ -19,10 +19,14 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from . import calculator_views
 from .forms import BidWatchForm
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from .scanner.bid_watch import default_max_bid
-from .scanner.dashboard import _has_maxsold, _time_remaining, _watched_lots
+from .scanner.dashboard import (
+    RECENTLY_CLOSED_WATCH_DAYS, _has_maxsold, _time_remaining, _watched_lots, recently_closed_watches,
+    watchlist_nav_summary,
+)
 from .scanner.review_history import (
     CATEGORY_CHOICES,
     CONFIDENCE_CHOICES,
@@ -188,6 +192,36 @@ def use_my_max_bid(request, lot_id):
         return JsonResponse({"watch_max_bid": float(watch.my_max_bid)})
     messages.success(request, f'Max bid for "{lot.title}" set to ${watch.my_max_bid}.')
     return redirect("albright_reselling_app:dashboard")
+
+
+@login_required
+def watchlist_page(request):
+    """The dedicated Watchlist page (nav: Watchlist) - the live watchlist
+    table (_watchlist_section.html, the same partial watchlist_section
+    below re-renders for in-place refreshes), with client-side source/
+    category/"over my bid" filters (static/js/watchlist.js), a "Recently
+    closed" section, and the Calculator dialog so a row's Calc opens in
+    place."""
+    now = timezone.now()
+    watched_lots = _watched_lots(now)
+    context = {
+        "watched_lots": watched_lots,
+        "watched_lots_has_maxsold": _has_maxsold(watched_lots),
+        "source_choices": sorted({(r["source"], r["source_display"]) for r in watched_lots}, key=lambda c: c[1]),
+        "category_choices": sorted({r["category"] for r in watched_lots}),
+        "recently_closed": recently_closed_watches(now),
+        "recently_closed_days": RECENTLY_CLOSED_WATCH_DAYS,
+    }
+    context.update(calculator_views.panel_context(request.user))
+    return render(request, "watchlist.html", context)
+
+
+@login_required
+def watchlist_summary(request):
+    """The nav badge's numbers as JSON - static/js/auction_scanner.js
+    re-fetches this after a dashboard row's star adds (or Undo removes) a
+    watch, so the badge's count and red state stay exact without a reload."""
+    return JsonResponse(watchlist_nav_summary())
 
 
 @login_required

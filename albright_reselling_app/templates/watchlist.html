@@ -1,0 +1,99 @@
+{% extends 'index.html' %}
+{% load static %}
+{% load cache_bust %}
+
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Watchlist</h1>
+        <button type="button" id="calc-dialog-toggle" class="btn btn-secondary">Calculator</button>
+    </div>
+
+    <!-- ============ Live watchlist. Filters are client-side only
+         (static/js/watchlist.js) - they hide rows, never change what's
+         watched. Sorted by end time by default (scanner/dashboard.py's
+         _watched_lots order); every column header with data-sort-key is
+         click-to-sort (static/js/auction_scanner.js). ============ -->
+    <div class="card" id="watchlist" style="margin-bottom: 20px;">
+        <div class="card__header">
+            <span class="card__label">Watching <span class="row-count" id="watchlist-row-count">({{ watched_lots|length }})</span></span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">A closed lot moves to Recently closed automatically.</span>
+        </div>
+        {% if watched_lots %}
+        <div class="scanner-controls" id="watchlist-filters" style="margin-bottom: 12px;">
+            <select id="wl-source" aria-label="Filter by source">
+                <option value="">All sources</option>
+                {% for value, label in source_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+            <select id="wl-category" aria-label="Filter by category">
+                <option value="">All categories</option>
+                {% for value in category_choices %}<option value="{{ value }}">{{ value|title }}</option>{% endfor %}
+            </select>
+            <label style="font-size: 0.8125rem;"><input type="checkbox" id="wl-over-only"> Only show over my bid</label>
+            <span id="wl-filter-count" class="row-count"></span>
+        </div>
+        <p id="wl-filter-empty" style="color: var(--text-secondary);" hidden>No watched lots match these filters.</p>
+        {% endif %}
+        <div id="watchlist-body" data-refresh-url="{% url 'albright_reselling_app:watchlist_section' %}">
+            {% include "_watchlist_section.html" %}
+        </div>
+    </div>
+
+    <!-- ============ Recently closed: collapsible (state remembered per
+         browser via data-collapse-key, same as the dashboard's cards). ============ -->
+    <div class="card" id="recently-closed">
+        <div class="card__header js-collapsible-header" data-collapse-key="watchlist-recently-closed">
+            <span class="card__label">Recently closed <span class="row-count">({{ recently_closed|length }})</span></span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">Watched lots that ended in the last {{ recently_closed_days }} days</span>
+        </div>
+        <div class="js-collapsible-body">
+            {% if recently_closed %}
+            <div style="overflow-x: auto;">
+            <table class="holdings" id="table-recently-closed">
+                <thead>
+                    <tr>
+                        <th class="lot-title-col" data-sort-key="title">Title</th>
+                        <th data-sort-key="source">Source</th>
+                        <th data-sort-key="category">Category</th>
+                        <th class="num" data-sort-key="ended">Ended</th>
+                        <th class="num" data-sort-key="final">Final Price</th>
+                        <th class="num" data-sort-key="mybid">My bid</th>
+                        <th data-sort-key="outcome">Result</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in recently_closed %}
+                    <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}"
+                        data-category="{{ row.category }}" data-ended="{{ row.end_time|date:'U' }}"
+                        data-final="{{ row.final_price|default_if_none:'' }}" data-mybid="{{ row.my_bid|default_if_none:'' }}"
+                        data-outcome="{{ row.outcome }}">
+                        <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
+                        <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
+                        <td><span class="badge neutral">{{ row.category|title }}</span></td>
+                        <td class="num">{{ row.end_time|date:"M j, g:i A" }}</td>
+                        <td class="num">{% if row.final_price is not None %}${{ row.final_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                        <td class="num">
+                            {% if row.my_bid is not None %}${{ row.my_bid|floatformat:2 }}{% if row.my_bid_source == 'scanner' %} <span style="font-size: 0.6875rem; color: var(--text-secondary);" title="No max bid was set - the scanner's max bid">scanner</span>{% endif %}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td><span class="badge {% if row.outcome == 'likely_won' %}gain{% elif row.outcome == 'lost' %}loss{% else %}neutral{% endif %}">{{ row.outcome_display }}</span></td>
+                        <td>{% if row.outcome == 'likely_won' %}<a href="{% url 'albright_reselling_app:ledger_win_lot' row.lot_id %}" class="btn btn-secondary btn-sm">I won this</a>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--text-secondary);">No watched lots closed in the last {{ recently_closed_days }} days.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% include "_calculator_dialog.html" %}
+
+<script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
+<script src="{% static_version 'js/calculator.js' %}" defer></script>
+<script src="{% static_version 'js/watchlist.js' %}" defer></script>
+{% endblock %}

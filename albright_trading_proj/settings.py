@@ -72,6 +72,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'albright_trading_app.context_processors.current_app',
+                'albright_reselling_app.context_processors.watchlist_nav',
             ],
         },
     },

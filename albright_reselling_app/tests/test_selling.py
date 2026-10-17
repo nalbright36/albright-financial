@@ -515,17 +515,20 @@ class NavAndLandingTests(TestCase):
         self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
         self.client.login(username="tester", password="pw-not-real-12345")
 
-    def test_today_is_first_in_reseller_nav(self):
+    def test_today_no_longer_in_reseller_nav(self):
+        """Watchlist took Today's nav slot (see test_watchlist_page.py) -
+        Today's page/URL stay, just unlinked from the nav."""
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
         content = response.content.decode()
 
         nav_start = content.index('class="navbar__links"')
         nav_html = content[nav_start:nav_start + 2000]
 
-        self.assertLess(nav_html.index(">Today<"), nav_html.index(">Dashboard<"))
+        self.assertNotIn(">Today<", nav_html)
+        self.assertNotIn(reverse("albright_reselling_app:today"), nav_html)
 
-    def test_reseller_root_serves_today_page(self):
-        response = self.client.get("/albright_reselling_app/")
+    def test_today_url_still_serves_today_page(self):
+        response = self.client.get(reverse("albright_reselling_app:today"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sell-Down Goal")

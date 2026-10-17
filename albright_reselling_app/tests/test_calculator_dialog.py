@@ -197,12 +197,14 @@ class CalcButtonPrefillDataTests(TestCase):
         _make_evaluation(lot, expected_sale="60.00")
         BidWatch.objects.create(lot=lot, my_max_bid=Decimal("25.00"), status="watching")
 
-        response = self.client.get(reverse("albright_reselling_app:dashboard"))
+        # The Watchlist lives on its own page now (with the same dialog).
+        response = self.client.get(reverse("albright_reselling_app:watchlist"))
         content = response.content.decode()
 
-        my_bids_section = content.split('id="my-bids"')[1].split('<nav class="scanner-tabs"')[0]
-        self.assertIn('data-bid="18.00"', my_bids_section)
-        self.assertIn('data-expected-sale="60.00"', my_bids_section)
+        self.assertIn('<dialog id="calc-dialog"', content)
+        watchlist_table = content.split('id="table-watchlist"')[1].split("</table>")[0]
+        self.assertIn('data-bid="18.00"', watchlist_table)
+        self.assertIn('data-expected-sale="60.00"', watchlist_table)
 
     def test_calc_button_absent_from_results_table(self):
         """Results/Performance is explicitly out of scope for the Calc

@@ -707,29 +707,18 @@ class DashboardViewTests(TestCase):
 
         self.assertContains(response, "status-dot--warn")
 
-    def test_watchlist_empty_state_message(self):
-        response = self.client.get(reverse("albright_reselling_app:dashboard"))
-
-        self.assertContains(response, "Nothing on your watchlist. Use")
-        self.assertContains(response, "Add to Watchlist on any lot.")
-
-    def test_watchlist_section_renders_above_the_tabs(self):
-        """The Watchlist section is its own card above the Act now/Watch/
-        Performance tabs, not nested inside any one of them - so it must
-        appear in the markup before the tab nav and before the Act now
-        panel, and outside the Act now panel's own closing tag."""
+    def test_watchlist_section_no_longer_on_dashboard(self):
+        """The Watchlist moved to its own page (scanner_views.watchlist_page) -
+        the dashboard renders no Watchlist section/table, even with a watch."""
         lot = _make_lot("wl-position-1", timezone.now() + timedelta(hours=3))
         BidWatch.objects.create(lot=lot, status="watching")
 
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
-        content = response.content.decode()
 
-        my_bids_index = content.index('id="my-bids"')
-        tabs_nav_index = content.index('id="scanner-tabs"')
-        act_now_index = content.index('id="act-now"')
-
-        self.assertLess(my_bids_index, tabs_nav_index)
-        self.assertLess(my_bids_index, act_now_index)
+        self.assertNotContains(response, 'id="my-bids"')
+        self.assertNotContains(response, 'id="watchlist-body"')
+        self.assertNotContains(response, 'id="table-watchlist"')
+        self.assertNotContains(response, "Nothing on your watchlist")
 
     def test_tabs_render_with_badge_counts(self):
         lot = _make_lot("tab-page-soon", timezone.now() + timedelta(hours=3))
@@ -1038,10 +1027,11 @@ class LedgerTilesDashboardTests(TestCase):
 
         self.assertContains(response, "$15.00 at cost")
 
-    def test_my_bids_tile_links_to_my_bids_anchor(self):
+    def test_watchlist_tile_links_to_watchlist_page(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
 
-        self.assertContains(response, f'href="{reverse("albright_reselling_app:dashboard")}#my-bids"')
+        self.assertContains(response, f'href="{reverse("albright_reselling_app:watchlist")}" class="card"')
+        self.assertNotContains(response, "#my-bids")
 
     def test_inventory_tile_links_to_unsold_ledger_filter(self):
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
@@ -1077,4 +1067,4 @@ class LedgerTilesDashboardTests(TestCase):
         BidWatch.objects.create(lot=lot, my_max_bid=Decimal("20.00"), status="watching")
 
         response = self.client.get(reverse("albright_reselling_app:dashboard"))
-        self.assertContains(response, 'id="my-bids"')
+        self.assertRegex(response.content.decode(), r'id="watchlist-tile-count"[^>]*>1<')

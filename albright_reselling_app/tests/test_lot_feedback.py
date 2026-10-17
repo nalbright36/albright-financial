@@ -39,11 +39,11 @@ class LotFeedbackFormViewTests(TestCase):
         lot = _make_lot("fb-post-1")
 
         response = self.client.post(
-            f"{reverse('albright_reselling_app:lot_feedback', args=[lot.pk])}?next=/albright_reselling_app/",
-            {"kind": "misread", "note": "Not actually silver", "next": "/albright_reselling_app/"},
+            f"{reverse('albright_reselling_app:lot_feedback', args=[lot.pk])}?next=/albright_reselling_app/dashboard/",
+            {"kind": "misread", "note": "Not actually silver", "next": "/albright_reselling_app/dashboard/"},
         )
 
-        self.assertRedirects(response, "/albright_reselling_app/")
+        self.assertRedirects(response, "/albright_reselling_app/dashboard/")
         feedback = LotFeedback.objects.get(lot=lot)
         self.assertEqual(feedback.kind, "misread")
         self.assertEqual(feedback.note, "Not actually silver")

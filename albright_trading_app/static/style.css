@@ -448,6 +448,7 @@ a:hover { color: var(--accent-hover); }
   border: 1px solid transparent;
   line-height: 1.6;
 }
+.badge[hidden] { display: none; }
 .badge.gain { background: var(--gain-bg); color: var(--gain); }
 .badge.loss { background: var(--loss-bg); color: var(--loss); }
 .badge.warn { background: var(--warn-bg); color: var(--warn); }

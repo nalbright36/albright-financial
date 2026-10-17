@@ -1,10 +1,16 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from . import calculator_views, dismiss_views, insights_views, ledger_views, scanner_views, selling_views, views
 
 app_name = "albright_reselling_app"
 
 urlpatterns = [
-    path("", selling_views.today_page, name="today"),
+    # The reseller app's landing page is the Dashboard; Today moved to
+    # its own URL (same name, still linked from nowhere in the nav).
+    path("", RedirectView.as_view(pattern_name="albright_reselling_app:dashboard"), name="home"),
+    path("today/", selling_views.today_page, name="today"),
+    path("watchlist/", scanner_views.watchlist_page, name="watchlist"),
+    path("scanner/watchlist-summary/", scanner_views.watchlist_summary, name="watchlist_summary"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("ledger/", views.ledger, name="ledger"),  # legacy URL: redirects to ledger_resale
     path("ledger/overview/", ledger_views.ledger_overview, name="ledger_overview"),
