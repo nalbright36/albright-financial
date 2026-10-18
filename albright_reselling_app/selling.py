@@ -206,7 +206,7 @@ def closing_soon_watches(now=None):
     now = now or timezone.now()
     cutoff = now + timedelta(hours=24)
     return list(
-        BidWatch.objects.filter(status="watching", lot__end_time__gte=now, lot__end_time__lte=cutoff)
+        BidWatch.objects.active().filter(lot__end_time__gte=now, lot__end_time__lte=cutoff)
         .select_related("lot").order_by("lot__end_time")
     )
 

@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 from . import calculator_views
 from .dismiss_views import record_dismissal
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
+from .scanner.bid_watch import restore
 from .scanner.review_queue import _ai_payload, review_queue
 from .scanner_models import AIReview, BidWatch, LotDismissal, SourcedLot
 from .scanner_views import RECENT_REVIEW_WINDOW
@@ -70,7 +71,9 @@ def review_watch(request, lot_id):
     lot = get_object_or_404(SourcedLot, pk=lot_id)
     if lot.end_time is not None and lot.end_time <= timezone.now():
         return JsonResponse({"error": "This lot has already closed."}, status=400)
-    BidWatch.objects.get_or_create(lot=lot, defaults={"status": "watching"})
+    watch, created = BidWatch.objects.get_or_create(lot=lot, defaults={"status": "watching"})
+    if not created and watch.archived_at is not None:
+        restore(watch)  # soft-removed earlier - back on the watchlist
     return JsonResponse({"ok": True, "lot_id": lot.pk, "watching": True})
 
 

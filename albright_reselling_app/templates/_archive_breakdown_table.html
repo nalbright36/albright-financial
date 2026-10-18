@@ -1,0 +1,37 @@
+{% comment %}
+A Watchlist Archive breakdown (by source / category / archive reason) -
+the same numbers as _archive_summary_block.html, one row per group.
+Expects `rows` (scanner/watch_archive._grouped()), `heading`, `table_id`.
+{% endcomment %}
+<div style="overflow-x: auto; margin-bottom: 16px;">
+<table class="holdings" id="{{ table_id }}">
+    <thead>
+        <tr>
+            <th>{{ heading }}</th>
+            <th class="num">Resolved</th>
+            <th class="num">At or below</th>
+            <th class="num">Below</th>
+            <th class="num">At</th>
+            <th class="num">Above</th>
+            <th class="num">Median final &minus; max</th>
+            <th class="num">Pending / Unknown</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr data-group="{{ row.key }}">
+            <td>{{ row.label }}</td>
+            <td class="num">{{ row.resolved }}</td>
+            <td class="num">{% if row.pct_at_or_below is not None %}{{ row.pct_at_or_below|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.pct_below is not None %}{{ row.pct_below|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.pct_at is not None %}{{ row.pct_at|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.pct_above is not None %}{{ row.pct_above|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if row.median_diff is not None %}{% if row.median_diff > 0 %}+{% endif %}${{ row.median_diff|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{{ row.pending }} / {{ row.unknown }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" style="color: var(--text-secondary);">Nothing archived yet.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>

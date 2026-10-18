@@ -8,7 +8,9 @@
 Updates lots we already scanned with their final (closed/sold) price, so we
 can see how our max-bid math actually held up. Never creates new lots -
 only SourcedLot rows already in the database (matched on source +
-external_id) get updated.
+external_id) get updated. Afterwards, settles the Watchlist Archive
+outcome of any archived watch whose lot it just priced (no extra lookups -
+see scanner/bid_watch.resolve_watches).
 """
 import statistics
 from datetime import timedelta
@@ -21,6 +23,7 @@ from albright_reselling_app.scanner.adapters.base import SourceBlocked, SourceUn
 from albright_reselling_app.scanner.adapters.hibid import HiBidAdapter
 from albright_reselling_app.scanner.adapters.maxsold import MaxSoldAdapter
 from albright_reselling_app.scanner.adapters.shopgoodwill import ShopGoodwillAdapter
+from albright_reselling_app.scanner.bid_watch import resolve_watches
 from albright_reselling_app.scanner.pipeline import _categories_for, _cfg, _keywords_for
 from albright_reselling_app.scanner_models import SourcedLot
 
@@ -120,6 +123,17 @@ class Command(BaseCommand):
             adapter.pause()
 
         self.stdout.write(f"Lots updated: {updated}")
+
+        # Watchlist Archive: settle any archived watch whose lot just got
+        # its final price here - final prices already on the lot only, no
+        # extra lookups (scan_lots' own sweep does those).
+        try:
+            resolved = resolve_watches(now=now, lookup=False)
+            if resolved:
+                self.stdout.write(f"Watch outcomes resolved: {len(resolved)}")
+        except Exception as exc:  # noqa: BLE001 - watch resolution must never break the price tracking
+            self.stderr.write(self.style.WARNING(f"Watch resolution failed: {exc}"))
+
         self._print_results_summary(source, now)
 
     def _print_results_summary(self, source, now):

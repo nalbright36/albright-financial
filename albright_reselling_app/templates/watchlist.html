@@ -10,15 +10,23 @@
         <button type="button" id="calc-dialog-toggle" class="btn btn-secondary">Calculator</button>
     </div>
 
-    <!-- ============ Live watchlist. Filters are client-side only
-         (static/js/watchlist.js) - they hide rows, never change what's
-         watched. Sorted by end time by default (scanner/dashboard.py's
-         _watched_lots order); every column header with data-sort-key is
-         click-to-sort (static/js/auction_scanner.js). ============ -->
+    <!-- Two tabs (static/js/watchlist.js; #watching / #archive in the URL).
+         Without JS both panels simply render stacked. -->
+    <nav class="scanner-tabs" id="watchlist-tabs">
+        <a href="#watching" class="scanner-tab is-active" data-tab="watching">Watching <span class="tab-badge">{{ watched_lots|length }}</span></a>
+        <a href="#archive" class="scanner-tab" data-tab="archive">Archive <span class="tab-badge">{{ archive_rows|length }}</span></a>
+    </nav>
+
+    <!-- ============ Watching: the live watchlist. Filters are client-side
+         only - they hide rows, never change what's watched. Sorted by end
+         time by default; every header with data-sort-key is click-to-sort
+         (static/js/auction_scanner.js). Remove = soft (to the Archive),
+         Delete = hard (gone, nothing tracked). ============ -->
+    <div class="tab-panel" id="watching">
     <div class="card" id="watchlist" style="margin-bottom: 20px;">
         <div class="card__header">
             <span class="card__label">Watching <span class="row-count" id="watchlist-row-count">({{ watched_lots|length }})</span></span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">A closed lot moves to Recently closed automatically.</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">A lot that closes while watched moves to the Archive automatically.</span>
         </div>
         {% if watched_lots %}
         <div class="scanner-controls" id="watchlist-filters" style="margin-bottom: 12px;">
@@ -39,53 +47,103 @@
             {% include "_watchlist_section.html" %}
         </div>
     </div>
+    </div>
 
-    <!-- ============ Recently closed: collapsible (state remembered per
-         browser via data-collapse-key, same as the dashboard's cards). ============ -->
-    <div class="card" id="recently-closed">
-        <div class="card__header js-collapsible-header" data-collapse-key="watchlist-recently-closed">
-            <span class="card__label">Recently closed <span class="row-count">({{ recently_closed|length }})</span></span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Watched lots that ended in the last {{ recently_closed_days }} days</span>
+    <!-- ============ Archive: soft-removed and closed-on-watchlist lots,
+         each measured against the max snapshotted when it was archived
+         (scanner/watch_archive.py). Hard-deleted lots never appear. ============ -->
+    <div class="tab-panel" id="archive">
+        <div class="card" style="margin-bottom: 20px;" id="archive-summary">
+            <div class="card__header">
+                <span class="card__label">How they closed vs. the max</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Resolved lots only &middot; "At" = within $0.01</span>
+            </div>
+            <div class="grid grid-3">
+                {% include "_archive_summary_block.html" with label="All" stats=archive_summary.all block_id="all" %}
+                {% include "_archive_summary_block.html" with label="My max" stats=archive_summary.manual block_id="manual" %}
+                {% include "_archive_summary_block.html" with label="Scanner max" stats=archive_summary.scanner block_id="scanner" %}
+            </div>
         </div>
-        <div class="js-collapsible-body">
-            {% if recently_closed %}
+
+        <div class="card" style="margin-bottom: 20px;" id="archive-breakdowns">
+            <div class="card__header js-collapsible-header" data-collapse-key="watchlist-archive-breakdowns">
+                <span class="card__label">Breakdown</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">By source, category, and how it left the watchlist</span>
+            </div>
+            <div class="js-collapsible-body">
+                {% include "_archive_breakdown_table.html" with rows=archive_summary.by_source heading="Source" table_id="archive-by-source" %}
+                {% include "_archive_breakdown_table.html" with rows=archive_summary.by_category heading="Category" table_id="archive-by-category" %}
+                {% include "_archive_breakdown_table.html" with rows=archive_summary.by_reason heading="Archive reason" table_id="archive-by-reason" %}
+            </div>
+        </div>
+
+        <div class="card" id="archive-list">
+            <div class="card__header">
+                <span class="card__label">Archived lots <span class="row-count">({{ archive_rows|length }})</span></span>
+                <span id="ar-filter-count" class="row-count"></span>
+            </div>
+            {% if archive_rows %}
+            <div class="scanner-controls" id="archive-filters" style="margin-bottom: 12px;">
+                <select id="ar-outcome" aria-label="Filter by outcome">
+                    <option value="">All outcomes</option>
+                    <option value="below">Below</option>
+                    <option value="at">At</option>
+                    <option value="above">Above</option>
+                    <option value="unknown">Unknown</option>
+                    <option value="pending">Pending</option>
+                </select>
+                <select id="ar-source" aria-label="Filter by source">
+                    <option value="">All sources</option>
+                    {% for value, label in archive_source_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+                <select id="ar-category" aria-label="Filter by category">
+                    <option value="">All categories</option>
+                    {% for value in archive_category_choices %}<option value="{{ value }}">{{ value|title }}</option>{% endfor %}
+                </select>
+                <label style="font-size: 0.8125rem;">Archived from <input type="date" id="ar-date-from"></label>
+                <label style="font-size: 0.8125rem;">to <input type="date" id="ar-date-to"></label>
+            </div>
+            <p id="ar-filter-empty" style="color: var(--text-secondary);" hidden>No archived lots match these filters.</p>
             <div style="overflow-x: auto;">
-            <table class="holdings" id="table-recently-closed">
+            <table class="holdings" id="table-archive">
                 <thead>
                     <tr>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
                         <th data-sort-key="category">Category</th>
-                        <th class="num" data-sort-key="ended">Ended</th>
+                        <th data-sort-key="archived">Archived</th>
+                        <th class="num" data-sort-key="mymax">My max</th>
                         <th class="num" data-sort-key="final">Final Price</th>
-                        <th class="num" data-sort-key="mybid">My bid</th>
-                        <th data-sort-key="outcome">Result</th>
+                        <th class="num" data-sort-key="diff">Difference</th>
+                        <th data-sort-key="outcome">Outcome</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for row in recently_closed %}
+                    {% for row in archive_rows %}
                     <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}"
-                        data-category="{{ row.category }}" data-ended="{{ row.end_time|date:'U' }}"
-                        data-final="{{ row.final_price|default_if_none:'' }}" data-mybid="{{ row.my_bid|default_if_none:'' }}"
-                        data-outcome="{{ row.outcome }}">
+                        data-category="{{ row.category }}" data-archived="{{ row.archived_at|date:'U' }}"
+                        data-archived-date="{{ row.archived_at|date:'Y-m-d' }}"
+                        data-mymax="{{ row.compare_max|default_if_none:'' }}" data-final="{{ row.final_price|default_if_none:'' }}"
+                        data-diff="{{ row.difference|default_if_none:'' }}" data-outcome="{{ row.outcome }}">
                         <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
-                        <td class="num">{{ row.end_time|date:"M j, g:i A" }}</td>
-                        <td class="num">{% if row.final_price is not None %}${{ row.final_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                        <td>{{ row.archived_at|date:"M j, Y" }}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ row.archive_reason_display }}</div></td>
                         <td class="num">
-                            {% if row.my_bid is not None %}${{ row.my_bid|floatformat:2 }}{% if row.my_bid_source == 'scanner' %} <span style="font-size: 0.6875rem; color: var(--text-secondary);" title="No max bid was set - the scanner's max bid">scanner</span>{% endif %}{% else %}&mdash;{% endif %}
+                            {% if row.compare_max is not None %}${{ row.compare_max|floatformat:2 }}{% if row.compare_source == 'scanner' %} <span class="js-archive-scanner" style="font-size: 0.6875rem; color: var(--text-secondary);" title="No max bid was set - the scanner's max bid">scanner</span>{% endif %}{% else %}&mdash;{% endif %}
                         </td>
-                        <td><span class="badge {% if row.outcome == 'likely_won' %}gain{% elif row.outcome == 'lost' %}loss{% else %}neutral{% endif %}">{{ row.outcome_display }}</span></td>
-                        <td>{% if row.outcome == 'likely_won' %}<a href="{% url 'albright_reselling_app:ledger_win_lot' row.lot_id %}" class="btn btn-secondary btn-sm">I won this</a>{% endif %}</td>
+                        <td class="num">{% if row.final_price is not None %}${{ row.final_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                        <td class="num">{% if row.difference is not None %}{% if row.difference > 0 %}+{% endif %}${{ row.difference|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                        <td><span class="badge {% if row.outcome == 'below' %}gain{% elif row.outcome == 'at' %}warn{% elif row.outcome == 'above' %}loss{% else %}neutral{% endif %}">{{ row.outcome_display }}</span></td>
+                        <td>{% if row.can_log_win %}<a href="{% url 'albright_reselling_app:ledger_win_lot' row.lot_id %}" class="btn btn-secondary btn-sm">I won this</a>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             </div>
             {% else %}
-            <p style="color: var(--text-secondary);">No watched lots closed in the last {{ recently_closed_days }} days.</p>
+            <p style="color: var(--text-secondary);">Nothing archived yet. Removed lots and lots that close while watched land here.</p>
             {% endif %}
         </div>
     </div>

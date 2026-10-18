@@ -631,14 +631,20 @@
     // lot does.
     document.addEventListener("watchlist:changed", refreshWatchlistSection);
 
+    // The Watchlist page's Remove (soft - archived) and Delete (hard -
+    // confirm first) buttons: POST, then reload, which also refreshes the
+    // Archive tab and the nav badge.
     function wireWatchlistRemoveButtons() {
         document.querySelectorAll(".js-watch-remove").forEach(function (button) {
             if (button.dataset.wired) return;
             button.dataset.wired = "1";
             button.addEventListener("click", function () {
-                postForm(button.dataset.toggleUrl).then(function () {
-                    window.location.reload();
-                });
+                if (button.dataset.confirm && !window.confirm(button.dataset.confirm)) return;
+                button.disabled = true;
+                fetch(button.dataset.actionUrl, {
+                    method: "POST", headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
+                }).then(function () { window.location.reload(); })
+                    .catch(function () { button.disabled = false; });
             });
         });
     }

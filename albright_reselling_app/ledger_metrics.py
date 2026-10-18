@@ -241,7 +241,7 @@ def dashboard_tiles(owner, now=None):
         "markdown_count": markdown_count,
         "wins_to_log": wins_to_log,
         "needs_action_count": markdown_count + wins_to_log,
-        "watching_count": BidWatch.objects.filter(status="watching").count(),
+        "watching_count": BidWatch.objects.active().count(),
         "likely_won_this_week": BidWatch.objects.filter(status="likely_won", resolved_at__gte=week_ago).count(),
     }
 

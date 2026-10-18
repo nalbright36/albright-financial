@@ -1,9 +1,16 @@
-"""BidWatch: the watchlist. Two pieces:
+"""BidWatch: the watchlist and its archive. Pieces:
   - default_max_bid(): the "set max bid" form's pre-fill value.
-  - resolve_watches(): once a watched lot's end_time has passed, finds its
-    final price (already-tracked, or one search_closed() lookup) and
-    settles the watch to likely_won/lost/unknown, with an optional result
-    alert (ALERTS["watchlist_result_alerts"], off by default).
+  - soft_remove() / hard_delete() / restore(): the Watchlist page's
+    "Remove" (archive it, keep it for the stats), "Delete" (gone, never
+    tracked or analyzed), and re-adding an archived lot.
+  - archive_closed_watches(): a lot still watched when its auction closes
+    is archived automatically ("closed_on_watchlist").
+  - resolve_watches(): once an archived lot's auction has ended, finds its
+    final price (already-tracked, or one search_closed() lookup) and sets
+    its outcome vs. compare_max (below/at/above, or unknown after
+    RESOLVE_GIVE_UP_AFTER) - plus, for a lot that closed on the watchlist,
+    the older likely_won/lost/unknown status and an optional result alert
+    (ALERTS["watchlist_result_alerts"], off by default).
 
 The "closing soon" Telegram push (the lot's own alert, as opposed to a
 likely-won/lost result) is NOT here - that's the watchlist_alerts
@@ -32,18 +39,19 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
-from ..scanner_models import BidWatch
+from ..scanner_models import AlertSent, BidWatch
 from .adapters.base import SourceBlocked, SourceUnavailable
 from .adapters.hibid import HiBidAdapter
 from .adapters.maxsold import MaxSoldAdapter
 from .adapters.shopgoodwill import ShopGoodwillAdapter
 from .alerts import SITE_BASE_URL, send_telegram
-from .dashboard import _source_display
+from .dashboard import _source_display, watch_my_bid
 
 log = logging.getLogger(__name__)
 
 ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter, "hibid": HiBidAdapter}
-RESOLVE_GIVE_UP_AFTER = timedelta(days=2)
+RESOLVE_GIVE_UP_AFTER = timedelta(days=3)  # no final price found this long after the end -> outcome "unknown"
+AT_TOLERANCE = Decimal("0.01")              # final price within this of compare_max counts as "at"
 
 
 def default_max_bid(evaluation, review):
@@ -107,52 +115,150 @@ def _send_result_alert(watch):
     return True
 
 
-def _resolve_one(watch, adapters_cache, now):
-    """Returns the watch if it was settled this call, else None (still
-    waiting - try again on the next sweep)."""
-    lot = watch.lot
-    final_price = lot.final_price if lot.is_closed else None
+# ---------------------------------------------------------------------------
+# Leaving the watchlist: soft remove (archive), hard delete, re-add
+# ---------------------------------------------------------------------------
 
-    if final_price is None:
-        adapter = adapters_cache.get(lot.source)
-        if adapter is None:
-            adapter = ADAPTERS[lot.source]()
-            adapters_cache[lot.source] = adapter
-        final_price = _find_final_price(lot, adapter, now)
-        if final_price is not None:
-            lot.final_price = final_price
-            lot.is_closed = True
-            lot.final_checked_at = now
-            lot.save(update_fields=["final_price", "is_closed", "final_checked_at"])
-
-    if final_price is not None:
-        if watch.my_max_bid is None:
-            watch.status = "unknown"  # no max bid on record - nothing to compare the final price against
-        else:
-            watch.status = "likely_won" if final_price <= watch.my_max_bid else "lost"
-    elif now - lot.end_time > RESOLVE_GIVE_UP_AFTER:
-        watch.status = "unknown"
-    else:
-        return None
-
-    watch.resolved_at = now
-    watch.save(update_fields=["status", "resolved_at"])
-    _send_result_alert(watch)
+def archive_watch(watch, reason, now=None):
+    """Moves a watch to the archive, snapshotting what its final price will
+    be compared against: the same "My bid" the Watchlist page shows -
+    my max bid if set ("manual"), else the scanner's max bid ("scanner"),
+    else nothing (outcome will be "unknown")."""
+    compare_max, source = watch_my_bid(watch)
+    watch.archived_at = now or timezone.now()
+    watch.archive_reason = reason
+    watch.compare_max = compare_max
+    watch.compare_source = {"mine": "manual", "scanner": "scanner"}.get(source, "")
+    watch.save(update_fields=["archived_at", "archive_reason", "compare_max", "compare_source"])
     return watch
 
 
-def resolve_watches(now=None):
-    """Settles every past-due "watching" BidWatch it can, one
-    search_closed() lookup (plus its pause) per lot still needing one.
-    Adapters are reused across lots of the same source within one call."""
+def soft_remove(watch, now=None):
+    """The Watchlist page's "Remove": archived (archive_reason
+    "soft_removed"), not deleted - it still gets a final price and an
+    outcome, and counts in the Archive's stats."""
+    return archive_watch(watch, "soft_removed", now)
+
+
+def hard_delete(watch):
+    """The Watchlist page's "Delete": the BidWatch is gone, along with the
+    lot's watchlist AlertSent rows - nothing about it is tracked,
+    analyzed, or protected from prune_lots any more."""
+    AlertSent.objects.filter(lot_id=watch.lot_id, kind="watchlist").delete()
+    watch.delete()
+
+
+def restore(watch):
+    """Back on the watchlist from the archive (re-adding a soft-removed
+    lot that's still open) - clears every archive/outcome field."""
+    watch.status = "watching"
+    watch.archived_at = None
+    watch.archive_reason = ""
+    watch.compare_max = None
+    watch.compare_source = ""
+    watch.final_price = None
+    watch.outcome = None
+    watch.resolved_at = None
+    watch.save()
+    return watch
+
+
+def archive_closed_watches(now=None):
+    """Every still-active watch whose auction has ended is archived as
+    "closed_on_watchlist" (compare_max snapshotted now). No network - safe
+    to call from the Watchlist page itself, as well as every sweep."""
     now = now or timezone.now()
+    watches = BidWatch.objects.active().filter(lot__end_time__lte=now).select_related("lot", "lot__evaluation")
+    return [archive_watch(watch, "closed_on_watchlist", now) for watch in watches]
+
+
+# ---------------------------------------------------------------------------
+# Resolving archived watches' outcomes
+# ---------------------------------------------------------------------------
+
+def outcome_for(final_price, compare_max):
+    """below/at/above vs. compare_max ("at" within AT_TOLERANCE either way),
+    or "unknown" when there was nothing to compare against."""
+    if compare_max is None:
+        return "unknown"
+    if abs(final_price - compare_max) <= AT_TOLERANCE:
+        return "at"
+    return "below" if final_price < compare_max else "above"
+
+
+def _final_price(lot, adapters_cache, now, lookup):
+    """The lot's final price: already tracked (track_closed, or an earlier
+    lookup), else - when lookup is allowed - one search_closed() title
+    lookup, saved back onto the lot."""
+    if lot.is_closed and lot.final_price is not None:
+        return lot.final_price
+    if not lookup:
+        return None
+    adapter = adapters_cache.get(lot.source)
+    if adapter is None:
+        adapter = ADAPTERS[lot.source]()
+        adapters_cache[lot.source] = adapter
+    final_price = _find_final_price(lot, adapter, now)
+    if final_price is not None:
+        lot.final_price = final_price
+        lot.is_closed = True
+        lot.final_checked_at = now
+        lot.save(update_fields=["final_price", "is_closed", "final_checked_at"])
+    return final_price
+
+
+def _settle_status(watch, final_price):
+    """The older watching -> likely_won/lost/unknown status (Today page,
+    dashboard tile, digest, result alert), only for a lot that was still
+    on the watchlist when it closed - a soft-removed lot was never bid on."""
+    if watch.archive_reason != "closed_on_watchlist":
+        return False
+    if final_price is None or watch.my_max_bid is None:
+        watch.status = "unknown"  # no final price, or no max bid on record to compare against
+    else:
+        watch.status = "likely_won" if final_price <= watch.my_max_bid else "lost"
+    return True
+
+
+def _resolve_one(watch, adapters_cache, now, lookup):
+    """Returns the watch if its outcome was settled this call, else None
+    (still waiting - try again on the next sweep)."""
+    lot = watch.lot
+    final_price = _final_price(lot, adapters_cache, now, lookup)
+
+    if final_price is not None:
+        watch.final_price = final_price
+        watch.outcome = outcome_for(final_price, watch.compare_max)
+    elif now - lot.end_time > RESOLVE_GIVE_UP_AFTER:
+        watch.outcome = "unknown"
+    else:
+        return None
+
+    settled_status = _settle_status(watch, final_price)
+    watch.resolved_at = now
+    watch.save(update_fields=["final_price", "outcome", "status", "resolved_at"])
+    if settled_status:
+        _send_result_alert(watch)
+    return watch
+
+
+def resolve_watches(now=None, lookup=True):
+    """The sweep, run from every scan_lots pass (and, lookup=False, from
+    track_closed right after it records final prices): archives any
+    watch whose lot just closed, then settles every ended, archived,
+    still-unresolved watch it can - one search_closed() lookup (plus its
+    pause) per lot still missing a final price, adapters reused across
+    lots of the same source. lookup=False never touches the network, it
+    only uses final prices already on the lot."""
+    now = now or timezone.now()
+    archive_closed_watches(now)
     watches = (
-        BidWatch.objects.filter(status="watching", lot__end_time__lte=now).select_related("lot")
+        BidWatch.objects.archived().filter(outcome__isnull=True, lot__end_time__lte=now).select_related("lot")
     )
     adapters_cache = {}
     resolved = []
     for watch in watches:
-        result = _resolve_one(watch, adapters_cache, now)
+        result = _resolve_one(watch, adapters_cache, now, lookup)
         if result is not None:
             resolved.append(result)
     return resolved

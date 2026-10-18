@@ -2,7 +2,7 @@
 watchlist.html) and what moved around it: the nav's Watchlist item (in
 Today's old slot) with its count badge (red when any lot is over My bid -
 albright_reselling_app.context_processors.watchlist_nav), the page's live
-table and Recently closed section, the dashboard no longer rendering a
+table, the dashboard no longer rendering a
 Watchlist section, and the reseller root now landing on the Dashboard
 while the Today page keeps working at its own URL."""
 import re
@@ -14,7 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from albright_reselling_app.scanner.dashboard import recently_closed_watches, watchlist_nav_summary
+from albright_reselling_app.scanner.dashboard import watchlist_nav_summary
 from albright_reselling_app.scanner_models import BidWatch, LotEvaluation, SourcedLot
 
 
@@ -193,73 +193,12 @@ class WatchlistPageTests(LoggedInTestCase):
         content = self.get("watchlist").content.decode()
 
         self.assertNotIn('id="table-watchlist"', content)
-        self.assertIn(lot.title, content.split('id="recently-closed"')[1])
+        self.assertIn(lot.title, content.split('id="archive"')[1])  # auto-archived (see test_watch_archive.py)
 
     def test_requires_login(self):
         self.client.logout()
 
         self.assertEqual(self.get("watchlist").status_code, 302)
-
-
-class RecentlyClosedTests(LoggedInTestCase):
-    def test_likely_won_lost_and_window(self):
-        won = _make_lot("rc-won", end_in=-timedelta(days=1), final_price="20.00")
-        lost = _make_lot("rc-lost", end_in=-timedelta(days=2), final_price="40.00")
-        old = _make_lot("rc-old", end_in=-timedelta(days=8), final_price="20.00")
-        _watch(won, my_max_bid="25.00", status="likely_won")
-        _watch(lost, my_max_bid="25.00", status="lost")
-        _watch(old, my_max_bid="25.00", status="likely_won")
-
-        content = self.get("watchlist").content.decode()
-        section = content.split('id="recently-closed"')[1]
-
-        self.assertNotIn(old.title, section)
-        won_row = _row_html(content, "table-recently-closed", won)
-        lost_row = _row_html(content, "table-recently-closed", lost)
-        self.assertIn("$20.00", won_row)          # final price
-        self.assertIn("$25.00", won_row)          # My bid
-        self.assertIn(">Likely won<", won_row)
-        self.assertIn(reverse("albright_reselling_app:ledger_win_lot", args=[won.pk]), won_row)
-        self.assertIn(">Lost<", lost_row)
-        self.assertNotIn(reverse("albright_reselling_app:ledger_win_lot", args=[lost.pk]), lost_row)
-
-    def test_most_recently_ended_first(self):
-        earlier = _make_lot("rc-earlier", end_in=-timedelta(days=3), final_price="20.00")
-        latest = _make_lot("rc-latest", end_in=-timedelta(hours=2), final_price="20.00")
-        _watch(earlier, my_max_bid="25.00")
-        _watch(latest, my_max_bid="25.00")
-
-        rows = recently_closed_watches(timezone.now())
-
-        self.assertEqual([r["lot_id"] for r in rows], [latest.pk, earlier.pk])
-
-    def test_outcome_uses_scanner_max_when_no_max_set(self):
-        lot = _make_lot("rc-scanner", end_in=-timedelta(hours=3), final_price="20.00")
-        _evaluate(lot, max_bid="30.00")
-        _watch(lot, status="unknown")
-
-        row = recently_closed_watches(timezone.now())[0]
-
-        self.assertEqual(row["my_bid"], Decimal("30.00"))
-        self.assertEqual(row["my_bid_source"], "scanner")
-        self.assertEqual(row["outcome"], "likely_won")
-
-    def test_pending_when_no_final_price_yet(self):
-        lot = _make_lot("rc-pending", end_in=-timedelta(hours=1))
-        _watch(lot, my_max_bid="25.00")
-
-        row = recently_closed_watches(timezone.now())[0]
-
-        self.assertEqual(row["outcome"], "pending")
-        self.assertEqual(row["outcome_display"], "Pending")
-
-    def test_section_is_collapsible(self):
-        content = self.get("watchlist").content.decode()
-        section = content.split('id="recently-closed"')[1]
-
-        self.assertIn('js-collapsible-header" data-collapse-key="watchlist-recently-closed"', section)
-        self.assertIn('class="js-collapsible-body"', section)
-        self.assertIn("No watched lots closed in the last 7 days.", section)
 
 
 class DashboardAndRedirectTests(LoggedInTestCase):

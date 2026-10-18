@@ -321,7 +321,7 @@ def send_watchlist_alerts(now=None):
 
     already_alerted = set(AlertSent.objects.filter(kind="watchlist").values_list("lot_id", flat=True))
     watches = (
-        BidWatch.objects.filter(status="watching", lot__end_time__gt=now, lot__end_time__lte=cutoff)
+        BidWatch.objects.active().filter(lot__end_time__gt=now, lot__end_time__lte=cutoff)
         .exclude(lot_id__in=already_alerted)
         .select_related("lot", "lot__evaluation", "lot__user_estimate")
     )
@@ -437,7 +437,7 @@ def _my_bids_counts(now):
     "watching" for a while after its lot closes (resolution needs a
     search_closed() lookup, see scanner/bid_watch.py)."""
     cutoff = now - timedelta(hours=24)
-    watching = BidWatch.objects.filter(status="watching").count()
+    watching = BidWatch.objects.active().count()
     likely_won = BidWatch.objects.filter(status="likely_won", resolved_at__gte=cutoff).count()
     lost = BidWatch.objects.filter(status="lost", resolved_at__gte=cutoff).count()
     return watching, likely_won, lost

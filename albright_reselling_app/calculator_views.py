@@ -423,7 +423,7 @@ def estimate_payload(estimate):
 
 
 def _watch_payload(lot) -> dict:
-    watch = BidWatch.objects.filter(lot=lot).first()
+    watch = BidWatch.objects.active().filter(lot=lot).first()
     return {
         "watching": watch is not None,
         "watch_max_bid": float(watch.my_max_bid) if watch and watch.my_max_bid is not None else None,

@@ -22,11 +22,9 @@ from django.views.decorators.http import require_POST
 from . import calculator_views
 from .forms import BidWatchForm
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
-from .scanner.bid_watch import default_max_bid
-from .scanner.dashboard import (
-    RECENTLY_CLOSED_WATCH_DAYS, _has_maxsold, _time_remaining, _watched_lots, recently_closed_watches,
-    watchlist_nav_summary,
-)
+from .scanner.bid_watch import archive_closed_watches, default_max_bid, hard_delete, restore, soft_remove
+from .scanner.dashboard import _has_maxsold, _time_remaining, _watched_lots, watchlist_nav_summary
+from .scanner.watch_archive import archive_row, archive_summary, archived_watches
 from .scanner.review_history import (
     CATEGORY_CHOICES,
     CONFIDENCE_CHOICES,
@@ -142,22 +140,59 @@ def watch_lot(request, lot_id):
 def toggle_watch(request, lot_id):
     """The "Add to Watchlist" star - one click adds a lot to the
     watchlist with no max bid yet (set later via watch_lot above, or
-    never - it's optional); clicking again removes it outright. Only for
-    a lot whose auction is still open - matches the dashboard's own rule
-    that every Act Now/Watch table row is already open-only, but checked
-    again here since this is reachable directly by URL too."""
+    never - it's optional); clicking again takes it off outright (a hard
+    delete - the star's second click is mostly the dashboard toast's
+    Undo, which shouldn't leave an archive entry behind; the Watchlist
+    page's own Remove is the soft, archived one). Starring a lot that was
+    soft-removed earlier restores it from the archive. Only for a lot
+    whose auction is still open - checked here since this is reachable
+    directly by URL too."""
     lot = get_object_or_404(SourcedLot, pk=lot_id)
     existing = getattr(lot, "bid_watch", None)
+    is_open = lot.end_time is None or lot.end_time > timezone.now()
 
-    if existing is not None:
-        existing.delete()
+    if existing is not None and existing.archived_at is None:
+        hard_delete(existing)
         return JsonResponse({"watching": False})
 
-    if lot.end_time is not None and lot.end_time <= timezone.now():
+    if not is_open:
         return JsonResponse({"error": "This lot has already closed."}, status=400)
 
-    BidWatch.objects.create(lot=lot, status="watching")
+    if existing is not None:
+        restore(existing)
+    else:
+        BidWatch.objects.create(lot=lot, status="watching")
     return JsonResponse({"watching": True})
+
+
+def _watch_action_response(request, message):
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({"ok": True})
+    messages.success(request, message)
+    return redirect("albright_reselling_app:watchlist")
+
+
+@login_required
+@require_POST
+def remove_watch(request, lot_id):
+    """The Watchlist page's "Remove" (SOFT): the lot moves to the
+    Watchlist Archive with my max (or the scanner's) snapshotted now, and
+    still gets a final price and outcome once its auction closes."""
+    watch = get_object_or_404(BidWatch.objects.active().select_related("lot", "lot__evaluation"), lot_id=lot_id)
+    soft_remove(watch)
+    return _watch_action_response(request, f'Moved "{watch.lot.title}" to the Watchlist Archive.')
+
+
+@login_required
+@require_POST
+def delete_watch(request, lot_id):
+    """The Watchlist page's "Delete" (HARD, after a confirm): the BidWatch
+    and the lot's watchlist alert records are deleted - nothing about it is
+    tracked or analyzed."""
+    watch = get_object_or_404(BidWatch.objects.select_related("lot"), lot_id=lot_id)
+    title = watch.lot.title
+    hard_delete(watch)
+    return _watch_action_response(request, f'Deleted "{title}" from the watchlist - no longer tracked.')
 
 
 @login_required
@@ -170,7 +205,7 @@ def use_my_max_bid(request, lot_id):
     watch_lot instead). JSON for the dialog/Watchlist's fetch() calls;
     a plain form POST (no JS) redirects back to the dashboard."""
     lot = get_object_or_404(SourcedLot, pk=lot_id)
-    watch = BidWatch.objects.filter(lot=lot).first()
+    watch = BidWatch.objects.active().filter(lot=lot).first()
     estimate = LotUserEstimate.objects.filter(lot=lot).first()
     wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
 
@@ -196,21 +231,32 @@ def use_my_max_bid(request, lot_id):
 
 @login_required
 def watchlist_page(request):
-    """The dedicated Watchlist page (nav: Watchlist) - the live watchlist
-    table (_watchlist_section.html, the same partial watchlist_section
-    below re-renders for in-place refreshes), with client-side source/
-    category/"over my bid" filters (static/js/watchlist.js), a "Recently
-    closed" section, and the Calculator dialog so a row's Calc opens in
-    place."""
+    """The dedicated Watchlist page (nav: Watchlist), two tabs:
+    "Watching" - the live table (_watchlist_section.html, the same partial
+    watchlist_section below re-renders for in-place refreshes) with
+    client-side source/category/"over my bid" filters - and "Archive":
+    every soft-removed or closed watch with its outcome vs. the max
+    snapshotted at archive time, plus summary/breakdown stats
+    (scanner/watch_archive.py), filterable client-side too (static/js/
+    watchlist.js). Any watch whose auction just ended is archived first
+    (no network), so a closed lot never falls between the two tabs while
+    waiting for the next scan's sweep. Includes the Calculator dialog so a
+    row's Calc opens in place."""
     now = timezone.now()
+    archive_closed_watches(now)
     watched_lots = _watched_lots(now)
+    archived = archived_watches()
+    archive_rows = [archive_row(w) for w in archived]
     context = {
         "watched_lots": watched_lots,
         "watched_lots_has_maxsold": _has_maxsold(watched_lots),
         "source_choices": sorted({(r["source"], r["source_display"]) for r in watched_lots}, key=lambda c: c[1]),
         "category_choices": sorted({r["category"] for r in watched_lots}),
-        "recently_closed": recently_closed_watches(now),
-        "recently_closed_days": RECENTLY_CLOSED_WATCH_DAYS,
+        "archive_rows": archive_rows,
+        "archive_summary": archive_summary(archived),
+        "archive_source_choices": sorted({(r["source"], r["source_display"]) for r in archive_rows},
+                                         key=lambda c: c[1]),
+        "archive_category_choices": sorted({r["category"] for r in archive_rows}),
     }
     context.update(calculator_views.panel_context(request.user))
     return render(request, "watchlist.html", context)

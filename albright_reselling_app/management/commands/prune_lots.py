@@ -13,7 +13,9 @@ unbounded growth. Two deletion rules, run independently:
      flagged as a lead - closed out, uninteresting, and old enough that
      it's not informing any recent decision.
 
-Never deletes a lot that has an AIReview, a BidWatch, a linked LedgerEntry,
+Never deletes a lot that has an AIReview, a BidWatch (on the watchlist or
+in the Watchlist Archive - a hard-deleted watch has no BidWatch left, so
+no protection either), a linked LedgerEntry,
 or that closed with a real max bid on record (calibration data for the
 max-bid math - see track_closed's under/over-max summary) - that
 protection is checked independently of which rule above would otherwise

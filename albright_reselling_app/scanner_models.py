@@ -153,6 +153,17 @@ class CriticalAlertSent(models.Model):
         return f"CriticalAlertSent({self.source}, {self.alert_type}) @ {self.sent_at}"
 
 
+class BidWatchQuerySet(models.QuerySet):
+    def active(self):
+        """Still on the watchlist: not archived (soft-removed or closed),
+        and not yet resolved. Every "what am I watching" count/table reads
+        this, so a soft-removed lot drops out of all of them at once."""
+        return self.filter(archived_at__isnull=True, status="watching")
+
+    def archived(self):
+        return self.filter(archived_at__isnull=False)
+
+
 class BidWatch(models.Model):
     """A lot on the user's watchlist - watching/likely_won/lost/unknown is
     the user's own real-world outcome, tracked independently of (and
@@ -163,11 +174,25 @@ class BidWatch(models.Model):
     from lost once the auction closes. Resolved by the scheduled scan's
     watch-resolution sweep (scanner/bid_watch.py); the actual "closing
     soon" Telegram alert is a separate, one-place concern - see the
-    watchlist_alerts management command and scanner/alerts.py."""
+    watchlist_alerts management command and scanner/alerts.py.
+
+    Leaving the watchlist is either a SOFT remove (archived, kept for the
+    Watchlist Archive's accuracy stats - archive_reason "soft_removed") or
+    a HARD delete (the row is deleted outright, nothing tracked). A lot
+    still watched when its auction closes is archived automatically
+    ("closed_on_watchlist"). Either way compare_max/compare_source snapshot
+    what the final price gets measured against (my max bid, else the
+    scanner's), and the resolution sweep fills in final_price/outcome/
+    resolved_at - see scanner/bid_watch.py."""
     STATUS_CHOICES = [
         ("watching", "Watching"), ("likely_won", "Likely Won"),
         ("lost", "Lost"), ("unknown", "Unknown"),
     ]
+    ARCHIVE_REASON_CHOICES = [("soft_removed", "Removed early"), ("closed_on_watchlist", "Closed on watchlist")]
+    COMPARE_SOURCE_CHOICES = [("manual", "My max"), ("scanner", "Scanner max")]
+    OUTCOME_CHOICES = [("below", "Below"), ("at", "At"), ("above", "Above"), ("unknown", "Unknown")]
+
+    objects = BidWatchQuerySet.as_manager()
 
     lot = models.OneToOneField(SourcedLot, on_delete=models.CASCADE, related_name="bid_watch")
     my_max_bid = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -180,6 +205,15 @@ class BidWatch(models.Model):
     # by status with no time bound.
     resolved_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+
+    # Watchlist Archive (see the class docstring). outcome compares
+    # final_price to compare_max: "at" is within $0.01 either way.
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=20, choices=ARCHIVE_REASON_CHOICES, blank=True)
+    compare_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    compare_source = models.CharField(max_length=10, choices=COMPARE_SOURCE_CHOICES, blank=True)
+    final_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    outcome = models.CharField(max_length=10, choices=OUTCOME_CHOICES, null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

@@ -1,0 +1,19 @@
+{% comment %}
+One summary block on the Watchlist Archive tab (scanner/watch_archive.summarize()):
+resolved count, % at or below the max, % below/at/above, median (final - max).
+Expects `label`, `stats`, `block_id`.
+{% endcomment %}
+<div class="archive-summary" id="archive-summary-{{ block_id }}">
+    <div class="row-count" style="margin-bottom: 4px;">{{ label }}</div>
+    <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{% if stats.pct_at_or_below is not None %}{{ stats.pct_at_or_below|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+    <div style="font-size: 0.75rem; color: var(--text-secondary);">closed at or below the max &middot; {{ stats.resolved }} resolved</div>
+    <div style="margin-top: 6px; font-size: 0.8125rem;">
+        <span class="badge gain">Below {% if stats.pct_below is not None %}{{ stats.pct_below|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+        <span class="badge warn">At {% if stats.pct_at is not None %}{{ stats.pct_at|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+        <span class="badge loss">Above {% if stats.pct_above is not None %}{{ stats.pct_above|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+    </div>
+    <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+        Median final &minus; max: <span class="num">{% if stats.median_diff is not None %}{% if stats.median_diff > 0 %}+{% endif %}${{ stats.median_diff|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+        {% if stats.pending or stats.unknown %}&middot; {{ stats.pending }} pending, {{ stats.unknown }} unknown{% endif %}
+    </div>
+</div>
