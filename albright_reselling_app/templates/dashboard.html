@@ -202,6 +202,7 @@
             <table class="holdings" id="table-dismissed">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="lot-title-col">Title</th>
                         <th>From</th>
                         <th>Source</th>
@@ -215,6 +216,7 @@
                 <tbody>
                     {% for row in dismissed_rows %}
                     <tr data-lot-id="{{ row.lot_id }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener">{{ row.title }}</a></td>
                         <td>{{ row.dismiss_section }}</td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
@@ -228,7 +230,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="8" style="color: var(--text-secondary);">No dismissed lots.</td></tr>
+                    <tr><td colspan="9" style="color: var(--text-secondary);">No dismissed lots.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -249,6 +251,7 @@
             <table class="holdings" id="table-candidates-soon" data-filterable="true" data-count-target="count-candidates-soon">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="row-toggle-col"></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
@@ -265,6 +268,7 @@
                     <tr class="scanner-row" data-lot-id="{{ row.lot_id }}" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
                         data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="row-toggle"></td>
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
@@ -282,7 +286,7 @@
                         <td class="num">{{ row.time_remaining }}</td>
                         {% include "_act_now_actions_cell.html" %}
                     </tr>
-                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% include "_scanner_row_detail.html" with row=row colspan=10 %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -445,6 +449,7 @@
             <table class="holdings" id="table-candidates-later" data-filterable="true" data-count-target="count-candidates-later">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="row-toggle-col"></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
@@ -461,6 +466,7 @@
                     <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
                         data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="row-toggle"></td>
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
@@ -477,7 +483,7 @@
                         <td class="num">{{ row.time_remaining }}</td>
                         {% include "_ai_review_cell.html" with show_calc=True %}
                     </tr>
-                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% include "_scanner_row_detail.html" with row=row colspan=10 %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -502,6 +508,7 @@
             <table class="holdings" id="table-closest-calls" data-filterable="true" data-count-target="count-closest-calls">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="row-toggle-col"></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
@@ -518,6 +525,7 @@
                     <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-bid="{{ row.current_bid }}" data-maxbid="{{ row.max_bid }}"
                         data-headroom="{{ row.headroom }}" data-endtime="{{ row.end_time_epoch_ms }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="row-toggle"></td>
                         <td class="lot-title">
                             <a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a>
@@ -534,7 +542,7 @@
                         <td class="num">{{ row.time_remaining }}</td>
                         {% include "_ai_review_cell.html" with show_calc=True %}
                     </tr>
-                    {% include "_scanner_row_detail.html" with row=row colspan=9 %}
+                    {% include "_scanner_row_detail.html" with row=row colspan=10 %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -553,9 +561,10 @@
             <div class="js-collapsible-body">
             {% if maxsold_estates %}
             <div style="overflow-x: auto;">
-            <table class="holdings">
+            <table class="holdings" id="table-maxsold-estates">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th data-sort-key="auction">Auction</th>
                         <th data-sort-key="city">City</th>
                         <th class="num" data-sort-key="distance">Distance</th>
@@ -568,6 +577,7 @@
                     <tr class="scanner-row" data-auction="{{ estate.auction_title }}" data-city="{{ estate.city }}"
                         data-distance="{{ estate.distance_miles|default_if_none:'' }}" data-lots="{{ estate.lot_count }}"
                         data-headroom="{{ estate.total_headroom }}">
+                        <td class="lot-thumb-cell" title="Photo of the estate's top candidate">{% include "_lot_thumb.html" with row=estate.thumb %}</td>
                         <td>{{ estate.auction_title|truncatechars:50|default:"—" }}</td>
                         <td>{{ estate.city|default:"—" }}</td>
                         <td class="num">{% if estate.distance_miles is not None %}{{ estate.distance_miles }}mi{% else %}&mdash;{% endif %}</td>
@@ -613,6 +623,7 @@
             <table class="holdings" id="table-results" data-filterable="true" data-count-target="count-results">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
                         <th data-sort-key="category">Category</th>
@@ -627,6 +638,7 @@
                     <tr class="scanner-row" data-title="{{ row.title }}" data-source="{{ row.source }}" data-category="{{ row.category }}"
                         data-confidence="{{ row.confidence }}" data-finalprice="{{ row.final_price }}" data-maxbid="{{ row.max_bid }}"
                         data-melt="{{ row.melt_value }}" data-result="{% if row.under_max %}1{% else %}0{% endif %}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>

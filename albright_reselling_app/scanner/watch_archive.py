@@ -82,6 +82,7 @@ def archive_row(watch):
         "lot_id": lot.pk,
         "title": lot.title,
         "lot_url": lot.url,
+        "image_url": lot.image_url,
         "source": lot.source,
         "source_display": _source_display(lot.source),
         "category": _category(watch),

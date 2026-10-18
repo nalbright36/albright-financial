@@ -21,6 +21,7 @@ scanner/dashboard.watch_my_bid().
 <table class="holdings" id="table-watchlist">
     <thead>
         <tr>
+            <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
             <th class="lot-title-col" data-sort-key="title">Title</th>
             <th data-sort-key="source">Source</th>
             <th data-sort-key="category">Category</th>
@@ -38,6 +39,7 @@ scanner/dashboard.watch_my_bid().
             data-bid="{{ row.current_bid }}" data-mybid="{{ row.my_bid|default_if_none:'' }}"
             data-headroom="{{ row.headroom|default_if_none:'' }}" data-endtime="{{ row.end_time_epoch_ms }}"
             data-over="{% if row.is_over_my_bid %}1{% else %}0{% endif %}">
+            <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
             <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
             <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
             <td><span class="badge neutral">{{ row.category|title }}</span></td>

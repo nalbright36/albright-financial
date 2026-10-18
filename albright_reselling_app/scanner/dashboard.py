@@ -476,9 +476,16 @@ def _maxsold_estates(now, excluded_lot_ids):
             "distance_miles": pickup.get("distance_miles"),
             "lot_count": 0,
             "total_headroom": Decimal("0"),
+            "best_headroom": None,
+            "thumb": {"image_url": "", "title": ""},
         })
         estate["lot_count"] += 1
         estate["total_headroom"] += ev.headroom or Decimal("0")
+        # The estate's photo: its highest-headroom candidate lot's (an
+        # estate row isn't a lot itself, so this stands in for it).
+        if estate["best_headroom"] is None or (ev.headroom or Decimal("0")) > estate["best_headroom"]:
+            estate["best_headroom"] = ev.headroom or Decimal("0")
+            estate["thumb"] = {"image_url": ev.lot.image_url, "title": ev.lot.title}
 
     return sorted(estates.values(), key=lambda e: e["total_headroom"], reverse=True)
 
@@ -533,8 +540,10 @@ def _closed_results(now):
 
     rows = [
         {
+            "lot_id": lot.pk,
             "title": lot.title,
             "lot_url": lot.url,
+            "image_url": lot.image_url,
             "source": lot.source,
             "source_display": _source_display(lot.source),
             "category": lot.evaluation.category,
@@ -622,6 +631,7 @@ def _watch_row(watch, now):
         "lot_id": lot.pk,
         "title": lot.title,
         "lot_url": lot.url,
+        "image_url": lot.image_url,
         "source": lot.source,
         "source_display": _source_display(lot.source),
         "category": evaluation.category if evaluation else "unknown",

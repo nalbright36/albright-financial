@@ -108,6 +108,7 @@
             <table class="holdings" id="table-archive">
                 <thead>
                     <tr>
+                        <th class="lot-thumb-col"><span class="visually-hidden">Photo</span></th>
                         <th class="lot-title-col" data-sort-key="title">Title</th>
                         <th data-sort-key="source">Source</th>
                         <th data-sort-key="category">Category</th>
@@ -126,6 +127,7 @@
                         data-archived-date="{{ row.archived_at|date:'Y-m-d' }}"
                         data-mymax="{{ row.compare_max|default_if_none:'' }}" data-final="{{ row.final_price|default_if_none:'' }}"
                         data-diff="{{ row.difference|default_if_none:'' }}" data-outcome="{{ row.outcome }}">
+                        <td class="lot-thumb-cell">{% include "_lot_thumb.html" %}</td>
                         <td class="lot-title"><a href="{{ row.lot_url }}" target="_blank" rel="noopener" title="{{ row.title }}">{{ row.title }}</a></td>
                         <td><span class="badge {% if row.source == 'maxsold' %}gain{% else %}neutral{% endif %}">{{ row.source_display }}</span></td>
                         <td><span class="badge neutral">{{ row.category|title }}</span></td>
@@ -150,8 +152,10 @@
 </div>
 
 {% include "_calculator_dialog.html" %}
+{% include "_lightbox.html" %}
 
 <script src="{% static_version 'js/auction_scanner.js' %}" defer></script>
 <script src="{% static_version 'js/calculator.js' %}" defer></script>
+<script src="{% static_version 'js/lightbox.js' %}" defer></script>
 <script src="{% static_version 'js/watchlist.js' %}" defer></script>
 {% endblock %}
