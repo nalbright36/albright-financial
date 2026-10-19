@@ -43,6 +43,9 @@ SOURCE_CHOICES = [
     ("hibid", "HiBid"),
     ("custom", "Custom"),
 ]
+# Tab order on both the Calculators page and the dialog is Melt value, Buy
+# cost, eBay profit; Melt value is what opens with nothing remembered yet.
+DEFAULT_TAB = "melt"
 EBAY_CATEGORY_CHOICES = [(key, EBAY_PRESETS[key]["label"]) for key in ("most", "jewelry", "custom")]
 METAL_CHOICES = [("gold", "Gold"), ("silver", "Silver")]
 UNIT_CHOICES = [
@@ -278,7 +281,7 @@ def panel_context(user):
     client-side lot prefill (see static/js/calculator.js)."""
     context = shared_calculator_context(user)
     context.update({
-        "active_tab": "buy", "buy_results": None, "ebay_results": None, "melt_results": None,
+        "active_tab": DEFAULT_TAB, "buy_results": None, "ebay_results": None, "melt_results": None,
         "buy_values": None, "ebay_values": None, "melt_values": None,
     })
     return context
@@ -289,17 +292,17 @@ def calculator_page(request):
     buy_results = None
     ebay_results = None
     melt_results = None
-    active_tab = "buy"
+    active_tab = DEFAULT_TAB
 
     if request.method == "POST":
-        active_tab = request.POST.get("tab") or "buy"
+        active_tab = request.POST.get("tab") or DEFAULT_TAB
         if active_tab == "ebay":
             ebay_results = _ebay_result(request.POST)
-        elif active_tab == "melt":
-            melt_results = _melt_result(request.POST)
-        else:
-            active_tab = "buy"
+        elif active_tab == "buy":
             buy_results = _buy_result(request.POST)
+        else:
+            active_tab = "melt"
+            melt_results = _melt_result(request.POST)
 
     lot_prefill = {}
     lot_id = request.GET.get("lot")

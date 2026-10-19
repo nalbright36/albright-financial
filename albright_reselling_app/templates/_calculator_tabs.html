@@ -1,5 +1,5 @@
 {% comment %}
-The calculator's 3 tabs (Buy cost / eBay profit / Melt value) - shared,
+The calculator's 3 tabs (Melt value - the default - / Buy cost / eBay profit) - shared,
 verbatim markup for both the full Calculators page (calculator.html) and
 the dashboard's Calculator dialog (_calculator_dialog.html), driven by
 the one shared static/js/calculator.js module. Expects the context
@@ -24,9 +24,9 @@ simple_calc functions, so they can never disagree.
 <script type="application/json" id="calc-data">{{ calc_data_json|safe }}</script>
 
 <nav class="scanner-tabs" id="calc-tabs">
+    <a href="#melt" class="scanner-tab{% if active_tab == 'melt' %} is-active{% endif %}" data-tab="melt">Melt value</a>
     <a href="#buy" class="scanner-tab{% if active_tab == 'buy' %} is-active{% endif %}" data-tab="buy">Buy cost</a>
     <a href="#ebay" class="scanner-tab{% if active_tab == 'ebay' %} is-active{% endif %}" data-tab="ebay">eBay profit</a>
-    <a href="#melt" class="scanner-tab{% if active_tab == 'melt' %} is-active{% endif %}" data-tab="melt">Melt value</a>
 </nav>
 
 <!-- ============ Buy cost tab ============ -->

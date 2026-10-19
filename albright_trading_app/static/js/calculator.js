@@ -1,5 +1,5 @@
 /*
- * The calculator's 3 tabs (Buy cost / eBay profit / Melt value) - shared by
+ * The calculator's 3 tabs (Melt value / Buy cost / eBay profit) - shared by
  * the full Calculators page (calculator.html) and the dashboard/Today
  * pages' slide-in panel (_calculator_panel.html), both of which include the
  * same _calculator_tabs.html markup and a #calc-data JSON blob this reads
@@ -42,7 +42,10 @@
     var STORAGE_KEY_MELT = "bidcalc_melt_values";
     var STORAGE_KEY_MELT_ITEMS = "bidcalc_melt_items";
     var STORAGE_KEY_TAB = "bidcalc_active_tab";
-    var TAB_NAMES = ["buy", "ebay", "melt"];
+    // Display order; the first one (Melt value) is the default whenever no
+    // valid tab is remembered - a first visit, or cleared/blocked storage.
+    var TAB_NAMES = ["melt", "buy", "ebay"];
+    var DEFAULT_TAB = TAB_NAMES[0];
 
     var BUY_FIELDS = ["bid", "premium_pct", "tax_pct", "shipping", "other_fees", "budget"];
     var BUY_CHECKBOXES = ["tax_on_premium", "tax_on_shipping"];
@@ -327,14 +330,16 @@
         meltItems.forEach(function (item, index) {
             total += item.payout || 0;
             var row = document.createElement("tr");
+            // data-label: the dialog stacks this table's cells as label/value
+            // pairs instead of scrolling sideways (see style.css .calc-dialog).
             row.innerHTML =
-                "<td>" + escapeHtml(item.label || "(unlabeled)") + "</td>" +
-                "<td>" + escapeHtml(item.metal) + "</td>" +
-                "<td>" + escapeHtml(item.purity) + "</td>" +
-                '<td class="num">' + escapeHtml(item.weight) + "</td>" +
-                '<td class="num">' + money(item.melt) + "</td>" +
-                '<td class="num">' + money(item.payout) + "</td>" +
-                '<td><button type="button" class="btn btn-secondary btn-sm melt-remove-item" data-index="' + index + '">Remove</button></td>';
+                '<td data-label="Label">' + escapeHtml(item.label || "(unlabeled)") + "</td>" +
+                '<td data-label="Metal">' + escapeHtml(item.metal) + "</td>" +
+                '<td data-label="Purity">' + escapeHtml(item.purity) + "</td>" +
+                '<td class="num" data-label="Weight">' + escapeHtml(item.weight) + "</td>" +
+                '<td class="num" data-label="Melt">' + money(item.melt) + "</td>" +
+                '<td class="num" data-label="Payout">' + money(item.payout) + "</td>" +
+                '<td class="melt-item-actions"><button type="button" class="btn btn-secondary btn-sm melt-remove-item" data-index="' + index + '">Remove</button></td>';
             tbody.appendChild(row);
         });
         byId("melt-items-total").textContent = money(total);
@@ -427,8 +432,9 @@
         var savedTab = null;
         try { savedTab = localStorage.getItem(STORAGE_KEY_TAB); } catch (e) {}
         var justSubmittedAny = JUST_SUBMITTED_BUY || JUST_SUBMITTED_EBAY || JUST_SUBMITTED_MELT;
-        if (!justSubmittedAny && savedTab && TAB_NAMES.indexOf(savedTab) !== -1) {
-            activateTab(savedTab);
+        if (!justSubmittedAny) {
+            // The most recently used tab, else Melt value.
+            activateTab(savedTab && TAB_NAMES.indexOf(savedTab) !== -1 ? savedTab : DEFAULT_TAB);
         }
     }
 

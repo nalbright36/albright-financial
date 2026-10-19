@@ -5,7 +5,7 @@
     <div class="card" style="max-width: 480px; margin: 0 auto;">
         <div class="card__header">
             <span class="card__label">{% if existing %}Set Max Bid{% else %}Add to Watchlist{% endif %}</span>
-            <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Back to dashboard</a>
+            <a href="{{ next_url }}" style="font-size: 0.8125rem;">&larr; Back</a>
         </div>
 
         <h3 style="margin-bottom: 4px;"><a href="{{ lot.url }}" target="_blank" rel="noopener">{{ lot.title }}</a></h3>
@@ -19,6 +19,7 @@
 
         <form method="post">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
             {% if review %}<input type="hidden" name="review" value="{{ review.pk }}">{% endif %}
             <div class="field"><label>My Max Bid (optional)</label>{{ form.my_max_bid }}</div>
 

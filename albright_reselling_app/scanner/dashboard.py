@@ -621,6 +621,24 @@ def watch_my_bid(watch):
     return None, None
 
 
+def watch_bid_payload(watch):
+    """What a Watchlist row shows for its bid after a max bid is saved -
+    the same My bid/Headroom/over rule _watch_row() renders - as JSON-ready
+    numbers for the page's in-place update (scanner_views.watch_lot)."""
+    my_bid, my_bid_source = watch_my_bid(watch)
+    current = watch.lot.current_price
+    headroom = my_bid - current if my_bid is not None else None
+    return {
+        "lot_id": watch.lot_id,
+        "my_max_bid": float(watch.my_max_bid) if watch.my_max_bid is not None else None,
+        "my_bid": float(my_bid) if my_bid is not None else None,
+        "my_bid_source": my_bid_source,
+        "current_bid": float(current),
+        "headroom": float(headroom) if headroom is not None else None,
+        "is_over_my_bid": my_bid is not None and current > my_bid,
+    }
+
+
 def _watch_row(watch, now):
     lot = watch.lot
     evaluation = getattr(lot, "evaluation", None)

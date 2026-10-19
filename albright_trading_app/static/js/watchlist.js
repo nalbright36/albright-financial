@@ -78,6 +78,74 @@
         applyWatchingFilters();
     }
 
+    // ---------- Inline max bid (Watching table) ----------
+    // Saves without leaving the page (scanner_views.watch_lot answers a
+    // fetch() with the row's new numbers), then updates just that row - My
+    // bid, its "scanner" marker, Headroom, the red/green state, and the
+    // data-* the sort/filters read - leaving scroll, tab, and filter
+    // controls alone. The row isn't re-filtered right away (so "Saved"
+    // stays visible); the next filter change applies the new values. With
+    // JS off the form posts normally and redirects back here.
+    function money(value) { return "$" + Number(value).toFixed(2); }  // "$-5.00", same as the server's cells
+
+    function updateRow(row, data) {
+        var color = data.my_bid === null ? "inherit" : (data.is_over_my_bid ? "var(--loss)" : "var(--gain)");
+        var myBid = row.querySelector(".js-my-bid");
+        var marker = row.querySelector(".js-my-bid-scanner");
+        var headroom = row.querySelector(".js-headroom");
+        if (myBid) {
+            myBid.textContent = data.my_bid === null ? "—" : money(data.my_bid);
+            myBid.style.color = color;
+        }
+        if (marker) marker.hidden = data.my_bid_source !== "scanner";
+        if (headroom) {
+            headroom.textContent = data.headroom === null ? "—" : money(data.headroom);
+            headroom.style.color = color;
+        }
+        row.dataset.mybid = data.my_bid === null ? "" : data.my_bid;
+        row.dataset.headroom = data.headroom === null ? "" : data.headroom;
+        row.dataset.over = data.is_over_my_bid ? "1" : "0";
+        var useMyMax = row.querySelector(".js-use-my-max");
+        if (useMyMax && data.my_max_bid !== null) useMyMax.style.display = "none";  // its inline display beats [hidden]
+    }
+
+    document.addEventListener("submit", function (event) {
+        var form = event.target.closest(".js-max-bid-form");
+        if (!form || !window.fetch) return;
+        event.preventDefault();
+        var row = form.closest("tr");
+        var status = form.querySelector(".js-max-bid-status");
+        var button = form.querySelector('button[type="submit"]');
+        var input = form.querySelector('input[name="my_max_bid"]');
+        button.disabled = true;
+        status.className = "max-bid-status js-max-bid-status";
+        status.textContent = "Saving…";
+        fetch(form.action, {method: "POST", body: new FormData(form), headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { return r.json().then(function (data) { return {ok: r.ok, data: data}; }); })
+            .then(function (res) {
+                button.disabled = false;
+                if (!res.ok) {
+                    status.classList.add("is-error");
+                    status.textContent = res.data.error || "Couldn't save";
+                    return;
+                }
+                if (row) updateRow(row, res.data);
+                input.value = res.data.my_max_bid === null ? "" : Number(res.data.my_max_bid).toFixed(2);
+                status.classList.add("is-saved");
+                status.textContent = "Saved ✓";
+                window.setTimeout(function () {
+                    if (status.textContent === "Saved ✓") status.textContent = "";
+                }, 2500);
+                // The nav badge's red state can change with the new max.
+                document.dispatchEvent(new CustomEvent("watchlist:badge-stale"));
+            })
+            .catch(function () {
+                button.disabled = false;
+                status.classList.add("is-error");
+                status.textContent = "Couldn't save";
+            });
+    });
+
     // ---------- Archive filters ----------
     var outcomeEl = byId("ar-outcome");
     if (outcomeEl) {

@@ -204,7 +204,7 @@ class WatchLotViewTests(TestCase):
             reverse("albright_reselling_app:watch_lot", args=[lot.pk]), {"my_max_bid": "22.50"}
         )
 
-        self.assertRedirects(response, reverse("albright_reselling_app:dashboard"))
+        self.assertRedirects(response, reverse("albright_reselling_app:watchlist"))  # no "next": the Watchlist page
         watch = BidWatch.objects.get(lot=lot)
         self.assertEqual(watch.my_max_bid, Decimal("22.50"))
         self.assertEqual(watch.status, "watching")
@@ -229,7 +229,7 @@ class WatchLotViewTests(TestCase):
             reverse("albright_reselling_app:watch_lot", args=[lot.pk]), {"my_max_bid": "30.00"}
         )
 
-        self.assertRedirects(response, reverse("albright_reselling_app:dashboard"))
+        self.assertRedirects(response, reverse("albright_reselling_app:watchlist"))
         self.assertEqual(BidWatch.objects.filter(lot=lot).count(), 1)
         watch.refresh_from_db()
         self.assertEqual(watch.my_max_bid, Decimal("30.00"))

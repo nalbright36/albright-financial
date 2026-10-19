@@ -23,7 +23,9 @@ from . import calculator_views
 from .forms import BidWatchForm
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from .scanner.bid_watch import archive_closed_watches, default_max_bid, hard_delete, restore, soft_remove
-from .scanner.dashboard import _has_maxsold, _time_remaining, _watched_lots, watchlist_nav_summary
+from .scanner.dashboard import (
+    _has_maxsold, _time_remaining, _watched_lots, watch_bid_payload, watchlist_nav_summary,
+)
 from .scanner.watch_archive import archive_row, archive_summary, archived_watches
 from .scanner.review_history import (
     CATEGORY_CHOICES,
@@ -39,6 +41,7 @@ from .scanner.review_history import (
     time_remaining_at_review,
 )
 from .scanner_models import AIReview, BidWatch, LotUserEstimate, SourcedLot
+from .url_utils import safe_next_url, wants_json
 
 RECENT_REVIEW_WINDOW = timedelta(hours=24)
 
@@ -79,12 +82,15 @@ def review_detail(request, review_id):
     result = review.result or {}
     time_remaining = _time_remaining(lot, timezone.now()) if lot.end_time else "unknown"
     lot_is_open = lot.end_time is None or lot.end_time > timezone.now()
+    watch = getattr(lot, "bid_watch", None)
 
     return render(request, "ai_review_detail.html", {
         "review": review,
         "lot": lot,
         "evaluation": evaluation,
         "lot_is_open": lot_is_open,
+        # On the watchlist right now - an archived (removed/closed) watch isn't.
+        "is_watching": watch is not None and watch.archived_at is None,
         "time_remaining": time_remaining,
         "time_remaining_at_review": time_remaining_at_review(review),
         "identified_items": result.get("identified_items") or [],
@@ -104,7 +110,13 @@ def watch_lot(request, lot_id):
     has a max bid of its own, which always wins. The quick one-click
     "Add to Watchlist" star (toggle_watch below) is what actually creates
     the BidWatch now - landing here with no watch yet at all (e.g. an old
-    bookmark) just creates one on save, same as before."""
+    bookmark) just creates one on save, same as before.
+
+    Saving never strands you somewhere else: a fetch() from the Watchlist
+    page's inline field gets the row's new numbers back as JSON
+    (watch_bid_payload) and stays put; a plain form POST redirects to its
+    "next" (this site's URLs only - see url_utils.safe_next_url),
+    defaulting to the Watchlist page."""
     lot = get_object_or_404(SourcedLot.objects.select_related("evaluation"), pk=lot_id)
     evaluation = getattr(lot, "evaluation", None)
     existing = getattr(lot, "bid_watch", None)
@@ -116,14 +128,24 @@ def watch_lot(request, lot_id):
     if review is None:
         review = AIReview.objects.filter(lot=lot, status="done").order_by("-created_at").first()
 
+    next_url = safe_next_url(request, "albright_reselling_app:watchlist")
+
     if request.method == "POST":
         form = BidWatchForm(request.POST, instance=existing)
         if form.is_valid():
             watch = form.save(commit=False)
             watch.lot = lot
             watch.save()
-            messages.success(request, f'Watching "{lot.title}" - max ${watch.my_max_bid}.')
-            return redirect("albright_reselling_app:dashboard")
+            if wants_json(request):
+                return JsonResponse({"ok": True, **watch_bid_payload(watch)})
+            if watch.my_max_bid is not None:
+                messages.success(request, f'Saved - max bid for "{lot.title}" is ${watch.my_max_bid}.')
+            else:
+                messages.success(request, f'Saved - no max bid set for "{lot.title}".')
+            return redirect(next_url)
+        if wants_json(request):
+            errors = form.errors.get("my_max_bid") or ["Enter a valid amount."]
+            return JsonResponse({"ok": False, "error": errors[0]}, status=400)
     elif existing is not None and existing.my_max_bid is not None:
         form = BidWatchForm(instance=existing)
     else:
@@ -132,6 +154,7 @@ def watch_lot(request, lot_id):
 
     return render(request, "watch_lot.html", {
         "lot": lot, "evaluation": evaluation, "review": review, "form": form, "existing": existing,
+        "next_url": next_url,
     })
 
 
@@ -203,11 +226,12 @@ def use_my_max_bid(request, lot_id):
     Watchlist entry - only when that entry has no max bid of its own yet,
     so it never silently overwrites one set by hand (edit that via
     watch_lot instead). JSON for the dialog/Watchlist's fetch() calls;
-    a plain form POST (no JS) redirects back to the dashboard."""
+    a plain form POST (no JS) redirects back to its "next" page (this
+    site's URLs only), defaulting to the Watchlist page."""
     lot = get_object_or_404(SourcedLot, pk=lot_id)
     watch = BidWatch.objects.active().filter(lot=lot).first()
     estimate = LotUserEstimate.objects.filter(lot=lot).first()
-    wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    next_url = safe_next_url(request, "albright_reselling_app:watchlist")
 
     if watch is None or estimate is None or watch.my_max_bid is not None:
         if watch is None:
@@ -216,17 +240,17 @@ def use_my_max_bid(request, lot_id):
             error = "No saved estimate for this lot."
         else:
             error = "This lot already has a max bid - edit it instead."
-        if wants_json:
+        if wants_json(request):
             return JsonResponse({"error": error}, status=400)
         messages.error(request, error)
-        return redirect("albright_reselling_app:dashboard")
+        return redirect(next_url)
 
     watch.my_max_bid = estimate.my_max_bid
     watch.save(update_fields=["my_max_bid"])
-    if wants_json:
+    if wants_json(request):
         return JsonResponse({"watch_max_bid": float(watch.my_max_bid)})
     messages.success(request, f'Max bid for "{lot.title}" set to ${watch.my_max_bid}.')
-    return redirect("albright_reselling_app:dashboard")
+    return redirect(next_url)
 
 
 @login_required

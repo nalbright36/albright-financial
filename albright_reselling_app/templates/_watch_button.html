@@ -12,5 +12,5 @@ shows once watching); clicking the star again removes it. No page reload
         <span class="js-watch-star">{% if is_watching %}&#9733;{% else %}&#9734;{% endif %}</span>
         <span class="js-watch-label">{% if is_watching %}Watching{% else %}Add to Watchlist{% endif %}</span>
     </button>
-    <a href="{% url 'albright_reselling_app:watch_lot' watch_lot_id %}" class="js-watch-set-max-bid" style="font-size: 0.75rem;"{% if not is_watching %} hidden{% endif %}>Set max bid</a>
+    <a href="{% url 'albright_reselling_app:watch_lot' watch_lot_id %}?next={{ request.get_full_path|urlencode }}" class="js-watch-set-max-bid" style="font-size: 0.75rem;"{% if not is_watching %} hidden{% endif %}>Set max bid</a>
 </span>

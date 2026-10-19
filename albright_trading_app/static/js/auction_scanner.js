@@ -588,6 +588,9 @@
             .catch(function () {});
     }
     document.addEventListener("watchlist:changed", refreshWatchlistNavBadge);
+    // static/js/watchlist.js after an inline max-bid save: just the badge -
+    // re-rendering the table would wipe that row's "Saved" confirmation.
+    document.addEventListener("watchlist:badge-stale", refreshWatchlistNavBadge);
 
     function applyWatchState(group, isWatching) {
         var button = group.querySelector(".js-watch-toggle");

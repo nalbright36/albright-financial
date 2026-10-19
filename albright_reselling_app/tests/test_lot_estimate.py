@@ -323,9 +323,10 @@ class WatchlistTests(LoggedInTestCase):
 
         content = self.section()
 
-        self.assertNotIn("js-my-bid-scanner", _watchlist_row_html(content, mine))
-        self.assertIn('class="js-my-bid-scanner"', _watchlist_row_html(content, scanner))
-        self.assertIn(">scanner</span>", _watchlist_row_html(content, scanner))
+        # Always rendered (so an inline save can toggle it), hidden unless it's the scanner's max.
+        marker = r'class="js-my-bid-scanner"[^>]*?(hidden)?>scanner</span>'
+        self.assertEqual(re.search(marker, _watchlist_row_html(content, mine)).group(1), "hidden")
+        self.assertIsNone(re.search(marker, _watchlist_row_html(content, scanner)).group(1))
 
     def test_red_only_when_current_bid_above_my_bid(self):
         cases = (
@@ -406,7 +407,7 @@ class WatchlistTests(LoggedInTestCase):
 
         response = self.client.post(reverse("albright_reselling_app:use_my_max_bid", args=[lot.pk]))
 
-        self.assertRedirects(response, reverse("albright_reselling_app:dashboard"))
+        self.assertRedirects(response, reverse("albright_reselling_app:watchlist"))
         watch.refresh_from_db()
         self.assertEqual(watch.my_max_bid, Decimal("42.29"))
 
