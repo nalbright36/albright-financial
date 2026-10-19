@@ -57,6 +57,21 @@
   --amber-hue: 38;
   --blue-hue: 217;
   --emerald-hue: 160;
+
+  /* Glass and glow (see the "Glass and glow" section at the end) -
+     theme-independent parts; per-theme colors are in the two blocks below. */
+  --glass-blur: 14px;
+  --radius-card: 14px;
+  --glow-ring: 0 0 0 4px rgba(16, 185, 129, 0.18);
+  --glow-primary: 0 0 0 4px rgba(16, 185, 129, 0.18), 0 6px 18px rgba(16, 185, 129, 0.35);
+  --glow-primary-hover: 0 0 0 5px rgba(16, 185, 129, 0.24), 0 8px 24px rgba(16, 185, 129, 0.45);
+  /* Primary buttons: emerald with white text. #10B981 itself only gives
+     white text 2.5:1 (fails WCAG AA), so the fill is the deeper emerald
+     #047857 (5.5:1); the glow keeps the brighter #10B981 hue. */
+  --primary-bg: #047857;
+  --primary-bg-hover: #065F46;
+  --primary-text: #FFFFFF;
+  --nav-tint: linear-gradient(90deg, rgba(16, 185, 129, 0.10), rgba(59, 130, 246, 0.08));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -81,7 +96,7 @@
 
   --text-primary: #E6E8EB;
   --text-secondary: #8B93A1;
-  --text-tertiary: #5B6472;
+  --text-tertiary: #7D8694;   /* was #5B6472 (3.1:1) - now 4.5:1+ on the glass cards */
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -95,6 +110,22 @@
   --blue-bg: rgba(59, 130, 246, 0.14);
   --emerald: #34D399;
   --emerald-bg: rgba(16, 185, 129, 0.14);
+
+  /* Glass and glow - dark: the same hues at lower strength. */
+  --page-glow-1: rgba(16, 185, 129, 0.14);
+  --page-glow-2: rgba(59, 130, 246, 0.11);
+  --glass-bg: rgba(18, 21, 26, 0.6);
+  --glass-bg-solid: #12151A;               /* no backdrop-filter / reduced transparency; sticky table cells */
+  --glass-bg-dialog: rgba(18, 21, 26, 0.88); /* dialogs sit over a dimmed backdrop - near-solid for contrast */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  --nav-border: rgba(255, 255, 255, 0.06);
+  --glow-gain: rgba(52, 211, 153, 0.22);
+  --glow-loss: rgba(251, 113, 133, 0.22);
+  --glow-warn: rgba(251, 191, 36, 0.20);
+  --money-gradient: linear-gradient(90deg, #34D399, #60A5FA);
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-text: var(--text-secondary);
 }
 
 /* ---------- Light theme ---------- */
@@ -109,7 +140,7 @@
 
   --text-primary: #0E1116;
   --text-secondary: #5B6472;
-  --text-tertiary: #8B93A1;
+  --text-tertiary: #666E7A;   /* was #8B93A1 (3.0:1) - now 4.5:1+ on the glass cards */
 
   /* Two-layer card shadow - cards need to lift off the new gray page
      background, not just the old white-on-white/near-invisible edge. */
@@ -117,14 +148,32 @@
   --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
 
-  --red: #E11D48;
+  /* red/amber/emerald one shade deeper than before so small text keeps
+     WCAG AA (4.5:1) on the translucent cards, even over the page glows. */
+  --red: #C2143C;
   --red-bg: rgba(244, 63, 94, 0.10);
-  --amber: #B45309;
+  --amber: #A64B08;
   --amber-bg: rgba(245, 158, 11, 0.14);
   --blue: #2563EB;
   --blue-bg: rgba(59, 130, 246, 0.10);
-  --emerald: #059669;
+  --emerald: #047857;
   --emerald-bg: rgba(16, 185, 129, 0.10);
+
+  /* Glass and glow - light. */
+  --page-glow-1: rgba(16, 185, 129, 0.18);
+  --page-glow-2: rgba(59, 130, 246, 0.14);
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-solid: #FAFBFC;
+  --glass-bg-dialog: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+  --nav-border: rgba(15, 23, 42, 0.06);
+  --glow-gain: rgba(16, 185, 129, 0.20);
+  --glow-loss: rgba(244, 63, 94, 0.18);
+  --glow-warn: rgba(245, 158, 11, 0.18);
+  --money-gradient: linear-gradient(90deg, #047857, #1D4ED8);
+  --chart-grid: rgba(15, 23, 42, 0.08);
+  --chart-text: var(--text-secondary);
 }
 
 /* ---------- Per-app accent ----------
@@ -146,6 +195,22 @@ body.theme-reselling {
   --accent-hover: #34D399;
   --accent-ring: rgba(16, 185, 129, 0.3);
   --on-accent: #06211A;
+}
+/* Light theme: each app's accent one step deeper, since it's used as text
+   (links, active tabs, counts) on the light glass cards - #10B981 and
+   #3B82F6 only reach ~2.4:1 and ~3.6:1 there (WCAG AA needs 4.5:1). White
+   text on accent fills. Hover goes darker, not lighter, in light mode. */
+[data-theme="light"] body {
+  --accent: #1D4ED8;
+  --accent-hover: #1E40AF;
+  --accent-ring: rgba(37, 99, 235, 0.18);
+  --on-accent: #FFFFFF;
+}
+[data-theme="light"] body.theme-reselling {
+  --accent: #047857;
+  --accent-hover: #065F46;
+  --accent-ring: rgba(16, 185, 129, 0.18);
+  --on-accent: #FFFFFF;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1123,3 +1188,158 @@ tr.scanner-detail td {
 .max-bid-status { font-size: var(--text-xs); min-width: 3.5em; text-align: left; }
 .max-bid-status.is-saved { color: var(--gain); }
 .max-bid-status.is-error { color: var(--loss); }
+
+
+/* ============================================================
+   GLASS AND GLOW - visual layer over everything above, for both apps
+   and both themes. Colors all come from the per-theme tokens
+   (--page-glow-*, --glass-*, --glow-*, --money-gradient, --chart-*)
+   and the shared ones (--glow-ring/--glow-primary, --primary-*,
+   --nav-tint). Styling only: no class/ID/data-* that JS relies on
+   changed - everything here targets selectors that already existed.
+
+   Fallbacks: cards are SOLID (--glass-bg-solid) unless the browser
+   supports backdrop-filter, and stay solid for anyone who asks for
+   reduced transparency. Reduced motion already zeroes --transition
+   (top of file); the extra transitions here use it too.
+   ============================================================ */
+
+/* ---------- Page background: two faint radial glows, fixed to the
+   viewport (a fixed pseudo-element, not background-attachment:fixed,
+   which iOS Safari ignores) - painted once, never per section. ---------- */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60vmax 45vmax at 0% 0%, var(--page-glow-1), transparent 70%),
+    radial-gradient(55vmax 40vmax at 100% 0%, var(--page-glow-2), transparent 70%);
+}
+
+/* ---------- Cards: tiles, table cards, filter bar, ledger,
+   calculator panels (all .card), plus the dialogs. Blur lives on these
+   containers only - never on table rows or cells. ---------- */
+.card,
+.calc-dialog,
+.lightbox {
+  background: var(--glass-bg-solid);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-shadow);
+}
+.card:hover { border-color: var(--glass-border); }
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  }
+  /* Dialogs float over a 50% black backdrop - a 62%-white panel would
+     turn grey there and fail contrast, so they're near-solid glass. */
+  .calc-dialog,
+  .lightbox {
+    background: var(--glass-bg-dialog);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  }
+}
+
+/* Sticky cells that must hide what scrolls under them: the card's own
+   (opaque) tone instead of plain --surface, so they don't show as a
+   brighter/darker strip on the glass. */
+table.holdings thead th,
+table.ledger-view-table .ledger-item-cell,
+table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid); }
+
+/* ---------- Nav bar: soft emerald-to-blue tint, same blur, faint
+   bottom border; the brand's status dot glows. ---------- */
+.navbar {
+  background: var(--nav-tint), color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border-bottom: 1px solid var(--nav-border);
+}
+.navbar__brand::before {
+  background: #10B981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18), 0 0 10px rgba(16, 185, 129, 0.65);
+}
+
+/* ---------- Primary buttons: emerald, white text, soft glow; a little
+   stronger on hover. Secondary buttons are unchanged. ---------- */
+.btn-primary {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
+  box-shadow: var(--glow-primary);
+}
+.btn-primary:hover {
+  background: var(--primary-bg-hover);
+  border-color: var(--primary-bg-hover);
+  color: var(--primary-text);
+  box-shadow: var(--glow-primary-hover);
+}
+.btn-primary:focus-visible { box-shadow: var(--glow-primary-hover); }
+
+/* ---------- Focus: the same emerald glow ring on inputs and buttons
+   (links keep the existing outline). ---------- */
+.btn:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--glow-ring);
+}
+.field input:focus, .field select:focus, .field textarea:focus,
+.scanner-controls input:focus, .scanner-controls select:focus,
+.ledger-input:focus {
+  border-color: #10B981;
+  box-shadow: var(--glow-ring);
+}
+
+/* ---------- Status pills / badges: tinted background (unchanged
+   tokens) plus a faint glow in the same hue. ---------- */
+.badge.gain { box-shadow: 0 0 0 1px var(--glow-gain), 0 0 12px var(--glow-gain); }
+.badge.loss { box-shadow: 0 0 0 1px var(--glow-loss), 0 0 12px var(--glow-loss); }
+.badge.warn { box-shadow: 0 0 0 1px var(--glow-warn), 0 0 12px var(--glow-warn); }
+.badge.neutral { box-shadow: 0 0 0 1px var(--glass-border); }
+.js-watch-toggle.is-watching { background: var(--gain-bg); box-shadow: 0 0 0 1px var(--glow-gain), 0 0 12px var(--glow-gain); }
+
+/* ---------- Big positive money values in tiles: emerald-to-blue
+   gradient text. "Positive" is exactly the tiles whose inline color
+   is var(--gain) (templates pick --gain/--loss by sign); negative
+   (--loss) and warning (--warn) values keep their solid color. Large
+   text (1.5rem+, semibold), so the gradient's ends need only 3:1. ---------- */
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .ledger-stat__value[style*="var(--gain)"] {
+    background-image: var(--money-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+}
+
+/* ---------- Contrast touch-ups for the deeper light-mode shades ---------- */
+/* The active tab's count badge sits on the accent's own tint - the hover
+   shade (darker in light mode, lighter in dark) keeps it at AA in both. */
+.scanner-tab.is-active .tab-badge { color: var(--accent-hover); }
+
+/* ---------- Accessibility fallbacks ---------- */
+@media (prefers-reduced-transparency: reduce) {
+  .card,
+  .calc-dialog,
+  .lightbox,
+  .navbar {
+    background: var(--glass-bg-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  body::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .btn, .badge, .navbar, body { transition: none; }
+}

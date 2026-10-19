@@ -171,14 +171,14 @@
     const chart = LightweightCharts.createChart(container, {
         layout: {
             background: { color: 'transparent' },
-            textColor: cssVar('--text-secondary'),
+            textColor: cssVar('--chart-text'),
         },
         grid: {
-            vertLines: { color: cssVar('--border') },
-            horzLines: { color: cssVar('--border') },
+            vertLines: { color: cssVar('--chart-grid') },
+            horzLines: { color: cssVar('--chart-grid') },
         },
-        rightPriceScale: { borderColor: cssVar('--border') },
-        timeScale: { borderColor: cssVar('--border') },
+        rightPriceScale: { borderColor: cssVar('--chart-grid') },
+        timeScale: { borderColor: cssVar('--chart-grid') },
         width: container.clientWidth,
         height: 420,
     });
@@ -204,10 +204,10 @@
     // a reload.
     document.addEventListener('themechange', function () {
         chart.applyOptions({
-            layout: { textColor: cssVar('--text-secondary') },
-            grid: { vertLines: { color: cssVar('--border') }, horzLines: { color: cssVar('--border') } },
-            rightPriceScale: { borderColor: cssVar('--border') },
-            timeScale: { borderColor: cssVar('--border') },
+            layout: { textColor: cssVar('--chart-text') },
+            grid: { vertLines: { color: cssVar('--chart-grid') }, horzLines: { color: cssVar('--chart-grid') } },
+            rightPriceScale: { borderColor: cssVar('--chart-grid') },
+            timeScale: { borderColor: cssVar('--chart-grid') },
         });
         candleSeries.applyOptions({
             upColor: cssVar('--gain'),
