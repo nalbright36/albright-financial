@@ -13,6 +13,7 @@ urlpatterns = [
     path("today/", selling_views.today_page, name="today"),
     path("watchlist/", scanner_views.watchlist_page, name="watchlist"),
     path("review/", review_views.review_page, name="review_queue"),
+    path("review/position/", review_views.review_position, name="review_position"),
     path("review/<int:lot_id>/watch/", review_views.review_watch, name="review_watch"),
     path("review/<int:lot_id>/dismiss/", review_views.review_dismiss, name="review_dismiss"),
     path("review/<int:lot_id>/undo/", review_views.review_undo, name="review_undo"),

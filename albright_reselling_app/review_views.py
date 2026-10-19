@@ -18,7 +18,7 @@ from . import calculator_views
 from .dismiss_views import record_dismissal
 from .scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from .scanner.bid_watch import restore
-from .scanner.review_queue import _ai_payload, review_queue
+from .scanner.review_queue import DEFAULT_SCOPE, SCOPE_LABELS, SCOPES, _ai_payload, all_queues
 from .scanner_models import AIReview, BidWatch, LotDismissal, SourcedLot
 from .scanner_views import RECENT_REVIEW_WINDOW
 
@@ -51,16 +51,60 @@ def _json_body(request):
     return request.POST
 
 
+POSITIONS_SESSION_KEY = "review_queue_positions"
+
+
+def _todays_positions(request):
+    """{scope: lot_id} saved today (review_position below) - an earlier
+    day's positions are ignored, so every scope starts from the top again."""
+    saved = request.session.get(POSITIONS_SESSION_KEY) or {}
+    if saved.get("date") != timezone.localdate().isoformat():
+        return {}
+    return {scope: lot_id for scope, lot_id in (saved.get("positions") or {}).items() if scope in SCOPE_LABELS}
+
+
 @login_required
 def review_page(request):
+    """The queue page, opened on ?scope= (from a table's "Start review"
+    button; default "review"). Every scope's queue is embedded, so the
+    page's scope selector switches without a reload; each scope resumes at
+    the lot it was on earlier today (session-saved - see review_position)."""
+    scope = request.GET.get("scope")
+    if scope not in SCOPE_LABELS:
+        scope = DEFAULT_SCOPE
+    queues = all_queues()
     context = {
-        "queue": review_queue(),
+        "scope": scope,
+        "scope_label": SCOPE_LABELS[scope],
+        "scope_options": [(key, label, len(queues[key])) for key, label in SCOPES],
+        "queues": queues,
+        "queue": queues[scope],
+        "any_queued": any(queues.values()),
+        "positions": _todays_positions(request),
         "shortcuts": SHORTCUTS,
         "dismiss_reasons": DISMISS_REASON_KEYS,
-        "today": timezone.localdate().isoformat(),
     }
     context.update(calculator_views.panel_context(request.user))
     return render(request, "review_queue.html", context)
+
+
+@login_required
+@require_POST
+def review_position(request):
+    """Remembers which lot a scope is on (posted by review_queue.js as you
+    move), for the rest of today, in the session."""
+    data = _json_body(request)
+    scope = data.get("scope")
+    try:
+        lot_id = int(data.get("lot_id"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Bad lot id."}, status=400)
+    if scope not in SCOPE_LABELS:
+        return JsonResponse({"error": "Unknown scope."}, status=400)
+    positions = _todays_positions(request)
+    positions[scope] = lot_id
+    request.session[POSITIONS_SESSION_KEY] = {"date": timezone.localdate().isoformat(), "positions": positions}
+    return JsonResponse({"ok": True, "positions": positions})
 
 
 @login_required

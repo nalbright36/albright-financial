@@ -240,7 +240,10 @@
         <div class="card" style="margin-bottom: 20px;">
             <div class="card__header js-collapsible-header">
                 <span class="card__label">Candidates Ending Soon <span class="row-count">({{ live_candidates_ending_soon|length }})</span></span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">Within {{ candidate_window_hours }}h</span>
+                <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Within {{ candidate_window_hours }}h</span>
+                    <a href="{% url 'albright_reselling_app:review_queue' %}?scope=candidates" class="btn btn-primary btn-sm">Start review</a>
+                </span>
             </div>
             <div class="js-collapsible-body">
             {% if live_candidates_ending_soon %}
@@ -302,7 +305,7 @@
                 <span class="card__label">Check by Hand <span class="row-count">({{ check_by_hand|length }})</span></span>
                 <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
                     <span style="font-size: 0.75rem; color: var(--text-secondary);">Affordable but low-confidence - the parser isn't sure, you decide</span>
-                    <a href="{% url 'albright_reselling_app:review_queue' %}" class="btn btn-primary btn-sm">Start review</a>
+                    <a href="{% url 'albright_reselling_app:review_queue' %}?scope=review" class="btn btn-primary btn-sm">Start review</a>
                 </span>
             </div>
             <div class="js-collapsible-body">
@@ -366,7 +369,7 @@
                 <span class="card__label">Leads to Review <span class="row-count">({{ leads_to_review|length }})</span></span>
                 <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
                     <span style="font-size: 0.75rem; color: var(--text-secondary);">Ending within {{ review_settings.window_hours }}h &mdash; price these by hand</span>
-                    <a href="{% url 'albright_reselling_app:review_queue' %}" class="btn btn-primary btn-sm">Start review</a>
+                    <a href="{% url 'albright_reselling_app:review_queue' %}?scope=review" class="btn btn-primary btn-sm">Start review</a>
                 </span>
             </div>
             <div class="js-collapsible-body">
@@ -438,7 +441,10 @@
         <div class="card" style="margin-bottom: 20px;">
             <div class="card__header js-collapsible-header">
                 <span class="card__label">Candidates Ending Later <span class="row-count">({{ live_candidates_ending_later|length }})</span></span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">Early bids usually rise - worth tracking, not acting on yet</span>
+                <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Early bids usually rise - worth tracking, not acting on yet</span>
+                    <a href="{% url 'albright_reselling_app:review_queue' %}?scope=later" class="btn btn-primary btn-sm">Start review</a>
+                </span>
             </div>
             <div class="js-collapsible-body">
             {% if live_candidates_ending_later %}

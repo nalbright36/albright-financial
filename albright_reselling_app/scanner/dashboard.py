@@ -358,13 +358,17 @@ def review_settings():
     return {**DEFAULT_REVIEW_SETTINGS, **settings.RESELLING_SCANNER.get("REVIEW", {})}
 
 
-def passes_review_settings(evaluation, now, rs, apply_min_headroom):
-    """Whether one Check by hand/lead evaluation survives the review
-    settings: ends within window_hours, isn't a hidden category/source,
-    and - for Check by hand only (apply_min_headroom; leads have no
-    headroom) - has at least min_headroom of headroom."""
+def passes_review_settings(evaluation, now, rs, apply_min_headroom, apply_window=True):
+    """Whether one evaluation survives the review settings: ends within
+    window_hours (unless apply_window=False - the review queue's "Ending
+    later" scope is past that window by definition), isn't a hidden
+    category/source, and - when apply_min_headroom (Check by hand and
+    candidates; leads have no headroom) - has at least min_headroom of
+    headroom."""
     lot = evaluation.lot
-    if lot.end_time is None or lot.end_time > now + timedelta(hours=rs["window_hours"]):
+    if lot.end_time is None:
+        return False
+    if apply_window and lot.end_time > now + timedelta(hours=rs["window_hours"]):
         return False
     if evaluation.category in rs["hide_categories"] or lot.source in rs["hide_sources"]:
         return False

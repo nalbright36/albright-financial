@@ -16,14 +16,24 @@ rendered from review_views.SHORTCUTS, so they always list the same keys.
     <div class="card__header" style="margin-bottom: 16px;">
         <h1 style="margin: 0;">Review</h1>
         <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
-            <span id="rq-progress" class="review-progress num" aria-live="polite">{% if queue %}1 of {{ queue|length }}{% endif %}</span>
+            <form method="get" action="{% url 'albright_reselling_app:review_queue' %}" class="review-scope" id="rq-scope-form">
+                <label for="rq-scope" class="review-scope__label">Reviewing:</label>
+                <select name="scope" id="rq-scope" class="review-scope__select">
+                    {% for key, label, count in scope_options %}<option value="{{ key }}"{% if key == scope %} selected{% endif %}>{{ label }} ({{ count }})</option>{% endfor %}
+                </select>
+                <noscript><button type="submit" class="btn btn-secondary btn-sm">Go</button></noscript>
+                <span aria-hidden="true">&middot;</span>
+                <span id="rq-progress" class="review-progress num" aria-live="polite">{% if queue %}1 of {{ queue|length }}{% else %}0 of 0{% endif %}</span>
+            </form>
             <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">Back to dashboard</a>
         </span>
     </div>
 
-    {% if queue %}
-    {{ queue|json_script:"review-queue-data" }}
-    <div id="review-config" hidden data-today="{{ today }}"></div>
+    {% if any_queued %}
+    {{ queues|json_script:"review-queue-data" }}
+    {{ positions|json_script:"review-positions" }}
+    <div id="review-config" hidden data-scope="{{ scope }}"
+         data-position-url="{% url 'albright_reselling_app:review_position' %}"></div>
 
     <div class="review-layout" id="review-layout">
         <div class="review-main">
@@ -54,7 +64,7 @@ rendered from review_views.SHORTCUTS, so they always list the same keys.
                 </div>
 
                 <div class="review-why" id="rq-why-box">
-                    <div class="review-why__label">Why it's here</div>
+                    <div class="review-why__label" id="rq-why-label">{% if scope == "review" %}Why it's here{% else %}The valuation{% endif %}</div>
                     <ul id="rq-why"></ul>
                 </div>
 
@@ -151,13 +161,13 @@ rendered from review_views.SHORTCUTS, so they always list the same keys.
     {% else %}
     <section class="card review-done" id="rq-done">
         <h2>All caught up</h2>
-        <p style="color: var(--text-secondary);">Nothing in Check by hand or Leads needs a look right now.</p>
+        <p style="color: var(--text-secondary);">Nothing in any review scope (candidates ending soon, ending later, check by hand, or leads) needs a look right now.</p>
         <a href="{% url 'albright_reselling_app:dashboard' %}" class="btn btn-primary">Back to dashboard</a>
     </section>
     {% endif %}
 </div>
 
-{% if queue %}
+{% if any_queued %}
 {% include "_calculator_dialog.html" %}
 {% include "_lightbox.html" %}
 <script src="{% static_version 'js/calculator.js' %}" defer></script>

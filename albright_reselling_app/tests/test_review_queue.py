@@ -190,7 +190,7 @@ class ReviewSettingsTests(LoggedInTestCase):
         content = self.dashboard()
         url = reverse("albright_reselling_app:review_queue")
 
-        self.assertEqual(content.count(f'href="{url}" class="btn btn-primary btn-sm">Start review</a>'), 2)
+        self.assertEqual(content.count(f'href="{url}?scope=review" class="btn btn-primary btn-sm">Start review</a>'), 2)
 
     def test_missing_review_settings_fall_back_to_defaults(self):
         cfg = {k: v for k, v in settings.RESELLING_SCANNER.items() if k != "REVIEW"}
@@ -472,11 +472,11 @@ class ReviewPageTests(LoggedInTestCase):
         second = _lead("page-2")
 
         content = self.page()
-        queue = json.loads(re.search(
+        queues = json.loads(re.search(
             r'<script id="review-queue-data" type="application/json">(.*?)</script>', content, re.S,
         ).group(1))
 
-        self.assertEqual([c["lot_id"] for c in queue], [first.pk, second.pk])
+        self.assertEqual([c["lot_id"] for c in queues["review"]], [first.pk, second.pk])
         self.assertIn('id="rq-progress"', content)
         self.assertIn("1 of 2", content)
         self.assertIn('<dialog id="calc-dialog"', content)

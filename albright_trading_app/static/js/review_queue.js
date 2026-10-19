@@ -11,16 +11,22 @@
  *
  * Shortcuts are ignored while typing in a field, and while the calculator
  * dialog or the photo lightbox is open (their own Esc closes them).
- * Position is remembered per browser for the rest of the day.
+ *
+ * Scopes (scanner/review_queue.py SCOPES): every scope's queue is embedded
+ * up front, so the "Reviewing:" selector switches without a reload; each
+ * scope keeps its own position, saved for the rest of the day in the
+ * session (review_views.review_position) and handed back on the next load.
  */
 (function () {
     "use strict";
 
     var dataEl = document.getElementById("review-queue-data");
     if (!dataEl) return;
-    var QUEUE = JSON.parse(dataEl.textContent);
-    var TODAY = document.getElementById("review-config").dataset.today;
-    var POSITION_KEY = "review-queue-position";
+    var QUEUES = JSON.parse(dataEl.textContent);        // {scope: [card, ...]}
+    var CONFIG = document.getElementById("review-config").dataset;
+    var SAVED_POSITIONS = JSON.parse(document.getElementById("review-positions").textContent || "{}");
+    var scope = QUEUES[CONFIG.scope] ? CONFIG.scope : Object.keys(QUEUES)[0];
+    var QUEUE = QUEUES[scope];
     var LEGEND_KEY = "review-queue-legend-open";
     var REASON_WINDOW_MS = 3000;
 
@@ -46,27 +52,35 @@
     function storageSet(key, value) { try { window.localStorage.setItem(key, value); } catch (e) {} }
 
     // ---------- State ----------
-    var index = 0;
-    var status = {};      // lot_id -> {type: "watch"|"dismiss", reason}
-    var undoStack = [];   // [{lotId, type, index}]
+    var status = {};      // lot_id -> {type: "watch"|"dismiss", reason} (shared by every scope)
+    var undoStack = [];   // [{scope, lotId, type, index, item}]
     var reasonTimer = null;
     var reasonCountdown = null;
     var reasonLotId = null;
 
-    // Same-day resume: back to the lot you were on (by id, since the queue
-    // itself may have changed since).
-    try {
-        var saved = JSON.parse(storageGet(POSITION_KEY) || "null");
-        if (saved && saved.date === TODAY) {
-            var found = QUEUE.findIndex(function (item) { return item.lot_id === saved.lotId; });
-            if (found !== -1) index = found;
-        }
-    } catch (e) {}
+    // Each scope's position: resume today's saved lot (by id, since the
+    // queue itself may have changed since), else the top.
+    var indexes = {};
+    Object.keys(QUEUES).forEach(function (key) {
+        var found = QUEUES[key].findIndex(function (item) { return item.lot_id === SAVED_POSITIONS[key]; });
+        indexes[key] = found === -1 ? 0 : found;
+    });
+    var index = indexes[scope];
 
+    var savedLot = {};    // last lot id actually saved per scope - skip redundant posts
+    var saveTimer = null;
     function savePosition() {
+        indexes[scope] = index;
         var item = QUEUE[index];
-        if (item) storageSet(POSITION_KEY, JSON.stringify({date: TODAY, lotId: item.lot_id}));
+        if (!item || savedLot[scope] === item.lot_id) return;
+        var key = scope, lotId = item.lot_id;
+        window.clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(function () {
+            savedLot[key] = lotId;
+            post(CONFIG.positionUrl, {scope: key, lot_id: lotId});
+        }, 400);
     }
+    Object.keys(SAVED_POSITIONS).forEach(function (key) { savedLot[key] = SAVED_POSITIONS[key]; });
 
     function pendingCount() {
         return QUEUE.filter(function (item) { return !status[item.lot_id]; }).length;
@@ -163,6 +177,7 @@
         headroomEl.textContent = money(item.headroom);
         headroomEl.style.color = item.headroom === null ? "" : (item.headroom >= 0 ? "var(--gain)" : "var(--loss)");
 
+        setText("rq-why-label", item.why_label || "Why it's here");
         var why = byId("rq-why");
         why.textContent = "";
         item.why.forEach(function (reason) {
@@ -190,7 +205,11 @@
         byId("rq-card").hidden = true;
         byId("rq-done").hidden = false;
         setText("rq-progress", QUEUE.length + " of " + QUEUE.length);
-        if (pending === 0) {
+        if (!QUEUE.length) {
+            setText("rq-done-title", "All caught up");
+            setText("rq-done-text", "Nothing to review in this scope right now - pick another above.");
+            byId("rq-review-skipped").hidden = true;
+        } else if (pending === 0) {
             setText("rq-done-title", "All caught up");
             setText("rq-done-text", "Every lot in the queue has been watched or dismissed.");
             byId("rq-review-skipped").hidden = true;
@@ -228,7 +247,7 @@
         flash("watch");
         if (status[item.lot_id] && status[item.lot_id].type === "watch") { next(); return; }
         status[item.lot_id] = {type: "watch"};
-        undoStack.push({lotId: item.lot_id, type: "watch", index: index, item: item});
+        undoStack.push({scope: scope, lotId: item.lot_id, type: "watch", index: index, item: item});
         post(item.urls.watch).then(function (res) {
             if (!res.ok) { delete status[item.lot_id]; undoStack.pop(); if (currentItem() === item) render(); }
         });
@@ -240,7 +259,7 @@
         if (!item) return;
         flash("dismiss");
         status[item.lot_id] = {type: "dismiss"};
-        undoStack.push({lotId: item.lot_id, type: "dismiss", index: index, item: item});
+        undoStack.push({scope: scope, lotId: item.lot_id, type: "dismiss", index: index, item: item});
         post(item.urls.dismiss, {});
         renderStatus(item);
         openReasonPicker(item);
@@ -290,7 +309,26 @@
         if (!last) return;
         delete status[last.lotId];
         post(last.item.urls.undo, {action: last.type});
-        goTo(last.index);
+        if (last.scope !== scope) switchScope(last.scope, last.index);  // undo from another scope: go back there
+        else goTo(last.index);
+    }
+
+    // ---------- Scope selector ("Reviewing: ...") ----------
+    function switchScope(newScope, atIndex) {
+        if (!QUEUES[newScope]) return;
+        closeReasonPicker(false);
+        indexes[scope] = index;
+        scope = newScope;
+        QUEUE = QUEUES[scope];
+        index = atIndex !== undefined ? atIndex : indexes[scope];
+        var select = byId("rq-scope");
+        if (select.value !== scope) select.value = scope;
+        try {  // keep ?scope= in the URL so a reload/bookmark lands on the same scope
+            var url = new URL(window.location.href);
+            url.searchParams.set("scope", scope);
+            window.history.replaceState(null, "", url.toString());
+        } catch (e) {}
+        render();
     }
 
     function updateCalcButton(item) {
@@ -416,6 +454,11 @@
     byId("rq-review-skipped").addEventListener("click", function () {
         var first = QUEUE.findIndex(function (item) { return !status[item.lot_id]; });
         if (first !== -1) goTo(first);
+    });
+    byId("rq-scope").addEventListener("change", function (event) { switchScope(event.target.value); });
+    byId("rq-scope-form").addEventListener("submit", function (event) {
+        event.preventDefault();  // with JS the selector switches in place; the form is the no-JS fallback
+        switchScope(byId("rq-scope").value);
     });
     byId("rq-help-close").addEventListener("click", function () { toggleHelp(false); });
     byId("rq-help").addEventListener("click", function (event) {

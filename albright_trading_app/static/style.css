@@ -1094,6 +1094,14 @@ tr.scanner-detail td {
   border: 1px solid var(--border); border-bottom-width: 2px; border-radius: var(--radius-sm, 4px);
 }
 .review-progress { font-size: var(--text-sm); color: var(--text-secondary); }
+.review-scope { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0;
+  font-size: var(--text-sm); color: var(--text-secondary); }
+.review-scope__label { font-weight: 600; }
+.review-scope__select {
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  color: var(--text-primary); font-family: var(--font-sans); font-size: var(--text-sm); padding: 2px var(--space-2);
+}
+[data-theme="light"] .review-scope__select { background: var(--surface); border-color: var(--border); }
 .review-layout {
   display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--space-5); align-items: start;
 }
