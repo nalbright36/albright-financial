@@ -229,8 +229,8 @@ class ScopePageTests(TestCase):
 
         for scope in ("candidates", "later", "review"):  # switching scope never loses another's position
             with self.subTest(opened_on=scope):
-                positions = self.embedded(self.page(scope=scope), "review-positions")
-                self.assertEqual(positions, {"candidates": self.soon[1].pk, "later": self.later[1].pk})
+                starts = self.embedded(self.page(scope=scope), "review-start-indexes")
+                self.assertEqual(starts, {"candidates": 1, "later": 1, "review": 0})
 
     def test_positions_only_last_for_the_day(self):
         self.save_position("candidates", self.soon[2])
@@ -240,7 +240,8 @@ class ScopePageTests(TestCase):
         session[POSITIONS_SESSION_KEY] = saved
         session.save()
 
-        self.assertEqual(self.embedded(self.page(scope="candidates"), "review-positions"), {})
+        self.assertEqual(self.embedded(self.page(scope="candidates"), "review-start-indexes"),
+                         {"candidates": 0, "later": 0, "review": 0})
 
     def test_position_endpoint_validates(self):
         url = reverse("albright_reselling_app:review_position")

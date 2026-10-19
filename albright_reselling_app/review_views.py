@@ -53,14 +53,80 @@ def _json_body(request):
 
 POSITIONS_SESSION_KEY = "review_queue_positions"
 
+# Other names a link/bookmark might use for a scope (older "Start review"
+# links, or naming a single table) - all resolve to a real scope, never a
+# blank selector.
+SCOPE_ALIASES = {
+    "check": "review", "check_by_hand": "review", "checkbyhand": "review", "leads": "review",
+    "lead": "review", "leads_to_review": "review", "act_now": "candidates", "soon": "candidates",
+    "ending_soon": "candidates", "candidates_ending_soon": "candidates", "ending_later": "later",
+    "candidates_ending_later": "later",
+}
+
+
+def resolve_scope(value):
+    """A valid scope for any ?scope= value: the scope itself, a known
+    alias, else the default - so the page always opens on a real scope."""
+    value = (value or "").strip().lower()
+    if value in SCOPE_LABELS:
+        return value
+    return SCOPE_ALIASES.get(value, DEFAULT_SCOPE)
+
 
 def _todays_positions(request):
-    """{scope: lot_id} saved today (review_position below) - an earlier
-    day's positions are ignored, so every scope starts from the top again."""
-    saved = request.session.get(POSITIONS_SESSION_KEY) or {}
-    if saved.get("date") != timezone.localdate().isoformat():
+    """{scope: lot_id} saved today (review_position below). Anything else -
+    an earlier day, an unknown scope, a non-integer id, or a malformed
+    value such as an older single-scope {"date", "lot_id"} record (which
+    can only have meant the original Check by hand + Leads queue) - is
+    dropped or mapped, never passed on."""
+    saved = request.session.get(POSITIONS_SESSION_KEY)
+    if not isinstance(saved, dict) or saved.get("date") != timezone.localdate().isoformat():
         return {}
-    return {scope: lot_id for scope, lot_id in (saved.get("positions") or {}).items() if scope in SCOPE_LABELS}
+    raw = saved.get("positions")
+    if not isinstance(raw, dict):
+        legacy = saved.get("lot_id", saved.get("lotId"))
+        raw = {DEFAULT_SCOPE: legacy} if legacy is not None else {}
+    positions = {}
+    for scope, lot_id in raw.items():
+        try:
+            if scope in SCOPE_LABELS:
+                positions[scope] = int(lot_id)
+        except (TypeError, ValueError):
+            continue
+    return positions
+
+
+def start_index(queue, lot_id):
+    """Where a scope resumes: the saved lot's place in the queue as it is
+    NOW, or the top when that lot is gone (watched, dismissed, closed,
+    filtered out) or nothing was saved - never past the end."""
+    if lot_id is not None:
+        for i, card in enumerate(queue):
+            if card["lot_id"] == lot_id:
+                return i
+    return 0
+
+
+def build_review_page(request):
+    """Everything the queue page shows, from ONE build of the queues: the
+    header's "N of M", the first card, the selector's counts, and whether
+    there's anything to review at all all read these same lists and start
+    indexes, so they can't disagree."""
+    scope = resolve_scope(request.GET.get("scope"))
+    queues = all_queues()
+    positions = _todays_positions(request)
+    starts = {key: start_index(queues[key], positions.get(key)) for key, _label in SCOPES}
+    queue = queues[scope]
+    return {
+        "scope": scope,
+        "scope_label": SCOPE_LABELS[scope],
+        "scope_options": [(key, label, len(queues[key])) for key, label in SCOPES],
+        "queues": queues,
+        "start_indexes": starts,
+        "total": len(queue),
+        "position": starts[scope] + 1 if queue else 0,
+        "any_queued": any(queues.values()),
+    }
 
 
 @login_required
@@ -69,18 +135,8 @@ def review_page(request):
     button; default "review"). Every scope's queue is embedded, so the
     page's scope selector switches without a reload; each scope resumes at
     the lot it was on earlier today (session-saved - see review_position)."""
-    scope = request.GET.get("scope")
-    if scope not in SCOPE_LABELS:
-        scope = DEFAULT_SCOPE
-    queues = all_queues()
     context = {
-        "scope": scope,
-        "scope_label": SCOPE_LABELS[scope],
-        "scope_options": [(key, label, len(queues[key])) for key, label in SCOPES],
-        "queues": queues,
-        "queue": queues[scope],
-        "any_queued": any(queues.values()),
-        "positions": _todays_positions(request),
+        "review": build_review_page(request),
         "shortcuts": SHORTCUTS,
         "dismiss_reasons": DISMISS_REASON_KEYS,
     }

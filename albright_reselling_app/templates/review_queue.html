@@ -16,23 +16,32 @@ rendered from review_views.SHORTCUTS, so they always list the same keys.
     <div class="card__header" style="margin-bottom: 16px;">
         <h1 style="margin: 0;">Review</h1>
         <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+            {% if review %}
             <form method="get" action="{% url 'albright_reselling_app:review_queue' %}" class="review-scope" id="rq-scope-form">
                 <label for="rq-scope" class="review-scope__label">Reviewing:</label>
                 <select name="scope" id="rq-scope" class="review-scope__select">
-                    {% for key, label, count in scope_options %}<option value="{{ key }}"{% if key == scope %} selected{% endif %}>{{ label }} ({{ count }})</option>{% endfor %}
+                    {% for key, label, count in review.scope_options %}<option value="{{ key }}"{% if key == review.scope %} selected{% endif %}>{{ label }} ({{ count }})</option>{% endfor %}
                 </select>
                 <noscript><button type="submit" class="btn btn-secondary btn-sm">Go</button></noscript>
                 <span aria-hidden="true">&middot;</span>
-                <span id="rq-progress" class="review-progress num" aria-live="polite">{% if queue %}1 of {{ queue|length }}{% else %}0 of 0{% endif %}</span>
+                <span id="rq-progress" class="review-progress num" aria-live="polite">{{ review.position }} of {{ review.total }}</span>
             </form>
+            {% endif %}
             <a href="{% url 'albright_reselling_app:dashboard' %}" style="font-size: 0.8125rem;">Back to dashboard</a>
         </span>
     </div>
 
-    {% if any_queued %}
-    {{ queues|json_script:"review-queue-data" }}
-    {{ positions|json_script:"review-positions" }}
-    <div id="review-config" hidden data-scope="{{ scope }}"
+    {% if not review %}
+    {% comment %} Only if the page was rendered without its data (e.g. a server still running older
+    code) - say so, rather than claiming there's nothing to review. {% endcomment %}
+    <section class="card review-done" id="rq-load-error">
+        <h2>The review queue didn't load</h2>
+        <p style="color: var(--text-secondary);">Refresh the page. If this keeps happening, restart the server so it picks up the current code.</p>
+    </section>
+    {% elif review.any_queued %}
+    {{ review.queues|json_script:"review-queue-data" }}
+    {{ review.start_indexes|json_script:"review-start-indexes" }}
+    <div id="review-config" hidden data-scope="{{ review.scope }}"
          data-position-url="{% url 'albright_reselling_app:review_position' %}"></div>
 
     <div class="review-layout" id="review-layout">
@@ -64,7 +73,7 @@ rendered from review_views.SHORTCUTS, so they always list the same keys.
                 </div>
 
                 <div class="review-why" id="rq-why-box">
-                    <div class="review-why__label" id="rq-why-label">{% if scope == "review" %}Why it's here{% else %}The valuation{% endif %}</div>
+                    <div class="review-why__label" id="rq-why-label">{% if review.scope == "review" %}Why it's here{% else %}The valuation{% endif %}</div>
                     <ul id="rq-why"></ul>
                 </div>
 
@@ -167,7 +176,7 @@ rendered from review_views.SHORTCUTS, so they always list the same keys.
     {% endif %}
 </div>
 
-{% if any_queued %}
+{% if review.any_queued %}
 {% include "_calculator_dialog.html" %}
 {% include "_lightbox.html" %}
 <script src="{% static_version 'js/calculator.js' %}" defer></script>

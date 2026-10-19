@@ -24,7 +24,10 @@
     if (!dataEl) return;
     var QUEUES = JSON.parse(dataEl.textContent);        // {scope: [card, ...]}
     var CONFIG = document.getElementById("review-config").dataset;
-    var SAVED_POSITIONS = JSON.parse(document.getElementById("review-positions").textContent || "{}");
+    // Server-computed (review_views.build_review_page): each scope's resume
+    // index, already checked against that scope's queue - the same index the
+    // header's "N of M" was rendered from.
+    var START_INDEXES = JSON.parse(document.getElementById("review-start-indexes").textContent || "{}");
     var scope = QUEUES[CONFIG.scope] ? CONFIG.scope : Object.keys(QUEUES)[0];
     var QUEUE = QUEUES[scope];
     var LEGEND_KEY = "review-queue-legend-open";
@@ -58,14 +61,16 @@
     var reasonCountdown = null;
     var reasonLotId = null;
 
-    // Each scope's position: resume today's saved lot (by id, since the
-    // queue itself may have changed since), else the top.
+    // Each scope's position, clamped to its queue as a last guard.
     var indexes = {};
     Object.keys(QUEUES).forEach(function (key) {
-        var found = QUEUES[key].findIndex(function (item) { return item.lot_id === SAVED_POSITIONS[key]; });
-        indexes[key] = found === -1 ? 0 : found;
+        var start = parseInt(START_INDEXES[key], 10);
+        indexes[key] = (start >= 0 && start < QUEUES[key].length) ? start : 0;
     });
     var index = indexes[scope];
+    // The pre-scopes queue kept one position in localStorage; it's never
+    // read any more - clear it so it can't be mistaken for anything later.
+    try { window.localStorage.removeItem("review-queue-position"); } catch (e) {}
 
     var savedLot = {};    // last lot id actually saved per scope - skip redundant posts
     var saveTimer = null;
@@ -80,7 +85,10 @@
             post(CONFIG.positionUrl, {scope: key, lot_id: lotId});
         }, 400);
     }
-    Object.keys(SAVED_POSITIONS).forEach(function (key) { savedLot[key] = SAVED_POSITIONS[key]; });
+    Object.keys(QUEUES).forEach(function (key) {
+        var item = QUEUES[key][indexes[key]];
+        if (item) savedLot[key] = item.lot_id;  // already where the server has it - no need to re-save
+    });
 
     function pendingCount() {
         return QUEUE.filter(function (item) { return !status[item.lot_id]; }).length;
@@ -478,5 +486,7 @@
     legendTab.addEventListener("click", function () { setLegendOpen(true); });
     setLegendOpen(storageGet(LEGEND_KEY) !== "0");
 
+    var scopeSelect = byId("rq-scope");
+    if (scopeSelect && scopeSelect.value !== scope) scopeSelect.value = scope;
     render();
 })();
