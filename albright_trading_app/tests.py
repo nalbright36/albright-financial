@@ -3,6 +3,7 @@ a logged-in user last visited, and "/" (home) redirecting a reseller-
 cookie user straight to the reseller dashboard. get_market_outlook() is
 mocked everywhere "/" is hit directly - it makes a real external call and
 what it returns is unrelated to what's being tested here."""
+import re
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -169,7 +170,9 @@ class LoginRedirectTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("albright_reselling_app:ledger"))
+        # /ledger/ is a legacy URL that itself redirects on to the Reselling
+        # tab - check the login honored "next" without following that hop.
+        self.assertRedirects(response, reverse("albright_reselling_app:ledger"), fetch_redirect_response=False)
 
     def test_login_ignores_off_site_next(self):
         response = self.client.post(
@@ -178,3 +181,83 @@ class LoginRedirectTests(TestCase):
         )
 
         self.assertRedirects(response, "/", fetch_redirect_response=False)
+
+
+class AppSwitchTests(TestCase):
+    """The header's app-switch buttons (and the brand link) go straight to
+    each app's own landing page by URL name - never "/", which follows the
+    remembered app and so used to bounce "Trading" back to the reseller."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="switcher", password="pw-not-real-12345")
+        self.client.login(username="switcher", password="pw-not-real-12345")
+
+    def nav(self, response):
+        content = response.content.decode()
+        return content[content.index('<nav class="navbar">'):content.index("</nav>")]
+
+    def href(self, nav_html, css_class):
+        return re.search(rf'<a href="([^"]*)" class="{css_class}"', nav_html).group(1)
+
+    @mock.patch(HOME_OUTLOOK, return_value=None)
+    def test_trading_button_goes_to_trading_landing_and_sets_cookie(self, mock_outlook):
+        dashboard = self.client.get(reverse("albright_reselling_app:dashboard"))
+        self.assertEqual(dashboard.cookies[LAST_APP_COOKIE].value, "reseller")
+        trading_href = self.href(self.nav(dashboard), "app-switch-btn")
+
+        self.assertEqual(trading_href, reverse("trading_home"))
+        self.assertNotEqual(trading_href, "/")
+
+        landed = self.client.get(trading_href)  # last_app is still "reseller" here - no bounce back
+
+        self.assertEqual(landed.status_code, 200)
+        self.assertTemplateUsed(landed, "home.html")
+        self.assertEqual(landed.cookies[LAST_APP_COOKIE].value, "trading")
+
+    @mock.patch(HOME_OUTLOOK, return_value=None)
+    def test_reselling_button_goes_to_reseller_dashboard_and_sets_cookie(self, mock_outlook):
+        trading = self.client.get(reverse("trading_home"))
+        reseller_href = self.href(self.nav(trading), "app-switch-btn")
+
+        self.assertEqual(reseller_href, reverse("albright_reselling_app:dashboard"))
+
+        landed = self.client.get(reseller_href)
+
+        self.assertEqual(landed.status_code, 200)
+        self.assertTemplateUsed(landed, "dashboard.html")
+        self.assertEqual(landed.cookies[LAST_APP_COOKIE].value, "reseller")
+
+    @mock.patch(HOME_OUTLOOK, return_value=None)
+    def test_brand_link_stays_within_the_current_app(self, mock_outlook):
+        reseller_nav = self.nav(self.client.get(reverse("albright_reselling_app:dashboard")))
+        trading_nav = self.nav(self.client.get(reverse("trading_home")))
+
+        self.assertEqual(self.href(reseller_nav, "navbar__brand"), reverse("albright_reselling_app:dashboard"))
+        self.assertEqual(self.href(trading_nav, "navbar__brand"), reverse("trading_home"))
+
+    @mock.patch(HOME_OUTLOOK, return_value=None)
+    def test_no_nav_link_points_at_bare_root(self, mock_outlook):
+        for url in (reverse("albright_reselling_app:dashboard"), reverse("trading_home")):
+            with self.subTest(page=url):
+                self.assertNotIn('href="/"', self.nav(self.client.get(url)))
+        trading_nav = self.nav(self.client.get(reverse("trading_home")))
+        self.assertIn(f'<a href="{reverse("trading_home")}">Home</a>', trading_nav)
+
+    @mock.patch(HOME_OUTLOOK, return_value=None)
+    def test_root_still_follows_the_remembered_app(self, mock_outlook):
+        self.client.get(reverse("albright_reselling_app:dashboard"))  # remembers "reseller"
+        self.assertRedirects(self.client.get("/"), reverse("albright_reselling_app:dashboard"))
+
+        self.client.get(reverse("trading_home"))  # remembers "trading"
+        root = self.client.get("/")
+        self.assertEqual(root.status_code, 200)
+        self.assertTemplateUsed(root, "home.html")
+
+    @mock.patch(HOME_OUTLOOK, return_value=None)
+    def test_trading_landing_never_redirects_even_for_a_reseller_user(self, mock_outlook):
+        self.client.cookies[LAST_APP_COOKIE] = "reseller"
+
+        response = self.client.get(reverse("trading_home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "home.html")
