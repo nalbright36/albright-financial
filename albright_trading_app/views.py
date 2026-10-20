@@ -227,16 +227,20 @@ def _render_trading_home(request):
 
 
 def home(request):
-    """"/" - redirects a logged-in user straight to the reseller app's
-    Dashboard if that's the last app they used (see
+    """"/" - redirects a logged-in user straight to the reseller or crypto
+    app's dashboard if that's the last app they used (see
     albright_trading_proj.middleware.LastAppMiddleware); otherwise renders
     this app's own landing page, exactly as before (the default for
     anonymous users and anyone whose last_app cookie says "trading" or
     isn't set yet). Links that mean "the trading app" specifically (the
     app-switch button, the brand, the trading nav's Home) use trading_home
-    below instead - "/" would bounce a reseller user straight back."""
-    if request.user.is_authenticated and request.COOKIES.get(LAST_APP_COOKIE) == "reseller":
-        return redirect("albright_reselling_app:dashboard")
+    below instead - "/" would bounce a reseller/crypto user straight back."""
+    if request.user.is_authenticated:
+        remembered = request.COOKIES.get(LAST_APP_COOKIE)
+        if remembered == "reseller":
+            return redirect("albright_reselling_app:dashboard")
+        if remembered == "crypto":
+            return redirect("albright_crypto_app:dashboard")
     return _render_trading_home(request)
 
 

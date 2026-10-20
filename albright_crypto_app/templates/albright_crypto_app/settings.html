@@ -1,0 +1,51 @@
+{% extends "index.html" %}
+{% load crypto_links %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 20px;">Crypto settings</h1>
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <form method="post" class="card">
+            {% csrf_token %}
+            <div class="card__header"><span class="card__label">Verified list &amp; feeds</span></div>
+            {% for field in form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{% if field.name == "allowlist" %}Verified domains (allowlist){% else %}RSS feeds{% endif %}</label>
+                {{ field }}
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ field.help_text }}</span>
+                {% for error in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ error }}</span>{% endfor %}
+            </div>
+            {% endfor %}
+            <p style="font-size: 0.75rem; color: var(--text-secondary);">Saved here, these take priority over settings.py. Budget: ${{ budget_usd|floatformat:2 }} (settings.py CRYPTO["budget_usd"]) - anything requiring more spending is excluded.</p>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+
+        <form method="post" class="card">
+            {% csrf_token %}<input type="hidden" name="action" value="sources">
+            <div class="card__header"><span class="card__label">Sources</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">Check each source's terms before collecting from it</span></div>
+            {% if sources %}
+            <table class="holdings" id="sources-table">
+                <thead><tr><th>Source</th><th>Active</th><th>Terms checked</th><th>Last checked</th></tr></thead>
+                <tbody>
+                    {% for s in sources %}
+                    <tr>
+                        <td>
+                            {{ s.name }} <span class="badge neutral">{{ s.get_kind_display }}</span>
+                            {% if s.kind == "rss" %}<div style="font-size: 0.75rem;">{% external_link s.url %}</div>{% endif %}
+                            {% if s.active and not s.terms_checked %}<div class="crypto-warning js-terms-warning" style="margin-top: 6px; font-size: 0.75rem; padding: 4px 8px;">Terms not checked - confirm this source allows automated collection.</div>{% endif %}
+                        </td>
+                        <td><input type="checkbox" name="active_{{ s.pk }}" aria-label="Active: {{ s.name }}"{% if s.active %} checked{% endif %}></td>
+                        <td><input type="checkbox" name="terms_{{ s.pk }}" aria-label="Terms checked: {{ s.name }}"{% if s.terms_checked %} checked{% endif %}></td>
+                        <td>{% if s.last_checked %}{{ s.last_checked|date:"M j, g:i A" }}{% else %}never{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="submit" class="btn btn-secondary" style="margin-top: 12px;">Save sources</button>
+            {% else %}<p style="color: var(--text-secondary);">No sources yet.</p>{% endif %}
+            <p style="margin-top: 12px; font-size: 0.75rem; color: var(--text-secondary);">GitHub searches come from settings.py CRYPTO["github_queries"]: {{ github_queries|join:" · " }}</p>
+        </form>
+    </div>
+</div>
+{% endblock %}

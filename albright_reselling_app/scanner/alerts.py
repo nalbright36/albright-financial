@@ -629,6 +629,14 @@ def build_digest_message(now=None):
 
     lines += selling.selling_digest_lines(now=now)
 
+    # The crypto app's section (albright_crypto_app.alerts.digest_lines) -
+    # imported here, and only if that app is installed, so this app never
+    # depends on it.
+    from django.apps import apps
+    if apps.is_installed("albright_crypto_app"):
+        from albright_crypto_app.alerts import digest_lines as crypto_digest_lines
+        lines += crypto_digest_lines(now=now)
+
     return "\n".join(lines)
 
 

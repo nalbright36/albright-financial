@@ -212,6 +212,21 @@ body.theme-reselling {
   --accent-ring: rgba(16, 185, 129, 0.18);
   --on-accent: #FFFFFF;
 }
+/* Crypto app: violet, so the three apps are easy to tell apart. Light-mode
+   shade chosen for AA on the light glass cards (5.2:1+), dark for the dark
+   ones (4.8:1+). */
+body.theme-crypto {
+  --accent: #A78BFA;
+  --accent-hover: #C4B5FD;
+  --accent-ring: rgba(139, 92, 246, 0.3);
+  --on-accent: #1E1033;
+}
+[data-theme="light"] body.theme-crypto {
+  --accent: #6D28D9;
+  --accent-hover: #5B21B6;
+  --accent-ring: rgba(139, 92, 246, 0.18);
+  --on-accent: #FFFFFF;
+}
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
    throughout scanner/ledger templates today — same tokens, same
@@ -1351,3 +1366,37 @@ textarea:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .card, .btn, .badge, .navbar, body { transition: none; }
 }
+
+/* ---------- Crypto app (albright_crypto_app) ---------- */
+.crypto-scores { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.crypto-score { display: inline-flex; flex-direction: column; min-width: 64px; }
+.crypto-score__label { font-size: var(--text-xs); color: var(--text-secondary); }
+.crypto-score__value { font-family: var(--font-mono); font-size: var(--text-sm); }
+.crypto-range { font-size: var(--text-xs); color: var(--text-secondary); font-family: var(--font-mono); }
+.crypto-source-text {
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow-y: auto; margin: 0;
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated); font-size: var(--text-sm); color: var(--text-primary);
+}
+.crypto-quote {
+  margin: 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--gain);
+  background: var(--gain-bg); border-radius: var(--radius-sm); font-size: var(--text-sm);
+}
+.crypto-reasons { margin: 0; padding-left: 1.2em; }
+.crypto-steps { list-style: none; margin: 0; padding: 0; }
+.crypto-steps li { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border); }
+.crypto-steps li.is-done .crypto-step__text { text-decoration: line-through; color: var(--text-secondary); }
+.crypto-warning {
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--warn); border-left-width: 4px;
+  border-radius: var(--radius-md); background: var(--warn-bg);
+}
+.crypto-danger {
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--loss); border-left-width: 4px;
+  border-radius: var(--radius-md); background: var(--loss-bg);
+}
+.crypto-domain { font-family: var(--font-mono); font-size: var(--text-lg); overflow-wrap: anywhere; }
+.crypto-link--unverified .badge { margin-left: 4px; }
+.crypto-nolink { color: var(--text-secondary); overflow-wrap: anywhere; }
+.crypto-status-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.crypto-status-buttons .btn.is-current { border-color: var(--accent); color: var(--accent); }

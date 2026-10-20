@@ -1,5 +1,5 @@
-"""Remembers which app (the reselling app vs. the trading app) a logged-in
-user last visited, in a long-lived cookie - read by albright_trading_app's
+"""Remembers which app (the reselling app, the crypto app, or the trading
+app) a logged-in user last visited, in a long-lived cookie - read by albright_trading_app's
 home view (the "/" root) to send a returning user straight back to
 whichever app they were using, instead of always defaulting to the trading
 app's own landing page.
@@ -10,6 +10,8 @@ LAST_APP_COOKIE = "last_app"
 LAST_APP_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 RESELLER_APP_NAME = "albright_reselling_app"
+CRYPTO_APP_NAME = "albright_crypto_app"
+APP_COOKIE_VALUES = {RESELLER_APP_NAME: "reseller", CRYPTO_APP_NAME: "crypto"}  # anything else: "trading"
 
 # Views that don't represent the user actually using one app or the other -
 # never recorded, even though they're real 200 GET HTML responses.
@@ -18,8 +20,9 @@ _EXCLUDED_URL_NAMES = {"user_login", "user_logout"}
 
 class LastAppMiddleware:
     """For every successful (200) GET HTML page request from a logged-in
-    user, records "reseller" (albright_reselling_app URLs) or "trading"
-    (everything else) in the last_app cookie. Skips static/media files,
+    user, records "reseller" (albright_reselling_app URLs), "crypto"
+    (albright_crypto_app URLs) or "trading" (everything else) in the
+    last_app cookie. Skips static/media files,
     non-HTML responses (API/AJAX - these never represent navigating to a
     page), POSTs, /admin/, and the login/logout views themselves."""
 
@@ -48,7 +51,7 @@ class LastAppMiddleware:
         if resolver_match is None or resolver_match.url_name in _EXCLUDED_URL_NAMES:
             return
 
-        app = "reseller" if resolver_match.app_name == RESELLER_APP_NAME else "trading"
+        app = APP_COOKIE_VALUES.get(resolver_match.app_name, "trading")
         response.set_cookie(
             LAST_APP_COOKIE, app, max_age=LAST_APP_COOKIE_MAX_AGE, httponly=True, samesite="Lax",
         )

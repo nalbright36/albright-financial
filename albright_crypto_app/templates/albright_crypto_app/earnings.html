@@ -1,0 +1,51 @@
+{% extends "index.html" %}
+{% load crypto_links %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Earnings</h1>
+        <a href="?export=csv" class="btn btn-secondary" id="earnings-csv">Export CSV (for taxes)</a>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">Confirmed earnings only - money actually received, valued in USD at the time you received it. Potential value never appears here.</p>
+
+    <div class="grid grid-3" style="margin-bottom: 24px;">
+        <div class="card">
+            <div class="card__header"><span class="card__label">Total (USD at receipt)</span></div>
+            <span class="ledger-stat__value num" id="earnings-total" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;{% if total_usd > 0 %} color: var(--gain);{% endif %}">${{ total_usd|floatformat:2 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">This month</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">${{ tiles.earned_this_month|floatformat:2 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">By currency</span></div>
+            {% for row in by_currency %}<div class="num" style="font-size: 0.875rem;">{{ row.amount.normalize }} {{ row.currency }} <span style="color: var(--text-secondary);">(${{ row.usd|floatformat:2 }})</span></div>{% empty %}<span style="color: var(--text-secondary);">&mdash;</span>{% endfor %}
+        </div>
+    </div>
+
+    <div class="card" style="padding: 0;">
+        {% if earnings %}
+        <div style="overflow-x: auto;">
+        <table class="holdings" id="earnings-table">
+            <thead><tr><th>Date</th><th class="num">Amount</th><th>Currency</th><th class="num">USD at receipt</th><th>Opportunity</th><th>Transaction</th><th>Note</th></tr></thead>
+            <tbody>
+                {% for e in earnings %}
+                <tr>
+                    <td>{{ e.date|date:"M j, Y" }}</td>
+                    <td class="num">{{ e.amount.normalize }}</td>
+                    <td>{{ e.currency }}</td>
+                    <td class="num">${{ e.usd_value_at_receipt|floatformat:2 }}</td>
+                    <td>{% if e.opportunity %}<a href="{% url 'albright_crypto_app:opportunity' e.opportunity.pk %}">{{ e.opportunity.title|truncatechars:60 }}</a>{% else %}&mdash;{% endif %}</td>
+                    <td>{% if e.tx_link %}{% external_link e.tx_link "view" %}{% else %}&mdash;{% endif %}</td>
+                    <td>{{ e.note }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary); padding: var(--space-5);">No confirmed earnings yet. Record one from an opportunity's page once you've been paid.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

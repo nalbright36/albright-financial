@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'albright_trading_app',
     'albright_reselling_app',
+    'albright_crypto_app',
     'django.contrib.humanize',
 ]
 
@@ -295,3 +296,23 @@ RESELLING_SCANNER = {
     # categories/sources never show. See scanner/dashboard.review_settings().
     "REVIEW": {"window_hours": 24, "min_headroom": 30, "hide_categories": [], "hide_sources": []},
 }
+
+# ---------------------------------------------------------------------------
+# Crypto opportunity finder (albright_crypto_app). allowlist and rss_feeds
+# can also be edited on the app's Settings page (stored in the database,
+# which then takes priority over these). Never put wallet secrets or exchange
+# keys here - the app has no setting for them and never needs one.
+# ---------------------------------------------------------------------------
+CRYPTO = {
+    "budget_usd": 0,
+    "allowlist": ["github.com"],
+    "rss_feeds": [],
+    "github_queries": ["label:bounty state:open", "label:\"💎 Bounty\" state:open"],
+    "scan_interval_hours": 4,
+    "alert_min_ev_per_hour": 15,
+    "alert_min_confidence": "medium",
+    "ai_daily_limit": 30,
+}
+# Optional, read-only: raises GitHub's search rate limit for scan_crypto.
+# Public data only - a token with no scopes is enough.
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")

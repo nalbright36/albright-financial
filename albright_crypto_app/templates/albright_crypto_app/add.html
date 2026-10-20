@@ -1,0 +1,24 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 760px;">
+    <a href="{% url 'albright_crypto_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Opportunities</a>
+    <h1 style="margin: 12px 0 8px;">Add an opportunity</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">Paste the link and the text exactly as you found it. It gets the same fact extraction, safety check and scoring as anything scanned.</p>
+
+    <p class="crypto-warning" style="margin-bottom: 20px;">Never paste a seed phrase, private key or exchange API key - here or anywhere. This app doesn't store them and no legitimate opportunity needs them.</p>
+
+    <form method="post" class="card">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-secondary);">{{ field.help_text }}</span>{% endif %}
+            {% for error in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ error }}</span>{% endfor %}
+        </div>
+        {% endfor %}
+        {% for error in form.non_field_errors %}<p class="crypto-danger">{{ error }}</p>{% endfor %}
+        <button type="submit" class="btn btn-primary">Add &amp; score</button>
+    </form>
+</div>
+{% endblock %}

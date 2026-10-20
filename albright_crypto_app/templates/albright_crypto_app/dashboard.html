@@ -1,0 +1,131 @@
+{% extends "index.html" %}
+{% load crypto_links %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 20px;">
+        <h1 style="margin: 0;">Crypto opportunities</h1>
+        <a href="{% url 'albright_crypto_app:add' %}" class="btn btn-primary">Add opportunity</a>
+    </div>
+
+    {% if unchecked_sources %}
+    <p class="crypto-warning" style="margin-bottom: 20px;">
+        {{ unchecked_sources }} active source{{ unchecked_sources|pluralize }} {{ unchecked_sources|pluralize:"hasn't,haven't" }} had {{ unchecked_sources|pluralize:"its,their" }} terms checked.
+        <a href="{% url 'albright_crypto_app:settings' %}">Review sources</a>
+    </p>
+    {% endif %}
+
+    <!-- Tiles: what's real (confirmed earnings) is kept apart from what's only potential. -->
+    <div class="grid grid-4" style="margin-bottom: 24px;">
+        <a href="{% url 'albright_crypto_app:earnings' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Confirmed earnings</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;{% if tiles.earned_all_time > 0 %} color: var(--gain);{% endif %}">${{ tiles.earned_all_time|floatformat:2 }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ tiles.earned_this_month|floatformat:2 }} this month</div>
+        </a>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Potential (not earned)</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">${{ tiles.potential|floatformat:2 }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Expected value of active opportunities - an estimate, not money</div>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Hours logged</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.hours_logged|floatformat:1 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Realized $/hour</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{% if tiles.realized_per_hour is not None %}${{ tiles.realized_per_hour|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Confirmed earnings ÷ hours logged</div>
+        </div>
+    </div>
+
+    <nav class="scanner-tabs" id="crypto-tabs">
+        {% for key, label, count in tabs %}
+        <a href="?tab={{ key }}" class="scanner-tab{% if key == tab %} is-active{% endif %}" data-tab="{{ key }}">{{ label }} <span class="tab-badge">{{ count }}</span></a>
+        {% endfor %}
+    </nav>
+
+    <form method="get" class="scanner-controls" id="crypto-filters">
+        <input type="hidden" name="tab" value="{{ tab }}">
+        <select name="type" aria-label="Reward type">
+            <option value="">All types</option>
+            {% for value, label in reward_types %}<option value="{{ value }}"{% if filters.type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="confidence" aria-label="Confidence">
+            <option value="">All confidence</option>
+            {% for value, label in levels %}<option value="{{ value }}"{% if filters.confidence == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="status" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for value, label in statuses %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        {% if filters.type or filters.confidence or filters.status %}<a href="?tab={{ tab }}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
+    </form>
+
+    {% if tab == "blocked" %}
+    <p class="crypto-danger" style="margin-bottom: 16px;">Blocked opportunities matched a scam or theft pattern (asking for keys, deposits to unlock, lookalike domains...). They never appear in Ranked. Treat links here as dangerous.</p>
+    {% elif tab == "excluded" %}
+    <p class="crypto-warning" style="margin-bottom: 16px;">Excluded: these require spending, or cost more than your ${{ budget_usd|floatformat:2 }} budget (CRYPTO["budget_usd"]). Shown for reference only.</p>
+    {% endif %}
+
+    <div class="card" style="padding: 0;">
+    {% if opportunities %}
+    <div style="overflow-x: auto;">
+    <table class="holdings" id="crypto-table">
+        <thead>
+            <tr>
+                <th class="lot-title-col">Opportunity</th>
+                <th>Reward</th>
+                <th class="num">EV/hour</th>
+                <th>Confidence</th>
+                <th>Risk</th>
+                <th>Automation</th>
+                <th>Deadline</th>
+                <th>Source</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for opp in opportunities %}
+            <tr data-opportunity-id="{{ opp.pk }}">
+                <td class="lot-title">
+                    <a href="{% url 'albright_crypto_app:opportunity' opp.pk %}">{{ opp.title }}</a>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ opp.get_status_display }}{% if opp.extraction_status != "done" %} &middot; facts not extracted{% endif %}</div>
+                    {% if tab == "blocked" %}
+                    <ul class="crypto-reasons" style="font-size: 0.75rem; color: var(--loss); margin-top: 4px;">
+                        {% for reason in opp.safety_reasons %}<li>{{ reason }}</li>{% endfor %}
+                    </ul>
+                    {% elif tab == "excluded" %}
+                    <div style="font-size: 0.75rem; color: var(--warn);">{{ opp.exclude_reason }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if opp.reward_usd is not None %}<span class="num">${{ opp.reward_usd|floatformat:2 }}</span>{% elif opp.reward_currency %}{{ opp.reward_currency }}{% else %}&mdash;{% endif %}
+                    <div><span class="badge neutral">{{ opp.get_reward_type_display }}</span></div>
+                </td>
+                <td class="num">
+                    {% if opp.ev_per_hour is not None %}${{ opp.ev_per_hour|floatformat:2 }}
+                    <div class="crypto-range">${{ opp.ev_per_hour_low|floatformat:2 }}&ndash;${{ opp.ev_per_hour_high|floatformat:2 }}</div>
+                    {% else %}&mdash;<div class="crypto-range">EV ${{ opp.ev_mid|floatformat:2 }} (hours unknown)</div>{% endif %}
+                </td>
+                <td><span class="badge {% if opp.confidence == 'high' %}gain{% elif opp.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ opp.confidence }}</span></td>
+                <td>
+                    <span class="badge {% if opp.safety_verdict == 'block' %}loss{% elif opp.safety_verdict == 'warn' %}warn{% else %}gain{% endif %}">{{ opp.get_safety_verdict_display }}</span>
+                    <span class="crypto-range">{{ opp.risk_score }}/100</span>
+                </td>
+                <td><span class="badge neutral">{{ opp.automation }}</span></td>
+                <td>{% if opp.deadline %}{{ opp.deadline|date:"M j, g:i A" }}{% else %}&mdash;{% endif %}</td>
+                <td>
+                    <span style="font-size: 0.8125rem;">{{ opp.source.get_kind_display }}</span>
+                    <div style="font-size: 0.75rem;">{% external_link opp.url opp.domain %}</div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="color: var(--text-secondary); padding: var(--space-5);">Nothing here yet.{% if tab == "ranked" %} Run <code>python manage.py scan_crypto</code>, or <a href="{% url 'albright_crypto_app:add' %}">add one you found</a>.{% endif %}</p>
+    {% endif %}
+    </div>
+</div>
+{% endblock %}

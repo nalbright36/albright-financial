@@ -22,4 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("", include("albright_trading_app.urls")),
     path("albright_reselling_app/", include("albright_reselling_app.urls")),
+    path("albright_crypto_app/", include("albright_crypto_app.urls")),
 ]

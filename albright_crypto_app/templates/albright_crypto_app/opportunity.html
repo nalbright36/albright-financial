@@ -1,0 +1,175 @@
+{% extends "index.html" %}
+{% load crypto_links %}
+{% load cache_bust %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <a href="{% url 'albright_crypto_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Opportunities</a>
+
+    <div class="card__header" style="margin: 12px 0 16px; align-items: flex-start;">
+        <div style="min-width: 0;">
+            <h1 style="margin: 0; font-size: var(--text-2xl); overflow-wrap: anywhere;">{{ opp.title }}</h1>
+            <div style="margin-top: 6px; font-size: 0.8125rem; color: var(--text-secondary);">
+                {{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% external_link opp.url %}
+            </div>
+        </div>
+        <span class="badge {% if opp.safety_verdict == 'block' %}loss{% elif opp.safety_verdict == 'warn' %}warn{% else %}gain{% endif %}">{{ opp.get_safety_verdict_display }}</span>
+    </div>
+
+    {% if opp.safety_verdict == "block" %}
+    <div class="crypto-danger" style="margin-bottom: 20px;">
+        <strong>Blocked - don't act on this.</strong> It matched patterns behind most crypto theft:
+        <ul class="crypto-reasons">{% for reason in opp.safety_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+    </div>
+    {% elif opp.excluded %}
+    <div class="crypto-warning" style="margin-bottom: 20px;"><strong>Excluded:</strong> {{ opp.exclude_reason }} (budget ${{ budget_usd|floatformat:2 }}).</div>
+    {% endif %}
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <div>
+            <!-- Scores: four separate numbers, never merged into one -->
+            <section class="card" style="margin-bottom: 20px;">
+                <div class="card__header"><span class="card__label">Scores</span></div>
+                <div class="grid grid-2" style="gap: var(--space-4);">
+                    <div>
+                        <div class="row-count">Expected value / hour</div>
+                        <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding: 0;">{% if opp.ev_per_hour is not None %}${{ opp.ev_per_hour|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+                        <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
+                            Per job: ${{ opp.ev_low|floatformat:2 }} &ndash; ${{ opp.ev_mid|floatformat:2 }} &ndash; ${{ opp.ev_high|floatformat:2 }} (low / mid / high).
+                            The reward times the chance it actually pays (by type and evidence), minus costs{% if opp.hours_estimate %}, over {{ opp.hours_estimate|floatformat:1 }} h{% else %}; hours unknown, so no hourly rate{% endif %}.
+                        </p>
+                    </div>
+                    <div>
+                        <div class="row-count">Confidence</div>
+                        <span class="badge {% if opp.confidence == 'high' %}gain{% elif opp.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ opp.confidence }}</span>
+                        <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
+                            High = an explicit reward from an official (allowlisted) source for a bounty, promo or microtask. Medium = an amount is stated. Low = no stated amount or no evidence.
+                        </p>
+                    </div>
+                    <div>
+                        <div class="row-count">Risk</div>
+                        <span class="num">{{ opp.risk_score }}/100</span>
+                        <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
+                            From the safety check: scam patterns block outright; wallet connections, signing, fees, urgency, KYC and unverified domains each add risk. "OK" means no red flags found - not a guarantee.
+                        </p>
+                    </div>
+                    <div>
+                        <div class="row-count">Automation</div>
+                        <span class="badge neutral">{{ opp.automation }}</span>
+                        <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
+                            Share of steps a script could do without logging in, signing or spending ({{ opp.automatable_steps }} of {{ steps|length }}).
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" style="margin-bottom: 20px;">
+                <div class="card__header"><span class="card__label">Facts</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Extraction: {{ opp.get_extraction_status_display }}</span></div>
+                <div class="grid grid-2" style="gap: var(--space-3); font-size: 0.875rem;">
+                    <div><div class="row-count">Reward</div>{% if opp.reward_usd is not None %}${{ opp.reward_usd|floatformat:2 }}{% else %}not stated{% endif %}{% if opp.reward_currency %} ({{ opp.reward_currency }}){% endif %}</div>
+                    <div><div class="row-count">Type</div>{{ opp.get_reward_type_display }}</div>
+                    <div><div class="row-count">Evidence</div>{{ opp.get_evidence_display }}{% if opp.official_source %} &middot; official source{% endif %}</div>
+                    <div><div class="row-count">Deadline</div>{% if opp.deadline %}{{ opp.deadline|date:"M j, Y g:i A" }}{% else %}&mdash;{% endif %}</div>
+                    <div><div class="row-count">Hours</div>{% if opp.hours_estimate %}{{ opp.hours_estimate|floatformat:1 }}{% else %}unknown{% endif %}</div>
+                    <div><div class="row-count">Costs</div>${{ opp.costs_usd|floatformat:2 }}{% if opp.requires_spending %} &middot; requires spending{% endif %}</div>
+                </div>
+                {% if opp.evidence_quote %}
+                <div class="row-count" style="margin-top: 12px;">Evidence quote (checked against the text)</div>
+                <blockquote class="crypto-quote" id="evidence-quote">“{{ opp.evidence_quote }}”</blockquote>
+                {% endif %}
+                {% if opp.eligibility_notes %}<p style="margin: 12px 0 0; font-size: 0.8125rem;"><strong>Eligibility:</strong> {{ opp.eligibility_notes }}</p>{% endif %}
+                {% if opp.metadata.labels %}<p style="margin: 8px 0 0; font-size: 0.75rem;">{% for label in opp.metadata.labels %}<span class="badge neutral" style="margin-right: 4px;">{{ label }}</span>{% endfor %}{% if opp.metadata.repo %} &middot; {{ opp.metadata.repo }}{% endif %}</p>{% endif %}
+            </section>
+
+            <section class="card" style="margin-bottom: 20px;">
+                <div class="card__header"><span class="card__label">Safety check</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Domain: {{ opp.domain|default:"none" }} ({{ opp.domain_status|default:"unknown" }})</span></div>
+                {% if opp.safety_reasons %}
+                <ul class="crypto-reasons" id="safety-reasons">{% for reason in opp.safety_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+                {% else %}<p style="margin: 0; color: var(--text-secondary);">No red flags found (this is not a guarantee).</p>{% endif %}
+            </section>
+
+            <section class="card">
+                <div class="card__header"><span class="card__label">Source text</span></div>
+                <pre class="crypto-source-text" id="source-text">{{ opp.raw_text|default:"(no text)" }}</pre>
+            </section>
+        </div>
+
+        <div>
+            <section class="card" style="margin-bottom: 20px;">
+                <div class="card__header"><span class="card__label">Status</span><span>{{ opp.get_status_display }}</span></div>
+                <form method="post" class="crypto-status-buttons">
+                    {% csrf_token %}<input type="hidden" name="action" value="status">
+                    {% for value, label in statuses %}
+                    <button type="submit" name="status" value="{{ value }}" class="btn btn-secondary btn-sm{% if opp.status == value %} is-current{% endif %}">{{ label }}</button>
+                    {% endfor %}
+                </form>
+            </section>
+
+            <section class="card" style="margin-bottom: 20px;" id="steps">
+                <div class="card__header"><span class="card__label">Steps</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">You do these yourself - this app never connects a wallet, signs, or spends</span></div>
+                {% if steps %}
+                <ul class="crypto-steps">
+                    {% for step in steps %}
+                    <li class="{% if step.done %}is-done{% endif %}">
+                        <form method="post" action="{% url 'albright_crypto_app:toggle_step' opp.pk step.pk %}" class="js-step-form">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm" aria-pressed="{% if step.done %}true{% else %}false{% endif %}" aria-label="Mark step {{ forloop.counter }} {% if step.done %}not done{% else %}done{% endif %}">{% if step.done %}&#10003;{% else %}&#9744;{% endif %}</button>
+                        </form>
+                        <span class="crypto-step__text">{{ step.text }}{% if step.automatable %} <span class="badge neutral">scriptable</span>{% endif %}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p style="margin: 0; color: var(--text-secondary);">No steps extracted.</p>{% endif %}
+            </section>
+
+            <section class="card" style="margin-bottom: 20px;">
+                <div class="card__header"><span class="card__label">Time</span><span class="num">{{ minutes_logged }} min logged</span></div>
+                <form method="post" class="grid grid-2" style="gap: var(--space-2); align-items: end;">
+                    {% csrf_token %}<input type="hidden" name="action" value="time">
+                    <div class="field" style="margin: 0;"><label>Minutes</label>{{ time_form.minutes }}</div>
+                    <div class="field" style="margin: 0;"><label>Date</label>{{ time_form.date }}</div>
+                    <div class="field" style="margin: 0;"><label>Note</label>{{ time_form.note }}</div>
+                    <div><button type="submit" class="btn btn-secondary">Log time</button></div>
+                    {% if time_form.errors %}<div class="crypto-warning" style="grid-column: 1 / -1;">{{ time_form.errors }}</div>{% endif %}
+                </form>
+                {% if time_logs %}
+                <table class="holdings" style="margin-top: 12px;"><tbody>
+                    {% for log in time_logs %}<tr><td>{{ log.date|date:"M j" }}</td><td class="num">{{ log.minutes }} min</td><td>{{ log.note }}</td></tr>{% endfor %}
+                </tbody></table>
+                {% endif %}
+            </section>
+
+            <section class="card" style="margin-bottom: 20px;" id="record-earning">
+                <div class="card__header"><span class="card__label">Record earning</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Only money actually received</span></div>
+                <form method="post" class="grid grid-2" style="gap: var(--space-2); align-items: end;">
+                    {% csrf_token %}<input type="hidden" name="action" value="earning">
+                    {% for field in earning_form %}<div class="field" style="margin: 0;"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for e in field.errors %}<span style="color: var(--loss); font-size: 0.75rem;">{{ e }}</span>{% endfor %}</div>{% endfor %}
+                    <div><button type="submit" class="btn btn-primary">Record earning</button></div>
+                </form>
+                {% if earnings %}
+                <table class="holdings" style="margin-top: 12px;"><tbody>
+                    {% for e in earnings %}<tr><td>{{ e.date|date:"M j, Y" }}</td><td class="num">{{ e.amount.normalize }} {{ e.currency }}</td><td class="num">${{ e.usd_value_at_receipt|floatformat:2 }}</td><td>{% if e.tx_link %}{% external_link e.tx_link "tx" %}{% endif %}</td></tr>{% endfor %}
+                </tbody></table>
+                {% endif %}
+            </section>
+
+            <section class="card">
+                <div class="card__header"><span class="card__label">Correct the facts</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Saving re-runs the safety check and scores</span></div>
+                <form method="post">
+                    {% csrf_token %}<input type="hidden" name="action" value="edit">
+                    {% for field in edit_form %}
+                    <div class="field"><label for="{{ field.id_for_label }}">{% if field.field.widget.input_type == "checkbox" %}{{ field }} {% endif %}{{ field.label }}</label>{% if field.field.widget.input_type != "checkbox" %}{{ field }}{% endif %}{% for e in field.errors %}<span style="color: var(--loss); font-size: 0.75rem;">{{ e }}</span>{% endfor %}</div>
+                    {% endfor %}
+                    {% if edit_form.non_field_errors %}<div class="crypto-warning">{{ edit_form.non_field_errors }}</div>{% endif %}
+                    <button type="submit" class="btn btn-secondary">Save &amp; re-score</button>
+                </form>
+            </section>
+        </div>
+    </div>
+</div>
+<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}
