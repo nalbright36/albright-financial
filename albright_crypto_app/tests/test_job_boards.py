@@ -163,9 +163,10 @@ class JobBoardTests(TestCase):
         self.assertIn("remotive.com", config.allowlist())
         self.assertIn("remoteok.com", config.allowlist())
         with override_settings(CRYPTO={**CFG, "allowlist": []}):
-            self.assertEqual(config.allowlist(), ["remotive.com", "remoteok.com"])
+            self.assertEqual(config.allowlist(), list(config.BUILT_IN_ALLOWLIST))
+            self.assertEqual(config.allowlist()[:2], ["remotive.com", "remoteok.com"])
         config.set_value("allowlist", ["github.com", "remoteok.com"])
-        self.assertEqual(config.allowlist(), ["github.com", "remoteok.com", "remotive.com"])
+        self.assertEqual(config.allowlist()[:3], ["github.com", "remoteok.com", "remotive.com"])
 
 
 @override_settings(CRYPTO=CFG)

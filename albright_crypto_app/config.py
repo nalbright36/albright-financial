@@ -12,6 +12,10 @@ DEFAULTS = {
     "skills": ["Python", "Django", "PostgreSQL", "data pipelines", "API integrations", "web scraping", "Excel", "VBA",
                "Power BI", "automation", "financial applications"],
     "freelance_min_skill_match": 50, "alert_min_skill_match": 60,
+    # HN Who is hiring: a remote (non-contract) posting is kept from this skill match up.
+    "hn_min_skill_match": 60,
+    # Generated proposals stay under this many words.
+    "proposal_max_words": 200,
 }
 EDITABLE_KEYS = ("allowlist", "rss_feeds", "skills")
 CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
@@ -33,8 +37,9 @@ def set_value(key, value):
     ConfigOverride.objects.update_or_create(key=key, defaults={"value": value})
 
 
-# The job-board adapters' sites (models.Source.ATTRIBUTED_KINDS) - always verified.
-BUILT_IN_ALLOWLIST = ("remotive.com", "remoteok.com")
+# The job-board adapters' sites (models.Source.ATTRIBUTED_KINDS) and HN - always verified.
+BUILT_IN_ALLOWLIST = ("remotive.com", "remoteok.com", "himalayas.app", "jobicy.com", "arbeitnow.com",
+                      "news.ycombinator.com")
 
 
 def allowlist():

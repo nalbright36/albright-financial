@@ -113,7 +113,8 @@ class TypeSeparationTests(TestCase):
         self.assertIn("testnet", dict(crypto["reward_types"]))
         self.assertNotIn("freelance", dict(crypto["reward_types"]))
         self.assertEqual([k for k, _l in income["reward_types"]],
-                         ["freelance", "bounty", "research_study", "competition", "bonus", "settlement", "unknown"])
+                         ["freelance", "bounty", "research_study", "competition", "bonus", "settlement",
+                          "paid_task", "unknown"])
 
     def test_tiles_are_per_type(self):
         crypto = self.client.get(reverse("albright_crypto_app:crypto")).context["tiles"]

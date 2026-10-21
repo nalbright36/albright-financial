@@ -1,0 +1,51 @@
+{% extends "index.html" %}
+{% block title %}Email alerts · Opportunities{% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 820px;">
+    <a href="{% url 'albright_crypto_app:settings' %}" style="font-size: 0.8125rem;">&larr; Settings</a>
+    <h1 style="margin: 12px 0 8px;">Email alerts</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">
+        Job-alert emails from Upwork, Fiverr, LinkedIn, Indeed or any site, read from one Gmail label. Each email is split into its separate postings,
+        safety-checked and scored like everything else. Access is <strong>read-only</strong> ({{ scope }}): this app never sends, deletes, labels or changes an email.
+    </p>
+
+    <section class="card" style="margin-bottom: 20px;" id="gmail-connection">
+        <div class="card__header"><span class="card__label">Gmail</span>
+            {% if connection %}<span class="badge gain">connected</span>{% else %}<span class="badge neutral">not connected</span>{% endif %}</div>
+        {% if connection %}
+        <p style="margin: 0 0 12px;">Connected as <strong>{{ connection.email|default:"(unknown address)" }}</strong> since {{ connection.connected_at|date:"M j, Y" }}. The token is stored encrypted.</p>
+        <form method="post" action="{% url 'albright_crypto_app:gmail_disconnect' %}">{% csrf_token %}
+            <button type="submit" class="btn btn-secondary">Disconnect Gmail</button></form>
+        {% elif configured %}
+        <form method="post" action="{% url 'albright_crypto_app:gmail_connect' %}">{% csrf_token %}
+            <button type="submit" class="btn btn-primary" id="connect-gmail">Connect Gmail</button></form>
+        <p style="margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Google will ask you to allow "View your email messages and settings" - nothing more.</p>
+        {% else %}
+        <div class="crypto-warning">
+            Gmail isn't set up on this server yet. In Google Cloud, create an OAuth client (type "Web application"), enable the Gmail API,
+            add this redirect URI, and set <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code>:
+            <div style="margin-top: 6px;"><code>{{ redirect_uri }}</code></div>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <div class="card__header"><span class="card__label">Label</span>
+            {% if source %}<span style="font-size: 0.75rem; color: var(--text-secondary);">{{ processed }} email{{ processed|pluralize }} processed{% if source.last_checked %} &middot; last checked {{ source.last_checked|date:"M j, g:i A" }}{% endif %}</span>{% endif %}</div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="field">
+                <label for="{{ form.label.id_for_label }}">Gmail label to read</label>
+                {{ form.label }}
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ form.label.help_text }}</span>
+                {% for error in form.label.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ error }}</span>{% endfor %}
+            </div>
+            <button type="submit" class="btn btn-secondary">Save label</button>
+        </form>
+        <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
+            Each scan (<code>python manage.py scan_crypto</code>) reads up to 10 new emails from this label - one AI call each, within your daily AI limit and monthly budget.
+            Every email is imported once; postings keep the link from the email.
+        </p>
+    </section>
+</div>
+{% endblock %}

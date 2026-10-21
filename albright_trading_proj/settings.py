@@ -316,3 +316,7 @@ CRYPTO = {
 # Optional, read-only: raises GitHub's search rate limit for scan_crypto.
 # Public data only - a token with no scopes is enough.
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+# Opportunities app "Email alerts" source: a Google Cloud OAuth client (type "Web application")
+# with redirect URI <site>/opportunities/gmail/callback/. Only the gmail.readonly scope is ever requested.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")

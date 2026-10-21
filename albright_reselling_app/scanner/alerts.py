@@ -29,6 +29,7 @@ from django.utils import timezone
 from .. import selling
 from ..scanner_models import (
     AIReview, AlertSent, BidWatch, CriticalAlertSent, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
+    WatchlistAlertSkip,
 )
 from .ai_review_service import months_review_cost
 from .dashboard import (
@@ -301,10 +302,28 @@ def _format_watchlist_message(watch, now):
     return "\n".join(lines)
 
 
+def watchlist_alert_skip_reason(watch, lot):
+    """Why the closing-soon alert should NOT go out, or None to send it:
+    only when I've set a max bid and the current bid (as of the last scan)
+    is below it."""
+    if watch.my_max_bid is None:
+        return "no_max"
+    if lot.current_price >= watch.my_max_bid:
+        return "at_or_above_max"
+    return None
+
+
 def send_watchlist_alerts(now=None):
-    """Exactly one Telegram alert per watchlisted lot, the first time its
-    auction is ALERTS["watchlist_minutes"] (default 60) or less from
-    closing - never before, never twice (AlertSent, kind="watchlist" -
+    """At most one Telegram alert per watchlisted lot, once its auction is
+    ALERTS["watchlist_minutes"] (default 60) or less from closing - and
+    only if I've set a max bid that the current bid (as of the last scan)
+    is still below. No max, or the bid already at/above it: nothing is sent
+    and a WatchlistAlertSkip records the decision, so the frequent
+    watchlist_alerts loop doesn't re-check it every pass - but it's
+    re-evaluated if a later scan updates the lot (e.g. the bid dropped on a
+    relist) or I change my max bid before close.
+
+    Never before the window, never twice (AlertSent, kind="watchlist" -
     get_or_create so two overlapping calls, e.g. the management command's
     --loop-minutes and a scan_lots run both landing at once, can never
     double-send). Ignores quiet hours by construction, same as every
@@ -323,11 +342,21 @@ def send_watchlist_alerts(now=None):
     watches = (
         BidWatch.objects.active().filter(lot__end_time__gt=now, lot__end_time__lte=cutoff)
         .exclude(lot_id__in=already_alerted)
-        .select_related("lot", "lot__evaluation", "lot__user_estimate")
+        .select_related("lot", "lot__evaluation", "lot__user_estimate", "lot__watchlist_alert_skip")
     )
 
     sent = []
     for watch in watches:
+        lot = watch.lot
+        skip = getattr(lot, "watchlist_alert_skip", None)
+        if skip is not None and skip.still_applies(lot, watch):
+            continue  # already decided "don't send" for this exact scan + max bid
+        reason = watchlist_alert_skip_reason(watch, lot)
+        if reason:
+            WatchlistAlertSkip.objects.update_or_create(lot=lot, defaults={
+                "reason": reason, "lot_last_seen": lot.last_seen, "current_bid": lot.current_price,
+                "my_max_bid": watch.my_max_bid})
+            continue
         _record, created = AlertSent.objects.get_or_create(lot=watch.lot, kind="watchlist")
         if not created:
             continue  # a concurrent call already claimed this one

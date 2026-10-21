@@ -135,6 +135,31 @@ class AlertSent(models.Model):
         return f"AlertSent({self.lot_id}, {self.kind}) @ {self.sent_at}"
 
 
+class WatchlistAlertSkip(models.Model):
+    """The watchlist "closing soon" alert was checked for this lot and NOT
+    sent - no max bid set, or the current bid was already at/above it
+    (scanner.alerts.send_watchlist_alerts). Records what that decision was
+    based on, so the frequent watchlist_alerts loop doesn't re-check the
+    same state every pass, but does re-evaluate once a later scan updates
+    the lot (lot.last_seen moves - e.g. the bid dropped on a relist) or my
+    max bid changes. Sending the alert still goes through AlertSent."""
+    REASON_CHOICES = [("no_max", "No max bid set"), ("at_or_above_max", "Current bid at or above my max")]
+
+    lot = models.OneToOneField(SourcedLot, on_delete=models.CASCADE, related_name="watchlist_alert_skip")
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+    lot_last_seen = models.DateTimeField(null=True, blank=True)   # the scan the decision was based on
+    current_bid = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    my_max_bid = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    checked_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"WatchlistAlertSkip({self.lot_id}, {self.reason})"
+
+    def still_applies(self, lot, watch):
+        """Same scan and same max bid as when it was decided - nothing to re-check."""
+        return self.lot_last_seen == lot.last_seen and self.my_max_bid == watch.my_max_bid
+
+
 class CriticalAlertSent(models.Model):
     """Rate-limits scanner.alerts.send_critical_alert() to at most one per
     source+alert_type every CRITICAL_ALERT_COOLDOWN (6h) - these are

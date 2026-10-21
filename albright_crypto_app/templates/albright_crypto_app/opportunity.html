@@ -78,6 +78,10 @@
                     <div><div class="row-count">Location</div>{{ opp.location_requirement|default:"not stated" }}</div>
                     <div><div class="row-count">Apply by</div>{% if opp.application_deadline %}{{ opp.application_deadline|date:"M j, Y g:i A" }}{% else %}&mdash;{% endif %}</div>
                     <div><div class="row-count">Refundable deposit</div>{% if opp.refundable_deposit_usd %}${{ opp.refundable_deposit_usd|floatformat:2 }} (you get it back - not spending){% else %}none{% endif %}</div>
+                    {% if opp.reward_type == "paid_task" or opp.platform_name or opp.application_status %}
+                    <div id="paid-task"><div class="row-count">Platform</div>{{ opp.platform_name|default:"not set" }}</div>
+                    <div><div class="row-count">Application status</div>{% if opp.application_status %}{{ opp.get_application_status_display }}{% else %}not set{% endif %}</div>
+                    {% endif %}
                     <div style="grid-column: 1 / -1;" id="skills-required"><div class="row-count">Skills required{% if opp.skill_match is not None %} &middot; {{ opp.skill_match }}% match{% endif %}</div>
                         {% for skill in opp.skills_required %}<span class="badge {% if skill in my_matched_skills %}gain{% else %}neutral{% endif %}" style="margin: 0 4px 4px 0;">{{ skill }}</span>{% empty %}none listed{% endfor %}
                         {% if opp.skills_required %}<div style="font-size: 0.75rem; color: var(--text-secondary);">Highlighted: in your skills profile (Settings).</div>{% endif %}
@@ -99,6 +103,75 @@
                 <ul class="crypto-reasons" id="safety-reasons">{% for reason in opp.safety_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
                 {% else %}<p style="margin: 0; color: var(--text-secondary);">No red flags found (this is not a guarantee).</p>{% endif %}
             </section>
+
+            <!-- Walk me through it: a saved plan (AI, within the shared limits). Never runs any code. -->
+            <section class="card" style="margin-bottom: 20px;" id="walkthrough">
+                <div class="card__header"><span class="card__label">Walk me through it</span>
+                    <form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="walkthrough">
+                        <button type="submit" class="btn btn-{% if walkthrough %}secondary{% else %}primary{% endif %} btn-sm" id="walkthrough-button">{% if walkthrough %}Regenerate{% else %}Walk me through it{% endif %}</button>
+                    </form></div>
+                {% if walkthrough %}
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 10px;">
+                    {{ walkthrough.created_at|date:"M j, Y g:i A" }} &middot; ${{ walkthrough.cost|floatformat:4 }}
+                    {% if walkthroughs|length > 1 %}&middot; Earlier: {% for w in walkthroughs %}{% if w.pk != walkthrough.pk %}<a href="?walkthrough={{ w.pk }}#walkthrough">{{ w.created_at|date:"M j g:i A" }}</a>{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}{% endif %}
+                </div>
+                {% with c=walkthrough.content %}
+                {% if c.warnings %}<div class="crypto-warning" style="margin-bottom: 12px;" id="walkthrough-warnings"><ul class="crypto-reasons" style="margin: 0;">{% for w in c.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+                {% for section in c.sections %}
+                <div class="row-count" style="margin-top: 10px;">{{ section.title }}</div>
+                {% if section.items|length == 1 %}<p style="margin: 4px 0 0; font-size: 0.875rem;">{{ section.items.0 }}</p>
+                {% else %}<ul style="margin: 4px 0 0; padding-left: 18px; font-size: 0.875rem;">{% for item in section.items %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+                {% endfor %}
+                {% if c.kind == "github" %}
+                <div class="row-count" style="margin-top: 10px;">Payout terms (quoted from the issue)</div>
+                {% if c.payout_quote %}<blockquote class="crypto-quote" id="payout-quote">“{{ c.payout_quote }}”</blockquote>{% else %}<p style="margin: 4px 0 0; font-size: 0.875rem; color: var(--text-secondary);">No payout terms found in the issue text - ask the maintainer.</p>{% endif %}
+                {% endif %}
+                <div class="row-count" style="margin-top: 10px;">Difficulty &amp; time</div>
+                <p style="margin: 4px 0 0; font-size: 0.875rem;"><span class="badge neutral">{{ c.difficulty }}</span> {% if c.time_estimate_hours %}~{{ c.time_estimate_hours }} h{% else %}time unclear{% endif %}{% if c.time_estimate_note %} - {{ c.time_estimate_note }}{% endif %}</p>
+                {% if c.steps %}
+                <div class="row-count" style="margin-top: 10px;">Steps</div>
+                <ol style="margin: 4px 0 0; padding-left: 20px; font-size: 0.875rem;">{% for step in c.steps %}<li>{{ step.text }}{% if step.needs_wallet %} <span class="badge warn">manual - wallet</span>{% endif %}</li>{% endfor %}</ol>
+                <form method="post" style="margin-top: 10px;">{% csrf_token %}<input type="hidden" name="action" value="walkthrough_steps"><input type="hidden" name="walkthrough" value="{{ walkthrough.pk }}">
+                    <button type="submit" class="btn btn-secondary btn-sm" id="walkthrough-to-checklist">Add these steps to my checklist</button></form>
+                {% endif %}
+                {% if c.questions %}
+                <div class="row-count" style="margin-top: 10px;">Questions to ask</div>
+                <ul style="margin: 4px 0 0; padding-left: 18px; font-size: 0.875rem;">{% for q in c.questions %}<li>{{ q }}</li>{% endfor %}</ul>
+                {% endif %}
+                {% endwith %}
+                {% else %}
+                <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">A step-by-step plan for this opportunity{% if opp.source.kind == "github" or "github.com" in opp.url %} - reads the issue, comments, README/CONTRIBUTING and files it mentions (text only; nothing is downloaded or run){% endif %}. Uses one AI call.</p>
+                {% endif %}
+            </section>
+
+            {% if is_income %}
+            <!-- Proposal & tailored resume: only facts from My profile. -->
+            <section class="card" style="margin-bottom: 20px;" id="drafts">
+                <div class="card__header"><span class="card__label">Apply</span>
+                    <div style="display: flex; gap: var(--space-2);">
+                        <form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="proposal"><button type="submit" class="btn btn-primary btn-sm" id="generate-proposal">Generate proposal</button></form>
+                        <form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="resume"><button type="submit" class="btn btn-secondary btn-sm" id="tailor-resume">Tailor resume</button></form>
+                    </div></div>
+                {% if not profile_ready %}<p class="crypto-warning" style="margin: 0 0 10px;">Fill in <a href="{% url 'albright_crypto_app:profile' %}">My profile</a> first - drafts only ever use facts from it.</p>{% endif %}
+                {% for d in drafts %}
+                <div class="crypto-draft" style="border-top: 1px solid var(--glass-border); padding-top: 10px; margin-top: 10px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-bottom: 6px;">
+                        <strong>{{ d.get_kind_display }}</strong>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ d.created_at|date:"M j, g:i A" }}{% if d.kind == "proposal" %} &middot; {{ d.content.word_count }} words (limit {{ d.content.max_words }}){% endif %}</span>
+                        {% if d.sent_at %}<span class="badge gain">sent {{ d.sent_at|date:"M j" }}</span>{% endif %}
+                        <button type="button" class="btn btn-secondary btn-sm js-copy" data-copy-target="draft-text-{{ d.pk }}">Copy</button>
+                        <a class="btn btn-secondary btn-sm" href="{% url 'albright_crypto_app:draft_download' d.pk %}">Download {% if d.kind == "resume" %}.docx{% else %}.txt{% endif %}</a>
+                        {% if not d.sent_at %}<form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="draft_sent"><input type="hidden" name="draft" value="{{ d.pk }}"><button type="submit" class="btn btn-secondary btn-sm">Mark sent</button></form>{% endif %}
+                    </div>
+                    {% if d.unmet_requirements %}<div class="crypto-warning" style="margin-bottom: 6px; font-size: 0.8125rem;"><strong>Requirements you don't show:</strong> {{ d.unmet_requirements|join:"; " }}</div>{% endif %}
+                    {% if d.removed_claims %}<div class="crypto-danger" style="margin-bottom: 6px; font-size: 0.8125rem;"><strong>Removed (not in your profile):</strong><ul class="crypto-reasons" style="margin: 4px 0 0;">{% for r in d.removed_claims %}<li>{{ r }}</li>{% endfor %}</ul></div>{% endif %}
+                    <pre class="crypto-source-text" id="draft-text-{{ d.pk }}">{{ d.text }}</pre>
+                </div>
+                {% empty %}
+                <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">Generates a short proposal or a tailored resume from <a href="{% url 'albright_crypto_app:profile' %}">My profile</a> only - it never adds experience you didn't list, and shows which requirements you don't meet.</p>
+                {% endfor %}
+            </section>
+            {% endif %}
 
             <section class="card">
                 <div class="card__header"><span class="card__label">Source text</span></div>

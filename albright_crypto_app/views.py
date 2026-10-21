@@ -10,6 +10,7 @@ transaction, approves a token, or buys anything - it tracks opportunities
 and what I did about them.
 """
 import csv
+import secrets
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -30,6 +31,12 @@ from .models import (ACTIVE_STATUSES, LEVELS, OPPORTUNITY_TYPES, REWARD_TYPES_BY
                      Opportunity, Source, TaskStep, TimeLog)
 from .pipeline import add_manual, rescore, sync_sources
 from .skills import matched_skills, skill_match
+
+# Features added later, kept together: walkthroughs, profile + drafts, Gmail.
+from . import gmail, my_profile, walkthrough as walkthroughs  # noqa: E402
+from .extraction import ExtractionLimitReached  # noqa: E402
+from .forms import GmailLabelForm, ProfileForm  # noqa: E402
+from .models import ApplicationDraft, GmailConnection, MyProfile, Walkthrough  # noqa: E402
 
 TABS = [("ranked", "Ranked"), ("doing", "Doing"), ("submitted", "Submitted"), ("blocked", "Blocked"),
         ("excluded", "Excluded")]
@@ -56,7 +63,8 @@ def tab_queryset(tab, opportunity_type=None):
     if tab == "excluded":
         return not_blocked.filter(excluded=True).order_by("-discovered_at")
     if tab in ("doing", "submitted"):
-        return not_blocked.filter(excluded=False, status=tab).order_by(F("deadline").asc(nulls_last=True))
+        statuses = ("submitted", "applied") if tab == "submitted" else (tab,)   # applied counts as submitted
+        return not_blocked.filter(excluded=False, status__in=statuses).order_by(F("deadline").asc(nulls_last=True))
     return (not_blocked.filter(excluded=False, status__in=("new", "reviewing"))
             .annotate(conf_rank=CONFIDENCE_ORDER)
             .order_by(F("ev_per_hour").desc(nulls_last=True), "-conf_rank", "-discovered_at"))
@@ -188,8 +196,28 @@ def opportunity_detail(request, pk):
                 earning_form.save()
                 messages.success(request, "Earning recorded.")
                 return redirect("albright_crypto_app:opportunity", pk=opp.pk)
+        elif action in AI_ACTIONS:
+            return _run_ai_action(request, opp, action)
+        elif action == "walkthrough_steps":
+            chosen = get_object_or_404(Walkthrough, pk=request.POST.get("walkthrough"), opportunity=opp)
+            created = walkthroughs.add_steps_to_checklist(chosen)
+            messages.success(request, f"Added {len(created)} step{'s' if len(created) != 1 else ''} to the checklist."
+                             if created else "Those steps are already in the checklist.")
+            return redirect(reverse("albright_crypto_app:opportunity", args=[opp.pk]) + "#steps")
+        elif action == "draft_sent":
+            draft = get_object_or_404(ApplicationDraft, pk=request.POST.get("draft"), opportunity=opp)
+            draft.sent_at = timezone.now()
+            draft.save(update_fields=["sent_at"])
+            opp.status = "applied"
+            opp.save(update_fields=["status"])
+            messages.success(request, "Marked as sent - status set to Applied.")
+            return redirect(reverse("albright_crypto_app:opportunity", args=[opp.pk]) + "#drafts")
 
     minutes = opp.time_logs.aggregate(t=Sum("minutes"))["t"] or 0
+    saved_walkthroughs = list(opp.walkthroughs.all())
+    shown = next((w for w in saved_walkthroughs if str(w.pk) == request.GET.get("walkthrough")),
+                 saved_walkthroughs[0] if saved_walkthroughs else None)
+    profile = MyProfile.objects.filter(pk=MyProfile.SINGLETON_PK).first()
     return render(request, "albright_crypto_app/opportunity.html", {
         "opp": opp, "edit_form": edit_form, "time_form": time_form, "earning_form": earning_form,
         "steps": opp.task_steps.all(), "time_logs": opp.time_logs.all(), "earnings": opp.earnings.all(),
@@ -197,7 +225,66 @@ def opportunity_detail(request, pk):
         "type_label": TYPE_LABELS[opp.opportunity_type], "is_income": opp.opportunity_type == "income",
         "dashboard_url_name": f"albright_crypto_app:{opp.opportunity_type}",
         "my_matched_skills": matched_skills(opp.skills_required, config.skills()),
+        "walkthroughs": saved_walkthroughs, "walkthrough": shown,
+        "drafts": opp.drafts.all(), "profile_ready": bool(profile and (profile.work_history or profile.summary)),
     })
+
+
+AI_ACTIONS = {"walkthrough": "Walkthrough", "proposal": "Proposal", "resume": "Tailored resume"}
+
+
+def _run_ai_action(request, opp, action):
+    """Walk me through it / Generate proposal / Tailor resume - each one AI
+    call within the shared limits; failures become a message, never an error page."""
+    anchor = "#walkthrough" if action == "walkthrough" else "#drafts"
+    try:
+        if action == "walkthrough":
+            walkthroughs.generate(opp)
+        else:
+            if opp.opportunity_type != "income":
+                messages.error(request, "Proposals and resumes are for income opportunities.")
+                return redirect(reverse("albright_crypto_app:opportunity", args=[opp.pk]))
+            profile = MyProfile.load()
+            if not (profile.work_history or profile.summary or profile.skills):
+                messages.error(request, "Fill in My profile first - drafts only use facts from it.")
+                return redirect("albright_crypto_app:profile")
+            draft = (my_profile.generate_proposal if action == "proposal" else my_profile.tailor_resume)(opp, profile)
+            if draft.removed_claims:
+                messages.warning(request, f"Removed {len(draft.removed_claims)} sentence(s) with facts that aren't in your profile.")
+        messages.success(request, f"{AI_ACTIONS[action]} ready.")
+    except ExtractionLimitReached as exc:
+        messages.error(request, f"Not generated: {exc}.")
+    except walkthroughs.WalkthroughError as exc:
+        messages.error(request, str(exc))
+    except Exception:  # noqa: BLE001 - already recorded as an AI error row
+        messages.error(request, "The AI request failed - try again in a minute.")
+    return redirect(reverse("albright_crypto_app:opportunity", args=[opp.pk]) + anchor)
+
+
+@login_required
+def draft_download(request, pk):
+    """A tailored resume as .docx, or a proposal as .txt."""
+    draft = get_object_or_404(ApplicationDraft.objects.select_related("opportunity"), pk=pk)
+    stem = f"{draft.kind}-{draft.opportunity_id}-{draft.created_at:%Y%m%d}"
+    if draft.kind == "resume":
+        response = HttpResponse(my_profile.resume_docx(MyProfile.load(), draft), content_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        response["Content-Disposition"] = f'attachment; filename="{stem}.docx"'
+        return response
+    response = HttpResponse(draft.text, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{stem}.txt"'
+    return response
+
+
+@login_required
+def profile_view(request):
+    profile = MyProfile.load()
+    form = ProfileForm(request.POST or None, initial=ProfileForm.initial_for(profile))
+    if request.method == "POST" and form.is_valid():
+        form.save(profile)
+        messages.success(request, "Profile saved.")
+        return redirect("albright_crypto_app:profile")
+    return render(request, "albright_crypto_app/profile.html", {"form": form, "profile": profile})
 
 
 @login_required
@@ -218,6 +305,17 @@ def add_opportunity(request):
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
         opp, created = add_manual(data["url"], data["title"], data["text"], opportunity_type=data["opportunity_type"])
+        if created and opp.opportunity_type == "income" and (data.get("reward_type") or data.get("platform_name")
+                                                            or data.get("pay_rate_usd") is not None
+                                                            or data.get("application_status")):
+            # What I typed wins over the AI's reading (e.g. a paid task tracked by hand).
+            if data.get("reward_type"):
+                opp.reward_type = data["reward_type"]
+            if data.get("pay_rate_usd") is not None:
+                opp.pay_rate_usd, opp.pay_type = data["pay_rate_usd"], "hourly"
+            opp.platform_name = data.get("platform_name") or opp.platform_name
+            opp.application_status = data.get("application_status") or opp.application_status
+            rescore(opp)
         if created:
             messages.success(request, "Added - facts extracted and scored." if opp.extraction_status == "done"
                              else "Added and scored (AI extraction skipped - limit reached or unavailable).")
@@ -321,3 +419,95 @@ def legacy_redirect(request, rest=""):
     url = reverse("albright_crypto_app:dashboard") + rest
     query = request.META.get("QUERY_STRING", "")
     return HttpResponsePermanentRedirect(f"{url}?{query}" if query else url)
+
+
+# ---------------------------------------------------------------------------
+# Gmail (Email alerts source) - read-only, gmail.readonly scope only
+# ---------------------------------------------------------------------------
+
+GMAIL_STATE_KEY = "opportunities_gmail_oauth_state"
+
+
+def _gmail_redirect_uri(request):
+    return request.build_absolute_uri(reverse("albright_crypto_app:gmail_callback"))
+
+
+def email_source():
+    return Source.objects.filter(kind="email", opportunity_type="income").first()
+
+
+@login_required
+def gmail_setup(request):
+    connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
+    source = email_source()
+    form = GmailLabelForm(request.POST or None,
+                          initial={"label": (source.options or {}).get("label") if source else "opportunities"})
+    if request.method == "POST" and form.is_valid():
+        label = form.cleaned_data["label"].strip()
+        if source is None:
+            source = Source(kind="email", opportunity_type="income")
+        source.name, source.url, source.options = f"Gmail label: {label}", f"gmail:{label}", {"label": label}
+        source.save()
+        messages.success(request, f'Reading the "{label}" label.')
+        return redirect("albright_crypto_app:gmail")
+    configured = True
+    try:
+        gmail.client_config()
+    except gmail.GmailError:
+        configured = False
+    return render(request, "albright_crypto_app/gmail.html", {
+        "connection": connection, "source": source, "form": form, "configured": configured,
+        "redirect_uri": _gmail_redirect_uri(request), "scope": gmail.SCOPE,
+        "processed": source.processed_items.count() if source else 0,
+    })
+
+
+@login_required
+@require_POST
+def gmail_connect(request):
+    state = secrets.token_urlsafe(24)
+    request.session[GMAIL_STATE_KEY] = state
+    try:
+        return redirect(gmail.authorization_url(_gmail_redirect_uri(request), state))
+    except gmail.GmailError as exc:
+        messages.error(request, str(exc))
+        return redirect("albright_crypto_app:gmail")
+
+
+@login_required
+def gmail_callback(request):
+    expected = request.session.pop(GMAIL_STATE_KEY, None)
+    if not expected or request.GET.get("state") != expected:
+        messages.error(request, "That Gmail sign-in didn't match a connect request from this page - nothing was saved.")
+        return redirect("albright_crypto_app:gmail")
+    if request.GET.get("error") or not request.GET.get("code"):
+        messages.error(request, "Gmail access wasn't granted.")
+        return redirect("albright_crypto_app:gmail")
+    try:
+        token = gmail.exchange_code(request.GET["code"], _gmail_redirect_uri(request))
+        connection = GmailConnection(pk=GmailConnection.SINGLETON_PK, scope=token.get("scope", ""))
+        connection.set_token(token)
+        connection.email = gmail.GmailReader(connection).profile_email()
+        connection.save()
+    except (gmail.GmailError, ValueError, KeyError) as exc:
+        messages.error(request, str(exc) if isinstance(exc, gmail.GmailError) else "Couldn't finish connecting Gmail.")
+        return redirect("albright_crypto_app:gmail")
+    if email_source() is None:
+        Source.objects.create(kind="email", opportunity_type="income", name="Gmail label: opportunities",
+                              url="gmail:opportunities", options={"label": "opportunities"})
+    messages.success(request, f"Gmail connected ({connection.email}) - read-only.")
+    return redirect("albright_crypto_app:gmail")
+
+
+@login_required
+@require_POST
+def gmail_disconnect(request):
+    connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
+    if connection:
+        try:
+            gmail.revoke(connection.get_token())
+        except Exception:  # noqa: BLE001 - unreadable token: just forget it
+            pass
+        connection.delete()
+    messages.success(request, "Gmail disconnected - the stored token was deleted.")
+    return redirect("albright_crypto_app:gmail")

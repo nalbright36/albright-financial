@@ -6,7 +6,9 @@ from django import forms
 from .extraction import quote_in_text
 from .guards import reject_secrets
 from .links import is_web_url
-from .models import OPPORTUNITY_TYPES, REWARD_TYPES_BY_OPPORTUNITY_TYPE, Earning, Opportunity, Source, TimeLog
+from . import my_profile
+from .models import (APPLICATION_STATUSES, INCOME_REWARD_TYPES, OPPORTUNITY_TYPES, REWARD_TYPES_BY_OPPORTUNITY_TYPE,
+                     Earning, MyProfile, Opportunity, Source, TimeLog)
 
 INPUT = {"class": "ledger-input"}
 
@@ -33,6 +35,20 @@ class ManualOpportunityForm(forms.Form):
     title = forms.CharField(max_length=500, required=False, widget=forms.TextInput(attrs=INPUT))
     text = forms.CharField(widget=forms.Textarea(attrs={**INPUT, "rows": 10}),
                            help_text="Paste the description, terms, and reward details as they appear.")
+    # Optional, income only - e.g. a paid task (annotation, AI training, testing platform) tracked by hand.
+    reward_type = forms.ChoiceField(choices=[("", "Let the AI decide")] + [c for c in INCOME_REWARD_TYPES if c[0] != "unknown"],
+                                    required=False, label="Income category (optional)", widget=forms.Select(attrs=INPUT))
+    platform_name = forms.CharField(max_length=120, required=False, label="Platform (paid tasks)",
+                                    widget=forms.TextInput(attrs={**INPUT, "placeholder": "e.g. an annotation platform"}))
+    pay_rate_usd = forms.DecimalField(max_digits=10, decimal_places=2, min_value=0, required=False,
+                                      label="Pay rate (USD per hour)", widget=forms.NumberInput(attrs={**INPUT, "step": "0.01"}))
+    application_status = forms.ChoiceField(choices=[("", "-")] + APPLICATION_STATUSES, required=False,
+                                           label="Application status", widget=forms.Select(attrs=INPUT))
+
+    def clean_platform_name(self):
+        name = self.cleaned_data["platform_name"].strip()
+        reject_secrets(name)
+        return name
 
     def clean_url(self):
         url = self.cleaned_data["url"]
@@ -47,7 +63,7 @@ class ManualOpportunityForm(forms.Form):
 
 
 INCOME_FIELDS = ["pay_type", "pay_rate_usd", "skills", "location_requirement", "application_deadline",
-                 "hours_is_estimate", "refundable_deposit_usd"]
+                 "hours_is_estimate", "refundable_deposit_usd", "platform_name", "application_status"]
 DATETIME_LOCAL = {**INPUT, "type": "datetime-local"}
 
 
@@ -63,7 +79,7 @@ class OpportunityEditForm(forms.ModelForm):
         fields = ["reward_usd", "reward_currency", "reward_type", "evidence", "evidence_quote", "deadline",
                   "hours_estimate", "costs_usd", "requires_spending",
                   "pay_type", "pay_rate_usd", "location_requirement", "application_deadline",
-                  "hours_is_estimate", "refundable_deposit_usd",
+                  "hours_is_estimate", "refundable_deposit_usd", "platform_name", "application_status",
                   "eligibility_notes", "notes"]
         widgets = {
             "deadline": forms.DateTimeInput(attrs=DATETIME_LOCAL, format="%Y-%m-%dT%H:%M"),
@@ -181,7 +197,7 @@ class IncomeSourceForm(forms.ModelForm):
     search = forms.CharField(required=False, max_length=100, widget=forms.TextInput(attrs={
         **INPUT, "placeholder": "e.g. django"}), label="Remotive search (optional)")
     tag = forms.CharField(required=False, max_length=60, widget=forms.TextInput(attrs={
-        **INPUT, "placeholder": "e.g. python"}), label="Remote OK tag (optional)")
+        **INPUT, "placeholder": "e.g. python"}), label="Tag - Remote OK / Jobicy (optional)")
 
     class Meta:
         model = Source
@@ -213,7 +229,13 @@ class IncomeSourceForm(forms.ModelForm):
         from .collectors.job_boards import ENDPOINTS, endpoint_url
         cleaned = super().clean()
         kind = cleaned.get("kind")
-        if kind in Source.ATTRIBUTED_KINDS:
+        if kind == "hn_hiring":
+            # The official HN API, always - the latest monthly thread is found automatically.
+            from .collectors.hn_hiring import API as HN_API
+            self.instance.options = {}
+            cleaned["url"] = HN_API
+            cleaned["name"] = cleaned.get("name") or "HN: Who is hiring"
+        elif kind in Source.ATTRIBUTED_KINDS:
             # The request always goes to the site's fixed endpoint; url is that
             # endpoint plus the options, so each combination is its own source.
             options = {k: (cleaned.get(k) or "").strip() for k in ENDPOINTS[kind][1] if (cleaned.get(k) or "").strip()}
@@ -231,3 +253,75 @@ class IncomeSourceForm(forms.ModelForm):
         if Source.objects.filter(kind=kind, url=cleaned.get("url"), opportunity_type="income").exists():
             raise forms.ValidationError("That source is already in your list.")
         return cleaned
+
+
+class GmailLabelForm(forms.Form):
+    label = forms.CharField(max_length=100, initial="opportunities", widget=forms.TextInput(attrs=INPUT),
+                            help_text="The Gmail label your job-alert emails go to (set up a Gmail filter to apply it).")
+
+
+def _textarea(rows, placeholder=""):
+    return forms.Textarea(attrs={**INPUT, "rows": rows, "placeholder": placeholder})
+
+
+class ProfileForm(forms.Form):
+    """My profile - the only facts the resume and proposal generators may
+    use. Plain-text formats (parsed by my_profile.parse_*)."""
+    name = forms.CharField(max_length=120, required=False, widget=forms.TextInput(attrs=INPUT))
+    headline = forms.CharField(max_length=200, required=False, widget=forms.TextInput(attrs=INPUT))
+    summary = forms.CharField(required=False, widget=_textarea(4))
+    skills = forms.CharField(required=False, widget=_textarea(4, "Python, Django, PostgreSQL ..."),
+                             help_text="One per line or comma-separated.")
+    work_history = forms.CharField(required=False, widget=_textarea(10, "Employer | Title | 2019-01 | 2023-06\n- What you did"),
+                                   help_text="Employer | Title | Start | End, then \"- bullet\" lines. Blank line between jobs.")
+    projects = forms.CharField(required=False, widget=_textarea(6, "Project | https://link\n- What it does"),
+                               help_text="Name | link (optional), then \"- bullet\" lines.")
+    education = forms.CharField(required=False, widget=_textarea(3), help_text="School | Degree | Year, one per line.")
+    certifications = forms.CharField(required=False, widget=_textarea(3), help_text="One per line.")
+    links = forms.CharField(required=False, widget=_textarea(3, "GitHub | https://github.com/..."),
+                            help_text="Label | URL, one per line.")
+    resume_template = forms.CharField(required=False, widget=_textarea(12),
+                                      help_text="Placeholders: " + ", ".join("{%s}" % p for p in my_profile.RESUME_PLACEHOLDERS))
+    proposal_template = forms.CharField(required=False, widget=_textarea(8),
+                                        help_text="Placeholders: " + ", ".join("{%s}" % p for p in my_profile.PROPOSAL_PLACEHOLDERS))
+
+    @classmethod
+    def initial_for(cls, profile):
+        return {
+            "name": profile.name, "headline": profile.headline, "summary": profile.summary,
+            "skills": "\n".join(profile.skills or []),
+            "work_history": my_profile.format_work_history(profile.work_history),
+            "projects": my_profile.format_projects(profile.projects),
+            "education": my_profile.format_education(profile.education),
+            "certifications": "\n".join(profile.certifications or []),
+            "links": my_profile.format_links(profile.links),
+            "resume_template": profile.resume_template or my_profile.DEFAULT_RESUME_TEMPLATE,
+            "proposal_template": profile.proposal_template or my_profile.DEFAULT_PROPOSAL_TEMPLATE,
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        for name, value in list(cleaned.items()):
+            if isinstance(value, str):
+                reject_secrets(value)
+        links = my_profile.parse_links(cleaned.get("links"))
+        for link in links:
+            if not is_web_url(link.get("url")):
+                self.add_error("links", f"“{link.get('url')}” isn't an http(s) link.")
+        for job in my_profile.parse_work_history(cleaned.get("work_history")):
+            if not job["employer"] or not job["title"]:
+                self.add_error("work_history", f"“{job['employer'] or job['title']}”: use Employer | Title | Start | End.")
+        return cleaned
+
+    def save(self, profile):
+        d = self.cleaned_data
+        profile.name, profile.headline, profile.summary = d["name"], d["headline"], d["summary"]
+        profile.skills = my_profile.parse_skills(d["skills"])
+        profile.work_history = my_profile.parse_work_history(d["work_history"])
+        profile.projects = my_profile.parse_projects(d["projects"])
+        profile.education = my_profile.parse_education(d["education"])
+        profile.certifications = my_profile.parse_lines(d["certifications"])
+        profile.links = my_profile.parse_links(d["links"])
+        profile.resume_template, profile.proposal_template = d["resume_template"], d["proposal_template"]
+        profile.save()
+        return profile

@@ -125,9 +125,27 @@ class NoWalletOrTransactionCodeTests(TestCase):
         self.assertTrue(any(p.name == "views.py" for p in files))
         for path in files:
             code = _code_only(path)
+            if path.name == "gmail.py":
+                # OAuth's own two POSTs (token exchange/refresh, revoke) - checked
+                # exactly in test_gmail_posts_only_to_googles_oauth_endpoints.
+                code = re.sub(r"requests\.post\((TOKEN_URL|REVOKE_URL),", "", code)
             for rule, pattern in FORBIDDEN_CODE.items():
                 with self.subTest(file=path.name, rule=rule):
                     self.assertIsNone(re.search(pattern, code, re.I | re.M), f"{path.name}: {rule}")
+
+    def test_gmail_posts_only_to_googles_oauth_endpoints(self):
+        """The one exception to "no outbound POST": OAuth itself. Every POST
+        in gmail.py goes to Google's token or revoke endpoint (never to the
+        Gmail API), and it never PUTs, PATCHes or DELETEs anything."""
+        from albright_crypto_app import gmail
+        code = _code_only(APP_DIR / "gmail.py")
+        posts = re.findall(r"requests\.post\(([^,]+),", code)
+        self.assertTrue(posts)
+        self.assertEqual(set(posts), {"TOKEN_URL", "REVOKE_URL"})
+        self.assertEqual(gmail.TOKEN_URL, "https://oauth2.googleapis.com/token")
+        self.assertEqual(gmail.REVOKE_URL, "https://oauth2.googleapis.com/revoke")
+        self.assertNotRegex(code, r"requests\.(put|patch|delete|request)\(")
+        self.assertNotIn("gmail.googleapis.com", gmail.TOKEN_URL + gmail.REVOKE_URL)
 
     def test_collectors_only_ever_use_get(self):
         code = _code_only(APP_DIR / "collectors" / "base.py")

@@ -15,7 +15,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from albright_reselling_app.scanner.alerts import send_watchlist_alerts
-from albright_reselling_app.scanner_models import AlertSent, BidWatch, SourcedLot
+from albright_reselling_app.scanner_models import AlertSent, BidWatch, SourcedLot, WatchlistAlertSkip
 
 TELEGRAM_POST = "albright_reselling_app.scanner.alerts.requests.post"
 CREDS = {"TELEGRAM_BOT_TOKEN": "test-token", "TELEGRAM_CHAT_ID": "12345"}
@@ -186,16 +186,127 @@ class SendWatchlistAlertsTests(TestCase):
 
     @mock.patch(TELEGRAM_POST)
     @mock.patch.dict(os.environ, CREDS)
-    def test_message_omits_max_bid_line_when_not_set(self, mock_post):
-        mock_post.return_value = _ok_response()
+    def test_nothing_sent_when_no_max_bid_is_set(self, mock_post):
+        """Replaces "message omits the max-bid line when not set": with no
+        max bid there's no message at all any more (see MaxBidGateTests)."""
         now = timezone.now()
         _make_watch("w11", now + timedelta(minutes=10), my_max_bid=None, current_price="18.00")
 
-        send_watchlist_alerts(now=now)
+        self.assertEqual(send_watchlist_alerts(now=now), [])
+        mock_post.assert_not_called()
 
-        message = mock_post.call_args.kwargs["json"]["text"]
-        self.assertNotIn("Your max", message)
-        self.assertNotIn("headroom", message)
+
+@override_settings(RESELLING_SCANNER={**settings.RESELLING_SCANNER,
+                                      "ALERTS": {**settings.RESELLING_SCANNER.get("ALERTS", {}), "enabled": True}})
+class MaxBidGateTests(TestCase):
+    """The closing-soon alert goes out only when I've set a max bid on the
+    watch AND the current bid (as of the last scan) is below it. Otherwise
+    nothing is sent and the lot is marked handled (WatchlistAlertSkip) -
+    not re-checked every loop, but re-evaluated after a later scan (e.g.
+    the bid dropped on a relist) or if I change my max before close."""
+
+    def setUp(self):
+        self.now = timezone.now()
+        patcher = mock.patch(TELEGRAM_POST, return_value=_ok_response())
+        self.post = patcher.start()
+        self.addCleanup(patcher.stop)
+        env = mock.patch.dict(os.environ, CREDS)
+        env.start()
+        self.addCleanup(env.stop)
+
+    def watch(self, external_id, my_max_bid, current_price):
+        return _make_watch(external_id, self.now + timedelta(minutes=30), my_max_bid=my_max_bid,
+                           current_price=current_price)
+
+    def test_under_max_sends(self):
+        lot, _watch = self.watch("g1", "25.00", "24.99")
+        self.assertEqual(send_watchlist_alerts(now=self.now), [lot.pk])
+        self.post.assert_called_once()
+        self.assertIn("Your max: $25.00 · headroom: $0.01", self.post.call_args.kwargs["json"]["text"])
+        self.assertFalse(WatchlistAlertSkip.objects.filter(lot=lot).exists())
+
+    def test_at_max_sends_nothing(self):
+        lot, _watch = self.watch("g2", "25.00", "25.00")
+        self.assertEqual(send_watchlist_alerts(now=self.now), [])
+        self.post.assert_not_called()
+        skip = WatchlistAlertSkip.objects.get(lot=lot)
+        self.assertEqual((skip.reason, skip.current_bid, skip.my_max_bid),
+                         ("at_or_above_max", Decimal("25.00"), Decimal("25.00")))
+        self.assertFalse(AlertSent.objects.filter(lot=lot, kind="watchlist").exists())
+
+    def test_over_max_sends_nothing(self):
+        lot, _watch = self.watch("g3", "25.00", "31.00")
+        self.assertEqual(send_watchlist_alerts(now=self.now), [])
+        self.post.assert_not_called()
+        self.assertEqual(WatchlistAlertSkip.objects.get(lot=lot).reason, "at_or_above_max")
+
+    def test_no_max_sends_nothing(self):
+        lot, _watch = self.watch("g4", None, "5.00")
+        self.assertEqual(send_watchlist_alerts(now=self.now), [])
+        self.post.assert_not_called()
+        self.assertEqual(WatchlistAlertSkip.objects.get(lot=lot).reason, "no_max")
+
+    def test_handled_lots_are_not_rechecked_every_loop(self):
+        self.watch("g5", "25.00", "31.00")
+        self.watch("g6", None, "5.00")
+        send_watchlist_alerts(now=self.now)
+        with mock.patch("albright_reselling_app.scanner.alerts.watchlist_alert_skip_reason") as decide:
+            for minutes in (5, 10, 15):
+                self.assertEqual(send_watchlist_alerts(now=self.now + timedelta(minutes=minutes)), [])
+        decide.assert_not_called()
+        self.post.assert_not_called()
+
+    def test_reevaluated_when_a_later_scan_shows_the_bid_below_max(self):
+        lot, _watch = self.watch("g7", "25.00", "31.00")
+        send_watchlist_alerts(now=self.now)
+        self.post.assert_not_called()
+
+        # A later scan (e.g. a relist) saves the lot with a lower bid - last_seen moves.
+        lot.refresh_from_db()
+        lot.current_price = Decimal("12.00")
+        lot.save()
+
+        self.assertEqual(send_watchlist_alerts(now=self.now + timedelta(minutes=5)), [lot.pk])
+        self.post.assert_called_once()
+        self.assertIn("Current bid: $12.00", self.post.call_args.kwargs["json"]["text"])
+        # ...and still only ever once.
+        self.assertEqual(send_watchlist_alerts(now=self.now + timedelta(minutes=10)), [])
+        self.post.assert_called_once()
+
+    def test_later_scan_still_at_or_above_max_stays_quiet(self):
+        lot, _watch = self.watch("g8", "25.00", "31.00")
+        send_watchlist_alerts(now=self.now)
+        lot.refresh_from_db()
+        lot.current_price = Decimal("26.00")
+        lot.save()
+        self.assertEqual(send_watchlist_alerts(now=self.now + timedelta(minutes=5)), [])
+        self.post.assert_not_called()
+        skip = WatchlistAlertSkip.objects.get(lot=lot)
+        self.assertEqual((skip.current_bid, skip.lot_last_seen), (Decimal("26.00"), lot.last_seen))
+
+    def test_reevaluated_when_i_set_or_raise_my_max_before_close(self):
+        lot, watch = self.watch("g9", None, "10.00")
+        send_watchlist_alerts(now=self.now)
+        self.post.assert_not_called()
+        watch.my_max_bid = Decimal("20.00")
+        watch.save()
+        self.assertEqual(send_watchlist_alerts(now=self.now + timedelta(minutes=5)), [lot.pk])
+
+    def test_nothing_after_close_even_if_the_bid_dropped(self):
+        lot, _watch = self.watch("g10", "25.00", "31.00")
+        send_watchlist_alerts(now=self.now)
+        lot.refresh_from_db()
+        lot.current_price = Decimal("12.00")
+        lot.save()
+        self.assertEqual(send_watchlist_alerts(now=self.now + timedelta(minutes=31)), [])
+        self.post.assert_not_called()
+
+    def test_hard_delete_clears_the_skip_record(self):
+        from albright_reselling_app.scanner.bid_watch import hard_delete
+        lot, watch = self.watch("g11", None, "10.00")
+        send_watchlist_alerts(now=self.now)
+        hard_delete(watch)
+        self.assertFalse(WatchlistAlertSkip.objects.filter(lot=lot).exists())
 
 
 class WatchlistAlertsCommandTests(TestCase):

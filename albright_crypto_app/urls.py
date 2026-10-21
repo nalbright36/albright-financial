@@ -14,4 +14,10 @@ urlpatterns = [
     path("earnings/", views.earnings, name="earnings"),
     path("settings/", views.settings_view, name="settings"),
     path("leave/", views.leave, name="leave"),
+    path("profile/", views.profile_view, name="profile"),
+    path("drafts/<int:pk>/download/", views.draft_download, name="draft_download"),
+    path("gmail/", views.gmail_setup, name="gmail"),
+    path("gmail/connect/", views.gmail_connect, name="gmail_connect"),
+    path("gmail/callback/", views.gmail_callback, name="gmail_callback"),
+    path("gmail/disconnect/", views.gmail_disconnect, name="gmail_disconnect"),
 ]

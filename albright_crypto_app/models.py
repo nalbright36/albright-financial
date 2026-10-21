@@ -23,7 +23,13 @@ CRYPTO_REWARD_TYPES = [
 ]
 INCOME_REWARD_TYPES = [
     ("freelance", "Freelance"), ("bounty", "Bounty"), ("research_study", "Research study"),
-    ("competition", "Competition"), ("bonus", "Bonus"), ("settlement", "Settlement"), ("unknown", "Unknown"),
+    ("competition", "Competition"), ("bonus", "Bonus"), ("settlement", "Settlement"),
+    ("paid_task", "Paid task"),   # annotation, AI training, testing platforms - tracked by hand
+    ("unknown", "Unknown"),
+]
+APPLICATION_STATUSES = [
+    ("not_applied", "Not applied"), ("applied", "Applied"), ("assessment", "Assessment"),
+    ("approved", "Approved"), ("active", "Active"), ("rejected", "Rejected"),
 ]
 REWARD_TYPES = CRYPTO_REWARD_TYPES[:-1] + [rt for rt in INCOME_REWARD_TYPES if rt[0] != "bounty"]
 REWARD_TYPES_BY_OPPORTUNITY_TYPE = {"crypto": CRYPTO_REWARD_TYPES, "income": INCOME_REWARD_TYPES}
@@ -33,10 +39,11 @@ VERDICTS = [("ok", "OK"), ("warn", "Warning"), ("block", "Blocked")]
 LEVELS = [("high", "High"), ("medium", "Medium"), ("low", "Low")]
 AUTOMATION = [("high", "High"), ("medium", "Medium"), ("low", "Low"), ("none", "None")]
 STATUSES = [
-    ("new", "New"), ("reviewing", "Reviewing"), ("doing", "Doing"), ("submitted", "Submitted"), ("paid", "Paid"),
-    ("rejected", "Rejected"), ("skipped", "Skipped"), ("expired", "Expired"),
+    ("new", "New"), ("reviewing", "Reviewing"), ("doing", "Doing"), ("applied", "Applied"),
+    ("submitted", "Submitted"), ("paid", "Paid"), ("rejected", "Rejected"), ("skipped", "Skipped"),
+    ("expired", "Expired"),
 ]
-ACTIVE_STATUSES = ("new", "reviewing", "doing", "submitted")
+ACTIVE_STATUSES = ("new", "reviewing", "doing", "applied", "submitted")
 CENT = Decimal("0.01")
 EXTRACTION_STATES = [("pending", "Pending"), ("done", "Done"), ("skipped", "Skipped (limit)"), ("error", "Error")]
 
@@ -55,13 +62,18 @@ class ConfigOverride(models.Model):
 class Source(models.Model):
     KINDS = [("github", "GitHub"), ("rss", "RSS"), ("manual", "Manual"),
              ("rss_income", "RSS (income)"), ("api_income", "API (income)"),
-             ("remotive", "Remotive"), ("remoteok", "Remote OK")]
+             ("remotive", "Remotive"), ("remoteok", "Remote OK"),
+             ("himalayas", "Himalayas"), ("jobicy", "Jobicy"), ("arbeitnow", "Arbeitnow"),
+             ("hn_hiring", "HN: Who is hiring"), ("email", "Email alerts")]
     # Never run until terms_checked is ticked.
-    INCOME_KINDS = ("rss_income", "api_income", "remotive", "remoteok")
+    INCOME_KINDS = ("rss_income", "api_income", "remotive", "remoteok", "himalayas", "jobicy", "arbeitnow",
+                    "hn_hiring")
     # Job boards whose terms require crediting them ("via ...", linking to the
     # job on their site) and forbid passing their jobs on: (name, domain).
     # Their opportunities stay in this app - no AI extraction, no Telegram.
-    ATTRIBUTED_KINDS = {"remotive": ("Remotive", "remotive.com"), "remoteok": ("Remote OK", "remoteok.com")}
+    ATTRIBUTED_KINDS = {"remotive": ("Remotive", "remotive.com"), "remoteok": ("Remote OK", "remoteok.com"),
+                        "himalayas": ("Himalayas", "himalayas.app"), "jobicy": ("Jobicy", "jobicy.com"),
+                        "arbeitnow": ("Arbeitnow", "arbeitnow.com")}
 
     name = models.CharField(max_length=200)
     kind = models.CharField(max_length=10, choices=KINDS)
@@ -91,7 +103,10 @@ class Source(models.Model):
 
     @property
     def runnable(self):
-        """Active, and - for income sources - its terms have been checked."""
+        """Active, and - for income sources - its terms have been checked.
+        Email alerts need a connected Gmail account instead (my own mail)."""
+        if self.kind == "email":
+            return self.active and GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).exists()
         return self.active and (not self.needs_terms or self.terms_checked)
 
     @property
@@ -140,6 +155,9 @@ class Opportunity(models.Model):
     skill_match = models.PositiveSmallIntegerField(null=True, blank=True)   # 0-100: share of skills_required I have
     location_requirement = models.CharField(max_length=200, null=True, blank=True)
     application_deadline = models.DateTimeField(null=True, blank=True)
+    # Paid tasks (annotation, AI training, testing platforms) - tracked by hand.
+    platform_name = models.CharField(max_length=120, blank=True)
+    application_status = models.CharField(max_length=12, choices=APPLICATION_STATUSES, blank=True)
     extraction_status = models.CharField(max_length=10, choices=EXTRACTION_STATES, default="pending")
 
     # Safety (core.safety.check_opportunity)
@@ -247,9 +265,16 @@ class Earning(models.Model):
 
 
 class AIExtraction(models.Model):
-    """One extraction call - counts toward ai_daily_limit and the shared
-    monthly AI budget (with the reseller app's AI reviews)."""
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="extractions")
+    """One AI call - counts toward ai_daily_limit and the shared monthly AI
+    budget (with the reseller app's AI reviews). Most belong to an
+    opportunity; splitting an email or filtering HN comments happens before
+    there is one."""
+    PURPOSES = [("extract", "Fact extraction"), ("email_split", "Email alert split"),
+                ("hn_filter", "HN comment filter"), ("walkthrough", "Walkthrough"),
+                ("resume", "Tailored resume"), ("proposal", "Proposal")]
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="extractions",
+                                    null=True, blank=True)
+    purpose = models.CharField(max_length=12, choices=PURPOSES, default="extract")
     created_at = models.DateTimeField(auto_now_add=True)
     model_name = models.CharField(max_length=60, blank=True)
     status = models.CharField(max_length=10, default="done")   # done / error
@@ -270,3 +295,114 @@ class ScanRun(models.Model):
 
     class Meta:
         ordering = ["-started_at"]
+
+
+class ProcessedItem(models.Model):
+    """An email message or HN comment a source has already handled, so it's
+    never imported (or sent to the AI) twice - whether or not it produced
+    any opportunities."""
+    source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name="processed_items")
+    item_id = models.CharField(max_length=200)
+    processed_at = models.DateTimeField(auto_now_add=True)
+    opportunities_created = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("source", "item_id")
+        ordering = ["-processed_at"]
+
+    def __str__(self):
+        return f"{self.source_id}:{self.item_id}"
+
+
+class GmailConnection(models.Model):
+    """The one Gmail account the "Email alerts" source reads (scope
+    gmail.readonly only). The OAuth token is stored encrypted with the same
+    Fernet key as the Alpaca credentials - never in plaintext."""
+    SINGLETON_PK = 1
+    email = models.CharField(max_length=254, blank=True)
+    encrypted_token = models.TextField()
+    scope = models.CharField(max_length=200)
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def set_token(self, token):
+        import json
+        from albright_trading_app.crypto_utils import get_fernet
+        self.encrypted_token = get_fernet().encrypt(json.dumps(token).encode()).decode()
+
+    def get_token(self):
+        import json
+        from albright_trading_app.crypto_utils import get_fernet
+        return json.loads(get_fernet().decrypt(self.encrypted_token.encode()).decode())
+
+    def __str__(self):
+        return f"Gmail: {self.email or 'connected'}"
+
+
+class Walkthrough(models.Model):
+    """A saved "Walk me through it" plan for an opportunity (regenerating
+    makes a new one; older ones stay reopenable)."""
+    KINDS = [("github", "GitHub bounty"), ("income", "Job / freelance / paid task"), ("crypto", "Crypto")]
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="walkthroughs")
+    created_at = models.DateTimeField(auto_now_add=True)
+    kind = models.CharField(max_length=8, choices=KINDS)
+    content = models.JSONField(default=dict)
+    cost = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+    model_name = models.CharField(max_length=60, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self):
+        return f"Walkthrough({self.opportunity_id}, {self.created_at:%Y-%m-%d %H:%M})"
+
+
+class MyProfile(models.Model):
+    """Structured facts about me - the ONLY source the resume and proposal
+    generators may use - plus the editable resume and proposal templates
+    (placeholders like {summary}, {experience}, {proposal_body})."""
+    SINGLETON_PK = 1
+    name = models.CharField(max_length=120, blank=True)
+    headline = models.CharField(max_length=200, blank=True)
+    summary = models.TextField(blank=True)
+    skills = models.JSONField(default=list, blank=True)
+    work_history = models.JSONField(default=list, blank=True)    # [{employer, title, start, end, bullets[]}]
+    projects = models.JSONField(default=list, blank=True)        # [{name, link, bullets[]}]
+    education = models.JSONField(default=list, blank=True)       # [{school, degree, year}]
+    certifications = models.JSONField(default=list, blank=True)  # [str]
+    links = models.JSONField(default=list, blank=True)           # [{label, url}]
+    resume_template = models.TextField(blank=True)
+    proposal_template = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Profile: {self.name or '(unnamed)'}"
+
+    def clean(self):
+        for field in ("name", "headline", "summary", "resume_template", "proposal_template"):
+            reject_secrets(getattr(self, field), field)
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=cls.SINGLETON_PK)[0]
+
+
+class ApplicationDraft(models.Model):
+    """A generated proposal or tailored resume for an income opportunity."""
+    KINDS = [("proposal", "Proposal"), ("resume", "Tailored resume")]
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="drafts")
+    kind = models.CharField(max_length=8, choices=KINDS)
+    created_at = models.DateTimeField(auto_now_add=True)
+    text = models.TextField()                                  # what the copy button copies
+    content = models.JSONField(default=dict, blank=True)       # resume structure (for .docx)
+    key_requirements = models.JSONField(default=list, blank=True)
+    unmet_requirements = models.JSONField(default=list, blank=True)
+    removed_claims = models.JSONField(default=list, blank=True)   # sentences dropped as not in my profile
+    cost = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} for {self.opportunity_id}"

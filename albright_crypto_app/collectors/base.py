@@ -30,6 +30,9 @@ class RawOpportunity:
     # Facts stated in a structured API's own fields (location, tags...), saved
     # as-is by pipeline.store - only the keys in pipeline.STRUCTURED_FACTS.
     facts: dict = field(default_factory=dict)
+    # True when the collector already ran AI extraction on this item (email
+    # alerts, HN): facts is the full validated set and isn't extracted again.
+    facts_complete: bool = False
 
 
 class SourceBlocked(Exception):
@@ -43,6 +46,10 @@ class SourceUnavailable(Exception):
 class BaseCollector:
     kind = "base"
     min_interval = None   # timedelta: the site's minimum time between fetches (pipeline.scan_sources)
+    # Set by pipeline.scan_sources for collectors that use AI themselves
+    # (email alerts, HN): whether AI is allowed this run, and the client.
+    use_ai = True
+    ai_client = None
     request_delay_seconds = 2.0
     timeout_seconds = 20
     retries = 1

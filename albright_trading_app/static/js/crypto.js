@@ -32,4 +32,19 @@
             button.setAttribute("aria-pressed", data.done ? "true" : "false");
         }).catch(function () { button.disabled = false; });
     });
+
+    // Copy buttons (proposal / resume drafts): data-copy-target is the id of
+    // the element whose text is copied. Without the clipboard API the text
+    // stays selectable on the page.
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest(".js-copy");
+        if (!button) return;
+        var source = document.getElementById(button.dataset.copyTarget);
+        if (!source || !navigator.clipboard) return;
+        navigator.clipboard.writeText(source.textContent).then(function () {
+            var label = button.textContent;
+            button.textContent = "Copied";
+            setTimeout(function () { button.textContent = label; }, 1500);
+        });
+    });
 })();

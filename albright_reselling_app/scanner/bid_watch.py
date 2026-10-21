@@ -39,7 +39,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
-from ..scanner_models import AlertSent, BidWatch
+from ..scanner_models import AlertSent, BidWatch, WatchlistAlertSkip
 from .adapters.base import SourceBlocked, SourceUnavailable
 from .adapters.hibid import HiBidAdapter
 from .adapters.maxsold import MaxSoldAdapter
@@ -142,9 +142,10 @@ def soft_remove(watch, now=None):
 
 def hard_delete(watch):
     """The Watchlist page's "Delete": the BidWatch is gone, along with the
-    lot's watchlist AlertSent rows - nothing about it is tracked,
-    analyzed, or protected from prune_lots any more."""
+    lot's watchlist AlertSent / WatchlistAlertSkip rows - nothing about it
+    is tracked, analyzed, or protected from prune_lots any more."""
     AlertSent.objects.filter(lot_id=watch.lot_id, kind="watchlist").delete()
+    WatchlistAlertSkip.objects.filter(lot_id=watch.lot_id).delete()
     watch.delete()
 
 

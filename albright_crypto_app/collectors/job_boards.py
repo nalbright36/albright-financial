@@ -1,6 +1,9 @@
-"""Remotive and Remote OK - public remote-job APIs, one GET per fetch.
+"""Public remote-job APIs - Remotive, Remote OK, Himalayas, Jobicy and
+Arbeitnow - one GET per fetch.
 
-Their terms, enforced here and in pipeline.scan_sources:
+Their terms, enforced here and in pipeline.scan_sources (Himalayas, Jobicy
+and Arbeitnow are treated exactly like the first two: attribution, a
+followed link back, 6 hours between fetches, jobs kept in the app):
   - Remotive: at most 4 fetches a day and 2 requests a minute. Remote OK:
     a descriptive User-Agent. Both: at least MIN_INTERVAL (6 hours) between
     fetches - per site, so even several sources for one site (different
@@ -37,10 +40,37 @@ def _facts_text(description, facts):
     return "\n".join(filter(None, [_plain(description), "\n".join(lines)]))
 
 
+FREELANCE_JOB_TYPES = {"contract", "contractor", "freelance", "freelancer", "part_time", "parttime"}
+
+
 def _reward_type(job_type):
-    """Contract/freelance/part-time work is "freelance"; salaried jobs aren't one of the income reward types."""
-    return "freelance" if str(job_type or "").lower().replace("-", "_") in ("contract", "freelance", "part_time") \
-        else "unknown"
+    """Contract/freelance/part-time work is "freelance"; salaried jobs aren't
+    one of the income reward types. Takes one job type or a list."""
+    types = job_type if isinstance(job_type, (list, tuple)) else [job_type]
+    normalized = {str(t or "").lower().replace("-", "_").replace(" ", "_") for t in types}
+    return "freelance" if normalized & FREELANCE_JOB_TYPES else "unknown"
+
+
+def _annual_salary(low, high, currency="USD"):
+    def amount(v):
+        try:
+            return int(float(v)) if v not in (None, "") and float(v) > 0 else None
+        except (TypeError, ValueError):
+            return None
+    low, high = amount(low), amount(high)
+    symbol = "$" if (currency or "USD").upper() == "USD" else f"{currency} "
+    if low and high:
+        return f"{symbol}{low:,}–{symbol}{high:,} per year"
+    if low or high:
+        return f"{symbol}{(low or high):,} per year"
+    return None
+
+
+def _from_unix(value):
+    try:
+        return datetime.fromtimestamp(int(value), tz=dt_timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def _tags(value):
@@ -151,5 +181,103 @@ def _iso(value):
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt_timezone.utc)
 
 
+class HimalayasCollector(JobBoardCollector):
+    """https://himalayas.app/jobs/api - credit Himalayas and link back to the job on himalayas.app."""
+    kind = "himalayas"
+    endpoint = "https://himalayas.app/jobs/api"
+    option_keys = ()
+    domain = "himalayas.app"
+    site_name = "Himalayas"
+
+    def collect(self, source):
+        payload = self.get(self.endpoint, params={"limit": 20}).json()
+        for job in (payload.get("jobs") if isinstance(payload, dict) else None) or []:
+            url = (job or {}).get("guid") or ""
+            if not isinstance(job, dict) or not _on_site(url, self.domain):
+                continue
+            locations = _tags(job.get("locationRestrictions"))
+            location = ", ".join(locations) if locations else "Remote (worldwide)"
+            salary = _annual_salary(job.get("minSalary"), job.get("maxSalary"), job.get("currency") or "USD")
+            facts = [("Company", job.get("companyName")), ("Employment type", job.get("employmentType")),
+                     ("Seniority", ", ".join(_tags(job.get("seniority")))), ("Location", location),
+                     ("Salary", salary), ("Categories", ", ".join(_tags(job.get("categories"))))]
+            yield RawOpportunity(
+                external_id=f"himalayas:{url}"[:300],
+                url=url,
+                title=_plain(job.get("title") or url)[:500],
+                text=_facts_text(job.get("description") or job.get("excerpt"), facts),
+                metadata={"via": self.site_name, "company": job.get("companyName") or "",
+                          "employment_type": job.get("employmentType") or "", "salary": salary or ""},
+                published=_from_unix(job.get("pubDate")),
+                facts={"reward_type": _reward_type(job.get("employmentType")), "location_requirement": location,
+                       "skills_required": _tags(job.get("skills"))},
+            )
+
+
+class JobicyCollector(JobBoardCollector):
+    """https://jobicy.com/api/v2/remote-jobs - credit Jobicy and link back to the job on jobicy.com."""
+    kind = "jobicy"
+    endpoint = "https://jobicy.com/api/v2/remote-jobs"
+    option_keys = ("tag", "industry", "geo")
+    domain = "jobicy.com"
+    site_name = "Jobicy"
+
+    def collect(self, source):
+        params = {"count": 50, **(self.params(source) or {})}
+        payload = self.get(self.endpoint, params=params).json()
+        for job in (payload.get("jobs") if isinstance(payload, dict) else None) or []:
+            if not isinstance(job, dict) or not job.get("id") or not _on_site(job.get("url"), self.domain):
+                continue
+            job_types = job.get("jobType") if isinstance(job.get("jobType"), list) else [job.get("jobType")]
+            location = str(job.get("jobGeo") or "").strip() or None
+            salary = _annual_salary(job.get("annualSalaryMin"), job.get("annualSalaryMax"), job.get("salaryCurrency"))
+            facts = [("Company", job.get("companyName")), ("Job type", ", ".join(map(str, filter(None, job_types)))),
+                     ("Level", job.get("jobLevel")), ("Location", location), ("Salary", salary),
+                     ("Industry", ", ".join(map(str, job.get("jobIndustry") or [])))]
+            yield RawOpportunity(
+                external_id=f"jobicy:{job['id']}",
+                url=job["url"],
+                title=_plain(job.get("jobTitle") or job["url"])[:500],
+                text=_facts_text(job.get("jobDescription") or job.get("jobExcerpt"), facts),
+                metadata={"via": self.site_name, "company": job.get("companyName") or "", "salary": salary or "",
+                          "published": job.get("pubDate") or ""},
+                published=_iso(job.get("pubDate")),
+                facts={"reward_type": _reward_type(job_types), "location_requirement": location},
+            )
+
+
+class ArbeitnowCollector(JobBoardCollector):
+    """https://www.arbeitnow.com/api/job-board-api - credit Arbeitnow and link back to the job on arbeitnow.com."""
+    kind = "arbeitnow"
+    endpoint = "https://www.arbeitnow.com/api/job-board-api"
+    option_keys = ()
+    domain = "arbeitnow.com"
+    site_name = "Arbeitnow"
+
+    def collect(self, source):
+        payload = self.get(self.endpoint).json()
+        for job in (payload.get("data") if isinstance(payload, dict) else None) or []:
+            if not isinstance(job, dict) or not job.get("slug") or not _on_site(job.get("url"), self.domain):
+                continue
+            location = "Remote" if job.get("remote") else (str(job.get("location") or "").strip() or None)
+            job_types = _tags(job.get("job_types"))
+            facts = [("Company", job.get("company_name")), ("Job type", ", ".join(job_types)),
+                     ("Location", job.get("location")), ("Remote", "yes" if job.get("remote") else "no"),
+                     ("Tags", ", ".join(_tags(job.get("tags"))))]
+            yield RawOpportunity(
+                external_id=f"arbeitnow:{job['slug']}"[:300],
+                url=job["url"],
+                title=_plain(job.get("title") or job["url"])[:500],
+                text=_facts_text(job.get("description"), facts),
+                metadata={"via": self.site_name, "company": job.get("company_name") or "", "remote": bool(job.get("remote"))},
+                published=_from_unix(job.get("created_at")),
+                facts={"reward_type": _reward_type(job_types), "location_requirement": location,
+                       "skills_required": _tags(job.get("tags"))},
+            )
+
+
 ENDPOINTS = {"remotive": (RemotiveCollector.endpoint, RemotiveCollector.option_keys),
-             "remoteok": (RemoteOkCollector.endpoint, RemoteOkCollector.option_keys)}
+             "remoteok": (RemoteOkCollector.endpoint, RemoteOkCollector.option_keys),
+             "himalayas": (HimalayasCollector.endpoint, HimalayasCollector.option_keys),
+             "jobicy": (JobicyCollector.endpoint, JobicyCollector.option_keys),
+             "arbeitnow": (ArbeitnowCollector.endpoint, ArbeitnowCollector.option_keys)}

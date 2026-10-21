@@ -32,6 +32,12 @@ MANUAL_SOURCE_NAMES = {"crypto": "Manual", "income": "Manual (income)"}
 REFUNDABLE_DEPOSIT_REASON = "requires a refundable deposit"
 # Facts a structured API states in its own fields (RawOpportunity.facts) - saved as-is.
 STRUCTURED_FACTS = ("reward_type", "location_requirement", "skills_required")
+# Everything extraction.validate() returns - what a collector that ran the AI itself may set.
+AI_FACT_FIELDS = (
+    "reward_usd", "reward_currency", "reward_type", "evidence", "evidence_quote", "deadline", "hours_estimate",
+    "costs_usd", "requires_spending", "steps", "automatable_steps", "eligibility_notes", "pay_type", "pay_rate_usd",
+    "hours_is_estimate", "skills_required", "location_requirement", "application_deadline", "refundable_deposit_usd",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -129,8 +135,12 @@ def _sync_task_steps(opp):
 def extract_and_score(opp, use_ai=True, client=None):
     """AI facts (when allowed and within limits), then safety + scores.
     Jobs from Remotive / Remote OK are never sent to the AI provider
-    (Source.keep_in_app) - their facts come from the API's own fields."""
-    if use_ai and not opp.source.keep_in_app:
+    (Source.keep_in_app) - their facts come from the API's own fields.
+    An item whose collector already extracted its facts (email alerts, HN)
+    isn't sent to the AI again."""
+    if opp.extraction_status == "done":
+        pass
+    elif use_ai and not opp.source.keep_in_app:
         try:
             facts = extract(opp, client=client)
         except ExtractionLimitReached as exc:
@@ -158,7 +168,11 @@ def store(source, raw):
     it's already stored (same source + external_id)."""
     if Opportunity.objects.filter(source=source, external_id=raw.external_id).exists():
         return None
-    facts = {k: v for k, v in (raw.facts or {}).items() if k in STRUCTURED_FACTS and v not in (None, "", [])}
+    if raw.facts_complete:
+        facts = {k: v for k, v in (raw.facts or {}).items() if k in AI_FACT_FIELDS}
+        facts["extraction_status"] = "done"
+    else:
+        facts = {k: v for k, v in (raw.facts or {}).items() if k in STRUCTURED_FACTS and v not in (None, "", [])}
     return Opportunity.objects.create(
         source=source, opportunity_type=source.opportunity_type, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
         raw_text=raw.text or "", metadata=raw.metadata or {}, **facts,
@@ -210,6 +224,7 @@ def scan_sources(sources=None, use_ai=True, client=None, collectors=None):
             log.info("Skipping %s: fetched less than %s ago", source.name, collector_class.min_interval)
             continue  # not an error - the next scan after the interval picks it up
         collector = collector_class()
+        collector.use_ai, collector.ai_client = use_ai, client
         try:
             for raw in collector.collect(source):
                 opp = store(source, raw)

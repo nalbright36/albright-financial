@@ -471,7 +471,8 @@ class WatchlistAlertTests(TestCase):
         lot = _make_lot("alert-1", current_price="10.00", end_in=timedelta(minutes=10))
         _make_evaluation(lot)
         _make_estimate(lot, my_max_bid="42.29")
-        BidWatch.objects.create(lot=lot, status="watching")
+        # The watchlist alert only goes out with a watch max above the current bid.
+        BidWatch.objects.create(lot=lot, my_max_bid=Decimal("30.00"), status="watching")
 
         send_watchlist_alerts()
 
@@ -483,7 +484,7 @@ class WatchlistAlertTests(TestCase):
     def test_alert_omits_my_line_without_estimate(self, mock_post):
         mock_post.return_value = mock.Mock(raise_for_status=mock.Mock(return_value=None))
         lot = _make_lot("alert-2", end_in=timedelta(minutes=10))
-        BidWatch.objects.create(lot=lot, status="watching")
+        BidWatch.objects.create(lot=lot, my_max_bid=Decimal("30.00"), status="watching")
 
         send_watchlist_alerts()
 

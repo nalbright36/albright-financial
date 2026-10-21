@@ -1,0 +1,29 @@
+{% extends "index.html" %}
+{% block title %}My profile · Opportunities{% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
+    <h1 style="margin: 0 0 8px;">My profile</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">
+        The only facts "Generate proposal" and "Tailor resume" may use. They reorder and emphasize what's here for each posting -
+        they never add employers, dates, skills, numbers or experience that aren't. Anything they write that isn't backed by this page is removed and shown to you.
+    </p>
+
+    <form method="post" class="card" id="profile-form">
+        {% csrf_token %}
+        <div class="grid grid-2" style="gap: var(--space-4); align-items: start;">
+            {% for field in form %}
+            <div class="field"{% if field.name in "summary work_history projects resume_template proposal_template" %} style="grid-column: 1 / -1;"{% endif %}>
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-secondary);">{{ field.help_text }}</span>{% endif %}
+                {% for error in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ error }}</span>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% for error in form.non_field_errors %}<p class="crypto-danger">{{ error }}</p>{% endfor %}
+        <p class="crypto-warning" style="margin: 8px 0 16px;">Don't put passwords, API keys, seed phrases or ID numbers here.</p>
+        <button type="submit" class="btn btn-primary">Save profile</button>
+        {% if profile.updated_at %}<span style="margin-left: 12px; font-size: 0.75rem; color: var(--text-secondary);">Last saved {{ profile.updated_at|date:"M j, Y g:i A" }}</span>{% endif %}
+    </form>
+</div>
+{% endblock %}
