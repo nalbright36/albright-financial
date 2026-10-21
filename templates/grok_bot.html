@@ -52,7 +52,7 @@
                 {% if not prefix %}
                     Showing the whole account - this includes all trades in this account, not just the bot's. Set the prefix Grok puts on its client order IDs to separate them.
                 {% elif data.bot_only %}
-                    Orders, fills and closed trades: only orders whose client order ID starts with “{{ prefix }}” (any capitalization). Account tiles and the equity curve are always the whole account; open positions are marked Bot or Other.
+                    Orders, fills and closed trades: only orders whose client order ID starts with “{{ prefix }}” (any capitalization). Equity and the equity curve are always the whole account; Today&#39;s and Total P&amp;L are the bot&#39;s; open positions are marked Bot or Other.
                 {% else %}
                     Showing the whole account - all trades, including ones not placed by the bot.
                 {% endif %}
@@ -82,21 +82,28 @@
             </div>
             <div class="card">
                 <div class="card__header"><span class="card__label">Today's P&amp;L</span></div>
-                {% if data.account %}
-                <span class="ledger-stat__value num {% if data.account.day_pl >= 0 %}gain{% else %}loss{% endif %}" id="tile-today" style="color: var(--{% if data.account.day_pl >= 0 %}gain{% else %}loss{% endif %});">
-                    {% if data.account.day_pl >= 0 %}+{% endif %}${{ data.account.day_pl|floatformat:2|intcomma }}
+                {% with t=data.tiles.today %}
+                {% if t %}
+                <span class="ledger-stat__value num" id="tile-today" style="color: var(--{% if t.value >= 0 %}gain{% else %}loss{% endif %});">
+                    {% if t.value >= 0 %}+{% endif %}${{ t.value|floatformat:2|intcomma }}
                 </span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{% if data.account.day_pl_pct is not None %}{% if data.account.day_pl_pct >= 0 %}+{% endif %}{{ data.account.day_pl_pct|floatformat:2 }}% vs. yesterday's close{% endif %}</div>
-                {% else %}<span class="ledger-stat__value num">&mdash;</span>{% endif %}
+                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-today-note">{% if t.pct is not None %}{% if t.pct >= 0 %}+{% endif %}{{ t.pct|floatformat:2 }}%{% else %}-{% endif %} &middot; {{ data.tiles.scope }}</div>
+                {% else %}<span class="ledger-stat__value num" id="tile-today">&mdash;</span>
+                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-today-note">{{ data.tiles.scope }}</div>{% endif %}
+                {% endwith %}
             </div>
             <div class="card">
                 <div class="card__header"><span class="card__label">Total P&amp;L ({{ period|upper }})</span></div>
-                {% if data.history and data.history.total_pl is not None %}
-                <span class="ledger-stat__value num" id="tile-total" style="color: var(--{% if data.history.total_pl >= 0 %}gain{% else %}loss{% endif %});">
-                    {% if data.history.total_pl >= 0 %}+{% endif %}${{ data.history.total_pl|floatformat:2|intcomma }}
+                {% with t=data.tiles.total %}
+                {% if t %}
+                <span class="ledger-stat__value num" id="tile-total" style="color: var(--{% if t.value >= 0 %}gain{% else %}loss{% endif %});">
+                    {% if t.value >= 0 %}+{% endif %}${{ t.value|floatformat:2|intcomma }}
                 </span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{% if data.history.total_pl_pct is not None %}{% if data.history.total_pl_pct >= 0 %}+{% endif %}{{ data.history.total_pl_pct|floatformat:2 }}% &middot; {% endif %}whole account</div>
-                {% else %}<span class="ledger-stat__value num">&mdash;</span>{% endif %}
+                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-total-note">{% if t.pct is not None %}{% if t.pct >= 0 %}+{% endif %}{{ t.pct|floatformat:2 }}% &middot; {% endif %}{{ data.tiles.scope }}</div>
+                {% if t.note %}<div style="margin-top: 2px; font-size: 0.6875rem; color: var(--text-tertiary);" id="tile-total-before">includes gains/losses from before this period</div>{% endif %}
+                {% else %}<span class="ledger-stat__value num" id="tile-total">&mdash;</span>
+                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-total-note">{{ data.tiles.scope }}</div>{% endif %}
+                {% endwith %}
             </div>
             <div class="card">
                 <div class="card__header"><span class="card__label">Win rate ({{ period|upper }})</span></div>

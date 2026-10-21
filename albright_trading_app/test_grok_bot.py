@@ -190,7 +190,7 @@ class GrokBotPageTests(TestCase):
         self.assertContains(response, "<title>Grok Bot · Albright Financial</title>")
         self.assertContains(response, "$105,250.50")                  # equity
         self.assertContains(response, "+$1,250.50")                   # today: 105,250.50 - 104,000
-        self.assertContains(response, "+1.20% vs. yesterday")
+        self.assertContains(response, "+1.20% &middot; whole account")
         self.assertContains(response, "+$5,250.50")                   # total P&L from history
         self.assertContains(response, describe_contract(CALL))        # readable contract
         self.assertContains(response, '<td class="num">10</td>')      # DTE
@@ -282,7 +282,7 @@ class GrokBotPageTests(TestCase):
         wrapper = ReadOnlyAlpaca("k", "s")
         public = {n for n in dir(wrapper) if not n.startswith("_")}
         self.assertEqual(public, {"account", "positions", "orders", "portfolio_history", "fill_activities",
-                                  "FILL_ACTIVITIES_PATH"})
+                                  "price_at", "FILL_ACTIVITIES_PATH"})
         source = inspect.getsource(grok_bot)
         for name in WRITE_METHODS[:7]:
             self.assertNotRegex(source, rf"\.{name}\(")
@@ -504,3 +504,186 @@ class EngPrefixPageTests(TestCase):
         self.assertEqual(calls[1].until, NOW - timedelta(minutes=499))      # oldest order of page 1
         self.assertEqual(data["orders_scanned"], 505)
         self.assertEqual(len(data["orders"]), 50)                          # recent list still capped at 50
+
+
+# ---------------------------------------------------------------------------
+# Today's P&L and Total P&L follow the Bot only / Whole account toggle
+# ---------------------------------------------------------------------------
+
+OPTION_DATA_CLIENT = "alpaca.data.historical.option.OptionHistoricalDataClient"
+STOCK_DATA_CLIENT = "alpaca.data.historical.stock.StockHistoricalDataClient"
+
+
+def today_at(minutes):
+    """A time today (local), `minutes` after midnight - so "today" never depends on when the test runs."""
+    midnight = timezone.make_aware(timezone.datetime.combine(timezone.localdate(), timezone.datetime.min.time()))
+    return min(midnight + timedelta(minutes=minutes), timezone.now())
+
+
+def position(symbol, qty, current, unrealized, intraday, cost_basis, avg_entry="1"):
+    return {"symbol": symbol, "qty": Decimal(qty), "current_price": Decimal(current),
+            "unrealized_pl": Decimal(unrealized), "unrealized_intraday_pl": Decimal(intraday),
+            "cost_basis": Decimal(cost_basis), "avg_entry": Decimal(avg_entry)}
+
+
+class BotPnlMathTests(TestCase):
+    def realizations(self):
+        fills = [
+            {**normalize_fill(fill(PUT, "sell", 1, "2.17", 0)), "time": today_at(0) - timedelta(days=2)},
+            {**normalize_fill(fill(PUT, "buy", 1, "2.00", 0)), "time": today_at(5)},        # +17 today (x100)
+            {**normalize_fill(fill("AAPL", "buy", 10, "100", 0)), "time": today_at(0) - timedelta(days=3)},
+            {**normalize_fill(fill("AAPL", "sell", 10, "99", 0)), "time": today_at(0) - timedelta(days=1)},  # -10, not today
+        ]
+        return grok_bot.match_fills(fills)[2]
+
+    def test_today_is_realized_today_plus_intraday_unrealized(self):
+        realizations = self.realizations()
+        self.assertEqual([(r.symbol, r.pnl, r.cost_basis) for r in realizations],
+                         [("AAPL", Decimal("-10"), Decimal("1000")), (PUT, Decimal("17.00"), Decimal("217.00"))])
+        bot_positions = [position(CALL, "2", "4.00", "180", "40", "620")]
+        today = grok_bot.bot_today_pl(realizations, bot_positions)
+        self.assertEqual((today["realized"], today["unrealized"], today["value"]),
+                         (Decimal("17.00"), Decimal("40"), Decimal("57.00")))
+        # % against open cost basis (620) + today's closed lots' cost (217)
+        self.assertEqual(today["pct"].quantize(Decimal("0.01")), Decimal("6.81"))
+
+    def test_today_pct_is_none_without_cost_basis(self):
+        today = grok_bot.bot_today_pl([], [])
+        self.assertEqual((today["value"], today["pct"]), (Decimal("0.00"), None))
+
+    def test_total_counts_only_the_change_since_the_period_start_when_the_price_is_known(self):
+        start = timezone.now() - timedelta(days=30)
+        trades = [SimpleNamespace(pnl=Decimal("300"))]
+        new = position(CALL, "1", "4.00", "50", "0", "350")                  # opened in the period
+        old = position(PUT, "2", "2.00", "120", "0", "280")                  # opened before it
+        old_stock = position("AAPL", "-10", "190", "100", "0", "-2000")      # short stock, before it
+        open_since = {CALL: start + timedelta(days=1), PUT: start - timedelta(days=5),
+                      "AAPL": start - timedelta(days=9)}
+        prices = {PUT: Decimal("1.50"), "AAPL": Decimal("185")}
+        total = grok_bot.bot_total_pl(trades, [new, old, old_stock], open_since, start, prices.get)
+        # 300 + 50 + (2.00 - 1.50) x 2 x 100 + (190 - 185) x -10 x 1
+        self.assertEqual((total["value"], total["note"]), (Decimal("400.00"), False))
+
+    def test_total_without_a_period_start_price_uses_full_unrealized_and_notes_it(self):
+        start = timezone.now() - timedelta(days=30)
+        old = position(PUT, "2", "2.00", "120", "0", "280")
+        total = grok_bot.bot_total_pl([SimpleNamespace(pnl=Decimal("300"))], [old], {PUT: start - timedelta(days=5)},
+                                      start, lambda symbol: None)
+        self.assertEqual((total["value"], total["note"]), (Decimal("420.00"), True))
+
+    def test_all_period_uses_full_unrealized(self):
+        old = position(PUT, "2", "2.00", "120", "0", "280")
+        total = grok_bot.bot_total_pl([], [old], {}, None, lambda symbol: self.fail("no price needed"))
+        self.assertEqual((total["value"], total["note"]), (Decimal("120.00"), False))
+
+
+@mock.patch(HOME_OUTLOOK, return_value=None)
+class BotPnlTileTests(TestCase):
+    """The page, with data shaped like the real account: the bot's put spread
+    opened and closed today (by leg id), plus a short 717P it still holds
+    (marked Bot) that isn't in the fills - so it's treated as opened before
+    the period."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.force_login(self.user)
+        creds = AlpacaCredentials(user=self.user, is_paper=True)
+        creds.set_credentials("PKTEST", "secret-test")
+        creds.save()
+        GrokBotSettings.objects.create(user=self.user, order_id_prefix="eng")
+        self.alpaca = eng_client()
+        times = {60: today_at(1), 30: today_at(2), 90: today_at(0), 20: today_at(3)}
+        for f in self.alpaca.get.return_value:
+            minutes = round((NOW - timezone.datetime.fromisoformat(f["transaction_time"])).total_seconds() / 60)
+            f["transaction_time"] = times[minutes].isoformat()
+        self.alpaca.get_all_positions.return_value = [
+            SimpleNamespace(symbol=SHORT_PUT, qty="-1", side="short", avg_entry_price="2.17", current_price="2.00",
+                            market_value="-200", unrealized_pl="17", unrealized_plpc="0.078",
+                            unrealized_intraday_pl="5", cost_basis="-217"),
+            SimpleNamespace(symbol="AAPL", qty="10", side="long", avg_entry_price="200", current_price="190",
+                            market_value="1900", unrealized_pl="-100", unrealized_plpc="-0.05",
+                            unrealized_intraday_pl="-30", cost_basis="2000"),
+        ]
+        patcher = mock.patch(TRADING_CLIENT, return_value=self.alpaca)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.option_data = mock.MagicMock()
+        self.option_data.get_option_bars.return_value = SimpleNamespace(data={SHORT_PUT: [
+            SimpleNamespace(timestamp=NOW - timedelta(days=33), close=2.40),
+            SimpleNamespace(timestamp=NOW - timedelta(days=31), close=2.50)]})
+        data_patcher = mock.patch(OPTION_DATA_CLIENT, return_value=self.option_data)
+        self.option_data_class = data_patcher.start()
+        self.addCleanup(data_patcher.stop)
+
+    def get(self, **params):
+        return self.client.get(reverse("grok_bot"), params)
+
+    def test_bot_today(self, _outlook):
+        response = self.get()
+        today = response.context["data"]["tiles"]["today"]
+        # realized today: 717P short 2.17 -> 2.00 = +17, 716P long 2.14 -> 2.11 = -3 (both x100); + intraday 5 (bot only)
+        self.assertEqual((today["realized"], today["unrealized"], today["value"]),
+                         (Decimal("14.00"), Decimal("5"), Decimal("19.00")))
+        # cost basis: open 717P 217 + today's closed lots 217 + 214
+        self.assertEqual(today["pct"].quantize(Decimal("0.01")), Decimal("2.93"))
+        self.assertContains(response, "+$19.00")
+        self.assertContains(response, 'id="tile-today-note">+2.93% &middot; bot only</div>')
+
+    def test_bot_total_with_a_period_start_price(self, _outlook):
+        response = self.get(period="1M")
+        total = response.context["data"]["tiles"]["total"]
+        # closed in period 17 - 3 = 14; held 717P since before the period: (2.00 - 2.50) x -1 x 100 = +50
+        self.assertEqual((total["value"], total["note"]), (Decimal("64.00"), False))
+        request = self.option_data.get_option_bars.call_args.args[0]
+        self.assertEqual(request.symbol_or_symbols, SHORT_PUT)
+        self.option_data_class.assert_called_once_with(api_key="PKTEST", secret_key="secret-test")
+        self.assertContains(response, 'id="tile-total-note">bot only</div>')
+        self.assertNotContains(response, "includes gains/losses from before this period")
+
+    def test_bot_total_without_a_period_start_price(self, _outlook):
+        self.option_data.get_option_bars.return_value = SimpleNamespace(data={})
+        response = self.get(period="1M")
+        total = response.context["data"]["tiles"]["total"]
+        self.assertEqual((total["value"], total["note"]), (Decimal("31.00"), True))   # 14 + full unrealized 17
+        self.assertContains(response, "includes gains/losses from before this period")
+
+    def test_price_lookup_failure_is_treated_as_no_price(self, _outlook):
+        self.option_data.get_option_bars.side_effect = RuntimeError("no data subscription")
+        response = self.get(period="1M")
+        self.assertEqual(response.context["data"]["tiles"]["total"]["value"], Decimal("31.00"))
+        self.assertEqual(response.context["data"]["errors"], {})
+
+    def test_all_period_needs_no_price(self, _outlook):
+        total = self.get(period="all").context["data"]["tiles"]["total"]
+        self.assertEqual((total["value"], total["note"]), (Decimal("31.00"), False))
+        self.option_data.get_option_bars.assert_not_called()
+
+    def test_whole_account_values_unchanged(self, _outlook):
+        response = self.get(scope="account")
+        tiles = response.context["data"]["tiles"]
+        self.assertEqual(tiles["scope"], "whole account")
+        self.assertEqual((tiles["today"]["value"], tiles["total"]["value"]), (Decimal("1250.50"), Decimal("5250.5")))
+        self.assertContains(response, "+$1,250.50")
+        self.assertContains(response, "+$5,250.50")
+        self.assertContains(response, 'id="tile-today-note">+1.20% &middot; whole account</div>')
+        self.assertContains(response, 'id="tile-total-note">+5.25% &middot; whole account</div>')
+        self.option_data.get_option_bars.assert_not_called()
+
+    def test_toggle_switches_both_tiles(self, _outlook):
+        bot = self.get().context["data"]["tiles"]
+        whole = self.get(scope="account").context["data"]["tiles"]
+        self.assertEqual((bot["scope"], whole["scope"]), ("bot only", "whole account"))
+        self.assertNotEqual(bot["today"]["value"], whole["today"]["value"])
+        self.assertNotEqual(bot["total"]["value"], whole["total"]["value"])
+
+    def test_no_prefix_means_whole_account(self, _outlook):
+        GrokBotSettings.objects.filter(user=self.user).update(order_id_prefix="")
+        self.assertEqual(self.get().context["data"]["tiles"]["scope"], "whole account")
+
+    def test_bot_tiles_show_a_dash_when_fills_fail(self, _outlook):
+        self.alpaca.get.side_effect = RuntimeError("down")
+        response = self.get()
+        self.assertIsNone(response.context["data"]["tiles"]["today"])
+        self.assertContains(response, 'id="tile-today">&mdash;</span>')
+        self.assertContains(response, 'id="tile-today-note">bot only</div>')

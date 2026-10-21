@@ -9,6 +9,10 @@ reachable from the outside. tests/test_grok_bot.py checks the view never
 touches an order-submission or cancel method.
 
 Pure helpers (no I/O, easy to test):
+  - match_fills(): fills -> closed trades, when each still-open position
+    was opened, and the P&L each fill realized (for "today")
+  - bot_today_pl() / bot_total_pl(): the Today's / Total P&L tiles in
+    "Bot only" mode
   - parse_occ(): "AAPL250117C00190000" -> underlying, expiration, call/put, strike
   - closed_trades(): fills -> realized P&L per closed position (FIFO lots,
     long or short; a position "closes" when it returns to flat)
@@ -214,16 +218,33 @@ def normalize_fill(activity):
     }
 
 
+@dataclass
+class Realization:
+    """P&L one fill realized by reducing a position, and the entry cost of what it closed."""
+    time: datetime
+    symbol: str
+    pnl: Decimal
+    cost_basis: Decimal
+
+
 def closed_trades(fills):
-    """Match fills first-in-first-out per symbol, longs and shorts alike
+    """The closed trades from match_fills()."""
+    return match_fills(fills)[0]
+
+
+def match_fills(fills):
+    """Returns (closed trades, {symbol: when its still-open position was
+    opened}, [Realization per reducing fill]).
+
+    Match fills first-in-first-out per symbol, longs and shorts alike
     (an options bot often sells to open). Every reduction of a position
     realizes (exit - entry) x qty x multiplier, reversed for a short. A
     "closed trade" is one round trip from flat back to flat; its P&L is
     everything realized along the way (scale-ins and partial exits
     included). A fill that flips the position closes the trade and opens a
-    new one with the remainder. Positions still open aren't included."""
+    new one with the remainder. Positions still open aren't closed trades."""
     books = defaultdict(_Book)
-    done = []
+    done, realizations = [], []
     earliest = datetime.min.replace(tzinfo=dt_timezone.utc)
     for fill in sorted(fills, key=lambda f: (f["time"] or earliest, f["id"])):
         if fill["qty"] <= 0 or not fill["symbol"]:
@@ -231,12 +252,16 @@ def closed_trades(fills):
         book = books[fill["symbol"]]
         mult = multiplier(fill["symbol"])
         remaining = fill["qty"] if fill["side"] == "buy" else -fill["qty"]
+        realized = cost = Decimal("0")
         # Reduce lots in the opposite direction first.
         while remaining and book.lots and (book.lots[0][0] > 0) != (remaining > 0):
             lot = book.lots[0]
             direction = 1 if lot[0] > 0 else -1
             matched = min(abs(lot[0]), abs(remaining))
-            book.trade.pnl += (fill["price"] - lot[1]) * matched * mult * direction
+            part = (fill["price"] - lot[1]) * matched * mult * direction
+            book.trade.pnl += part
+            realized += part
+            cost += abs(lot[1]) * matched * mult
             lot[0] -= matched * direction
             remaining += matched * direction
             if lot[0] == 0:
@@ -245,13 +270,59 @@ def closed_trades(fills):
                 book.trade.closed_at = fill["time"]
                 done.append(book.trade)
                 book.trade = None
+        if cost:
+            realizations.append(Realization(fill["time"], fill["symbol"], realized, cost))
         if remaining:
             if book.trade is None:
                 book.trade = ClosedTrade(symbol=fill["symbol"], opened_at=fill["time"], closed_at=None,
                                          direction="long" if remaining > 0 else "short", quantity=Decimal("0"))
             book.lots.append([remaining, fill["price"]])
             book.trade.quantity = max(book.trade.quantity, abs(sum(lot[0] for lot in book.lots)))
-    return done
+    open_since = {symbol: book.trade.opened_at for symbol, book in books.items() if book.lots and book.trade}
+    return done, open_since, realizations
+
+
+# ---------------------------------------------------------------------------
+# Bot-only Today's P&L and Total P&L
+# ---------------------------------------------------------------------------
+
+def bot_today_pl(realizations, bot_positions, today=None):
+    """Realized P&L from the bot's fills today (local time) + the intraday
+    unrealized P&L of its open positions (Alpaca's unrealized_intraday_pl,
+    which already includes the x100 for options). % is against the open
+    positions' cost basis plus today's closed lots' cost basis; None if 0."""
+    today = today or timezone.localdate()
+    todays = [r for r in realizations if r.time and timezone.localtime(r.time).date() == today]
+    realized = sum((r.pnl for r in todays), Decimal("0"))
+    unrealized = sum((p["unrealized_intraday_pl"] or Decimal("0") for p in bot_positions), Decimal("0"))
+    basis = (sum((abs(p["cost_basis"] or 0) for p in bot_positions), Decimal("0"))
+             + sum((r.cost_basis for r in todays), Decimal("0")))
+    value = realized + unrealized
+    return {"value": value.quantize(Decimal("0.01")), "realized": realized, "unrealized": unrealized,
+            "pct": (value / basis * 100) if basis else None}
+
+
+def bot_total_pl(trades_in_period, bot_positions, open_since, start, price_at):
+    """Realized P&L of the bot's trades closed in the period + the current
+    unrealized P&L of its open positions. A position opened before the
+    period counts only its change since the period's start - (current -
+    price at start) x qty x multiplier - when price_at(symbol) has that
+    price; otherwise its full unrealized P&L, flagged in "note"."""
+    realized = sum((t.pnl for t in trades_in_period), Decimal("0"))
+    unrealized, note = Decimal("0"), False
+    for p in bot_positions:
+        opened = open_since.get(p["symbol"])
+        if start is None or (opened is not None and opened >= start):
+            unrealized += p["unrealized_pl"] or Decimal("0")
+            continue
+        start_price = price_at(p["symbol"])
+        if start_price is not None and p["current_price"] is not None:
+            unrealized += (p["current_price"] - start_price) * p["qty"] * multiplier(p["symbol"])
+        else:
+            unrealized += p["unrealized_pl"] or Decimal("0")
+            note = True
+    return {"value": (realized + unrealized).quantize(Decimal("0.01")), "realized": realized,
+            "unrealized": unrealized, "note": note}
 
 
 def trade_stats(trades):
@@ -290,6 +361,7 @@ class ReadOnlyAlpaca:
     def __init__(self, api_key, secret_key):
         from alpaca.trading.client import TradingClient
         self.__client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)  # paper endpoint only
+        self.__keys = {"api_key": api_key, "secret_key": secret_key}   # for market-data reads (price_at)
 
     def account(self):
         return self.__client.get_account()
@@ -316,6 +388,27 @@ class ReadOnlyAlpaca:
         if start:
             params["start"] = start
         return self.__client.get_portfolio_history(GetPortfolioHistoryRequest(**params))
+
+    def price_at(self, symbol, when):
+        """The close of the last daily bar before `when`'s date - the price
+        at that period's start - from Alpaca market data, or None if there
+        isn't one. Options and stocks alike (a read; nothing is traded)."""
+        from alpaca.data.timeframe import TimeFrame
+        request = {"symbol_or_symbols": symbol, "timeframe": TimeFrame.Day,
+                   "start": when - timedelta(days=10), "end": when}
+        if parse_occ(symbol):
+            from alpaca.data.historical.option import OptionHistoricalDataClient
+            from alpaca.data.requests import OptionBarsRequest
+            bars = OptionHistoricalDataClient(**self.__keys).get_option_bars(OptionBarsRequest(**request))
+        else:
+            from alpaca.data.historical.stock import StockHistoricalDataClient
+            from alpaca.data.requests import StockBarsRequest
+            bars = StockHistoricalDataClient(**self.__keys).get_stock_bars(StockBarsRequest(**request))
+        series = (getattr(bars, "data", None) or (bars if isinstance(bars, dict) else {})).get(symbol) or []
+        closes = [_get(b, "close") for b in series
+                  if _dt(_get(b, "timestamp")) and timezone.localtime(_dt(_get(b, "timestamp"))).date()
+                  < timezone.localtime(when).date()]
+        return _dec(closes[-1]) if closes else None
 
     def fill_activities(self, page_token=None):
         """One page of FILL activities, newest first (a plain GET -
@@ -377,6 +470,8 @@ def _positions_data(api, today=None):
             "market_value": _dec(p.market_value),
             "unrealized_pl": _dec(p.unrealized_pl, Decimal("0")),
             "unrealized_pl_pct": _dec(p.unrealized_plpc, Decimal("0")) * 100,
+            "unrealized_intraday_pl": _dec(_get(p, "unrealized_intraday_pl")),
+            "cost_basis": _dec(_get(p, "cost_basis")),
             "dte": days_to_expiration(symbol, today),
         })
     return sorted(rows, key=lambda r: (r["dte"] is None, r["dte"] or 0, r["symbol"]))
@@ -521,17 +616,57 @@ def build_dashboard(credentials, user_id, period=DEFAULT_PERIOD, prefix="", scop
                 position["owner"] = "bot" if position["symbol"] in bot_symbols else "other"
 
     data["trades"] = data["stats"] = data["fills_truncated"] = None
+    matched = None
     if fills is not None:
         client_ids = orders["client_ids"] if orders else {}
         if bot_only and orders is None:
             data["errors"]["closed trades"] = "Closed trades need the order list to tell which fills are the bot's."
         else:
             fill_rows = filter_fills(fills["fills"], prefix if bot_only else "", client_ids)
-            trades = [t for t in closed_trades(fill_rows) if start is None or t.closed_at >= start]
+            matched = match_fills(fill_rows)
+            trades = [t for t in matched[0] if start is None or t.closed_at >= start]
             trades.sort(key=lambda t: t.closed_at, reverse=True)
             data["trades"] = trades
             data["stats"] = trade_stats(trades)
             data["fills_truncated"] = fills["truncated"]
+
+    data["tiles"] = _tiles(data, bot_only, matched, start, today,
+                           lambda symbol: _price_at_start(api, user_id, symbol, start))
     return data
+
+
+def _price_at_start(api, user_id, symbol, start):
+    """Cached; None when market data has no bar (or the request fails)."""
+    try:
+        return _cached(user_id, f"price:{symbol}:{start.date()}", lambda: api.price_at(symbol, start) or "none") \
+            if start else None
+    except Exception as exc:  # noqa: BLE001 - no price just means "count the full unrealized P&L"
+        log.info("Grok Bot: no period-start price for %s: %s", symbol, exc)
+        return None
+
+
+def _tiles(data, bot_only, matched, start, today, price_at):
+    """Today's P&L and Total P&L, each labelled "bot only" or "whole
+    account". Whole account: equity vs last equity, and the portfolio
+    history's P&L. Bot only: bot_today_pl() / bot_total_pl() - None
+    when the orders, fills or positions they need didn't load."""
+    if not bot_only:
+        account, history = data["account"], data["history"]
+        return {
+            "scope": "whole account",
+            "today": {"value": account["day_pl"], "pct": account["day_pl_pct"]} if account else None,
+            "total": ({"value": history["total_pl"], "pct": history["total_pl_pct"], "note": False}
+                      if history and history["total_pl"] is not None else None),
+        }
+    if matched is None or data["positions"] is None:
+        return {"scope": "bot only", "today": None, "total": None}
+    _closed, open_since, realizations = matched
+    bot_positions = [p for p in data["positions"] if p.get("owner") == "bot"]
+    lookup = lambda symbol: (lambda v: None if v in (None, "none") else v)(price_at(symbol))  # noqa: E731
+    return {
+        "scope": "bot only",
+        "today": bot_today_pl(realizations, bot_positions, today),
+        "total": {**bot_total_pl(data["trades"], bot_positions, open_since, start, lookup), "pct": None},
+    }
 
 
