@@ -29,7 +29,12 @@ log = logging.getLogger(__name__)
 
 CACHE_SECONDS = 60
 RECENT_ORDERS = 50
-ORDER_HISTORY_LIMIT = 500        # Alpaca's maximum per request - used to map fills to client order IDs
+ORDER_HISTORY_LIMIT = 500        # Alpaca's maximum per request
+MAX_ORDER_PAGES = 20             # up to 10,000 orders back to the period's start
+# Orders are fetched this far before the period's start too, so a bot trade
+# opened before the period and closed in it still has its opening fill
+# attributed (options the bot holds rarely run longer than this).
+ORDER_LOOKBACK = timedelta(days=60)
 FILL_PAGE_SIZE = 100
 MAX_FILL_PAGES = 50              # up to 5,000 fills - the whole history for most paper bots
 OPTION_MULTIPLIER = 100
@@ -137,7 +142,8 @@ def days_to_expiration(symbol, today=None):
 # ---------------------------------------------------------------------------
 
 def matches_prefix(client_order_id, prefix):
-    return not prefix or str(client_order_id or "").startswith(prefix)
+    """Case-insensitive startswith ("ENG" matches "eng-test-open-...")."""
+    return not prefix or str(client_order_id or "").casefold().startswith(prefix.casefold())
 
 
 def order_ids_to_client_ids(orders):
@@ -291,10 +297,16 @@ class ReadOnlyAlpaca:
     def positions(self):
         return self.__client.get_all_positions()
 
-    def orders(self, limit):
+    def orders(self, limit, after=None, until=None):
+        """One page of orders, newest first (status all, nested legs)."""
         from alpaca.trading.enums import QueryOrderStatus
         from alpaca.trading.requests import GetOrdersRequest
-        return self.__client.get_orders(GetOrdersRequest(status=QueryOrderStatus.ALL, limit=limit, nested=True))
+        params = {"status": QueryOrderStatus.ALL, "limit": limit, "nested": True}
+        if after:
+            params["after"] = after
+        if until:
+            params["until"] = until
+        return self.__client.get_orders(GetOrdersRequest(**params))
 
     def portfolio_history(self, period, timeframe, start=None):
         from alpaca.trading.requests import GetPortfolioHistoryRequest
@@ -318,8 +330,18 @@ class GrokBotError(Exception):
     """Something the page shows as a message instead of data."""
 
 
+def _cache_key(user_id, key):
+    return f"grok_bot:{user_id}:{key}"
+
+
+def clear_cache(user_id):
+    """Drops every cached Alpaca response for this user (called when the prefix changes)."""
+    keys = ["account", "positions", "fills"] + [f"{what}:{p}" for p in PERIODS for what in ("history", "orders")]
+    cache.delete_many([_cache_key(user_id, k) for k in keys])
+
+
 def _cached(user_id, key, fetch):
-    cache_key = f"grok_bot:{user_id}:{key}"
+    cache_key = _cache_key(user_id, key)
     value = cache.get(cache_key)
     if value is None:
         value = fetch()
@@ -365,7 +387,10 @@ def _order_row(o):
     symbol = _get(o, "symbol")
     is_multi_leg = _enum(_get(o, "order_class")) == "mleg" or bool(legs and not symbol)
     leg_rows = [{"symbol": _get(leg, "symbol"), "description": describe_contract(_get(leg, "symbol")),
-                 "side": _enum(_get(leg, "side")), "ratio": _get(leg, "ratio_qty")} for leg in legs]
+                 "side": _enum(_get(leg, "side")), "ratio": _get(leg, "ratio_qty"),
+                 "filled": (_dec(_get(leg, "filled_qty"), Decimal("0")) > 0
+                            or _enum(_get(leg, "status")) in ("filled", "partially_filled"))} for leg in legs]
+    status = _enum(_get(o, "status"))
     return {
         "time": _dt(_get(o, "submitted_at")) or _dt(_get(o, "created_at")),
         "symbols": [leg["symbol"] for leg in leg_rows] if is_multi_leg else [symbol],
@@ -376,16 +401,44 @@ def _order_row(o):
         "qty": _dec(_get(o, "qty")),
         "type": _enum(_get(o, "order_type") or _get(o, "type")),
         "limit_price": _dec(_get(o, "limit_price")),
-        "status": _enum(_get(o, "status")),
+        "status": status,
+        "filled": _dec(_get(o, "filled_qty"), Decimal("0")) > 0 or status in ("filled", "partially_filled"),
         "filled_avg_price": _dec(_get(o, "filled_avg_price")),
         "client_order_id": _get(o, "client_order_id") or "",
     }
 
 
-def _orders_data(api):
-    orders = api.orders(ORDER_HISTORY_LIMIT)
+def filled_symbols(order_rows):
+    """Symbols the given orders actually traded: a filled simple order's
+    symbol, and each filled leg of a multi-leg order (or every leg, if the
+    parent is filled)."""
+    symbols = set()
+    for row in order_rows:
+        if row["is_multi_leg"]:
+            symbols.update(leg["symbol"] for leg in row["legs"] if leg["symbol"] and (leg["filled"] or row["filled"]))
+        elif row["filled"] and row["symbols"][0]:
+            symbols.add(row["symbols"][0])
+    return symbols
+
+
+def _orders_data(api, after=None):
+    """Every order back to `after` (None: all), 500 per page, newest
+    first - each next page ends ("until") at the oldest order seen so far.
+    Used both for Recent orders and to map fills (by order or leg id) to
+    their client order IDs."""
+    orders, seen, until, truncated = [], set(), None, False
+    for _page in range(MAX_ORDER_PAGES):
+        batch = api.orders(ORDER_HISTORY_LIMIT, after=after, until=until)
+        new = [o for o in batch if str(_get(o, "id")) not in seen]
+        orders += new
+        seen.update(str(_get(o, "id")) for o in new)
+        if len(batch) < ORDER_HISTORY_LIMIT or not new:
+            break
+        until = min(_dt(_get(o, "submitted_at")) or _dt(_get(o, "created_at")) for o in new)
+    else:
+        truncated = True
     return {"rows": [_order_row(o) for o in orders], "client_ids": order_ids_to_client_ids(orders),
-            "truncated": len(orders) >= ORDER_HISTORY_LIMIT}
+            "truncated": truncated}
 
 
 def _fills_data(api):
@@ -447,14 +500,25 @@ def build_dashboard(credentials, user_id, period=DEFAULT_PERIOD, prefix="", scop
     created = data["account"]["created_at"] if data["account"] else None
     data["history"] = section("portfolio history", f"history:{period}", lambda: _history_data(api, period, created))
     data["positions"] = section("positions", "positions", lambda: _positions_data(api, today))
-    orders = section("orders", "orders", lambda: _orders_data(api))
+    start = period_start(period, now)
+    orders_after = start - ORDER_LOOKBACK if start else None
+    orders = section("orders", f"orders:{period}", lambda: _orders_data(api, after=orders_after))
     fills = section("fills", "fills", lambda: _fills_data(api))
 
-    data["orders"] = data["orders_truncated"] = None
+    data["orders"] = data["orders_truncated"] = data["orders_scanned"] = None
+    data["no_match"] = False
     if orders is not None:
-        rows = [r for r in orders["rows"] if not bot_only or matches_prefix(r["client_order_id"], prefix)]
+        bot_rows = [r for r in orders["rows"] if matches_prefix(r["client_order_id"], prefix)] if prefix else []
+        rows = bot_rows if bot_only else orders["rows"]
         data["orders"] = rows[:RECENT_ORDERS]
         data["orders_truncated"] = orders["truncated"]
+        data["orders_scanned"] = len(orders["rows"])
+        data["no_match"] = bool(prefix) and not bot_rows
+        if prefix and data["positions"] is not None:
+            # Positions carry no order IDs: "bot" means the bot's filled orders traded this symbol.
+            bot_symbols = filled_symbols(bot_rows)
+            for position in data["positions"]:
+                position["owner"] = "bot" if position["symbol"] in bot_symbols else "other"
 
     data["trades"] = data["stats"] = data["fills_truncated"] = None
     if fills is not None:
@@ -463,7 +527,6 @@ def build_dashboard(credentials, user_id, period=DEFAULT_PERIOD, prefix="", scop
             data["errors"]["closed trades"] = "Closed trades need the order list to tell which fills are the bot's."
         else:
             fill_rows = filter_fills(fills["fills"], prefix if bot_only else "", client_ids)
-            start = period_start(period, now)
             trades = [t for t in closed_trades(fill_rows) if start is None or t.closed_at >= start]
             trades.sort(key=lambda t: t.closed_at, reverse=True)
             data["trades"] = trades

@@ -336,3 +336,171 @@ class GrokBotPageTests(TestCase):
         self.assertContains(self.get(), link)
         self.assertNotContains(self.client.get(reverse("albright_reselling_app:dashboard")), link)
         self.assertNotContains(self.client.get(reverse("albright_crypto_app:dashboard")), link)
+
+
+# ---------------------------------------------------------------------------
+# The "eng" prefix bug: data shaped like the real account - the bot's
+# multi-leg orders carry "eng-test-..." on the parent only (legs get
+# random UUIDs), and fill activities report the LEG id, never a client ID.
+# ---------------------------------------------------------------------------
+
+SHORT_PUT = "SPY261120P00717000"
+LONG_PUT = "SPY261120P00716000"
+
+
+def leg(leg_id, symbol, side, filled=True):
+    return SimpleNamespace(id=leg_id, symbol=symbol, side=side, ratio_qty="1", status="filled" if filled else "canceled",
+                           filled_qty="1" if filled else "0", client_order_id=f"uuid-{leg_id}")
+
+
+def eng_client():
+    client = fake_client()
+    client.get_orders.return_value = [
+        order("p-close", "eng-test-close-20261021104523-2-b444f8", symbol=None, side=None,
+              legs=[leg("l-c1", SHORT_PUT, "buy"), leg("l-c2", LONG_PUT, "sell")], filled_qty="1"),
+        order("p-open-x", "eng-test-open-20261021104523-1-b71165", symbol=None, side=None, status="canceled",
+              legs=[leg("l-x1", SHORT_PUT, "sell", False), leg("l-x2", LONG_PUT, "buy", False)], filled_qty="0"),
+        order("p-open", "ENG-test-open-20261021104523-2-849506", symbol=None, side=None,
+              legs=[leg("l-o1", SHORT_PUT, "sell"), leg("l-o2", LONG_PUT, "buy")], filled_qty="1"),
+        order("m-nke", "631380d2-5b41-4f9c-9e86-90d2a26efc6d", symbol="NKE", side="sell", filled_qty="10"),
+        order("m-eng-look", "x-eng-not-a-prefix", symbol="AAPL", filled_qty="1"),
+    ]
+    client.get.return_value = [
+        # The bot's spread, by leg id: open sell 717P 2.17 / buy 716P 2.14; close buy 717P 2.00 / sell 716P 2.11.
+        fill(SHORT_PUT, "sell", 1, "2.17", 60, "l-o1"), fill(LONG_PUT, "buy", 1, "2.14", 60, "l-o2"),
+        fill(SHORT_PUT, "buy", 1, "2.00", 30, "l-c1"), fill(LONG_PUT, "sell", 1, "2.11", 30, "l-c2"),
+        # Not the bot: NKE 10 @ 37 -> 37.52
+        fill("NKE", "buy", 10, "37.00", 90, "m-nke-old"), fill("NKE", "sell", 10, "37.52", 20, "m-nke"),
+    ]
+    client.get_all_positions.return_value = [
+        SimpleNamespace(symbol=SHORT_PUT, qty="-1", side="short", avg_entry_price="2.17", current_price="2.00",
+                        market_value="-200", unrealized_pl="17", unrealized_plpc="0.078"),
+        SimpleNamespace(symbol="AAPL", qty="10", side="long", avg_entry_price="200", current_price="190",
+                        market_value="1900", unrealized_pl="-100", unrealized_plpc="-0.05"),
+    ]
+    return client
+
+
+class PrefixMatchingTests(TestCase):
+    def test_case_insensitive_startswith(self):
+        for client_id in ("eng-test-open-1", "ENG-test-open-1", "Eng-x", "eng"):
+            self.assertTrue(grok_bot.matches_prefix(client_id, "eng"), client_id)
+            self.assertTrue(grok_bot.matches_prefix(client_id, "ENG"), client_id)
+        for client_id in ("x-eng-1", "en-g", "", None, "631380d2-5b41"):
+            self.assertFalse(grok_bot.matches_prefix(client_id, "eng"), client_id)
+        self.assertTrue(grok_bot.matches_prefix("anything", ""))
+
+    def test_filled_symbols_from_multi_leg_parents(self):
+        rows = [grok_bot._order_row(o) for o in eng_client().get_orders()]
+        bot = [r for r in rows if grok_bot.matches_prefix(r["client_order_id"], "eng")]
+        self.assertEqual(grok_bot.filled_symbols(bot), {SHORT_PUT, LONG_PUT})
+        canceled_only = [r for r in bot if r["status"] == "canceled"]
+        self.assertEqual(grok_bot.filled_symbols(canceled_only), set())
+
+
+@mock.patch(HOME_OUTLOOK, return_value=None)
+class EngPrefixPageTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.client.force_login(self.user)
+        creds = AlpacaCredentials(user=self.user, is_paper=True)
+        creds.set_credentials("PKTEST", "secret-test")
+        creds.save()
+        self.alpaca = eng_client()
+        patcher = mock.patch(TRADING_CLIENT, return_value=self.alpaca)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def get(self, **params):
+        return self.client.get(reverse("grok_bot"), params)
+
+    def save_prefix(self, prefix):
+        return self.client.post(reverse("grok_bot"), {"order_id_prefix": prefix})
+
+    def test_prefix_persists_and_bot_only_is_the_default(self, _outlook):
+        self.assertRedirects(self.save_prefix("eng"), reverse("grok_bot"))
+        self.assertEqual(GrokBotSettings.objects.get(user=self.user).order_id_prefix, "eng")
+        response = self.get()
+        self.assertEqual(response.context["prefix"], "eng")
+        self.assertTrue(response.context["data"]["bot_only"])
+        self.assertContains(response, 'class="scanner-tab is-active" id="scope-bot"')
+
+    def test_multi_leg_orders_match_on_the_parent_and_keep_their_legs(self, _outlook):
+        self.save_prefix("eng")
+        orders = self.get().context["data"]["orders"]
+        self.assertEqual([o["client_order_id"] for o in orders],
+                         ["eng-test-close-20261021104523-2-b444f8", "eng-test-open-20261021104523-1-b71165",
+                          "ENG-test-open-20261021104523-2-849506"])  # case-insensitive; "x-eng-..." excluded
+        self.assertEqual([leg["symbol"] for leg in orders[0]["legs"]], [SHORT_PUT, LONG_PUT])
+        content = self.get().content.decode()
+        self.assertIn(describe_contract(LONG_PUT), content)
+        self.assertNotIn("631380d2-5b41", content)
+
+    def test_uppercase_prefix_matches_too(self, _outlook):
+        self.save_prefix("ENG")
+        self.assertEqual(len(self.get().context["data"]["orders"]), 3)
+
+    def test_fills_are_filtered_through_the_order_id_map(self, _outlook):
+        self.save_prefix("eng")
+        data = self.get().context["data"]
+        self.assertEqual(sorted((t.symbol, t.pnl) for t in data["trades"]),
+                         [(LONG_PUT, Decimal("-3.00")), (SHORT_PUT, Decimal("17.00"))])
+        self.assertEqual(data["stats"]["count"], 2)
+        whole = self.get(scope="account").context["data"]
+        self.assertIn("NKE", {t.symbol for t in whole["trades"]})
+        self.assertEqual(whole["stats"]["count"], 3)
+
+    def test_positions_marked_bot_or_other(self, _outlook):
+        self.save_prefix("eng")
+        response = self.get()
+        owners = {p["symbol"]: p["owner"] for p in response.context["data"]["positions"]}
+        self.assertEqual(owners, {SHORT_PUT: "bot", "AAPL": "other"})
+        self.assertContains(response, '<span class="badge gain">Bot</span>')
+        self.assertContains(response, '<span class="badge neutral">Other</span>')
+        self.assertContains(response, "<th>Bot?</th>")
+        # Same marking under Whole account; no column at all without a prefix.
+        self.assertEqual({p["owner"] for p in self.get(scope="account").context["data"]["positions"]}, {"bot", "other"})
+        self.save_prefix("")
+        self.assertNotContains(self.get(), "<th>Bot?</th>")
+
+    def test_cache_is_cleared_when_the_prefix_changes(self, _outlook):
+        self.save_prefix("eng")
+        self.get()
+        self.get()
+        self.assertEqual(self.alpaca.get_account.call_count, 1)    # cached
+        self.save_prefix("eng")                                     # unchanged: cache kept
+        self.get()
+        self.assertEqual(self.alpaca.get_account.call_count, 1)
+        self.save_prefix("grok-")                                   # changed: cleared
+        self.assertIsNone(cache.get(f"grok_bot:{self.user.pk}:account"))
+        self.assertIsNone(cache.get(f"grok_bot:{self.user.pk}:orders:1M"))
+        self.get()
+        self.assertEqual(self.alpaca.get_account.call_count, 2)
+
+    def test_no_match_message_instead_of_everything(self, _outlook):
+        self.save_prefix("zzz")
+        response = self.get()
+        data = response.context["data"]
+        self.assertTrue(data["no_match"])
+        self.assertEqual((data["orders"], data["trades"]), ([], []))
+        self.assertContains(response, "No orders start with ‘zzz’ in the last 5 orders")
+        self.assertNotContains(response, "eng-test-close")
+        self.assertFalse(self.get().context["data"]["orders"] is None)
+        self.save_prefix("eng")
+        self.assertNotContains(self.get(), 'id="grok-no-match"')
+
+    def test_orders_are_paginated_back_to_the_period(self, _outlook):
+        page = [order(f"o{i}", f"eng-{i}", symbol="AAPL") for i in range(500)]
+        for i, o in enumerate(page):
+            o.submitted_at = NOW - timedelta(minutes=i)
+        self.alpaca.get_orders.side_effect = [page, eng_client().get_orders()]
+        self.save_prefix("eng")
+        data = self.get(period="1M").context["data"]
+        calls = [c.args[0] for c in self.alpaca.get_orders.call_args_list]
+        self.assertEqual(len(calls), 2)
+        self.assertLess(calls[0].after, NOW - timedelta(days=30))           # period start minus the lookback
+        self.assertIsNone(calls[0].until)
+        self.assertEqual(calls[1].until, NOW - timedelta(minutes=499))      # oldest order of page 1
+        self.assertEqual(data["orders_scanned"], 505)
+        self.assertEqual(len(data["orders"]), 50)                          # recent list still capped at 50

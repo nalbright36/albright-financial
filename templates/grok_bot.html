@@ -52,12 +52,18 @@
                 {% if not prefix %}
                     Showing the whole account - this includes all trades in this account, not just the bot's. Set the prefix Grok puts on its client order IDs to separate them.
                 {% elif data.bot_only %}
-                    Orders, fills and closed trades: only orders whose client order ID starts with “{{ prefix }}”. Account tiles, the equity curve and open positions are always the whole account.
+                    Orders, fills and closed trades: only orders whose client order ID starts with “{{ prefix }}” (any capitalization). Account tiles and the equity curve are always the whole account; open positions are marked Bot or Other.
                 {% else %}
                     Showing the whole account - all trades, including ones not placed by the bot.
                 {% endif %}
             </p>
         </div>
+
+        {% if data.no_match %}
+        <div class="card" id="grok-no-match" style="border-color: var(--warn); margin-bottom: 12px; padding: var(--space-3) var(--space-4);">
+            <p style="margin: 0; font-size: 0.875rem; color: var(--warn);">No orders start with ‘{{ prefix }}’ in the last {{ data.orders_scanned }} order{{ data.orders_scanned|pluralize }}{% if data.bot_only %} - so Recent orders and Closed trades are empty, not showing the whole account{% endif %}. Check the prefix against the Client order ID column under Whole account.</p>
+        </div>
+        {% endif %}
 
         {% for name, message in data.errors.items %}
         <div class="card grok-section-error" style="border-color: var(--loss); margin-bottom: 12px; padding: var(--space-3) var(--space-4);">
@@ -128,7 +134,7 @@
             <div class="table-scroll">
             <table class="holdings" id="positions-table">
                 <thead><tr>
-                    <th>Symbol</th><th>Contract</th><th class="num">Qty</th><th class="num">Avg entry</th>
+                    <th>Symbol</th><th>Contract</th>{% if prefix %}<th>Bot?</th>{% endif %}<th class="num">Qty</th><th class="num">Avg entry</th>
                     <th class="num">Current</th><th class="num hide-mobile">Market value</th>
                     <th class="num">Unrealized P&amp;L</th><th class="num">DTE</th>
                 </tr></thead>
@@ -137,6 +143,7 @@
                 <tr>
                     <td class="symbol">{{ p.symbol }}</td>
                     <td>{% if p.description %}{{ p.description }}{% else %}<span style="color: var(--text-secondary);">Stock</span>{% endif %}</td>
+                    {% if prefix %}<td>{% if p.owner == "bot" %}<span class="badge gain">Bot</span>{% elif p.owner == "other" %}<span class="badge neutral">Other</span>{% else %}&mdash;{% endif %}</td>{% endif %}
                     <td class="num">{{ p.qty.normalize }}</td>
                     <td class="num">${{ p.avg_entry|floatformat:2|intcomma }}</td>
                     <td class="num">{% if p.current_price is not None %}${{ p.current_price|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</td>

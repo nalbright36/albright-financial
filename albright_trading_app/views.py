@@ -1942,7 +1942,7 @@ def grok_bot(request):
     from django.contrib import messages
 
     from .forms import GrokBotPrefixForm
-    from .grok_bot import DEFAULT_PERIOD, PERIODS, GrokBotError, build_dashboard
+    from .grok_bot import DEFAULT_PERIOD, PERIODS, GrokBotError, build_dashboard, clear_cache
     from .models import GrokBotSettings
 
     bot_settings = GrokBotSettings.objects.filter(user=request.user).first()
@@ -1955,6 +1955,8 @@ def grok_bot(request):
         if prefix_form.is_valid():
             new_prefix = prefix_form.cleaned_data["order_id_prefix"].strip()
             GrokBotSettings.objects.update_or_create(user=request.user, defaults={"order_id_prefix": new_prefix})
+            if new_prefix != prefix:
+                clear_cache(request.user.pk)  # the next load re-reads everything from Alpaca
             messages.success(request, f'Showing orders starting with "{new_prefix}".' if new_prefix
                              else "Prefix cleared - showing the whole account.")
             return redirect("grok_bot")
