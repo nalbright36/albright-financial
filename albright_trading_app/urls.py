@@ -28,6 +28,7 @@ urlpatterns = [
     path('registration/', views.registration, name='registration'),
     path('registrationsuccess/', views.registrationsuccess, name='registrationsuccess'),
     path('trading_account/', views.trading_account, name='trading_account'),
+    path("grok-bot/", views.grok_bot, name="grok_bot"),
     path('market_scanner/', views.market_scanner, name='market_scanner'),
     path("stock/<str:symbol>/", views.stock_detail, name="stock_detail"),
     path("stock/<str:symbol>/bars/", views.stock_bars_api, name="stock_bars_api"),

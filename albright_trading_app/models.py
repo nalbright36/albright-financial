@@ -141,6 +141,19 @@ class AlpacaCredentials(models.Model):
     def __str__(self):
         return f"Alpaca credentials for {self.user.username}"
 
+class GrokBotSettings(models.Model):
+    """The Grok Bot page's one setting: the client_order_id prefix the
+    external bot puts on its orders (e.g. "grok-"), used to show the bot's
+    orders, fills and closed trades apart from the rest of the account.
+    Not a credential - the page uses the AlpacaCredentials above."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name="grok_bot_settings")
+    order_id_prefix = models.CharField(max_length=48, blank=True)
+
+    def __str__(self):
+        return f"Grok Bot settings for {self.user.username}"
+
+
 POSITION_SIZING_CHOICES = [
     ("fixed_shares", "Fixed number of shares"),
     ("fixed_dollar", "Fixed dollar amount"),

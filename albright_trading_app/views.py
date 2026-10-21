@@ -1926,3 +1926,57 @@ def styleguide(request):
     from both apps. Not linked from the live nav; nothing it renders is
     wired to real data."""
     return render(request, 'styleguide.html')
+
+
+# ============================================================
+# GROK BOT - read-only monitor of the paper account an external bot trades in
+# ============================================================
+
+@login_required
+def grok_bot(request):
+    """Account, equity curve, positions, recent orders and closed-trade
+    results for the paper account Grok trades options in. READ-ONLY: all
+    Alpaca access goes through grok_bot.ReadOnlyAlpaca, which can't place,
+    modify or cancel anything. The only thing this view saves is the
+    optional "Bot order ID prefix" (POST)."""
+    from django.contrib import messages
+
+    from .forms import GrokBotPrefixForm
+    from .grok_bot import DEFAULT_PERIOD, PERIODS, GrokBotError, build_dashboard
+    from .models import GrokBotSettings
+
+    bot_settings = GrokBotSettings.objects.filter(user=request.user).first()
+    prefix = bot_settings.order_id_prefix if bot_settings else ""
+    period = request.GET.get("period") if request.GET.get("period") in PERIODS else DEFAULT_PERIOD
+    scope = "account" if request.GET.get("scope") == "account" else "bot"
+
+    prefix_form = GrokBotPrefixForm(request.POST or None, initial={"order_id_prefix": prefix})
+    if request.method == "POST":
+        if prefix_form.is_valid():
+            new_prefix = prefix_form.cleaned_data["order_id_prefix"].strip()
+            GrokBotSettings.objects.update_or_create(user=request.user, defaults={"order_id_prefix": new_prefix})
+            messages.success(request, f'Showing orders starting with "{new_prefix}".' if new_prefix
+                             else "Prefix cleared - showing the whole account.")
+            return redirect("grok_bot")
+
+    context = {
+        "prefix": prefix, "prefix_form": prefix_form, "period": period, "scope": scope,
+        "periods": [(key, spec["label"]) for key, spec in PERIODS.items()],
+        "not_connected": False, "error": None, "data": None, "chart_json": "[]",
+    }
+    try:
+        credentials = request.user.alpaca_credentials
+    except AlpacaCredentials.DoesNotExist:
+        context["not_connected"] = True
+        return render(request, "grok_bot.html", context)
+
+    try:
+        data = build_dashboard(credentials, request.user.pk, period=period, prefix=prefix, scope=scope)
+    except GrokBotError as exc:
+        context["error"] = str(exc)
+        return render(request, "grok_bot.html", context)
+
+    context["data"] = data
+    if data["history"]:
+        context["chart_json"] = json.dumps(data["history"]["points"])
+    return render(request, "grok_bot.html", context)

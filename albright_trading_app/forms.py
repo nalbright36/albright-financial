@@ -120,3 +120,11 @@ class InvestorProfileForm(forms.ModelForm):
         if user and user.is_authenticated:
             self.fields["username"].initial = user.username
             self.fields["email"].initial = user.email
+
+
+class GrokBotPrefixForm(forms.Form):
+    """The Grok Bot page's "Bot order ID prefix" - blank shows the whole account."""
+    order_id_prefix = forms.RegexField(
+        regex=r"^[A-Za-z0-9._:-]*$", max_length=48, required=False, label="Bot order ID prefix",
+        error_messages={"invalid": "Use letters, numbers, dots, dashes, underscores or colons."},
+        widget=forms.TextInput(attrs={"placeholder": "e.g. grok-", "autocomplete": "off"}))
