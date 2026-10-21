@@ -14,6 +14,7 @@ opportunity under the budget, but it's always flagged.
 import logging
 from decimal import Decimal
 
+from django.db.models import F
 from django.utils import timezone
 
 from . import config
@@ -29,6 +30,8 @@ log = logging.getLogger(__name__)
 
 MANUAL_SOURCE_NAMES = {"crypto": "Manual", "income": "Manual (income)"}
 REFUNDABLE_DEPOSIT_REASON = "requires a refundable deposit"
+# Facts a structured API states in its own fields (RawOpportunity.facts) - saved as-is.
+STRUCTURED_FACTS = ("reward_type", "location_requirement", "skills_required")
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +127,10 @@ def _sync_task_steps(opp):
 
 
 def extract_and_score(opp, use_ai=True, client=None):
-    """AI facts (when allowed and within limits), then safety + scores."""
-    if use_ai:
+    """AI facts (when allowed and within limits), then safety + scores.
+    Jobs from Remotive / Remote OK are never sent to the AI provider
+    (Source.keep_in_app) - their facts come from the API's own fields."""
+    if use_ai and not opp.source.keep_in_app:
         try:
             facts = extract(opp, client=client)
         except ExtractionLimitReached as exc:
@@ -153,9 +158,10 @@ def store(source, raw):
     it's already stored (same source + external_id)."""
     if Opportunity.objects.filter(source=source, external_id=raw.external_id).exists():
         return None
+    facts = {k: v for k, v in (raw.facts or {}).items() if k in STRUCTURED_FACTS and v not in (None, "", [])}
     return Opportunity.objects.create(
         source=source, opportunity_type=source.opportunity_type, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
-        raw_text=raw.text or "", metadata=raw.metadata or {},
+        raw_text=raw.text or "", metadata=raw.metadata or {}, **facts,
     )
 
 
@@ -175,8 +181,18 @@ def add_manual(url, title, text, use_ai=True, client=None, opportunity_type="cry
 
 
 def runnable_sources():
-    """Active collected sources - income ones only once their terms are checked."""
-    return [s for s in Source.objects.filter(active=True).exclude(kind="manual") if s.runnable]
+    """Active collected sources - income ones only once their terms are checked.
+    Least recently checked first, so sources sharing a site's interval take turns."""
+    qs = Source.objects.filter(active=True).exclude(kind="manual").order_by(F("last_checked").asc(nulls_first=True))
+    return [s for s in qs if s.runnable]
+
+
+def fetched_too_recently(source, min_interval, now=None):
+    """A site with a minimum interval (Remotive, Remote OK: 6 hours) is
+    fetched at most once per interval - across every source of that kind,
+    so several sources for one site can't add up to more fetches."""
+    now = now or timezone.now()
+    return Source.objects.filter(kind=source.kind, last_checked__gt=now - min_interval).exists()
 
 
 def scan_sources(sources=None, use_ai=True, client=None, collectors=None):
@@ -190,6 +206,9 @@ def scan_sources(sources=None, use_ai=True, client=None, collectors=None):
         collector_class = collectors.get(source.kind)
         if collector_class is None or not source.runnable:
             continue  # never fetch from a source that's off, or whose terms I haven't checked
+        if collector_class.min_interval and fetched_too_recently(source, collector_class.min_interval):
+            log.info("Skipping %s: fetched less than %s ago", source.name, collector_class.min_interval)
+            continue  # not an error - the next scan after the interval picks it up
         collector = collector_class()
         try:
             for raw in collector.collect(source):

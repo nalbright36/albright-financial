@@ -54,8 +54,14 @@ class ConfigOverride(models.Model):
 
 class Source(models.Model):
     KINDS = [("github", "GitHub"), ("rss", "RSS"), ("manual", "Manual"),
-             ("rss_income", "RSS (income)"), ("api_income", "API (income)")]
-    INCOME_KINDS = ("rss_income", "api_income")   # never run until terms_checked is ticked
+             ("rss_income", "RSS (income)"), ("api_income", "API (income)"),
+             ("remotive", "Remotive"), ("remoteok", "Remote OK")]
+    # Never run until terms_checked is ticked.
+    INCOME_KINDS = ("rss_income", "api_income", "remotive", "remoteok")
+    # Job boards whose terms require crediting them ("via ...", linking to the
+    # job on their site) and forbid passing their jobs on: (name, domain).
+    # Their opportunities stay in this app - no AI extraction, no Telegram.
+    ATTRIBUTED_KINDS = {"remotive": ("Remotive", "remotive.com"), "remoteok": ("Remote OK", "remoteok.com")}
 
     name = models.CharField(max_length=200)
     kind = models.CharField(max_length=10, choices=KINDS)
@@ -65,6 +71,9 @@ class Source(models.Model):
     last_checked = models.DateTimeField(null=True, blank=True)
     terms_checked = models.BooleanField(default=False)     # I've read this source's terms - collecting is allowed
     notes = models.TextField(blank=True)
+    # Request parameters for the job-board adapters (Remotive: category,
+    # search; Remote OK: tag). Also reflected in url so each combination is unique.
+    options = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["opportunity_type", "kind", "name"]
@@ -84,6 +93,16 @@ class Source(models.Model):
     def runnable(self):
         """Active, and - for income sources - its terms have been checked."""
         return self.active and (not self.needs_terms or self.terms_checked)
+
+    @property
+    def attribution(self):
+        """(name, domain) for Remotive / Remote OK, else None."""
+        return self.ATTRIBUTED_KINDS.get(self.kind)
+
+    @property
+    def keep_in_app(self):
+        """This source's jobs are never sent anywhere (AI provider, Telegram)."""
+        return self.kind in self.ATTRIBUTED_KINDS
 
 
 class Opportunity(models.Model):

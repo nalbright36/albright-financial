@@ -27,6 +27,9 @@ class RawOpportunity:
     text: str = ""
     metadata: dict = field(default_factory=dict)
     published: datetime | None = None
+    # Facts stated in a structured API's own fields (location, tags...), saved
+    # as-is by pipeline.store - only the keys in pipeline.STRUCTURED_FACTS.
+    facts: dict = field(default_factory=dict)
 
 
 class SourceBlocked(Exception):
@@ -39,6 +42,7 @@ class SourceUnavailable(Exception):
 
 class BaseCollector:
     kind = "base"
+    min_interval = None   # timedelta: the site's minimum time between fetches (pipeline.scan_sources)
     request_delay_seconds = 2.0
     timeout_seconds = 20
     retries = 1

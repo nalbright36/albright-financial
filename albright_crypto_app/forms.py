@@ -141,7 +141,8 @@ class SettingsForm(forms.Form):
                   "required skills in this list.")
     allowlist = forms.CharField(
         required=False, widget=forms.Textarea(attrs={**INPUT, "rows": 6}),
-        help_text="One domain per line (e.g. github.com). Subdomains are included. Links anywhere else show a warning first.")
+        help_text="One domain per line (e.g. github.com). Subdomains are included. Links anywhere else show a warning first. "
+                  "remotive.com and remoteok.com are always included (their job-board adapters).")
     rss_feeds = forms.CharField(
         required=False, widget=forms.Textarea(attrs={**INPUT, "rows": 4}),
         help_text="One feed URL per line - official project and program feeds only.")
@@ -168,12 +169,19 @@ class SettingsForm(forms.Form):
 
 
 class IncomeSourceForm(forms.ModelForm):
-    """Adding an official remote-job/freelance feed or public JSON API. It
-    starts with terms unchecked, so it won't run until I tick "terms
-    checked" in the sources table. Only public feeds/APIs: no page scraping
-    and no logging in (collectors only make plain GETs)."""
+    """Adding an income source: Remotive or Remote OK (fixed public APIs -
+    optional category/search or tag), or any official remote-job/freelance
+    feed or public JSON API by URL. It starts with terms unchecked, so it
+    won't run until I tick "terms checked" in the sources table. Only public
+    feeds/APIs: no page scraping and no logging in (collectors only GET)."""
     kind = forms.ChoiceField(choices=[(k, label) for k, label in Source.KINDS if k in Source.INCOME_KINDS],
                              widget=forms.Select(attrs=INPUT))
+    category = forms.CharField(required=False, max_length=100, widget=forms.TextInput(attrs={
+        **INPUT, "placeholder": "e.g. software-dev"}), label="Remotive category (optional)")
+    search = forms.CharField(required=False, max_length=100, widget=forms.TextInput(attrs={
+        **INPUT, "placeholder": "e.g. django"}), label="Remotive search (optional)")
+    tag = forms.CharField(required=False, max_length=60, widget=forms.TextInput(attrs={
+        **INPUT, "placeholder": "e.g. python"}), label="Remote OK tag (optional)")
 
     class Meta:
         model = Source
@@ -181,18 +189,20 @@ class IncomeSourceForm(forms.ModelForm):
         widgets = {"name": forms.TextInput(attrs=INPUT),
                    "url": forms.URLInput(attrs={**INPUT, "placeholder": "https://... (official feed or public API)"}),
                    "notes": forms.TextInput(attrs={**INPUT, "placeholder": "Where the terms are, what they allow"})}
-        labels = {"url": "Feed / API URL"}
-
-    def clean_url(self):
-        url = self.cleaned_data["url"].strip()
-        if not is_web_url(url):
-            raise forms.ValidationError("Enter an http(s) link.")
-        return url
+        labels = {"url": "Feed / API URL (not needed for Remotive / Remote OK)"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["url"].required = False   # required below, except for the job-board adapters
+        self.fields["name"].required = False
         self.instance.opportunity_type = "income"
         self.instance.terms_checked = False  # ticked in the sources table once I've read the terms
+
+    def clean_url(self):
+        url = (self.cleaned_data.get("url") or "").strip()
+        if url and not is_web_url(url):
+            raise forms.ValidationError("Enter an http(s) link.")
+        return url
 
     def clean_notes(self):
         notes = self.cleaned_data["notes"]
@@ -200,7 +210,24 @@ class IncomeSourceForm(forms.ModelForm):
         return notes
 
     def clean(self):
+        from .collectors.job_boards import ENDPOINTS, endpoint_url
         cleaned = super().clean()
-        if Source.objects.filter(kind=cleaned.get("kind"), url=cleaned.get("url"), opportunity_type="income").exists():
+        kind = cleaned.get("kind")
+        if kind in Source.ATTRIBUTED_KINDS:
+            # The request always goes to the site's fixed endpoint; url is that
+            # endpoint plus the options, so each combination is its own source.
+            options = {k: (cleaned.get(k) or "").strip() for k in ENDPOINTS[kind][1] if (cleaned.get(k) or "").strip()}
+            self.instance.options = options
+            cleaned["url"] = endpoint_url(kind, options)
+            if not cleaned.get("name"):
+                site = Source.ATTRIBUTED_KINDS[kind][0]
+                cleaned["name"] = f"{site}: {', '.join(options.values())}" if options else site
+        else:
+            self.instance.options = {}
+            if not cleaned.get("url") and "url" not in self.errors:
+                self.add_error("url", "Enter the feed or API URL.")
+            if not cleaned.get("name"):
+                self.add_error("name", "Give the source a name.")
+        if Source.objects.filter(kind=kind, url=cleaned.get("url"), opportunity_type="income").exists():
             raise forms.ValidationError("That source is already in your list.")
         return cleaned

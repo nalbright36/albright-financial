@@ -33,8 +33,13 @@ def set_value(key, value):
     ConfigOverride.objects.update_or_create(key=key, defaults={"value": value})
 
 
+# The job-board adapters' sites (models.Source.ATTRIBUTED_KINDS) - always verified.
+BUILT_IN_ALLOWLIST = ("remotive.com", "remoteok.com")
+
+
 def allowlist():
-    return [d.strip().lower() for d in get("allowlist") or [] if d and d.strip()]
+    domains = [d.strip().lower() for d in get("allowlist") or [] if d and d.strip()]
+    return domains + [d for d in BUILT_IN_ALLOWLIST if d not in domains]
 
 
 def budget_usd():

@@ -34,7 +34,8 @@
                     <tr>
                         <td>
                             {{ s.name }} <span class="badge neutral">{{ s.get_kind_display }}</span>
-                            {% if s.kind != "github" %}<div style="font-size: 0.75rem;">{% external_link s.url %}</div>{% endif %}
+                            {% if s.attribution %}<div style="font-size: 0.75rem; color: var(--text-secondary);">Fetched at most once every 6 hours{% if s.options %} &middot; {% for k, v in s.options.items %}{{ k }}: {{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}. Jobs stay in this app (no AI, no Telegram).</div>
+                            {% elif s.kind != "github" %}<div style="font-size: 0.75rem;">{% external_link s.url %}</div>{% endif %}
                             {% if s.notes %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ s.notes }}</div>{% endif %}
                             {% if s.active and not s.terms_checked %}<div class="crypto-warning js-terms-warning" style="margin-top: 6px; font-size: 0.75rem; padding: 4px 8px;">Terms not checked - confirm this source allows automated collection.{% if s.needs_terms %} <strong>It won't run until you tick it.</strong>{% endif %}</div>{% endif %}
                         </td>
@@ -54,7 +55,7 @@
         <form method="post" class="card" style="margin-top: var(--space-5);" id="add-source-form">
             {% csrf_token %}<input type="hidden" name="action" value="add_source">
             <div class="card__header"><span class="card__label">Add an income source</span></div>
-            <p style="margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-secondary);">Official remote-job and freelance feeds or public JSON APIs only - nothing that needs page scraping or logging in. A new source won't run until you've read its terms and ticked "terms checked" above.</p>
+            <p style="margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-secondary);">Remotive or Remote OK (fill in the optional category/search or tag), or another official remote-job/freelance feed or public JSON API by URL - nothing that needs page scraping or logging in. A new source won't run until you've read its terms and ticked "terms checked" above.</p>
             {% for field in source_form %}
             <div class="field">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>

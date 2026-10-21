@@ -138,8 +138,12 @@
                 <td>{% if opp.deadline %}{{ opp.deadline|date:"M j, g:i A" }}{% else %}&mdash;{% endif %}
                     {% if opp.application_deadline %}<div class="crypto-range">apply by {{ opp.application_deadline|date:"M j" }}</div>{% endif %}</td>
                 <td>
+                    {% if opp.source.attribution %}
+                    <span style="font-size: 0.8125rem;">{% via_link opp %}</span>
+                    {% else %}
                     <span style="font-size: 0.8125rem;">{{ opp.source.get_kind_display }}</span>
                     <div style="font-size: 0.75rem;">{% external_link opp.url opp.domain %}</div>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

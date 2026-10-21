@@ -10,7 +10,7 @@
         <div style="min-width: 0;">
             <h1 style="margin: 0; font-size: var(--text-2xl); overflow-wrap: anywhere;">{{ opp.title }}</h1>
             <div style="margin-top: 6px; font-size: 0.8125rem; color: var(--text-secondary);">
-                <span class="badge neutral">{{ type_label }}</span> {{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% external_link opp.url %}
+                <span class="badge neutral">{{ type_label }}</span> {{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% if opp.source.attribution %}{% via_link opp %}{% else %}{% external_link opp.url %}{% endif %}
             </div>
         </div>
         <span class="badge {% if opp.safety_verdict == 'block' %}loss{% elif opp.safety_verdict == 'warn' %}warn{% else %}gain{% endif %}">{{ opp.get_safety_verdict_display }}</span>

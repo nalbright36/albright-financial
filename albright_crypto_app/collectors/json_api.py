@@ -34,7 +34,8 @@ def _first(item, keys):
 def _plain(text):
     text = re.sub(r"<(br|/p|/li|/h\d)\s*/?>", "\n", str(text or ""), flags=re.I)
     text = html.unescape(re.sub(r"<[^>]+>", " ", text))
-    return re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n\n", text)).strip()
+    text = re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n\n", text))
+    return re.sub(r" +([.,;:!?)])", r"\1", text).strip()  # "<i>pipelines</i>." -> "pipelines."
 
 
 def _items(payload):

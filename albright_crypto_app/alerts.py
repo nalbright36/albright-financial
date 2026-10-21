@@ -25,7 +25,7 @@ from albright_reselling_app.scanner.alerts import SITE_BASE_URL, send_telegram
 
 from . import config
 from .core.safety import check_domain
-from .models import OPPORTUNITY_TYPES, Earning, Opportunity
+from .models import OPPORTUNITY_TYPES, Earning, Opportunity, Source
 
 REMINDER_WINDOW = timedelta(hours=24)
 TYPE_LABELS = dict(OPPORTUNITY_TYPES)
@@ -35,10 +35,18 @@ def _money(value):
     return f"${value:,.2f}" if value is not None else "?"
 
 
+def _title(opp, length):
+    """The opportunity's title for Telegram - except for jobs from Remotive /
+    Remote OK, which never leave the app: just where it's from."""
+    if opp.source.keep_in_app:
+        return f"A job via {escape(opp.source.attribution[0])} (details in the app)"
+    return escape(opp.title[:length])
+
+
 def _links(opp):
     page = SITE_BASE_URL + reverse("albright_crypto_app:opportunity", args=[opp.pk])
     links = [f'<a href="{escape(page)}">Open in app</a>']
-    if check_domain(opp.url, config.allowlist())[1] == "allowlisted":
+    if not opp.source.keep_in_app and check_domain(opp.url, config.allowlist())[1] == "allowlisted":
         links.append(f'<a href="{escape(opp.url)}">Listing</a>')
     return " · ".join(links)
 
@@ -88,8 +96,8 @@ def send_new_opportunity_alerts(opportunities, now=None):
     now = now or timezone.now()
     sent = []
     for opp in opportunities:
-        if opp.alert_sent_at or not qualifies_for_alert(opp):
-            continue
+        if opp.alert_sent_at or opp.source.keep_in_app or not qualifies_for_alert(opp):
+            continue  # Remotive / Remote OK jobs are never sent anywhere, Telegram included
         claimed = Opportunity.objects.filter(pk=opp.pk, alert_sent_at__isnull=True).update(alert_sent_at=now)
         if claimed:
             send_telegram(format_new_opportunity(opp))
@@ -111,7 +119,7 @@ def send_deadline_reminders(now=None):
         hours = max(0, int((opp.deadline - now).total_seconds() // 3600))
         send_telegram("\n".join([
             f"<b>{TYPE_LABELS[opp.opportunity_type]}: deadline in under 24h</b>",
-            escape(opp.title[:150]),
+            _title(opp, 150),
             f"Due {timezone.localtime(opp.deadline):%b %d, %I:%M %p} (about {hours}h left)",
             _links(opp),
         ]))
@@ -128,7 +136,7 @@ def _type_lines(opportunity_type, now, week_start):
         total=Sum("usd_value_at_receipt"))["total"] or Decimal("0")
     lines = [f"{TYPE_LABELS[opportunity_type]}: {actionable.count()} new (24h), {blocked} blocked · "
              f"earned this week {_money(earned)}"]
-    best = actionable.exclude(ev_per_hour__isnull=True)
+    best = actionable.exclude(ev_per_hour__isnull=True).exclude(source__kind__in=list(Source.ATTRIBUTED_KINDS))
     if opportunity_type == "income":  # freelance below the skill-match cutoff is hidden by default - here too
         best = best.exclude(reward_type="freelance", skill_match__lt=int(config.get("freelance_min_skill_match")))
     for opp in best.order_by("-ev_per_hour")[:3]:
@@ -154,7 +162,7 @@ def digest_lines(now=None):
     if deadlines:
         lines.append("Deadlines (7 days):")
         for opp in deadlines[:5]:
-            lines.append(f"  • {timezone.localtime(opp.deadline):%b %d} - {escape(opp.title[:70])} "
+            lines.append(f"  • {timezone.localtime(opp.deadline):%b %d} - {_title(opp, 70)} "
                          f"({TYPE_LABELS[opp.opportunity_type].lower()}, {opp.status})")
     else:
         lines.append("Deadlines (7 days): none")
