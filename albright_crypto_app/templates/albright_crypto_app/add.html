@@ -1,9 +1,10 @@
 {% extends "index.html" %}
+{% block title %}Add opportunity · Opportunities{% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 760px;">
     <a href="{% url 'albright_crypto_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Opportunities</a>
     <h1 style="margin: 12px 0 8px;">Add an opportunity</h1>
-    <p style="color: var(--text-secondary); margin-bottom: 20px;">Paste the link and the text exactly as you found it. It gets the same fact extraction, safety check and scoring as anything scanned.</p>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">Pick Crypto or Income, then paste the link and the text exactly as you found it. It gets the same fact extraction, safety check and scoring as anything scanned.</p>
 
     <p class="crypto-warning" style="margin-bottom: 20px;">Never paste a seed phrase, private key or exchange API key - here or anywhere. This app doesn't store them and no legitimate opportunity needs them.</p>
 

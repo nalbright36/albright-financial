@@ -1,5 +1,5 @@
 """Usage:
-    python manage.py scan_crypto                         # every active GitHub/RSS source
+    python manage.py scan_crypto                         # every runnable source (income: terms checked)
     python manage.py scan_crypto --no-ai                  # collect + safety/score only, zero AI cost
     python manage.py scan_crypto --min-interval-hours 4   # skip if the last good run was <4h ago
 
@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from albright_crypto_app.alerts import send_deadline_reminders, send_new_opportunity_alerts
 from albright_crypto_app.models import ScanRun
-from albright_crypto_app.pipeline import scan_sources, sync_sources
+from albright_crypto_app.pipeline import runnable_sources, scan_sources, sync_sources
 
 
 def last_good_run():
@@ -21,7 +21,7 @@ def last_good_run():
 
 
 class Command(BaseCommand):
-    help = "Scan crypto opportunity sources (GitHub bounties, RSS feeds), score them, and alert."
+    help = "Scan opportunity sources (GitHub bounties, RSS feeds, income RSS/API sources), score them, and alert."
 
     def add_arguments(self, parser):
         parser.add_argument("--no-ai", action="store_true", help="Skip AI extraction (no API cost).")
@@ -51,8 +51,7 @@ class Command(BaseCommand):
         run.finished_at = timezone.now()
         run.new_opportunities = len(new)
         run.errors = errors
-        from albright_crypto_app.models import Source
-        run.sources_checked = Source.objects.filter(active=True).exclude(kind="manual").count()
+        run.sources_checked = len(runnable_sources())
         run.save()
 
         alerts = send_new_opportunity_alerts(new)

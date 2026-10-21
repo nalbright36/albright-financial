@@ -212,16 +212,16 @@ body.theme-reselling {
   --accent-ring: rgba(16, 185, 129, 0.18);
   --on-accent: #FFFFFF;
 }
-/* Crypto app: violet, so the three apps are easy to tell apart. Light-mode
+/* Opportunities app: violet, so the three apps are easy to tell apart. Light-mode
    shade chosen for AA on the light glass cards (5.2:1+), dark for the dark
    ones (4.8:1+). */
-body.theme-crypto {
+body.theme-opportunities {
   --accent: #A78BFA;
   --accent-hover: #C4B5FD;
   --accent-ring: rgba(139, 92, 246, 0.3);
   --on-accent: #1E1033;
 }
-[data-theme="light"] body.theme-crypto {
+[data-theme="light"] body.theme-opportunities {
   --accent: #6D28D9;
   --accent-hover: #5B21B6;
   --accent-ring: rgba(139, 92, 246, 0.18);

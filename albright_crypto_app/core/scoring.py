@@ -15,8 +15,15 @@ DEFAULT_PROBABILITY = {
     "speculative_airdrop": (0.00, 0.05, 0.20),
     "points":            (0.00, 0.05, 0.25),   # points have no established value
     "unknown":           (0.00, 0.10, 0.30),
+    # Income opportunities
+    "freelance":         (0.10, 0.25, 0.50),   # chance a proposal wins the job
+    "research_study":    (0.20, 0.40, 0.60),   # chance you qualify through the screener
+    "competition":       (0.00, 0.03, 0.10),   # prize competitions rarely pay
+    "bonus":             (0.70, 0.85, 0.95),   # sign-up bonus when you meet the stated terms
+    "settlement":        (0.50, 0.80, 0.95),   # payout for a valid claim (amount often reduced)
 }
-CONFIRMED_TYPES = {"bounty", "promo_reward", "microtask"}   # types where a stated amount can count as real
+CONFIRMED_TYPES = {"bounty", "promo_reward", "microtask",   # types where a stated amount can count as real
+                   "freelance", "research_study", "bonus", "settlement"}
 
 
 @dataclass

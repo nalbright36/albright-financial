@@ -6,5 +6,5 @@ def current_app(request):
     app_name = resolved.app_name if resolved else None
     return {
         "in_reselling_app": app_name == "albright_reselling_app",
-        "in_crypto_app": app_name == "albright_crypto_app",
+        "in_opportunities_app": app_name == "albright_crypto_app",  # the Opportunities app
     }

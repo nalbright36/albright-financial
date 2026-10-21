@@ -1,4 +1,4 @@
-"""Remembers which app (the reselling app, the crypto app, or the trading
+"""Remembers which app (the reselling app, the Opportunities app, or the trading
 app) a logged-in user last visited, in a long-lived cookie - read by albright_trading_app's
 home view (the "/" root) to send a returning user straight back to
 whichever app they were using, instead of always defaulting to the trading
@@ -10,8 +10,11 @@ LAST_APP_COOKIE = "last_app"
 LAST_APP_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 RESELLER_APP_NAME = "albright_reselling_app"
-CRYPTO_APP_NAME = "albright_crypto_app"
-APP_COOKIE_VALUES = {RESELLER_APP_NAME: "reseller", CRYPTO_APP_NAME: "crypto"}  # anything else: "trading"
+OPPORTUNITIES_APP_NAME = "albright_crypto_app"  # the Opportunities app (package name kept)
+APP_COOKIE_VALUES = {RESELLER_APP_NAME: "reseller", OPPORTUNITIES_APP_NAME: "opportunities"}  # else: "trading"
+# Cookie values that mean the Opportunities app - "crypto" is what it was
+# called before the rename, still in returning users' browsers.
+OPPORTUNITIES_COOKIE_VALUES = ("opportunities", "crypto")
 
 # Views that don't represent the user actually using one app or the other -
 # never recorded, even though they're real 200 GET HTML responses.
@@ -20,7 +23,7 @@ _EXCLUDED_URL_NAMES = {"user_login", "user_logout"}
 
 class LastAppMiddleware:
     """For every successful (200) GET HTML page request from a logged-in
-    user, records "reseller" (albright_reselling_app URLs), "crypto"
+    user, records "reseller" (albright_reselling_app URLs), "opportunities"
     (albright_crypto_app URLs) or "trading" (everything else) in the
     last_app cookie. Skips static/media files,
     non-HTML responses (API/AJAX - these never represent navigating to a

@@ -62,3 +62,25 @@ class ScoringTests(TestCase):
 
     def test_unknown_hours_has_no_hourly(self):
         self.assertIsNone(score(50, "bounty", None, evidence="explicit", official_source=True).ev_per_hour_mid)
+
+
+class IncomeTests(TestCase):
+    def test_job_scams_blocked(self):
+        for text in ["Pay the $49 training fee to start your new job today",
+                     "Deposit the check we mail you and send the remainder via wire transfer",
+                     "Work from home as a package reshipper",
+                     "Payment for the starter kit must be made in Apple gift cards",
+                     "Your interview will be held on Telegram with our HR manager"]:
+            self.assertEqual(check_opportunity(text, "https://github.com/x", ALLOW).verdict,
+                             "block" if "interview" not in text else "warn", text)
+
+    def test_unrealistic_pay_warns(self):
+        r = check_opportunity("Earn $500 per day from home, no experience needed", "https://github.com/x", ALLOW)
+        self.assertIn("unrealistic pay for little work", r.reasons)
+
+    def test_income_types_scored(self):
+        f = score(1200, "freelance", hours=20, evidence="explicit", official_source=True)
+        self.assertEqual((f.confidence, f.reward_counts_as_confirmed), ("high", True))
+        c = score(10000, "competition", hours=40, evidence="explicit", official_source=True)
+        self.assertFalse(c.reward_counts_as_confirmed)
+        self.assertLess(c.ev_mid, 1000)

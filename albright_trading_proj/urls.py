@@ -15,12 +15,17 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
+
+from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", include("albright_trading_app.urls")),
     path("albright_reselling_app/", include("albright_reselling_app.urls")),
-    path("albright_crypto_app/", include("albright_crypto_app.urls")),
+    # The Opportunities app (package albright_crypto_app). Its old prefixes
+    # redirect here, keeping the rest of the path and the query string.
+    path("opportunities/", include("albright_crypto_app.urls")),
+    re_path(r"^(?:crypto|albright_crypto_app)/(?P<rest>.*)$", legacy_redirect, name="opportunities_legacy_redirect"),
 ]

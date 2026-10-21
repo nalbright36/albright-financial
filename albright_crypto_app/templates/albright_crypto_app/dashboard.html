@@ -1,12 +1,14 @@
 {% extends "index.html" %}
 {% load crypto_links %}
+{% block title %}{{ type_label }} · Opportunities{% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
 
-    <div class="card__header" style="margin-bottom: 20px;">
-        <h1 style="margin: 0;">Crypto opportunities</h1>
-        <a href="{% url 'albright_crypto_app:add' %}" class="btn btn-primary">Add opportunity</a>
+    <div class="card__header" style="margin-bottom: 16px;">
+        <h1 style="margin: 0;">{{ type_label }} opportunities</h1>
+        <a href="{% url 'albright_crypto_app:add' %}?type={{ opportunity_type }}" class="btn btn-primary">Add opportunity</a>
     </div>
+    {% include "albright_crypto_app/_type_tabs.html" with current=opportunity_type %}
 
     {% if unchecked_sources %}
     <p class="crypto-warning" style="margin-bottom: 20px;">
@@ -17,7 +19,7 @@
 
     <!-- Tiles: what's real (confirmed earnings) is kept apart from what's only potential. -->
     <div class="grid grid-4" style="margin-bottom: 24px;">
-        <a href="{% url 'albright_crypto_app:earnings' %}" class="card" style="display: block;">
+        <a href="{% url 'albright_crypto_app:earnings' %}?type={{ opportunity_type }}" class="card" style="display: block;">
             <div class="card__header"><span class="card__label">Confirmed earnings</span></div>
             <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;{% if tiles.earned_all_time > 0 %} color: var(--gain);{% endif %}">${{ tiles.earned_all_time|floatformat:2 }}</span>
             <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ tiles.earned_this_month|floatformat:2 }} this month</div>
@@ -65,7 +67,17 @@
     {% if tab == "blocked" %}
     <p class="crypto-danger" style="margin-bottom: 16px;">Blocked opportunities matched a scam or theft pattern (asking for keys, deposits to unlock, lookalike domains...). They never appear in Ranked. Treat links here as dangerous.</p>
     {% elif tab == "excluded" %}
-    <p class="crypto-warning" style="margin-bottom: 16px;">Excluded: these require spending, or cost more than your ${{ budget_usd|floatformat:2 }} budget (CRYPTO["budget_usd"]). Shown for reference only.</p>
+    <p class="crypto-warning" style="margin-bottom: 16px;">Excluded: these require spending, or cost more than your ${{ budget_usd|floatformat:2 }} budget (CRYPTO["budget_usd"]). Shown for reference only.{% if is_income %} A refundable deposit (money you get back) isn't spending.{% endif %}</p>
+    {% endif %}
+
+    {% if is_income and tab == "ranked" %}
+    <p style="margin-bottom: 16px; font-size: 0.8125rem; color: var(--text-secondary);" id="low-match-note">
+        {% if show_low_match %}Showing freelance work below {{ min_skill_match }}% skill match.
+        <a href="?{{ low_match_query }}" id="low-match-toggle">Hide low matches</a>
+        {% elif hidden_low_match %}{{ hidden_low_match }} freelance opportunit{{ hidden_low_match|pluralize:"y,ies" }} below {{ min_skill_match }}% skill match hidden.
+        <a href="?{{ low_match_query }}" id="low-match-toggle">Show {{ hidden_low_match|pluralize:"it,them" }}</a>
+        {% else %}Freelance work below {{ min_skill_match }}% skill match is hidden (none right now).{% endif %}
+    </p>
     {% endif %}
 
     <div class="card" style="padding: 0;">
@@ -77,10 +89,13 @@
                 <th class="lot-title-col">Opportunity</th>
                 <th>Reward</th>
                 <th class="num">EV/hour</th>
+                {% if is_income %}<th>Pay</th>
+                <th class="num">Skill match</th>
+                <th>Location</th>{% endif %}
                 <th>Confidence</th>
                 <th>Risk</th>
                 <th>Automation</th>
-                <th>Deadline</th>
+                <th>{% if is_income %}Deadline / apply by{% else %}Deadline{% endif %}</th>
                 <th>Source</th>
             </tr>
         </thead>
@@ -106,14 +121,22 @@
                     {% if opp.ev_per_hour is not None %}${{ opp.ev_per_hour|floatformat:2 }}
                     <div class="crypto-range">${{ opp.ev_per_hour_low|floatformat:2 }}&ndash;${{ opp.ev_per_hour_high|floatformat:2 }}</div>
                     {% else %}&mdash;<div class="crypto-range">EV ${{ opp.ev_mid|floatformat:2 }} (hours unknown)</div>{% endif %}
+                    {% if opp.hours_is_estimate %}<div class="crypto-range">hours estimated</div>{% endif %}
                 </td>
+                {% if is_income %}
+                <td>{% if opp.pay_type %}{{ opp.get_pay_type_display }}{% if opp.pay_rate_usd is not None %} <span class="num">${{ opp.pay_rate_usd|floatformat:2 }}{% if opp.pay_type == "hourly" %}/h{% endif %}</span>{% endif %}{% else %}&mdash;{% endif %}
+                    {% if opp.refundable_deposit_usd %}<div class="crypto-range">refundable deposit ${{ opp.refundable_deposit_usd|floatformat:2 }}</div>{% endif %}</td>
+                <td class="num">{% if opp.skill_match is not None %}<span class="badge {% if opp.skill_match >= 60 %}gain{% elif opp.skill_match >= min_skill_match %}neutral{% else %}warn{% endif %}">{{ opp.skill_match }}%</span>{% else %}&mdash;{% endif %}</td>
+                <td style="font-size: 0.8125rem;">{% if opp.location_requirement %}{{ opp.location_requirement }}{% else %}&mdash;{% endif %}</td>
+                {% endif %}
                 <td><span class="badge {% if opp.confidence == 'high' %}gain{% elif opp.confidence == 'medium' %}neutral{% else %}warn{% endif %}">{{ opp.confidence }}</span></td>
                 <td>
                     <span class="badge {% if opp.safety_verdict == 'block' %}loss{% elif opp.safety_verdict == 'warn' %}warn{% else %}gain{% endif %}">{{ opp.get_safety_verdict_display }}</span>
                     <span class="crypto-range">{{ opp.risk_score }}/100</span>
                 </td>
                 <td><span class="badge neutral">{{ opp.automation }}</span></td>
-                <td>{% if opp.deadline %}{{ opp.deadline|date:"M j, g:i A" }}{% else %}&mdash;{% endif %}</td>
+                <td>{% if opp.deadline %}{{ opp.deadline|date:"M j, g:i A" }}{% else %}&mdash;{% endif %}
+                    {% if opp.application_deadline %}<div class="crypto-range">apply by {{ opp.application_deadline|date:"M j" }}</div>{% endif %}</td>
                 <td>
                     <span style="font-size: 0.8125rem;">{{ opp.source.get_kind_display }}</span>
                     <div style="font-size: 0.75rem;">{% external_link opp.url opp.domain %}</div>
@@ -124,7 +147,7 @@
     </table>
     </div>
     {% else %}
-    <p style="color: var(--text-secondary); padding: var(--space-5);">Nothing here yet.{% if tab == "ranked" %} Run <code>python manage.py scan_crypto</code>, or <a href="{% url 'albright_crypto_app:add' %}">add one you found</a>.{% endif %}</p>
+    <p style="color: var(--text-secondary); padding: var(--space-5);">Nothing here yet.{% if tab == "ranked" %} Run <code>python manage.py scan_crypto</code>, or <a href="{% url 'albright_crypto_app:add' %}?type={{ opportunity_type }}">add one you found</a>.{% endif %}</p>
     {% endif %}
     </div>
 </div>

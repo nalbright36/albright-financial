@@ -19,6 +19,11 @@ BLOCK_PATTERNS = {
                                               r"|pay\b.{0,40}\bto\s*(unlock|activate|withdraw)"),
     "promises guaranteed or multiplied returns": r"guaranteed\s*(returns?|profit|income)|double\s*your|(2|3|10)x\s*your\s*(crypto|money|coins)|risk[- ]free\s*(profit|returns?)",
     "wallet 'validation' or 'sync' request": r"(validate|verify|sync|rectify|restore)\s*(your\s*)?wallet",
+    # Job and task scams
+    "pay to start, train, or buy equipment": r"(pay|purchase|buy)\b.{0,30}\b(training|starter kit|equipment|onboarding|registration)\s*(fee|kit|package)?\b.{0,30}\b(job|position|start|begin|hired)|(training|registration|onboarding)\s*fee",
+    "check cashing or money forwarding": r"(deposit|cash)\s*(a|the)?\s*check\b.{0,60}\b(send|wire|transfer|buy)|money\s*mule|forward\s*(the\s*)?(funds|money|payments?)",
+    "reshipping or package forwarding": r"reship|re-ship|package\s*(forwarding|inspector|reshipper)|receive\s*(and|&)\s*forward\s*packages",
+    "payment in gift cards": r"gift\s*cards?\b.{0,60}\b(pay|payment|purchase|buy|send)|(pay|payment|send)\b.{0,60}\bgift\s*cards?",
     "support contact through DMs": r"(dm|direct message|whatsapp|telegram)\s*(us|me|support|admin)\s*(to|for)\s*(claim|support|help)",
 }
 # These raise the risk score but don't block on their own.
@@ -29,6 +34,9 @@ WARN_PATTERNS = {
     "claim fee or gas required": r"claim\s*fee|gas\s*fee|pay\s*gas|network\s*fee",
     "requires purchase or deposit": r"(minimum|min\.?)\s*deposit|purchase\s*required|buy\s*\$?\d+",
     "giveaway language": r"giveaway|free\s*\d+\s*(eth|btc|usdt|sol)",
+    "interview or contact only through chat apps": r"interview\b.{0,40}\b(telegram|whatsapp|signal|google\s*chat|hangouts)|(text|message)\s*(us|me)\s*on\s*(telegram|whatsapp|signal)",
+    "unrealistic pay for little work": r"(\$\s?\d{3,}|\d{3,}\s*(usd|dollars))\s*(a|per)\s*day\b.{0,40}\b(no experience|from home|easy)|no experience\b.{0,40}\b(\$\s?\d{3,})",
+    "requires a refundable deposit": r"(minimum|initial|opening)\s*deposit|direct\s*deposit\s*of\s*\$",
     "requires identity documents": r"\bkyc\b|passport|driver'?s\s*licen[cs]e|selfie\s*with",
 }
 

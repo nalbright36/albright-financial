@@ -135,7 +135,7 @@ class RoutingTests(TestCase):
         Opportunity.objects.filter(pk=self.doing.pk).update(status="doing")
 
     def titles(self, tab):
-        content = self.client.get(reverse("albright_crypto_app:dashboard"), {"tab": tab}).content.decode()
+        content = self.client.get(reverse("albright_crypto_app:crypto"), {"tab": tab}).content.decode()
         table = content.split('id="crypto-table"')[1].split("</table>")[0] if 'id="crypto-table"' in content else ""
         return [o.title for o in Opportunity.objects.all() if f">{o.title}</a>" in table], table
 
@@ -158,7 +158,7 @@ class RoutingTests(TestCase):
 
     def test_doing_tab_and_filters(self):
         self.assertEqual(self.titles("doing")[0], ["In progress"])
-        content = self.client.get(reverse("albright_crypto_app:dashboard"),
+        content = self.client.get(reverse("albright_crypto_app:crypto"),
                                   {"tab": "ranked", "confidence": "high"}).content.decode()
         self.assertIn("Fast bounty", content)
         self.assertNotIn(">In progress</a>", content)

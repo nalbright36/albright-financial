@@ -70,7 +70,7 @@ class LinkTests(TestCase):
 
     def test_every_external_link_on_pages_goes_through_the_check(self):
         opp = make(title="Unverified", url="https://someproject.dev/bounty")
-        for name, args in (("dashboard", []), ("opportunity", [opp.pk])):
+        for name, args in (("crypto", []), ("opportunity", [opp.pk])):
             content = self.client.get(reverse(f"albright_crypto_app:{name}", args=args)).content.decode()
             self.assertNotIn('href="https://someproject.dev', content, name)
             self.assertIn("leave/?to=https%3A%2F%2Fsomeproject.dev", content, name)
@@ -92,7 +92,7 @@ class EarningsTests(TestCase):
         response = self.client.get(reverse("albright_crypto_app:earnings"))
         self.assertContains(response, '<span class="ledger-stat__value num" id="earnings-total"', html=False)
         self.assertContains(response, "$231.05")
-        dashboard = self.client.get(reverse("albright_crypto_app:dashboard")).context
+        dashboard = self.client.get(reverse("albright_crypto_app:crypto")).context
         tiles = dashboard["tiles"]
         self.assertEqual(tiles["earned_all_time"], Decimal("231.05"))
         self.assertEqual(tiles["earned_this_month"], Decimal("199.80"))
@@ -185,12 +185,13 @@ class AlertTests(TestCase):
 
         text = "\n".join(digest_lines(now=now))
 
-        self.assertIn("<b>Crypto</b>", text)
-        self.assertIn("blocked", text)
+        self.assertIn("<b>Opportunities</b>", text)
+        self.assertIn("Crypto: 2 new (24h), 1 blocked", text)
+        self.assertIn("Income: 0 new (24h), 0 blocked", text)
         self.assertIn("Fresh bounty", text)
         self.assertIn("Due this week", text)
         self.assertIn("Earned this week (confirmed): $25.00", text)
 
     def test_digest_section_is_in_the_daily_digest(self):
         from albright_reselling_app.scanner.alerts import build_digest_message
-        self.assertIn("<b>Crypto</b>", build_digest_message())
+        self.assertIn("<b>Opportunities</b>", build_digest_message())

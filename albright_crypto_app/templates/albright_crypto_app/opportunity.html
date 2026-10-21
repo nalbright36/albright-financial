@@ -1,15 +1,16 @@
 {% extends "index.html" %}
 {% load crypto_links %}
 {% load cache_bust %}
+{% block title %}{{ opp.title|truncatechars:60 }} · Opportunities{% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
-    <a href="{% url 'albright_crypto_app:dashboard' %}" style="font-size: 0.8125rem;">&larr; Opportunities</a>
+    <a href="{% url dashboard_url_name %}" style="font-size: 0.8125rem;">&larr; {{ type_label }} opportunities</a>
 
     <div class="card__header" style="margin: 12px 0 16px; align-items: flex-start;">
         <div style="min-width: 0;">
             <h1 style="margin: 0; font-size: var(--text-2xl); overflow-wrap: anywhere;">{{ opp.title }}</h1>
             <div style="margin-top: 6px; font-size: 0.8125rem; color: var(--text-secondary);">
-                {{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% external_link opp.url %}
+                <span class="badge neutral">{{ type_label }}</span> {{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% external_link opp.url %}
             </div>
         </div>
         <span class="badge {% if opp.safety_verdict == 'block' %}loss{% elif opp.safety_verdict == 'warn' %}warn{% else %}gain{% endif %}">{{ opp.get_safety_verdict_display }}</span>
@@ -17,7 +18,7 @@
 
     {% if opp.safety_verdict == "block" %}
     <div class="crypto-danger" style="margin-bottom: 20px;">
-        <strong>Blocked - don't act on this.</strong> It matched patterns behind most crypto theft:
+        <strong>Blocked - don't act on this.</strong> It matched patterns behind most {% if is_income %}job and payment scams{% else %}crypto theft{% endif %}:
         <ul class="crypto-reasons">{% for reason in opp.safety_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
     </div>
     {% elif opp.excluded %}
@@ -49,7 +50,7 @@
                         <div class="row-count">Risk</div>
                         <span class="num">{{ opp.risk_score }}/100</span>
                         <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-secondary);">
-                            From the safety check: scam patterns block outright; wallet connections, signing, fees, urgency, KYC and unverified domains each add risk. "OK" means no red flags found - not a guarantee.
+                            From the safety check: scam patterns block outright; {% if is_income %}pay-to-start, check cashing, reshipping, gift cards and similar job scams block; chat-app interviews, unrealistic pay, deposits, urgency{% else %}wallet connections, signing, fees, urgency, KYC{% endif %} and unverified domains each add risk. "OK" means no red flags found - not a guarantee.
                         </p>
                     </div>
                     <div>
@@ -70,8 +71,18 @@
                     <div><div class="row-count">Type</div>{{ opp.get_reward_type_display }}</div>
                     <div><div class="row-count">Evidence</div>{{ opp.get_evidence_display }}{% if opp.official_source %} &middot; official source{% endif %}</div>
                     <div><div class="row-count">Deadline</div>{% if opp.deadline %}{{ opp.deadline|date:"M j, Y g:i A" }}{% else %}&mdash;{% endif %}</div>
-                    <div><div class="row-count">Hours</div>{% if opp.hours_estimate %}{{ opp.hours_estimate|floatformat:1 }}{% else %}unknown{% endif %}</div>
+                    <div><div class="row-count">Hours</div>{% if opp.hours_estimate %}{{ opp.hours_estimate|floatformat:1 }}{% if opp.hours_is_estimate %} <span class="badge warn" id="hours-estimate">estimate</span>{% endif %}{% else %}unknown{% endif %}</div>
                     <div><div class="row-count">Costs</div>${{ opp.costs_usd|floatformat:2 }}{% if opp.requires_spending %} &middot; requires spending{% endif %}</div>
+                    {% if is_income %}
+                    <div><div class="row-count">Pay</div>{% if opp.pay_type %}{{ opp.get_pay_type_display }}{% if opp.pay_rate_usd is not None %} &middot; ${{ opp.pay_rate_usd|floatformat:2 }}{% if opp.pay_type == "hourly" %}/hour{% endif %}{% endif %}{% else %}not stated{% endif %}</div>
+                    <div><div class="row-count">Location</div>{{ opp.location_requirement|default:"not stated" }}</div>
+                    <div><div class="row-count">Apply by</div>{% if opp.application_deadline %}{{ opp.application_deadline|date:"M j, Y g:i A" }}{% else %}&mdash;{% endif %}</div>
+                    <div><div class="row-count">Refundable deposit</div>{% if opp.refundable_deposit_usd %}${{ opp.refundable_deposit_usd|floatformat:2 }} (you get it back - not spending){% else %}none{% endif %}</div>
+                    <div style="grid-column: 1 / -1;" id="skills-required"><div class="row-count">Skills required{% if opp.skill_match is not None %} &middot; {{ opp.skill_match }}% match{% endif %}</div>
+                        {% for skill in opp.skills_required %}<span class="badge {% if skill in my_matched_skills %}gain{% else %}neutral{% endif %}" style="margin: 0 4px 4px 0;">{{ skill }}</span>{% empty %}none listed{% endfor %}
+                        {% if opp.skills_required %}<div style="font-size: 0.75rem; color: var(--text-secondary);">Highlighted: in your skills profile (Settings).</div>{% endif %}
+                    </div>
+                    {% endif %}
                 </div>
                 {% if opp.evidence_quote %}
                 <div class="row-count" style="margin-top: 12px;">Evidence quote (checked against the text)</div>

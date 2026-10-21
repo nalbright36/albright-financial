@@ -4,6 +4,12 @@ The safety check (core.safety.check_opportunity) and the scoring
 (core.scoring.score) are the provided, tested pure-Python modules; this
 file only feeds them and saves what they return. rescore() runs both again
 whenever an opportunity is edited.
+
+Each opportunity is "crypto" or "income", taken from its source. Income
+adds two things on top of the core modules: skill_match (my skills
+profile vs. the skills required), and the "requires a refundable deposit"
+warning - a deposit you get back isn't spending, so it never excludes an
+opportunity under the budget, but it's always flagged.
 """
 import logging
 from decimal import Decimal
@@ -17,18 +23,22 @@ from .core.safety import check_domain, check_opportunity
 from .core.scoring import score
 from .extraction import ExtractionLimitReached, extract
 from .models import Opportunity, Source, TaskStep
+from .skills import skill_match
 
 log = logging.getLogger(__name__)
 
-MANUAL_SOURCE_NAME = "Manual"
+MANUAL_SOURCE_NAMES = {"crypto": "Manual", "income": "Manual (income)"}
+REFUNDABLE_DEPOSIT_REASON = "requires a refundable deposit"
 
 
 # ---------------------------------------------------------------------------
 # Sources: one row per configured GitHub query / RSS feed, plus "Manual"
+# (one per type). Income sources are added on the Settings page.
 # ---------------------------------------------------------------------------
 
-def manual_source():
-    source, _ = Source.objects.get_or_create(kind="manual", url="", defaults={"name": MANUAL_SOURCE_NAME})
+def manual_source(opportunity_type="crypto"):
+    source, _ = Source.objects.get_or_create(kind="manual", url="", opportunity_type=opportunity_type,
+                                             defaults={"name": MANUAL_SOURCE_NAMES[opportunity_type]})
     return source
 
 
@@ -45,7 +55,8 @@ def sync_sources():
     for feed in feeds:
         Source.objects.get_or_create(kind="rss", url=feed, defaults={"name": feed})
     Source.objects.filter(kind="rss", active=True).exclude(url__in=feeds).update(active=False)
-    manual_source()
+    for opportunity_type in MANUAL_SOURCE_NAMES:
+        manual_source(opportunity_type)
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +71,12 @@ def apply_safety_and_score(opp):
     opp.safety_verdict = safety.verdict
     opp.risk_score = safety.risk_score
     opp.safety_reasons = list(safety.reasons)
+    if opp.refundable_deposit_usd and REFUNDABLE_DEPOSIT_REASON not in opp.safety_reasons:
+        # The safety module only spots some deposit wording ("minimum deposit");
+        # a recorded refundable deposit always gets the warning.
+        opp.safety_reasons.append(REFUNDABLE_DEPOSIT_REASON)
+        if opp.safety_verdict == "ok":
+            opp.safety_verdict = "warn"
     opp.domain = safety.domain
     opp.domain_status = safety.domain_status
     opp.official_source = check_domain(opp.url, allow)[1] == "allowlisted"
@@ -84,6 +101,8 @@ def apply_safety_and_score(opp):
     opp.confidence = s.confidence
     opp.automation = s.automation
     opp.reward_counts_as_confirmed = s.reward_counts_as_confirmed
+    opp.skill_match = (skill_match(opp.skills_required, config.skills())
+                       if opp.opportunity_type == "income" else None)
     return opp
 
 
@@ -135,35 +154,42 @@ def store(source, raw):
     if Opportunity.objects.filter(source=source, external_id=raw.external_id).exists():
         return None
     return Opportunity.objects.create(
-        source=source, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
+        source=source, opportunity_type=source.opportunity_type, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
         raw_text=raw.text or "", metadata=raw.metadata or {},
     )
 
 
-def add_manual(url, title, text, use_ai=True, client=None):
+def add_manual(url, title, text, use_ai=True, client=None, opportunity_type="crypto"):
     """The "Add opportunity" form: something I found myself."""
     from hashlib import sha256
-    source = manual_source()
+    source = manual_source(opportunity_type)
     external_id = "manual:" + sha256(f"{url}\n{text}".encode()).hexdigest()[:32]
     opp, created = Opportunity.objects.get_or_create(
         source=source, external_id=external_id,
-        defaults={"url": url, "title": (title or url)[:500], "raw_text": text or ""},
+        defaults={"url": url, "title": (title or url)[:500], "raw_text": text or "",
+                  "opportunity_type": opportunity_type},
     )
     if created:
         extract_and_score(opp, use_ai=use_ai, client=client)
     return opp, created
 
 
+def runnable_sources():
+    """Active collected sources - income ones only once their terms are checked."""
+    return [s for s in Source.objects.filter(active=True).exclude(kind="manual") if s.runnable]
+
+
 def scan_sources(sources=None, use_ai=True, client=None, collectors=None):
-    """Runs every active GitHub/RSS source. Returns (new opportunities,
-    errors). A blocked source (403/429) stops that source only."""
+    """Runs every runnable source (GitHub/RSS, and income RSS/API sources
+    whose terms are checked). Returns (new opportunities, errors). A
+    blocked source (403/429) stops that source only."""
     collectors = collectors or COLLECTORS
-    sources = sources if sources is not None else Source.objects.filter(active=True).exclude(kind="manual")
+    sources = sources if sources is not None else runnable_sources()
     new, errors = [], []
     for source in sources:
         collector_class = collectors.get(source.kind)
-        if collector_class is None:
-            continue
+        if collector_class is None or not source.runnable:
+            continue  # never fetch from a source that's off, or whose terms I haven't checked
         collector = collector_class()
         try:
             for raw in collector.collect(source):

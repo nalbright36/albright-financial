@@ -1,11 +1,16 @@
 {% extends "index.html" %}
 {% load crypto_links %}
+{% block title %}Earnings · Opportunities{% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
     <div class="card__header" style="margin-bottom: 20px;">
         <h1 style="margin: 0;">Earnings</h1>
-        <a href="?export=csv" class="btn btn-secondary" id="earnings-csv">Export CSV (for taxes)</a>
+        <a href="?{{ csv_query }}" class="btn btn-secondary" id="earnings-csv">Export CSV (for taxes)</a>
     </div>
+    <nav class="scanner-tabs" id="earnings-type-filter" aria-label="Type" style="margin-bottom: 16px;">
+        <a href="{% url 'albright_crypto_app:earnings' %}" class="scanner-tab{% if not type_filter %} is-active{% endif %}">All</a>
+        {% for value, label in opportunity_types %}<a href="?type={{ value }}" class="scanner-tab{% if type_filter == value %} is-active{% endif %}">{{ label }}</a>{% endfor %}
+    </nav>
     <p style="color: var(--text-secondary); margin-bottom: 20px;">Confirmed earnings only - money actually received, valued in USD at the time you received it. Potential value never appears here.</p>
 
     <div class="grid grid-3" style="margin-bottom: 24px;">
@@ -27,11 +32,12 @@
         {% if earnings %}
         <div style="overflow-x: auto;">
         <table class="holdings" id="earnings-table">
-            <thead><tr><th>Date</th><th class="num">Amount</th><th>Currency</th><th class="num">USD at receipt</th><th>Opportunity</th><th>Transaction</th><th>Note</th></tr></thead>
+            <thead><tr><th>Date</th><th>Type</th><th class="num">Amount</th><th>Currency</th><th class="num">USD at receipt</th><th>Opportunity</th><th>Transaction</th><th>Note</th></tr></thead>
             <tbody>
                 {% for e in earnings %}
                 <tr>
                     <td>{{ e.date|date:"M j, Y" }}</td>
+                    <td><span class="badge neutral">{{ e.get_opportunity_type_display }}</span></td>
                     <td class="num">{{ e.amount.normalize }}</td>
                     <td>{{ e.currency }}</td>
                     <td class="num">${{ e.usd_value_at_receipt|floatformat:2 }}</td>

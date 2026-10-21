@@ -1,0 +1,64 @@
+{% extends "index.html" %}
+{% block title %}Opportunities{% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 16px;">
+        <h1 style="margin: 0;">Opportunities</h1>
+        <a href="{% url 'albright_crypto_app:add' %}" class="btn btn-primary">Add opportunity</a>
+    </div>
+    {% include "albright_crypto_app/_type_tabs.html" with current="all" %}
+
+    {% if unchecked_sources %}
+    <p class="crypto-warning" style="margin-bottom: 20px;">
+        {{ unchecked_sources }} active source{{ unchecked_sources|pluralize }} {{ unchecked_sources|pluralize:"hasn't,haven't" }} had {{ unchecked_sources|pluralize:"its,their" }} terms checked (income sources don't run until you tick it).
+        <a href="{% url 'albright_crypto_app:settings' %}">Review sources</a>
+    </p>
+    {% endif %}
+
+    <!-- Combined: money actually received, time spent, and what that works out to per hour. -->
+    <div class="grid grid-3" style="margin-bottom: 24px;" id="overview-combined">
+        <a href="{% url 'albright_crypto_app:earnings' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Confirmed earnings (all)</span></div>
+            <span class="ledger-stat__value num" id="overview-earned" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;{% if tiles.earned_all_time > 0 %} color: var(--gain);{% endif %}">${{ tiles.earned_all_time|floatformat:2 }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">${{ tiles.earned_this_month|floatformat:2 }} this month</div>
+        </a>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Hours logged (all)</span></div>
+            <span class="ledger-stat__value num" id="overview-hours" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{{ tiles.hours_logged|floatformat:1 }}</span>
+        </div>
+        <div class="card">
+            <div class="card__header"><span class="card__label">Realized $/hour (all)</span></div>
+            <span class="ledger-stat__value num" id="overview-rate" style="font-size: 1.5rem; border-bottom: none; padding-bottom: 0;">{% if tiles.realized_per_hour is not None %}${{ tiles.realized_per_hour|floatformat:2 }}{% else %}&mdash;{% endif %}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Confirmed earnings ÷ hours logged</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        {% for t in by_type %}
+        <section class="card" id="overview-{{ t.key }}">
+            <div class="card__header">
+                <span class="card__label">{{ t.label }}</span>
+                <a href="{% url t.url_name %}" class="btn btn-secondary btn-sm">Open {{ t.label }}</a>
+            </div>
+            <table class="holdings">
+                <tbody>
+                    <tr><td>Confirmed earnings</td><td class="num" data-stat="earned">${{ t.tiles.earned_all_time|floatformat:2 }}</td></tr>
+                    <tr><td>This month</td><td class="num">${{ t.tiles.earned_this_month|floatformat:2 }}</td></tr>
+                    <tr><td>Hours logged</td><td class="num" data-stat="hours">{{ t.tiles.hours_logged|floatformat:1 }}</td></tr>
+                    <tr><td>Realized $/hour</td><td class="num" data-stat="rate">{% if t.tiles.realized_per_hour is not None %}${{ t.tiles.realized_per_hour|floatformat:2 }}{% else %}&mdash;{% endif %}</td></tr>
+                    <tr><td>Potential (not earned)</td><td class="num">${{ t.tiles.potential|floatformat:2 }}</td></tr>
+                    <tr><td>Ranked / doing</td><td class="num">{{ t.ranked }} / {{ t.doing }}</td></tr>
+                </tbody>
+            </table>
+            {% if t.top %}
+            <div class="row-count" style="margin-top: 12px;">Best by EV/hour</div>
+            <ul style="margin: 4px 0 0; padding-left: 18px; font-size: 0.875rem;">
+                {% for opp in t.top %}<li><a href="{% url 'albright_crypto_app:opportunity' opp.pk %}">{{ opp.title|truncatechars:70 }}</a>{% if opp.ev_per_hour is not None %} <span class="num" style="color: var(--text-secondary);">${{ opp.ev_per_hour|floatformat:2 }}/h</span>{% endif %}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </section>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

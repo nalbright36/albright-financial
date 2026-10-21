@@ -1,0 +1,6 @@
+{# The app's top-level tabs: All (overview), Crypto, Income. `current` is "all", "crypto" or "income". #}
+<nav class="scanner-tabs" id="type-tabs" aria-label="Opportunity type" style="margin-bottom: 20px;">
+    <a href="{% url 'albright_crypto_app:dashboard' %}" class="scanner-tab{% if current == 'all' %} is-active{% endif %}"{% if current == 'all' %} aria-current="page"{% endif %}>All</a>
+    <a href="{% url 'albright_crypto_app:crypto' %}" class="scanner-tab{% if current == 'crypto' %} is-active{% endif %}"{% if current == 'crypto' %} aria-current="page"{% endif %}>Crypto</a>
+    <a href="{% url 'albright_crypto_app:income' %}" class="scanner-tab{% if current == 'income' %} is-active{% endif %}"{% if current == 'income' %} aria-current="page"{% endif %}>Income</a>
+</nav>
