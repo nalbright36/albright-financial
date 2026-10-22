@@ -1,0 +1,7 @@
+{% for note in notes %}
+<span class="bot-lot-note" style="flex-basis: 100%;">
+    <span class="badge neutral">Grok</span>
+    <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ note.created_at|date:"M j, g:i A" }}</span>
+    <span class="bot-note__text" style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ note.text }}</span>
+</span>
+{% endfor %}

@@ -1,0 +1,32 @@
+{% if pending or decided %}
+<div class="card" style="margin-top: 24px;" id="grok-suggestions">
+    <div class="card__header"><span class="card__label">Grok suggestions</span>
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">Nothing changes until you accept</span></div>
+    {% for s in pending %}
+    <div class="bot-suggestion" style="border-top: 1px solid var(--glass-border); padding: 10px 0;">
+        <div style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;">
+            <span class="badge warn">pending</span>
+            {% if s.suggested_price is not None %}<strong>List at ${{ s.suggested_price }}</strong>{% endif %}
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ s.created_at|date:"M j, g:i A" }}{% if s.token %} &middot; {{ s.token.name }}{% endif %}</span>
+            <form method="post" action="{% url 'albright_bot_api:decide_suggestion' s.pk 'accept' %}" style="margin: 0;">
+                <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-primary btn-sm">Accept{% if s.suggested_price is not None %} &amp; set price{% endif %}</button></form>
+            <form method="post" action="{% url 'albright_bot_api:decide_suggestion' s.pk 'dismiss' %}" style="margin: 0;">
+                <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-secondary btn-sm">Dismiss</button></form>
+        </div>
+        {% if s.reason %}<p style="margin: 6px 0 0; font-size: 0.8125rem; white-space: pre-wrap; overflow-wrap: anywhere;"><strong>Why:</strong> {{ s.reason }}</p>{% endif %}
+        {% if s.listing_draft %}
+        <div class="row-count" style="margin-top: 6px;">Listing draft</div>
+        <pre class="crypto-source-text bot-note__text" id="listing-draft-{{ s.pk }}">{{ s.listing_draft }}</pre>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% for s in decided %}
+    <div style="border-top: 1px solid var(--glass-border); padding: 8px 0; font-size: 0.8125rem; color: var(--text-secondary);">
+        <span class="badge {% if s.status == 'accepted' %}gain{% else %}neutral{% endif %}">{{ s.get_status_display|lower }}</span>
+        {% if s.suggested_price is not None %}${{ s.suggested_price }}{% endif %}{% if s.listing_draft %} &middot; listing draft{% endif %} &middot; {{ s.decided_at|date:"M j" }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

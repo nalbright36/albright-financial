@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, re_path
 
+from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
 from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
 
@@ -28,4 +29,7 @@ urlpatterns = [
     # redirect here, keeping the rest of the path and the query string.
     path("opportunities/", include("albright_crypto_app.urls")),
     re_path(r"^(?:crypto|albright_crypto_app)/(?P<rest>.*)$", legacy_redirect, name="opportunities_legacy_redirect"),
+    # Bot API: the token pages (Trading nav "Bot API") and the token-authenticated JSON API.
+    path("bot-api/", include("albright_bot_api.urls")),
+    path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
 ]

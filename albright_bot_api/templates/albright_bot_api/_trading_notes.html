@@ -1,0 +1,16 @@
+<div class="card" style="margin-top: 24px;" id="bot-notes">
+    <div class="card__header"><span class="card__label">Bot notes</span>
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">Posted by the bot through the Bot API - read-only, newest first</span></div>
+    {% for note in notes %}
+    <div class="bot-note" style="border-top: 1px solid var(--glass-border); padding: 10px 0;">
+        <div style="display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap;">
+            <span class="badge neutral">Grok</span>
+            <strong>{{ note.title }}</strong>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ note.date|date:"M j, Y" }}{% if note.token %} &middot; {{ note.token.name }}{% endif %}</span>
+        </div>
+        <p class="bot-note__text" style="margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem;">{{ note.text }}</p>
+    </div>
+    {% empty %}
+    <p style="margin: 0; color: var(--text-secondary); font-size: 0.875rem;">No notes yet. The bot can post them with the <code>trading:notes</code> scope.</p>
+    {% endfor %}
+</div>

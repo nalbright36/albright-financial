@@ -1,0 +1,71 @@
+{% extends "index.html" %}
+{% block page_title %}Bot API · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
+    <div class="card__header" style="margin-bottom: 8px;">
+        <h1 style="margin: 0;">Bot API</h1>
+        <a href="{% url 'albright_bot_api:activity' %}" class="btn btn-secondary">Activity log</a>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 20px;">
+        Tokens let an outside AI bot (like Grok) read some of your data and leave notes and suggestions - never take actions.
+        It can't bid, change max bids or prices, touch your watchlist or ledger entries, submit applications, trade,
+        or read credentials or your profile. Point the bot at <code>{{ docs_path }}</code> to learn the API.
+    </p>
+
+    {% if new_token %}
+    <div class="card" style="margin-bottom: 20px; border-color: var(--accent);" id="new-token">
+        <div class="card__header"><span class="card__label">Your new token</span><span class="badge warn">shown once</span></div>
+        <p style="margin: 0 0 8px; font-size: 0.875rem;">Copy it now - only a hash is stored, so it can't be shown again. If you lose it, revoke it and create a new one.</p>
+        <div style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;">
+            <code id="new-token-value" style="font-size: 0.875rem; overflow-wrap: anywhere;">{{ new_token }}</code>
+            <button type="button" class="btn btn-primary btn-sm js-copy" data-copy-target="new-token-value">Copy</button>
+        </div>
+        <p style="margin: 8px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Send it as <code>Authorization: Bearer &lt;token&gt;</code>, over HTTPS. Base URL: <code>{{ api_base }}</code></p>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <form method="post" class="card" id="token-form">
+            {% csrf_token %}
+            <div class="card__header"><span class="card__label">New token</span></div>
+            <div class="field">
+                <label for="{{ form.name.id_for_label }}">Name</label>
+                {{ form.name }}
+                {% for e in form.name.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="field">
+                <label>Scopes</label>
+                {% for choice in form.scopes %}<label style="display: flex; gap: 8px; align-items: center; font-weight: 400;">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>{% endfor %}
+                {% for e in form.scopes.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Create token</button>
+        </form>
+
+        <div class="card" style="padding: 0;">
+            <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Tokens</span></div>
+            {% if tokens %}
+            <div class="table-scroll">
+            <table class="holdings" id="tokens-table">
+                <thead><tr><th>Name</th><th>Scopes</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+                <tbody>
+                {% for t in tokens %}
+                <tr>
+                    <td><strong>{{ t.name }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);"><code>{{ t.display_prefix }}…</code></div></td>
+                    <td style="font-size: 0.75rem;">{% for s in t.scopes %}<code>{{ s }}</code>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+                    <td style="font-size: 0.8125rem;">{{ t.created_at|date:"M j, Y" }}</td>
+                    <td style="font-size: 0.8125rem;">{% if t.last_used_at %}{{ t.last_used_at|date:"M j, g:i A" }}{% else %}never{% endif %}</td>
+                    <td>{% if t.is_active %}
+                        <form method="post" action="{% url 'albright_bot_api:revoke' t.pk %}" style="margin: 0;">{% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Revoke</button></form>
+                        {% else %}<span class="badge loss">revoked {{ t.revoked_at|date:"M j" }}</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No tokens yet.</p>{% endif %}
+        </div>
+    </div>
+</div>
+{% load cache_bust %}<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}

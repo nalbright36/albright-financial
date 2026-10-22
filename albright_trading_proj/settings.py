@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'albright_trading_app',
     'albright_reselling_app',
     'albright_crypto_app',
+    'albright_bot_api',
     'django.contrib.humanize',
 ]
 
@@ -320,3 +321,6 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 # with redirect URI <site>/opportunities/gmail/callback/. Only the gmail.readonly scope is ever requested.
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
+# Bot API (albright_bot_api): token requests must arrive over HTTPS whenever DEBUG is off.
+BOT_API_REQUIRE_HTTPS = not DEBUG

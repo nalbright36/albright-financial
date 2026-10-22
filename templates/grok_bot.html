@@ -246,6 +246,7 @@
             {% endif %}
         </div>
     {% endif %}
+    {% load bot_api %}{% bot_trading_notes request.user %}
 </div>
 
 {% if data %}

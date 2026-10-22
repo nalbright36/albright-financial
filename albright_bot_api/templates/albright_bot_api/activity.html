@@ -1,0 +1,38 @@
+{% extends "index.html" %}
+{% block page_title %}Bot API activity · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <a href="{% url 'albright_bot_api:tokens' %}" style="font-size: 0.8125rem;">&larr; Bot API</a>
+    <h1 style="margin: 12px 0 16px;">Activity log</h1>
+
+    <nav class="scanner-tabs" id="token-filter" aria-label="Token" style="margin-bottom: 16px;">
+        <a href="{% url 'albright_bot_api:activity' %}" class="scanner-tab{% if not selected %} is-active{% endif %}">All tokens</a>
+        {% for t in tokens %}<a href="?token={{ t.pk }}" class="scanner-tab{% if selected == t.pk|stringformat:'d' %} is-active{% endif %}">{{ t.name }}</a>{% endfor %}
+        <a href="?token=none" class="scanner-tab{% if selected == 'none' %} is-active{% endif %}">No valid token</a>
+    </nav>
+
+    <div class="card" style="padding: 0;">
+        {% if logs %}
+        <div class="table-scroll">
+        <table class="holdings" id="activity-table">
+            <thead><tr><th>Time</th><th>Token</th><th>Endpoint</th><th class="num">Status</th><th>Summary</th></tr></thead>
+            <tbody>
+            {% for log in logs %}
+            <tr>
+                <td style="white-space: nowrap;">{{ log.created_at|date:"M j, g:i:s A" }}</td>
+                <td>{{ log.token_name }}</td>
+                <td style="font-size: 0.8125rem;"><code>{{ log.method }} {{ log.endpoint }}</code></td>
+                <td class="num"><span class="badge {% if log.status < 300 %}gain{% elif log.status == 429 or log.status == 400 or log.status == 404 %}warn{% else %}loss{% endif %}">{{ log.status }}</span></td>
+                <td style="font-size: 0.8125rem; overflow-wrap: anywhere;">{{ log.summary }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p style="padding: var(--space-3) var(--space-5); margin: 0; font-size: 0.75rem; color: var(--text-secondary);">Newest first, up to {{ limit }}.</p>
+        {% else %}
+        <p style="padding: var(--space-5); margin: 0; color: var(--text-secondary);">No requests yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

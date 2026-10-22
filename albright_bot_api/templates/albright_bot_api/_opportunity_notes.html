@@ -1,0 +1,17 @@
+{% if notes %}
+<section class="card" style="margin-bottom: 20px;" id="grok-notes">
+    <div class="card__header"><span class="card__label">From Grok</span>
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">Notes and drafts from the Bot API - never sent anywhere</span></div>
+    {% for note in notes %}
+    <div style="border-top: 1px solid var(--glass-border); padding: 10px 0;">
+        <div style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
+            <span class="badge neutral">Grok</span>
+            <strong>{{ note.get_kind_display }}</strong>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ note.created_at|date:"M j, g:i A" }}</span>
+            {% if note.kind == "proposal" %}<button type="button" class="btn btn-secondary btn-sm js-copy" data-copy-target="grok-note-{{ note.pk }}">Copy</button>{% endif %}
+        </div>
+        <pre class="crypto-source-text bot-note__text" id="grok-note-{{ note.pk }}">{{ note.text }}</pre>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}

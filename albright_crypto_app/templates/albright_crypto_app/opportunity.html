@@ -144,6 +144,8 @@
                 {% endif %}
             </section>
 
+            {% load bot_api %}{% bot_opportunity_notes opp %}
+
             {% if is_income %}
             <!-- Proposal & tailored resume: only facts from My profile. -->
             <section class="card" style="margin-bottom: 20px;" id="drafts">
