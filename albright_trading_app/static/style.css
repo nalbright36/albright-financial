@@ -62,16 +62,8 @@
      theme-independent parts; per-theme colors are in the two blocks below. */
   --glass-blur: 14px;
   --radius-card: 14px;
-  --glow-ring: 0 0 0 4px rgba(16, 185, 129, 0.18);
-  --glow-primary: 0 0 0 4px rgba(16, 185, 129, 0.18), 0 6px 18px rgba(16, 185, 129, 0.35);
-  --glow-primary-hover: 0 0 0 5px rgba(16, 185, 129, 0.24), 0 8px 24px rgba(16, 185, 129, 0.45);
-  /* Primary buttons: emerald with white text. #10B981 itself only gives
-     white text 2.5:1 (fails WCAG AA), so the fill is the deeper emerald
-     #047857 (5.5:1); the glow keeps the brighter #10B981 hue. */
-  --primary-bg: #047857;
-  --primary-bg-hover: #065F46;
-  --primary-text: #FFFFFF;
-  --nav-tint: linear-gradient(90deg, rgba(16, 185, 129, 0.10), rgba(59, 130, 246, 0.08));
+  /* The accent glows (--glow-ring, --glow-primary*, --page-glow-*,
+     --nav-tint) are per app - defined on <body> in "Per-app accent". */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -111,9 +103,18 @@
   --emerald: #34D399;
   --emerald-bg: rgba(16, 185, 129, 0.14);
 
-  /* Glass and glow - dark: the same hues at lower strength. */
-  --page-glow-1: rgba(16, 185, 129, 0.14);
-  --page-glow-2: rgba(59, 130, 246, 0.11);
+  /* Glass and glow - dark: the same hues at lower strength. The two
+     page glows are the current app's accent at these strengths. */
+  --page-glow-1-alpha: 0.14;
+  --page-glow-2-alpha: 0.11;
+  --accent-ring-alpha: 0.3;
+  /* Each app's own color (the app-switch buttons' dots) - fixed per app,
+     whichever app you're in. */
+  --app-trading: #34D399;
+  --app-reselling: #60A5FA;
+  --app-opportunities: #A78BFA;
+  /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
+  --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
   --glass-bg-solid: #12151A;               /* no backdrop-filter / reduced transparency; sticky table cells */
   --glass-bg-dialog: rgba(18, 21, 26, 0.88); /* dialogs sit over a dimmed backdrop - near-solid for contrast */
@@ -160,8 +161,13 @@
   --emerald-bg: rgba(16, 185, 129, 0.10);
 
   /* Glass and glow - light. */
-  --page-glow-1: rgba(16, 185, 129, 0.18);
-  --page-glow-2: rgba(59, 130, 246, 0.14);
+  --page-glow-1-alpha: 0.18;
+  --page-glow-2-alpha: 0.14;
+  --accent-ring-alpha: 0.18;
+  --app-trading: #10B981;
+  --app-reselling: #3B82F6;
+  --app-opportunities: #8B5CF6;
+  --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
   --glass-bg-dialog: rgba(255, 255, 255, 0.92);
@@ -177,55 +183,76 @@
 }
 
 /* ---------- Per-app accent ----------
-   Trading keeps its current cool hue (refined to a Vercel-style
-   blue); Reselling keeps emerald. Everything else (positive/
-   negative values, warnings, info) is the shared --emerald/--red/
-   --amber/--blue above, independent of which app you're in. A dark,
-   near-black "on-accent" text color (not white) sits on top of
-   either, matching how the primary button already works today. */
-:root,
+   Each app has its own accent, switched by <body data-app="trading |
+   reselling | opportunities"> (context_processors.current_app; pages
+   outside the three apps are "trading"):
+     Trading = green #10B981, Reselling = blue #3B82F6, Opportunities = purple #8B5CF6.
+   --accent-rgb is that brand hue; everything that glows is built from it.
+   --accent is the shade used as TEXT (links, active tabs, counts): the
+   lighter #34D399 / #60A5FA / #A78BFA in dark mode, and in light mode a
+   deeper shade (#047857 / #1D4ED8 / #6D28D9) - the brand hues themselves
+   reach only 2.5:1 / 3.7:1 / 4.2:1 on the light cards (WCAG AA is 4.5:1).
+   --accent-solid is the fill behind white --accent-contrast text (primary
+   buttons, active presets): those same deep shades in both themes (white
+   text 5.5:1 / 6.7:1 / 7.1:1).
+   Semantic colors don't change with the app: gains stay green, losses
+   red, warnings amber (--gain/--loss/--warn below).
+
+   The derived tokens are declared on body (not :root) on purpose: a
+   custom property's var() is resolved where it's declared, so they must
+   sit on the same element as the per-app --accent-rgb. */
 body {
-  --accent: #3B82F6;
-  --accent-hover: #60A5FA;
-  --accent-ring: rgba(59, 130, 246, 0.3);
-  --on-accent: #051029;
+  --accent-soft: rgba(var(--accent-rgb), 0.14);
+  --accent-glow: rgba(var(--accent-rgb), 0.35);
+  --accent-ring: rgba(var(--accent-rgb), var(--accent-ring-alpha));
+  --accent-contrast: #FFFFFF;
+  --on-accent: var(--accent-contrast);
+  --glow-ring: 0 0 0 4px rgba(var(--accent-rgb), 0.18);
+  --glow-primary: 0 0 0 4px rgba(var(--accent-rgb), 0.18), 0 6px 18px var(--accent-glow);
+  --glow-primary-hover: 0 0 0 5px rgba(var(--accent-rgb), 0.24), 0 8px 24px rgba(var(--accent-rgb), 0.45);
+  --primary-bg: var(--accent-solid);
+  --primary-bg-hover: var(--accent-solid-hover);
+  --primary-text: var(--accent-contrast);
+  --page-glow-1: rgba(var(--accent-rgb), var(--page-glow-1-alpha));
+  --page-glow-2: rgba(var(--accent-rgb), var(--page-glow-2-alpha));
+  --nav-tint: linear-gradient(90deg, rgba(var(--accent-rgb), 0.10), rgba(var(--accent-rgb), 0.04));
 }
-body.theme-reselling {
-  --accent: #10B981;
-  --accent-hover: #34D399;
-  --accent-ring: rgba(16, 185, 129, 0.3);
-  --on-accent: #06211A;
+/* Dark (default). Trading is also the default for a body without data-app. */
+body,
+body[data-app="trading"] {
+  --accent-rgb: 16, 185, 129;
+  --accent: #34D399;
+  --accent-hover: #6EE7B7;
+  --accent-solid: #047857;
+  --accent-solid-hover: #065F46;
 }
-/* Light theme: each app's accent one step deeper, since it's used as text
-   (links, active tabs, counts) on the light glass cards - #10B981 and
-   #3B82F6 only reach ~2.4:1 and ~3.6:1 there (WCAG AA needs 4.5:1). White
-   text on accent fills. Hover goes darker, not lighter, in light mode. */
-[data-theme="light"] body {
-  --accent: #1D4ED8;
-  --accent-hover: #1E40AF;
-  --accent-ring: rgba(37, 99, 235, 0.18);
-  --on-accent: #FFFFFF;
+body[data-app="reselling"] {
+  --accent-rgb: 59, 130, 246;
+  --accent: #60A5FA;
+  --accent-hover: #93C5FD;
+  --accent-solid: #1D4ED8;
+  --accent-solid-hover: #1E40AF;
 }
-[data-theme="light"] body.theme-reselling {
-  --accent: #047857;
-  --accent-hover: #065F46;
-  --accent-ring: rgba(16, 185, 129, 0.18);
-  --on-accent: #FFFFFF;
-}
-/* Opportunities app: violet, so the three apps are easy to tell apart. Light-mode
-   shade chosen for AA on the light glass cards (5.2:1+), dark for the dark
-   ones (4.8:1+). */
-body.theme-opportunities {
+body[data-app="opportunities"] {
+  --accent-rgb: 139, 92, 246;
   --accent: #A78BFA;
   --accent-hover: #C4B5FD;
-  --accent-ring: rgba(139, 92, 246, 0.3);
-  --on-accent: #1E1033;
+  --accent-solid: #6D28D9;
+  --accent-solid-hover: #5B21B6;
 }
-[data-theme="light"] body.theme-opportunities {
+/* Light: text shades one step deeper (hover goes darker, not lighter). */
+[data-theme="light"] body,
+[data-theme="light"] body[data-app="trading"] {
+  --accent: #047857;
+  --accent-hover: #065F46;
+}
+[data-theme="light"] body[data-app="reselling"] {
+  --accent: #1D4ED8;
+  --accent-hover: #1E40AF;
+}
+[data-theme="light"] body[data-app="opportunities"] {
   --accent: #6D28D9;
   --accent-hover: #5B21B6;
-  --accent-ring: rgba(139, 92, 246, 0.18);
-  --on-accent: #FFFFFF;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -675,26 +702,26 @@ a:hover { color: var(--accent-hover); }
 
 .btn-sm { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
 
-.btn-primary { background: var(--accent); color: var(--on-accent); }
-.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary { background: var(--accent-solid); color: var(--accent-contrast); }
+.btn-primary:hover { background: var(--accent-solid-hover); }
 .btn-primary:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
 
 .btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--text-primary); }
 .btn-secondary:hover { background: var(--surface-hover); border-color: var(--text-tertiary); }
 
 /* Watchlist star toggle, once watching - see _watch_button.html. */
-.js-watch-toggle.is-watching { border-color: var(--gain); color: var(--gain); }
+.js-watch-toggle.is-watching { border-color: var(--accent); color: var(--accent); }
 .js-watch-toggle .js-watch-star { margin-right: 2px; }
 
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
 .btn-ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
 
 .btn-danger { background: var(--red-bg); border-color: transparent; color: var(--red); }
-.btn-danger:hover { background: var(--red); color: var(--on-accent); }
+.btn-danger:hover { background: var(--red); color: var(--on-semantic); }
 
-.btn-buy { background: var(--gain); color: var(--on-accent); }
+.btn-buy { background: var(--gain); color: var(--on-semantic); }
 .btn-buy:hover { opacity: 0.9; }
-.btn-sell { background: var(--loss); color: var(--on-accent); }
+.btn-sell { background: var(--loss); color: var(--on-semantic); }
 .btn-sell:hover { opacity: 0.9; }
 
 /* Loading state: add data-loading="true" to a .btn - hides the label's
@@ -721,7 +748,7 @@ a:hover { color: var(--accent-hover); }
 @media (prefers-reduced-motion: reduce) { .btn[data-loading="true"]::after { animation: none; } }
 
 .btn-timeframe { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
-.btn-timeframe.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn-timeframe.active { background: var(--accent-solid); color: var(--accent-contrast); border-color: var(--accent-solid); }
 .btn-timeframe:disabled { opacity: 0.6; cursor: default; }
 .btn-timeframe-error { border-color: var(--loss) !important; color: var(--loss) !important; }
 
@@ -783,7 +810,7 @@ a:hover { color: var(--accent-hover); }
 
 /* A headroom preset button reflects the filter it currently matches -
    same look as an active timeframe toggle elsewhere in this app. */
-.af-preset.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.af-preset.is-active { background: var(--accent-solid); color: var(--accent-contrast); border-color: var(--accent-solid); }
 
 /* Light theme only: inputs/selects inside a card go white (--surface)
    with the card's own border color (--border), so they read as part of
@@ -977,7 +1004,7 @@ tr.scanner-detail td {
   background: var(--surface-hover); color: var(--text-secondary); font-size: var(--text-xs);
   font-family: var(--font-mono); padding: 1px var(--space-2); border-radius: var(--radius-full);
 }
-.scanner-tab.is-active .tab-badge { background: var(--accent-ring); color: var(--accent); }
+.scanner-tab.is-active .tab-badge { background: var(--accent-soft); color: var(--accent); }
 .tab-panel__heading {
   font-size: var(--text-sm); text-transform: none; color: var(--text-secondary);
   font-weight: 600; margin: 0 0 var(--space-3);
@@ -1018,8 +1045,8 @@ tr.scanner-detail td {
   content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px;
   background: var(--text-secondary); border-radius: 50%; transition: transform var(--transition), background var(--transition);
 }
-.toggle-switch input:checked + .toggle-slider { background: var(--gain-bg); border-color: var(--gain); }
-.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background: var(--gain); }
+.toggle-switch input:checked + .toggle-slider { background: var(--accent-soft); border-color: var(--accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background: var(--accent); }
 .toggle-switch input:disabled + .toggle-slider { opacity: 0.6; cursor: default; }
 
 /* ---------- Misc ---------- */
@@ -1173,7 +1200,7 @@ tr.scanner-detail td {
 .review-legend__keys { display: inline-flex; align-items: center; gap: 3px; min-width: 76px; }
 .review-legend__or { color: var(--text-tertiary); font-size: var(--text-xs); }
 .review-legend__hint { color: var(--text-secondary); font-size: var(--text-xs); }
-.review-legend__list li.is-flash { background: var(--accent-ring); color: var(--accent); }
+.review-legend__list li.is-flash { background: var(--accent-soft); color: var(--accent); }
 .review-legend-tab {
   position: sticky; top: var(--space-4); writing-mode: vertical-rl; padding: var(--space-3) var(--space-2);
   border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
@@ -1277,8 +1304,8 @@ table.holdings thead th,
 table.ledger-view-table .ledger-item-cell,
 table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid); }
 
-/* ---------- Nav bar: soft emerald-to-blue tint, same blur, faint
-   bottom border; the brand's status dot glows. ---------- */
+/* ---------- Nav bar: a soft tint of the app's accent, same blur, faint
+   bottom border; the brand's status dot glows in the accent. ---------- */
 .navbar {
   background: var(--nav-tint), color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
@@ -1286,11 +1313,11 @@ table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid)
   border-bottom: 1px solid var(--nav-border);
 }
 .navbar__brand::before {
-  background: #10B981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18), 0 0 10px rgba(16, 185, 129, 0.65);
+  background: rgb(var(--accent-rgb));
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18), 0 0 10px rgba(var(--accent-rgb), 0.65);
 }
 
-/* ---------- Primary buttons: emerald, white text, soft glow; a little
+/* ---------- Primary buttons: the app's accent, white text, soft glow; a little
    stronger on hover. Secondary buttons are unchanged. ---------- */
 .btn-primary {
   background: var(--primary-bg);
@@ -1306,7 +1333,7 @@ table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid)
 }
 .btn-primary:focus-visible { box-shadow: var(--glow-primary-hover); }
 
-/* ---------- Focus: the same emerald glow ring on inputs and buttons
+/* ---------- Focus: the app's accent glow ring on inputs and buttons
    (links keep the existing outline). ---------- */
 .btn:focus-visible,
 button:focus-visible,
@@ -1319,9 +1346,14 @@ textarea:focus-visible {
 .field input:focus, .field select:focus, .field textarea:focus,
 .scanner-controls input:focus, .scanner-controls select:focus,
 .ledger-input:focus {
-  border-color: #10B981;
+  border-color: var(--accent);
   box-shadow: var(--glow-ring);
 }
+
+/* ---------- Checkboxes, radios, ranges: the app's accent ---------- */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] { accent-color: var(--accent-solid); }
 
 /* ---------- Status pills / badges: tinted background (unchanged
    tokens) plus a faint glow in the same hue. ---------- */
@@ -1329,7 +1361,7 @@ textarea:focus-visible {
 .badge.loss { box-shadow: 0 0 0 1px var(--glow-loss), 0 0 12px var(--glow-loss); }
 .badge.warn { box-shadow: 0 0 0 1px var(--glow-warn), 0 0 12px var(--glow-warn); }
 .badge.neutral { box-shadow: 0 0 0 1px var(--glass-border); }
-.js-watch-toggle.is-watching { background: var(--gain-bg); box-shadow: 0 0 0 1px var(--glow-gain), 0 0 12px var(--glow-gain); }
+.js-watch-toggle.is-watching { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-ring), 0 0 12px var(--accent-glow); }
 
 /* ---------- Big positive money values in tiles: emerald-to-blue
    gradient text. "Positive" is exactly the tiles whose inline color
@@ -1350,6 +1382,29 @@ textarea:focus-visible {
 /* The active tab's count badge sits on the accent's own tint - the hover
    shade (darker in light mode, lighter in dark) keeps it at AA in both. */
 .scanner-tab.is-active .tab-badge { color: var(--accent-hover); }
+
+/* ---------- App-switch buttons: a dot in each app's own color; the
+   current app's button in its accent. ---------- */
+.app-switch-btn { gap: 6px; }
+.app-switch-btn::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--app-trading);
+}
+.app-switch-btn[data-app-target="reselling"]::before { background: var(--app-reselling); }
+.app-switch-btn[data-app-target="opportunities"]::before { background: var(--app-opportunities); }
+.app-switch-btn.is-current {
+  /* The hover shade (darker in light mode, lighter in dark): the plain
+     accent on its own tint over the page glow is just under AA (4.4:1). */
+  color: var(--accent-hover);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 10px var(--accent-ring);
+}
+.app-switch-btn.is-current::before { box-shadow: 0 0 6px var(--accent-glow); }
 
 /* ---------- Accessibility fallbacks ---------- */
 @media (prefers-reduced-transparency: reduce) {

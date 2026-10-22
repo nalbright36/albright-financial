@@ -187,7 +187,7 @@ class GrokBotPageTests(TestCase):
     def test_page_renders_from_mocked_data(self, _outlook):
         response = self.get()
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<title>Grok Bot · Albright Financial</title>")
+        self.assertContains(response, "<title>Grok Bot · Albright Trading</title>")
         self.assertContains(response, "$105,250.50")                  # equity
         self.assertContains(response, "+$1,250.50")                   # today: 105,250.50 - 104,000
         self.assertContains(response, "+1.20% &middot; whole account")

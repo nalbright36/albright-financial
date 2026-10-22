@@ -1,10 +1,24 @@
-# albright_trading_app/context_processors.py  (or a shared/utils location)
+"""Which of the three apps the current page belongs to - drives the
+header's brand name, app-switch buttons, per-app nav, and accent color
+(templates/index.html sets <body data-app="..."> from it)."""
+
+# URL namespace (app_name) -> the app's key. Anything else - the trading
+# app's own pages, login/logout, admin - is "trading".
+APP_KEYS = {"albright_reselling_app": "reselling", "albright_crypto_app": "opportunities"}
+APP_BRANDS = {"trading": "Albright Trading", "reselling": "Albright Reselling",
+              "opportunities": "Albright Opportunities"}
+
+
+def app_key_for(app_name):
+    return APP_KEYS.get(app_name, "trading")
+
+
 def current_app(request):
-    """Which of the three apps the current page belongs to - drives the
-    header's app-switch buttons, per-app nav, and accent (templates/index.html)."""
-    resolved = request.resolver_match
-    app_name = resolved.app_name if resolved else None
+    resolved = getattr(request, "resolver_match", None)
+    key = app_key_for(resolved.app_name if resolved else None)
     return {
-        "in_reselling_app": app_name == "albright_reselling_app",
-        "in_opportunities_app": app_name == "albright_crypto_app",  # the Opportunities app
+        "current_app": key,
+        "app_brand": APP_BRANDS[key],
+        "in_reselling_app": key == "reselling",
+        "in_opportunities_app": key == "opportunities",
     }

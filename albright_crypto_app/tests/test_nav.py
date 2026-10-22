@@ -27,7 +27,7 @@ class OpportunitiesNavTests(TestCase):
         content = self.client.get(url).content.decode()
         row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
         return dict((label, href) for href, label in
-                    re.findall(r'<a href="([^"]*)" class="app-switch-btn">([^<]+)</a>', row))
+                    re.findall(r'<a href="([^"]*)" class="app-switch-btn[^"]*"[^>]*>([^<]+)</a>', row))
 
     def test_opportunities_button_in_every_app_links_directly_to_the_app(self, _outlook):
         home = reverse("albright_crypto_app:dashboard")
@@ -38,10 +38,13 @@ class OpportunitiesNavTests(TestCase):
                 self.assertEqual(buttons.get("Opportunities"), home)
                 self.assertNotIn("Crypto", buttons)
 
-    def test_opportunities_app_shows_the_other_two(self, _outlook):
+    def test_opportunities_app_shows_all_three_with_itself_highlighted(self, _outlook):
+        content = self.client.get(reverse("albright_crypto_app:dashboard")).content.decode()
         buttons = self.switch_buttons(reverse("albright_crypto_app:dashboard"))
         self.assertEqual(buttons, {"Trading": reverse("trading_home"),
-                                   "Reselling": reverse("albright_reselling_app:dashboard")})
+                                   "Reselling": reverse("albright_reselling_app:dashboard"),
+                                   "Opportunities": reverse("albright_crypto_app:dashboard")})
+        self.assertIn('class="app-switch-btn is-current" data-app-target="opportunities" aria-current="page"', content)
 
     def test_no_switch_button_points_at_root(self, _outlook):
         for page in (reverse("trading_home"), reverse("albright_reselling_app:dashboard"),
@@ -62,11 +65,11 @@ class OpportunitiesNavTests(TestCase):
         self.assertIn(f'<a href="{reverse("albright_crypto_app:dashboard")}" class="navbar__brand">', content)
         for name in ("dashboard", "crypto", "income", "add", "earnings", "settings"):
             self.assertIn(f'href="{reverse(f"albright_crypto_app:{name}")}"', content)
-        self.assertIn('class="theme-opportunities"', content)
-        self.assertIn("<title>Crypto · Opportunities</title>", content)
-        self.assertIn("<title>Opportunities</title>",
+        self.assertIn('<body data-app="opportunities">', content)
+        self.assertIn("<title>Crypto · Albright Opportunities</title>", content)
+        self.assertIn("<title>Albright Opportunities</title>",
                       self.client.get(reverse("albright_crypto_app:dashboard")).content.decode())
-        self.assertIn("<title>Income · Opportunities</title>",
+        self.assertIn("<title>Income · Albright Opportunities</title>",
                       self.client.get(reverse("albright_crypto_app:income")).content.decode())
 
     def test_verbose_name(self, _outlook):

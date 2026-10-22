@@ -1,7 +1,7 @@
 {% extends "index.html" %}
 {% load crypto_links %}
 {% load cache_bust %}
-{% block title %}{{ opp.title|truncatechars:60 }} · Opportunities{% endblock %}
+{% block page_title %}{{ opp.title|truncatechars:60 }} · {% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
     <a href="{% url dashboard_url_name %}" style="font-size: 0.8125rem;">&larr; {{ type_label }} opportunities</a>
