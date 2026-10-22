@@ -14,13 +14,13 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-SCOPES = [
-    ("trading:notes", "Trading: post notes to the Grok Bot page"),
-    ("reseller:read", "Reseller: read live lots and unsold inventory"),
-    ("reseller:suggest", "Reseller: leave lot notes and inventory suggestions"),
-    ("opportunities:read", "Opportunities: read new opportunities"),
-    ("opportunities:suggest", "Opportunities: leave notes and proposal drafts"),
-    ("site:suggest", "Site: drop website improvement ideas in the Admin inbox"),
+SCOPES = [   # (scope, one-line description of what it allows)
+    ("trading:notes", "Post notes to the Grok Bot page (Trading)."),
+    ("reseller:read", "Read today's live auction lots and your unsold inventory."),
+    ("reseller:suggest", "Leave notes on lots and pending price/listing suggestions on inventory items."),
+    ("opportunities:read", "Read opportunities found in the last 7 days."),
+    ("opportunities:suggest", "Leave notes and proposal drafts on opportunities (never sent anywhere)."),
+    ("site:suggest", "Drop website improvement ideas in the Admin inbox (Bot suggestions)."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"
@@ -54,6 +54,20 @@ class BotToken(models.Model):
         token = cls.objects.create(owner=owner, name=name, token_hash=hash_token(raw), display_prefix=raw[:8],
                                    scopes=[s for s in SCOPE_KEYS if s in scopes])
         return token, raw
+
+    def set_scopes(self, scopes):
+        """Change what the token may do - effective on its next request; the token value is unchanged."""
+        self.scopes = [s for s in SCOPE_KEYS if s in scopes]
+        self.save(update_fields=["scopes"])
+
+    def rotate(self):
+        """A new token value with the same name and scopes. The old value
+        stops working immediately (its hash is replaced). Returns the new
+        full token - shown once, never stored."""
+        raw = TOKEN_PREFIX + secrets.token_urlsafe(32)
+        self.token_hash, self.display_prefix = hash_token(raw), raw[:8]
+        self.save(update_fields=["token_hash", "display_prefix"])
+        return raw
 
     @property
     def is_active(self):

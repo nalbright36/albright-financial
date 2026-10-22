@@ -43,7 +43,7 @@ class AdminTestCase(TestCase):
 
 class AccessTests(AdminTestCase):
     def all_urls(self):
-        args = {"revoke_token": [1], "update_suggestion": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
+        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "update_suggestion": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
         return [(p.name, reverse(f"albright_control:{p.name}", args=args.get(p.name, []))) for p in control_urls]
 
     def test_every_admin_page_is_404_for_non_superusers(self):
@@ -478,3 +478,168 @@ class AuditLogTests(AdminTestCase):
         filtered = self.client.get(reverse("albright_control:audit"), {"action": "token_revoked"})
         self.assertContains(filtered, "&quot;Grok&quot;")
         self.assertNotContains(filtered, "albright-expenses-")
+
+
+# ---------------------------------------------------------------------------
+# Token management: edit permissions, rotate
+# ---------------------------------------------------------------------------
+
+@override_settings(BOT_API_REQUIRE_HTTPS=False)
+class TokenManagementTests(AdminTestCase):
+    def setUp(self):
+        super().setUp()
+        self.token, self.raw = BotToken.issue(self.admin, "Grok bot", ["reseller:read"])
+        self.api = Client()
+
+    def suggest(self, raw):
+        return self.api.post(reverse("bot_api_v1:site_suggestions"),
+                             data=json.dumps({"app": "all", "title": "Idea", "description": "x"}),
+                             content_type="application/json", HTTP_AUTHORIZATION=f"Bearer {raw}")
+
+    def test_create_form_lists_every_scope_with_a_description(self):
+        from django.utils.html import escape
+        from albright_bot_api.models import SCOPES
+        page = self.client.get(reverse("albright_control:bot_api")).content.decode()
+        form = page.split('id="token-form"', 1)[1].split("</form>", 1)[0]
+        self.assertEqual(len(SCOPES), 6)
+        for key, description in SCOPES:
+            self.assertIn(f'value="{key}"', form)
+            self.assertIn(f"<code>{key}</code> &mdash; {escape(description)}", form)
+
+    def test_edit_permissions_takes_effect_immediately_without_changing_the_token(self):
+        self.assertEqual(self.suggest(self.raw).status_code, 403)
+        page = self.client.get(reverse("albright_control:bot_api")).content.decode()
+        edit = page.split(f'id="edit-token-{self.token.pk}"', 1)[1].split("</details>", 1)[0]
+        self.assertIn('value="reseller:read" checked', edit)       # pre-filled with its current scopes
+        self.assertNotIn('value="site:suggest" checked', edit)
+        hash_before = BotToken.objects.get(pk=self.token.pk).token_hash
+
+        self.client.post(reverse("albright_control:edit_token_scopes", args=[self.token.pk]),
+                         {"scopes": ["reseller:read", "site:suggest"], "password": PASSWORD})
+
+        token = BotToken.objects.get(pk=self.token.pk)
+        self.assertEqual(token.scopes, ["reseller:read", "site:suggest"])
+        self.assertEqual(token.token_hash, hash_before)            # same token value
+        self.assertEqual(self.suggest(self.raw).status_code, 201)  # works right away
+        entry = AuditEntry.objects.get()
+        self.assertEqual(entry.action, "token_scopes_changed")
+        self.assertIn("reseller:read -> reseller:read, site:suggest", entry.details)
+
+        self.client.post(reverse("albright_control:edit_token_scopes", args=[self.token.pk]),
+                         {"scopes": ["site:suggest"], "password": PASSWORD})
+        reader = self.api.get(reverse("bot_api_v1:reseller_lots"), HTTP_AUTHORIZATION=f"Bearer {self.raw}")
+        self.assertEqual(reader.status_code, 403)                  # a removed scope stops working at once
+
+    def test_edit_permissions_needs_my_password(self):
+        self.client.post(reverse("albright_control:edit_token_scopes", args=[self.token.pk]),
+                         {"scopes": ["site:suggest"], "password": "wrong"})
+        self.assertEqual(BotToken.objects.get(pk=self.token.pk).scopes, ["reseller:read"])
+        self.assertEqual(self.suggest(self.raw).status_code, 403)
+        self.assertFalse(AuditEntry.objects.exists())
+
+    def test_rotate_invalidates_the_old_value_and_shows_the_new_one_once(self):
+        response = self.client.post(reverse("albright_control:rotate_token", args=[self.token.pk]), {"password": PASSWORD})
+        new_raw = response.context["new_token"]
+        self.assertNotEqual(new_raw, self.raw)
+        self.assertContains(response, new_raw)
+        self.assertContains(response, 'data-copy-target="new-token-value"')
+        token = BotToken.objects.get(pk=self.token.pk)
+        self.assertEqual((token.name, token.scopes, token.is_active), ("Grok bot", ["reseller:read"], True))
+        self.assertEqual(BotToken.objects.count(), 1)
+        old = self.api.get(reverse("bot_api_v1:docs"), HTTP_AUTHORIZATION=f"Bearer {self.raw}")
+        new = self.api.get(reverse("bot_api_v1:docs"), HTTP_AUTHORIZATION=f"Bearer {new_raw}")
+        self.assertEqual((old.status_code, new.status_code), (401, 200))
+        self.assertNotContains(self.client.get(reverse("albright_control:bot_api")), new_raw)   # shown once
+        entry = AuditEntry.objects.get()
+        self.assertEqual(entry.action, "token_rotated")
+        self.assertNotIn(new_raw, entry.details)
+
+    def test_rotate_needs_my_password_and_asks_to_confirm(self):
+        self.client.post(reverse("albright_control:rotate_token", args=[self.token.pk]), {"password": "wrong"})
+        self.assertEqual(self.api.get(reverse("bot_api_v1:docs"), HTTP_AUTHORIZATION=f"Bearer {self.raw}").status_code, 200)
+        self.assertFalse(AuditEntry.objects.exists())
+        page = self.client.get(reverse("albright_control:bot_api")).content.decode()
+        self.assertIn('data-confirm="Rotate Grok bot? The current key stops working immediately', page)
+
+    def test_revoked_tokens_cant_be_edited_or_rotated(self):
+        self.token.revoke()
+        for name in ("edit_token_scopes", "rotate_token"):
+            response = self.client.post(reverse(f"albright_control:{name}", args=[self.token.pk]),
+                                        {"password": PASSWORD, "scopes": ["site:suggest"]})
+            self.assertEqual(response.status_code, 404)
+
+    def test_non_superusers_get_404(self):
+        client = Client()
+        client.force_login(self.user)
+        for name in ("edit_token_scopes", "rotate_token"):
+            self.assertEqual(client.post(reverse(f"albright_control:{name}", args=[self.token.pk]),
+                                         {"password": PASSWORD}).status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Bot notes cleanup (Grok Bot page)
+# ---------------------------------------------------------------------------
+
+@mock.patch(HOME_OUTLOOK, return_value=None)
+class BotNotesCleanupTests(AdminTestCase):
+    def setUp(self):
+        super().setUp()
+        from albright_bot_api.models import TradingNote
+        self.token, _raw = BotToken.issue(self.admin, "Grok bot", ["trading:notes"])
+        today = timezone.localdate()
+        self.notes = [TradingNote.objects.create(owner=self.admin, token=self.token, date=today, title=f"Note {i}",
+                                                 text=f"Idea number {i}") for i in range(3)]
+        self.others = TradingNote.objects.create(owner=self.user, date=today, title="Not mine", text="x")
+
+    def page(self):
+        return self.client.get(reverse("grok_bot")).content.decode()
+
+    def test_checkboxes_select_all_and_buttons(self, _outlook):
+        page = self.page()
+        self.assertIn('data-select-all="note"', page)
+        for note in self.notes:
+            self.assertIn(f'name="note" value="{note.pk}"', page)
+            self.assertIn(reverse("albright_bot_api:trading_note_delete", args=[note.pk]), page)
+        self.assertIn('name="action" value="move"', page)
+        self.assertIn('data-confirm="Delete the selected notes?', page)
+        self.assertNotIn("Not mine", page)
+
+    def test_bulk_delete(self, _outlook):
+        from albright_bot_api.models import TradingNote
+        self.client.post(reverse("albright_bot_api:trading_notes_bulk"),
+                         {"action": "delete", "note": [self.notes[0].pk, self.notes[1].pk, self.others.pk]})
+        self.assertEqual(list(TradingNote.objects.filter(owner=self.admin)), [self.notes[2]])
+        self.assertTrue(TradingNote.objects.filter(pk=self.others.pk).exists())   # never someone else's
+        entry = AuditEntry.objects.get()
+        self.assertEqual(entry.action, "bot_notes_deleted")
+        self.assertIn('2 note(s): "Note 0"; "Note 1"', entry.details)
+
+    def test_move_to_bot_suggestions(self, _outlook):
+        from albright_bot_api.models import TradingNote
+        response = self.client.post(reverse("albright_bot_api:trading_notes_bulk"),
+                                    {"action": "move", "note": [self.notes[1].pk, self.notes[2].pk]})
+        self.assertRedirects(response, reverse("grok_bot") + "#bot-notes", fetch_redirect_response=False)
+        moved = SiteSuggestion.objects.order_by("pk")
+        self.assertEqual([(s.title, s.description, s.app, s.priority, s.status, s.token) for s in moved],
+                         [("Note 1", "Idea number 1", "all", "medium", "new", self.token),
+                          ("Note 2", "Idea number 2", "all", "medium", "new", self.token)])
+        self.assertEqual(list(TradingNote.objects.filter(owner=self.admin)), [self.notes[0]])   # removed from Trading
+        self.assertEqual(AuditEntry.objects.get().action, "bot_notes_moved")
+        inbox = self.client.get(reverse("albright_control:suggestions"), {"status": "new"})
+        self.assertContains(inbox, "Idea number 1")
+
+    def test_single_delete(self, _outlook):
+        from albright_bot_api.models import TradingNote
+        self.client.post(reverse("albright_bot_api:trading_note_delete", args=[self.notes[0].pk]),
+                         {"note": [self.notes[1].pk]})   # other ticked boxes are ignored
+        self.assertEqual(TradingNote.objects.filter(owner=self.admin).count(), 2)
+        self.assertFalse(TradingNote.objects.filter(pk=self.notes[0].pk).exists())
+        self.assertEqual(AuditEntry.objects.get().action, "bot_notes_deleted")
+        self.assertEqual(self.client.post(reverse("albright_bot_api:trading_note_delete",
+                                                  args=[self.others.pk])).status_code, 404)
+
+    def test_nothing_selected_does_nothing(self, _outlook):
+        from albright_bot_api.models import TradingNote
+        self.client.post(reverse("albright_bot_api:trading_notes_bulk"), {"action": "delete"})
+        self.assertEqual(TradingNote.objects.count(), 4)
+        self.assertFalse(AuditEntry.objects.exists())

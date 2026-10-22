@@ -165,6 +165,23 @@
                 document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: next } }));
             });
 
+            // Confirmation before a destructive submit: data-confirm on the
+            // form, or on the button that submitted it (button wins).
+            document.addEventListener('submit', function (e) {
+                var source = (e.submitter && e.submitter.dataset.confirm) ? e.submitter : e.target;
+                var message = source.dataset ? source.dataset.confirm : null;
+                if (message && !window.confirm(message)) e.preventDefault();
+            });
+
+            // "Select all": a checkbox with data-select-all="name" ticks/unticks
+            // every checkbox with that name in the same form.
+            document.addEventListener('change', function (e) {
+                var all = e.target.closest('[data-select-all]');
+                if (!all || !all.form) return;
+                all.form.querySelectorAll('input[type="checkbox"][name="' + all.dataset.selectAll + '"]')
+                    .forEach(function (box) { box.checked = all.checked; });
+            });
+
             // Toasts dismiss themselves after a few seconds - click also
             // dismisses immediately. Messages are one-shot (Django clears
             // them from the session once rendered), so there's nothing to

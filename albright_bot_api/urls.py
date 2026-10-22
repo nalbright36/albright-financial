@@ -10,6 +10,8 @@ urlpatterns = [
     path("tokens/<int:pk>/revoke/", views.moved_to_admin, name="revoke"),
     path("activity/", views.moved_to_admin, {"target": "albright_control:bot_activity"}, name="activity"),
     path("suggestions/<int:pk>/<str:decision>/", views.decide_suggestion, name="decide_suggestion"),
+    path("trading-notes/bulk/", views.trading_notes_bulk, name="trading_notes_bulk"),
+    path("trading-notes/<int:pk>/delete/", views.trading_note_delete, name="trading_note_delete"),
 ]
 
 # The API itself (/api/bot/v1/) - token-authenticated JSON; included under the "bot_api_v1" namespace.

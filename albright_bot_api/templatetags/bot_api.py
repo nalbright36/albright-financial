@@ -12,11 +12,11 @@ register = template.Library()
 TRADING_NOTES_SHOWN = 20
 
 
-@register.inclusion_tag("albright_bot_api/_trading_notes.html")
-def bot_trading_notes(user):
+@register.inclusion_tag("albright_bot_api/_trading_notes.html", takes_context=True)
+def bot_trading_notes(context, user):
     notes = TradingNote.objects.filter(owner=user).order_by("-date", "-created_at", "-pk")[:TRADING_NOTES_SHOWN] \
         if getattr(user, "is_authenticated", False) else []
-    return {"notes": notes}
+    return {"notes": notes, "csrf_token": context.get("csrf_token")}
 
 
 @register.inclusion_tag("albright_bot_api/_lot_notes.html")

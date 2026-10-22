@@ -10,7 +10,58 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import InventorySuggestion
+from .models import InventorySuggestion, SiteSuggestion, TradingNote
+
+
+NOTES_ANCHOR = "#bot-notes"
+
+
+def _back_to_notes():
+    return redirect(reverse("grok_bot") + NOTES_ANCHOR)
+
+
+def _delete_notes(request, notes):
+    from albright_control.access import audit
+    titles = [n.title for n in notes]
+    TradingNote.objects.filter(pk__in=[n.pk for n in notes]).delete()
+    audit(request, "bot_notes_deleted", f"{len(titles)} note(s): " + "; ".join(f'"{t[:60]}"' for t in titles))
+    messages.success(request, f"Deleted {len(titles)} note{'s' if len(titles) != 1 else ''}.")
+
+
+@login_required
+@require_POST
+def trading_notes_bulk(request):
+    """Grok Bot page, "Bot notes": Delete or Move to Bot suggestions for the
+    ticked notes (mine only). Moving makes one Admin-inbox suggestion per
+    note (title, text as description, app "all", medium, New) and removes
+    the note from Trading."""
+    from albright_control.access import audit
+    notes = list(TradingNote.objects.filter(owner=request.user, pk__in=request.POST.getlist("note"))
+                 .order_by("date", "created_at", "pk"))   # oldest first, so suggestions keep the notes' order
+    if not notes:
+        messages.info(request, "Tick at least one note first.")
+        return _back_to_notes()
+    action = request.POST.get("action")
+    if action == "delete":
+        _delete_notes(request, notes)
+    elif action == "move":
+        created = [SiteSuggestion.objects.create(token=n.token, app="all", title=n.title[:200], description=n.text,
+                                                 priority="medium", status="new") for n in notes]
+        TradingNote.objects.filter(pk__in=[n.pk for n in notes]).delete()
+        audit(request, "bot_notes_moved", f"{len(created)} note(s) -> Bot suggestions #"
+              + ", #".join(str(s.pk) for s in created))
+        messages.success(request, f"Moved {len(created)} note{'s' if len(created) != 1 else ''} to Bot suggestions.")
+    else:
+        messages.error(request, "Unknown action.")
+    return _back_to_notes()
+
+
+@login_required
+@require_POST
+def trading_note_delete(request, pk):
+    note = get_object_or_404(TradingNote, pk=pk, owner=request.user)
+    _delete_notes(request, [note])
+    return _back_to_notes()
 
 
 def moved_to_admin(request, target="albright_control:bot_api"):

@@ -14,7 +14,7 @@
 
     {% if new_token %}
     <div class="card" style="margin-bottom: 20px; border-color: var(--accent);" id="new-token">
-        <div class="card__header"><span class="card__label">Your new token</span><span class="badge warn">shown once</span></div>
+        <div class="card__header"><span class="card__label">{{ new_token_note|default:"Your new token" }}</span><span class="badge warn">shown once</span></div>
         <p style="margin: 0 0 8px; font-size: 0.875rem;">Copy it now - only a hash is stored, so it can't be shown again. If you lose it, revoke it and create a new one.</p>
         <div style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;">
             <code id="new-token-value" style="font-size: 0.875rem; overflow-wrap: anywhere;">{{ new_token }}</code>
@@ -35,7 +35,7 @@
             </div>
             <div class="field">
                 <label>Scopes</label>
-                {% for choice in form.scopes %}<label style="display: flex; gap: 8px; align-items: center; font-weight: 400;">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>{% endfor %}
+                {% for choice in form.scopes %}<label style="display: flex; gap: 8px; align-items: flex-start; font-weight: 400;">{{ choice.tag }} <span><code>{{ choice.data.value }}</code> &mdash; {{ choice.choice_label }}</span></label>{% endfor %}
                 {% for e in form.scopes.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
             </div>
             <div class="field">
@@ -60,9 +60,24 @@
                     <td style="font-size: 0.8125rem;">{{ t.created_at|date:"M j, Y" }}</td>
                     <td style="font-size: 0.8125rem;">{% if t.last_used_at %}{{ t.last_used_at|date:"M j, g:i A" }}{% else %}never{% endif %}</td>
                     <td>{% if t.is_active %}
-                        <form method="post" action="{% url 'albright_control:revoke_token' t.pk %}" class="revoke-form" style="margin: 0; display: flex; gap: 4px; flex-wrap: wrap;">{% csrf_token %}
+                        <div class="token-actions" style="display: flex; flex-direction: column; gap: 6px; min-width: 210px;">
+                        <details class="token-edit" id="edit-token-{{ t.pk }}">
+                            <summary class="btn btn-secondary btn-sm" style="list-style: none;">Edit permissions</summary>
+                            <form method="post" action="{% url 'albright_control:edit_token_scopes' t.pk %}" style="margin: 8px 0 0;">{% csrf_token %}
+                                {% for key, label in scopes %}<label style="display: flex; gap: 6px; align-items: flex-start; font-size: 0.8125rem; font-weight: 400;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in t.scopes %} checked{% endif %}> <span><code>{{ key }}</code> &mdash; {{ label }}</span></label>{% endfor %}
+                                <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to change {{ t.name }}'s permissions" autocomplete="current-password" required style="margin-top: 6px;">
+                                <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 6px;">Save permissions</button>
+                            </form>
+                        </details>
+                        <form method="post" action="{% url 'albright_control:rotate_token' t.pk %}" class="rotate-form" style="margin: 0; display: flex; gap: 4px; flex-wrap: wrap;"
+                              data-confirm="Rotate {{ t.name }}? The current key stops working immediately - the bot needs the new one.">{% csrf_token %}
+                            <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to rotate {{ t.name }}" autocomplete="current-password" required style="max-width: 120px;">
+                            <button type="submit" class="btn btn-secondary btn-sm">Rotate key</button></form>
+                        <form method="post" action="{% url 'albright_control:revoke_token' t.pk %}" class="revoke-form" style="margin: 0; display: flex; gap: 4px; flex-wrap: wrap;"
+                              data-confirm="Revoke {{ t.name }}? It stops working immediately.">{% csrf_token %}
                             <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to revoke {{ t.name }}" autocomplete="current-password" required style="max-width: 120px;">
                             <button type="submit" class="btn btn-secondary btn-sm">Revoke</button></form>
+                        </div>
                         {% else %}<span class="badge loss">revoked {{ t.revoked_at|date:"M j" }}</span>{% endif %}</td>
                 </tr>
                 {% endfor %}

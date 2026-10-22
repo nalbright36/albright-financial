@@ -78,11 +78,55 @@ def bot_api(request):
         audit(request, "token_created", f'"{token.name}" ({token.display_prefix}…) scopes: {", ".join(token.scopes)}')
         messages.success(request, f'Created "{token.name}". Copy the token now - it won\'t be shown again.')
         form = TokenForm(user=request.user)
+    return _bot_api_page(request, form, new_token)
+
+
+def _bot_api_page(request, form=None, new_token=None, new_token_note=""):
     docs = reverse("bot_api_v1:docs")
     return render(request, "albright_control/bot_api.html", {
-        "form": form, "new_token": new_token, "tokens": BotToken.objects.select_related("owner"),
+        "form": form or TokenForm(user=request.user), "new_token": new_token, "new_token_note": new_token_note,
+        "tokens": BotToken.objects.select_related("owner"), "scopes": SCOPES,
         "docs_path": docs, "api_base": docs.removesuffix("docs"),
     })
+
+
+def _password_ok(request, what):
+    if request.user.check_password(request.POST.get("password", "")):
+        return True
+    messages.error(request, f"Wrong password - {what}")
+    return False
+
+
+@superuser_required
+@require_POST
+def edit_token_scopes(request, pk):
+    """Change an active token's scopes - effective on its next request; the token value doesn't change."""
+    token = get_object_or_404(BotToken, pk=pk, revoked_at=None)
+    if not _password_ok(request, f'"{token.name}"\'s permissions were not changed.'):
+        return redirect("albright_control:bot_api")
+    old = list(token.scopes)
+    token.set_scopes(request.POST.getlist("scopes"))
+    if old == token.scopes:
+        messages.info(request, f'"{token.name}" already had those permissions.')
+    else:
+        audit(request, "token_scopes_changed",
+              f'"{token.name}" ({token.display_prefix}…): {", ".join(old) or "none"} -> {", ".join(token.scopes) or "none"}')
+        messages.success(request, f'Updated "{token.name}"\'s permissions - in effect now; the token value is unchanged.')
+    return redirect("albright_control:bot_api")
+
+
+@superuser_required
+@require_POST
+def rotate_token(request, pk):
+    """New token value, same name and scopes; the old value stops working now. Shown once."""
+    token = get_object_or_404(BotToken, pk=pk, revoked_at=None)
+    if not _password_ok(request, f'"{token.name}" was not rotated.'):
+        return redirect("albright_control:bot_api")
+    old_prefix = token.display_prefix
+    new_token = token.rotate()
+    audit(request, "token_rotated", f'"{token.name}": {old_prefix}… -> {token.display_prefix}… (old value invalidated)')
+    messages.success(request, f'Rotated "{token.name}". The old value no longer works - copy the new one now.')
+    return _bot_api_page(request, new_token=new_token, new_token_note=f'New value for "{token.name}"')
 
 
 @superuser_required
