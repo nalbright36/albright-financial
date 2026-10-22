@@ -24,6 +24,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from albright_reselling_app.scanner.alerts import send_watchlist_alerts
+from albright_control.jobs import tracked_job
 
 
 class Command(BaseCommand):
@@ -35,6 +36,7 @@ class Command(BaseCommand):
         parser.add_argument("--every", type=float, default=5,
                              help="Minutes between checks while looping (default 5).")
 
+    @tracked_job("watchlist_alerts")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         loop_minutes = opts["loop_minutes"]
         every_minutes = opts["every"]

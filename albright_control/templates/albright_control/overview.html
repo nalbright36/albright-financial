@@ -1,0 +1,64 @@
+{% extends "index.html" %}
+{% block page_title %}Overview · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 6px;">Admin</h1>
+    <p style="margin: 0 0 20px; color: var(--text-secondary);">Things that affect all three apps. Superusers only.</p>
+
+    <div class="grid grid-4" style="margin-bottom: 24px;" id="overview-tiles">
+        <a href="{% url 'albright_control:health' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">System health</span></div>
+            <span class="ledger-stat__value num">{{ status_counts.ok }} ok</span>
+            <div style="margin-top: 6px; font-size: 0.75rem;">
+                {% if status_counts.failing %}<span class="badge loss">{{ status_counts.failing }} failing</span>{% endif %}
+                {% if status_counts.late %}<span class="badge warn">{{ status_counts.late }} late</span>{% endif %}
+                {% if not status_counts.failing and not status_counts.late %}<span style="color: var(--text-secondary);">all jobs on time</span>{% endif %}
+            </div>
+        </a>
+        <a href="{% url 'albright_control:suggestions' %}?status=new" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Bot suggestions</span></div>
+            <span class="ledger-stat__value num">{{ new_suggestions }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">new in the inbox</div>
+        </a>
+        <a href="{% url 'albright_control:ai_usage' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">AI spend this month</span></div>
+            <span class="ledger-stat__value num">${{ usage.total|floatformat:2 }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">of ${{ usage.budget|floatformat:2 }} budget{% if usage.pct is not None %} ({{ usage.pct|floatformat:0 }}%){% endif %}</div>
+        </a>
+        <a href="{% url 'albright_control:bot_api' %}" class="card" style="display: block;">
+            <div class="card__header"><span class="card__label">Bot API</span></div>
+            <span class="ledger-stat__value num">{{ active_tokens }}</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">active token{{ active_tokens|pluralize }}</div>
+        </a>
+    </div>
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <section class="card">
+            <div class="card__header"><span class="card__label">Needs attention</span><a href="{% url 'albright_control:health' %}" style="font-size: 0.8125rem;">All jobs &rarr;</a></div>
+            {% for r in problems %}
+            <div style="display: flex; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--glass-border); font-size: 0.875rem;">
+                <span class="status-dot status-dot--{% if r.status == 'failing' %}error{% else %}warn{% endif %}"></span>
+                <span>{{ r.label }}</span>
+                <span style="margin-left: auto; font-size: 0.75rem; color: var(--text-secondary);">{{ r.status }}{% if r.last_success %} &middot; last ok {{ r.last_success|timesince }} ago{% else %} &middot; no successful run recorded{% endif %}</span>
+            </div>
+            {% empty %}<p style="margin: 0; color: var(--text-secondary);">Nothing late or failing.</p>{% endfor %}
+        </section>
+        <section class="card">
+            <div class="card__header"><span class="card__label">Integrations</span><a href="{% url 'albright_control:integrations' %}" style="font-size: 0.8125rem;">Details &rarr;</a></div>
+            {% for i in integrations %}
+            <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.875rem;">
+                <span>{{ i.name }}</span>
+                <span class="badge {% if i.status == 'configured' %}gain{% elif i.status == 'failing' %}loss{% else %}neutral{% endif %}">{{ i.status|capfirst }}</span>
+            </div>
+            {% endfor %}
+        </section>
+    </div>
+
+    <section class="card" style="margin-top: 20px;">
+        <div class="card__header"><span class="card__label">Recent admin actions</span><a href="{% url 'albright_control:audit' %}" style="font-size: 0.8125rem;">Audit log &rarr;</a></div>
+        {% for e in recent_audit %}
+        <div style="font-size: 0.8125rem; padding: 4px 0;">{{ e.created_at|date:"M j, g:i A" }} &middot; <code>{{ e.action }}</code> &middot; {{ e.details }}</div>
+        {% empty %}<p style="margin: 0; color: var(--text-secondary);">None yet.</p>{% endfor %}
+    </section>
+</div>
+{% endblock %}

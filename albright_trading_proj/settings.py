@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'albright_reselling_app',
     'albright_crypto_app',
     'albright_bot_api',
+    'albright_control',
     'django.contrib.humanize',
 ]
 

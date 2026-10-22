@@ -1,0 +1,31 @@
+{% extends "index.html" %}
+{% block page_title %}Integrations · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    <h1 style="margin: 0 0 6px;">Integrations</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">Whether each service is set up. Keys and tokens are never shown - only whether they're set. Tests run only where they're cheap and safe.</p>
+    <div class="card" style="padding: 0;">
+        <div class="table-scroll">
+        <table class="holdings" id="integrations-table">
+            <thead><tr><th>Service</th><th>Status</th><th>Setting</th><th>Last test</th><th></th></tr></thead>
+            <tbody>
+            {% for i in rows %}
+            <tr data-integration="{{ i.key }}">
+                <td><strong>{{ i.name }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);">{{ i.used_for }}</div>
+                    {% if i.note %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ i.note }}</div>{% endif %}</td>
+                <td><span class="badge {% if i.status == 'configured' %}gain{% elif i.status == 'failing' %}loss{% else %}neutral{% endif %}">{{ i.status|capfirst }}</span>
+                    {% if i.status == 'failing' and i.failing_why %}<div style="font-size: 0.75rem; color: var(--loss);">{{ i.failing_why }}</div>{% endif %}</td>
+                <td style="font-size: 0.75rem;"><code>{{ i.setting }}</code></td>
+                <td style="font-size: 0.75rem;">{% if i.last_check %}{{ i.last_check.checked_at|date:"M j, g:i A" }} - {% if i.last_check.ok %}passed{% else %}failed{% endif %}{% else %}&mdash;{% endif %}</td>
+                <td>{% if i.test and i.configured %}
+                    <form method="post" action="{% url 'albright_control:test_integration' i.key %}" style="margin: 0;">{% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-sm">{% if i.key == 'telegram' %}Send test message{% else %}Check connection{% endif %}</button></form>
+                    {% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

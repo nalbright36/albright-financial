@@ -2,12 +2,13 @@ from django.urls import path
 
 from . import api_views, views
 
-# The site pages (Trading app nav "Bot API") - logged-in only.
+# Site pages. Token management and the activity log moved to the Admin area
+# (/control/bot-api/); the old URLs redirect there.
 app_name = "albright_bot_api"
 urlpatterns = [
-    path("", views.tokens, name="tokens"),
-    path("tokens/<int:pk>/revoke/", views.revoke, name="revoke"),
-    path("activity/", views.activity, name="activity"),
+    path("", views.moved_to_admin, name="tokens"),
+    path("tokens/<int:pk>/revoke/", views.moved_to_admin, name="revoke"),
+    path("activity/", views.moved_to_admin, {"target": "albright_control:bot_activity"}, name="activity"),
     path("suggestions/<int:pk>/<str:decision>/", views.decide_suggestion, name="decide_suggestion"),
 ]
 
@@ -24,4 +25,5 @@ api_urlpatterns = [
     path("opportunities/<int:opportunity_id>/notes", api_views.opportunity_note, name="opportunity_note"),
     path("opportunities/<int:opportunity_id>/proposal-draft", api_views.opportunity_proposal,
          name="opportunity_proposal"),
+    path("site-suggestions", api_views.site_suggestions, name="site_suggestions"),
 ]

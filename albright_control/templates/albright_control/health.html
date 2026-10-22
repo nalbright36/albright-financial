@@ -1,0 +1,34 @@
+{% extends "index.html" %}
+{% block page_title %}System health · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 6px;">System health</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">
+        Every scheduled job. <strong>Failing</strong>: its latest run failed. <strong>Late</strong>: no successful run within {{ late_factor }}&times; its expected interval (or never).
+        <strong>OK</strong>: otherwise. <strong>Off</strong>: switched off or not connected.
+    </p>
+    <div class="card" style="padding: 0;">
+        <div class="table-scroll">
+        <table class="holdings" id="health-table">
+            <thead><tr><th>Job</th><th>Status</th><th>Expected every</th><th>Last run</th><th>Last success</th><th>Last error</th></tr></thead>
+            <tbody>
+            {% for r in rows %}
+            <tr data-job="{{ r.job }}" data-status="{{ r.status }}">
+                <td><strong>{{ r.label }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);"><code>{{ r.job }}</code>{% if r.note %} &middot; {{ r.note }}{% endif %}</div></td>
+                <td style="white-space: nowrap;"><span class="status-dot status-dot--{% if r.status == 'ok' %}ok{% elif r.status == 'failing' %}error{% elif r.status == 'late' %}warn{% endif %}"{% if r.status == 'off' %} style="background: var(--text-tertiary);"{% endif %}></span> {{ r.status|capfirst }}{% if r.running %} <span class="badge neutral">running</span>{% endif %}</td>
+                <td style="font-size: 0.8125rem;">{{ r.interval_label }}</td>
+                <td style="font-size: 0.8125rem;">{% if r.last_run %}{{ r.last_run|date:"M j, g:i A" }}<div style="color: var(--text-secondary);">{{ r.last_run|timesince }} ago</div>{% else %}never{% endif %}</td>
+                <td style="font-size: 0.8125rem;">{% if r.last_success %}{{ r.last_success|date:"M j, g:i A" }}{% else %}&mdash;{% endif %}</td>
+                <td style="font-size: 0.75rem; max-width: 340px; overflow-wrap: anywhere;">{% if r.last_error %}{{ r.last_error|truncatechars:240 }}{% else %}&mdash;{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    <section class="card" style="margin-top: 20px;" id="error-log">
+        <div class="card__header"><span class="card__label">Recent unhandled errors</span></div>
+        <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">No error logging is configured on this site (no <code>LOGGING</code> setting, no error-tracking service), so there's nothing to show here. Each job's own last error is in the table above.</p>
+    </section>
+</div>
+{% endblock %}

@@ -20,6 +20,7 @@ SCOPES = [
     ("reseller:suggest", "Reseller: leave lot notes and inventory suggestions"),
     ("opportunities:read", "Opportunities: read new opportunities"),
     ("opportunities:suggest", "Opportunities: leave notes and proposal drafts"),
+    ("site:suggest", "Site: drop website improvement ideas in the Admin inbox"),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"
@@ -124,3 +125,19 @@ class OpportunityNote(_BotWrite):
                                     related_name="bot_notes")
     kind = models.CharField(max_length=8, choices=KINDS)
     text = models.TextField()
+
+
+class SiteSuggestion(_BotWrite):
+    """POST site-suggestions - a website idea for the Admin inbox
+    (/control/suggestions/). I set the status and add my own notes."""
+    APPS = [("trade", "Trading"), ("resell", "Reselling"), ("opps", "Opportunities"), ("all", "Whole site")]
+    PRIORITIES = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
+    STATUSES = [("new", "New"), ("accepted", "Accepted"), ("declined", "Declined"), ("done", "Done")]
+    app = models.CharField(max_length=6, choices=APPS)
+    area = models.CharField(max_length=100, blank=True)
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    priority = models.CharField(max_length=6, choices=PRIORITIES, default="medium")
+    status = models.CharField(max_length=8, choices=STATUSES, default="new")
+    my_notes = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

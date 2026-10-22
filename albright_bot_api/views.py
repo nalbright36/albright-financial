@@ -1,61 +1,21 @@
-"""The site side of the Bot API (Trading app nav, "Bot API"): create and
-revoke tokens, the activity log, and accepting/dismissing the bot's
-pending inventory suggestions. These are normal logged-in pages - the bot
-itself can't reach any of them."""
-from django import forms
+"""The site side of the Bot API that stays here: accepting/dismissing the
+bot's pending inventory suggestions (an item owner's action, on the item's
+page). Token management and the activity log moved to the Admin area
+(albright_control, /control/bot-api/) - the old /bot-api/ pages redirect
+there."""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import SCOPES, BotRequestLog, BotToken, InventorySuggestion
-
-ACTIVITY_LIMIT = 300
+from .models import InventorySuggestion
 
 
-class TokenForm(forms.Form):
-    name = forms.CharField(max_length=100, initial="Grok bot", widget=forms.TextInput(attrs={"class": "ledger-input"}))
-    scopes = forms.MultipleChoiceField(choices=SCOPES, widget=forms.CheckboxSelectMultiple,
-                                       error_messages={"required": "Pick at least one scope."})
-
-
-@login_required
-def tokens(request):
-    form = TokenForm(request.POST or None)
-    new_token = None
-    if request.method == "POST" and form.is_valid():
-        token, new_token = BotToken.issue(request.user, form.cleaned_data["name"].strip(), form.cleaned_data["scopes"])
-        messages.success(request, f'Created "{token.name}". Copy the token now - it won\'t be shown again.')
-        form = TokenForm()
-    return render(request, "albright_bot_api/tokens.html", {
-        "form": form, "new_token": new_token, "tokens": BotToken.objects.filter(owner=request.user),
-        "docs_path": reverse("bot_api_v1:docs"), "api_base": reverse("bot_api_v1:docs").removesuffix("docs"),
-    })
-
-
-@login_required
-@require_POST
-def revoke(request, pk):
-    token = get_object_or_404(BotToken, pk=pk, owner=request.user)
-    token.revoke()
-    messages.success(request, f'Revoked "{token.name}" - it stops working immediately.')
-    return redirect("albright_bot_api:tokens")
-
-
-@login_required
-def activity(request):
-    user_tokens = BotToken.objects.filter(owner=request.user)
-    logs = BotRequestLog.objects.select_related("token").filter(token__owner=request.user)
-    if request.GET.get("token") == "none":
-        logs = BotRequestLog.objects.filter(token__isnull=True)
-    elif request.GET.get("token"):
-        logs = logs.filter(token_id=request.GET["token"])
-    return render(request, "albright_bot_api/activity.html", {
-        "logs": logs[:ACTIVITY_LIMIT], "tokens": user_tokens, "selected": request.GET.get("token", ""),
-        "limit": ACTIVITY_LIMIT,
-    })
+def moved_to_admin(request, target="albright_control:bot_api"):
+    """The old Trading-app Bot API pages - now in Admin."""
+    return redirect(target, permanent=True)
 
 
 @login_required

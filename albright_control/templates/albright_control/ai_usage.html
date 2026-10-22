@@ -1,0 +1,48 @@
+{% extends "index.html" %}
+{% block page_title %}AI usage · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 6px;">AI usage</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">{{ usage.month|date:"F Y" }} so far, model <code>{{ usage.model }}</code>. One monthly budget covers every AI feature.</p>
+
+    <div class="grid grid-3" style="margin-bottom: 20px;" id="ai-limits">
+        {% for l in usage.limits %}
+        <div class="card">
+            <div class="card__header"><span class="card__label">{{ l.label }}</span></div>
+            <span class="ledger-stat__value num" style="font-size: 1.4rem;">{{ l.used }} <span style="font-size: 0.9rem; color: var(--text-secondary);">/ {{ l.limit }}</span></span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{% if forloop.first %}{% if usage.pct is not None %}{{ usage.pct|floatformat:0 }}% used &middot; ${{ usage.remaining|floatformat:2 }} left{% endif %}{% else %}today{% endif %}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <section class="card" style="margin-bottom: 20px; padding: 0;">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">By feature</span></div>
+        <div class="table-scroll">
+        <table class="holdings" id="ai-by-feature">
+            <thead><tr><th>Feature</th><th class="num">Calls</th><th class="num">Cost</th></tr></thead>
+            <tbody>
+            {% for f in usage.by_feature %}<tr><td>{{ f.label }}</td><td class="num">{{ f.calls }}</td><td class="num">${{ f.cost|floatformat:4 }}</td></tr>{% endfor %}
+            <tr><td><strong>Total</strong></td><td></td><td class="num"><strong>${{ usage.total|floatformat:4 }}</strong></td></tr>
+            </tbody>
+        </table>
+        </div>
+        {% for u in usage.untracked %}<p style="margin: 0; padding: var(--space-3) var(--space-5); font-size: 0.75rem; color: var(--text-secondary);">{{ u }}</p>{% endfor %}
+    </section>
+
+    <section class="card" style="padding: 0;">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">By day</span></div>
+        {% if usage.by_day %}
+        <div class="table-scroll">
+        <table class="holdings" id="ai-by-day">
+            <thead><tr><th>Day</th>{% for key, label in usage.features %}<th class="num">{{ label }}</th>{% endfor %}<th class="num">Total</th></tr></thead>
+            <tbody>
+            {% for d in usage.by_day %}
+            <tr><td style="white-space: nowrap;">{{ d.day|date:"M j" }}</td>{% for c in d.cells %}<td class="num">{% if c.calls %}${{ c.cost|floatformat:4 }}<div style="font-size: 0.6875rem; color: var(--text-secondary);">{{ c.calls }} call{{ c.calls|pluralize }}</div>{% else %}&mdash;{% endif %}</td>{% endfor %}<td class="num"><strong>${{ d.total|floatformat:4 }}</strong></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No AI calls this month yet.</p>{% endif %}
+    </section>
+</div>
+{% endblock %}

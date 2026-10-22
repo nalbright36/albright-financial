@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 
 from .auth import ApiError, bot_endpoint, json_body
-from .models import MAX_TEXT, SCOPES, InventorySuggestion, LotNote, OpportunityNote, TradingNote
+from .models import MAX_TEXT, SCOPES, InventorySuggestion, LotNote, OpportunityNote, SiteSuggestion, TradingNote
 
 UNSOLD = ("holding", "partially_sold")
 NEW_OPPORTUNITY_DAYS = 7
@@ -104,6 +104,14 @@ POST opportunities/<id>/notes                         scope: opportunities:sugge
 POST opportunities/<id>/proposal-draft                scope: opportunities:suggest
   Body: {"text": str}. A proposal draft shown on the opportunity's page labeled "Grok". It is never sent
   anywhere - the owner decides. Returns 201 {"id": int}.
+
+POST site-suggestions                                 scope: site:suggest
+  A website improvement idea for the owner's Admin inbox.
+  Body: {"app": "trade" | "resell" | "opps" | "all" (required), "area": str (optional, <=100, e.g. "Watchlist page"),
+         "title": str (required, <=200), "description": str (required - what to change and why),
+         "priority": "low" | "medium" | "high" (optional, default "medium")}
+  The owner reviews it (New -> Accepted / Declined -> Done); nothing changes on the site by itself.
+  Returns 201 {"id": int, "status": "new"}.
 """
 
 
@@ -263,3 +271,22 @@ def opportunity_note(request, token, opportunity_id):
 @bot_endpoint("opportunities:suggest", methods=("POST",))
 def opportunity_proposal(request, token, opportunity_id):
     return _opportunity_write(request, token, opportunity_id, "proposal")
+
+
+# ---------------------------------------------------------------------------
+# Site suggestions (Admin inbox)
+# ---------------------------------------------------------------------------
+
+@bot_endpoint("site:suggest", methods=("POST",))
+def site_suggestions(request, token):
+    data = json_body(request)
+    app = data.get("app")
+    if app not in dict(SiteSuggestion.APPS):
+        raise ApiError(400, '"app" must be one of: trade, resell, opps, all.', "rejected: bad app")
+    priority = data.get("priority") or "medium"
+    if priority not in dict(SiteSuggestion.PRIORITIES):
+        raise ApiError(400, '"priority" must be low, medium or high.', "rejected: bad priority")
+    suggestion = SiteSuggestion.objects.create(
+        token=token, app=app, area=_text(data, "area", required=False, limit=100),
+        title=_text(data, "title", limit=200), description=_text(data, "description"), priority=priority)
+    return {"id": suggestion.pk, "status": "new"}, 201, f"site suggestion ({app}): {suggestion.title[:80]}"

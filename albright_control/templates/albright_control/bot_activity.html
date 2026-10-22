@@ -2,11 +2,11 @@
 {% block page_title %}Bot API activity · {% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
-    <a href="{% url 'albright_bot_api:tokens' %}" style="font-size: 0.8125rem;">&larr; Bot API</a>
+    <a href="{% url 'albright_control:bot_api' %}" style="font-size: 0.8125rem;">&larr; Bot API</a>
     <h1 style="margin: 12px 0 16px;">Activity log</h1>
 
     <nav class="scanner-tabs" id="token-filter" aria-label="Token" style="margin-bottom: 16px;">
-        <a href="{% url 'albright_bot_api:activity' %}" class="scanner-tab{% if not selected %} is-active{% endif %}">All tokens</a>
+        <a href="{% url 'albright_control:bot_activity' %}" class="scanner-tab{% if not selected %} is-active{% endif %}">All tokens</a>
         {% for t in tokens %}<a href="?token={{ t.pk }}" class="scanner-tab{% if selected == t.pk|stringformat:'d' %} is-active{% endif %}">{{ t.name }}</a>{% endfor %}
         <a href="?token=none" class="scanner-tab{% if selected == 'none' %} is-active{% endif %}">No valid token</a>
     </nav>

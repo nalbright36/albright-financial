@@ -14,11 +14,13 @@ the message-building logic, which is tested without hitting Telegram.
 from django.core.management.base import BaseCommand
 
 from albright_reselling_app.scanner.alerts import send_daily_digest
+from albright_control.jobs import tracked_job
 
 
 class Command(BaseCommand):
     help = "Send the daily Telegram digest of yesterday's results and today's live counts."
 
+    @tracked_job("alert_digest")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         message = send_daily_digest()
         self.stdout.write(message)

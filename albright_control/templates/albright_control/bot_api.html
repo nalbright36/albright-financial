@@ -1,10 +1,10 @@
 {% extends "index.html" %}
 {% block page_title %}Bot API · {% endblock %}
 {% block content %}
-<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
     <div class="card__header" style="margin-bottom: 8px;">
         <h1 style="margin: 0;">Bot API</h1>
-        <a href="{% url 'albright_bot_api:activity' %}" class="btn btn-secondary">Activity log</a>
+        <a href="{% url 'albright_control:bot_activity' %}" class="btn btn-secondary">Activity log</a>
     </div>
     <p style="color: var(--text-secondary); margin-bottom: 20px;">
         Tokens let an outside AI bot (like Grok) read some of your data and leave notes and suggestions - never take actions.
@@ -38,6 +38,11 @@
                 {% for choice in form.scopes %}<label style="display: flex; gap: 8px; align-items: center; font-weight: 400;">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>{% endfor %}
                 {% for e in form.scopes.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
             </div>
+            <div class="field">
+                <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                {{ form.password }}
+                {% for e in form.password.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+            </div>
             <button type="submit" class="btn btn-primary">Create token</button>
         </form>
 
@@ -50,12 +55,13 @@
                 <tbody>
                 {% for t in tokens %}
                 <tr>
-                    <td><strong>{{ t.name }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);"><code>{{ t.display_prefix }}…</code></div></td>
+                    <td><strong>{{ t.name }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);"><code>{{ t.display_prefix }}…</code> &middot; {{ t.owner.username }}</div></td>
                     <td style="font-size: 0.75rem;">{% for s in t.scopes %}<code>{{ s }}</code>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
                     <td style="font-size: 0.8125rem;">{{ t.created_at|date:"M j, Y" }}</td>
                     <td style="font-size: 0.8125rem;">{% if t.last_used_at %}{{ t.last_used_at|date:"M j, g:i A" }}{% else %}never{% endif %}</td>
                     <td>{% if t.is_active %}
-                        <form method="post" action="{% url 'albright_bot_api:revoke' t.pk %}" style="margin: 0;">{% csrf_token %}
+                        <form method="post" action="{% url 'albright_control:revoke_token' t.pk %}" class="revoke-form" style="margin: 0; display: flex; gap: 4px; flex-wrap: wrap;">{% csrf_token %}
+                            <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to revoke {{ t.name }}" autocomplete="current-password" required style="max-width: 120px;">
                             <button type="submit" class="btn btn-secondary btn-sm">Revoke</button></form>
                         {% else %}<span class="badge loss">revoked {{ t.revoked_at|date:"M j" }}</span>{% endif %}</td>
                 </tr>

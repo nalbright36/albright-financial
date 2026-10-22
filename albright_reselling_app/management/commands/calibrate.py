@@ -14,11 +14,13 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from albright_reselling_app.scanner.insights import build_calibration_suggestions
+from albright_control.jobs import tracked_job
 
 
 class Command(BaseCommand):
     help = "Compare real outcomes to settings.py's calibration values and suggest adjustments."
 
+    @tracked_job("calibrate")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         created = build_calibration_suggestions(settings.RESELLING_SCANNER)
 

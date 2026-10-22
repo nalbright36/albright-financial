@@ -14,6 +14,7 @@ from django.utils import timezone
 from albright_crypto_app.alerts import send_deadline_reminders, send_new_opportunity_alerts
 from albright_crypto_app.models import ScanRun
 from albright_crypto_app.pipeline import runnable_sources, scan_sources, sync_sources
+from albright_control.jobs import tracked_job
 
 
 def last_good_run():
@@ -28,6 +29,7 @@ class Command(BaseCommand):
         parser.add_argument("--min-interval-hours", type=float, default=None,
                             help="Skip this run if the last successful scan started less than this many hours ago.")
 
+    @tracked_job("scan_crypto")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         min_interval = opts["min_interval_hours"]
         if min_interval is not None:

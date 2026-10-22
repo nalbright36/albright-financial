@@ -34,6 +34,7 @@ from django.utils import timezone
 
 from albright_reselling_app.scanner_models import AIReview, AlertSent, BidWatch, CriticalAlertSent, \
     LotEvaluation, ScanRun, SourcedLot, SpotPrice
+from albright_control.jobs import tracked_job
 
 NONE_CATEGORY_STALE_AFTER = timedelta(days=30)
 CLOSED_STALE_AFTER = timedelta(days=120)
@@ -87,6 +88,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Report what would be deleted; delete nothing.")
 
+    @tracked_job("prune_lots")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         now = timezone.now()
         protected_ids = _protected_ids()

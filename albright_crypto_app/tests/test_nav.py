@@ -35,16 +35,17 @@ class OpportunitiesNavTests(TestCase):
         for page in (reverse("trading_home"), reverse("albright_reselling_app:dashboard")):
             with self.subTest(page=page):
                 buttons = self.switch_buttons(page)
-                self.assertEqual(buttons.get("Opportunities"), home)
+                self.assertEqual(buttons.get("Opps"), home)
                 self.assertNotIn("Crypto", buttons)
 
     def test_opportunities_app_shows_all_three_with_itself_highlighted(self, _outlook):
         content = self.client.get(reverse("albright_crypto_app:dashboard")).content.decode()
         buttons = self.switch_buttons(reverse("albright_crypto_app:dashboard"))
-        self.assertEqual(buttons, {"Trading": reverse("trading_home"),
-                                   "Reselling": reverse("albright_reselling_app:dashboard"),
-                                   "Opportunities": reverse("albright_crypto_app:dashboard")})
-        self.assertIn('class="app-switch-btn is-current" data-app-target="opportunities" aria-current="page"', content)
+        self.assertEqual(buttons, {"Trade": reverse("trading_home"),
+                                   "Resell": reverse("albright_reselling_app:dashboard"),
+                                   "Opps": reverse("albright_crypto_app:dashboard")})
+        self.assertIn('class="app-switch-btn is-current" data-app-target="opportunities" title="Albright Opportunities" '
+                      'aria-current="page"', content)
 
     def test_no_switch_button_points_at_root(self, _outlook):
         for page in (reverse("trading_home"), reverse("albright_reselling_app:dashboard"),

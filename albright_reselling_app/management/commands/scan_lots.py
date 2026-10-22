@@ -16,6 +16,7 @@ from albright_reselling_app.scanner.alerts import check_stale_source, check_zero
 from albright_reselling_app.scanner.bid_watch import resolve_watches
 from albright_reselling_app.scanner.pipeline import run_scan
 from albright_reselling_app.scanner_models import ScanRun
+from albright_control.jobs import tracked_job
 
 
 def _format_remaining(delta):
@@ -87,6 +88,7 @@ class Command(BaseCommand):
                              help="Skip this run if the last successful scan for this source "
                                   "started less than this many hours ago.")
 
+    @tracked_job(lambda opts: f"scan_lots:{opts['source']}")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         source = opts["source"]
 

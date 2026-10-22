@@ -31,5 +31,7 @@ urlpatterns = [
     re_path(r"^(?:crypto|albright_crypto_app)/(?P<rest>.*)$", legacy_redirect, name="opportunities_legacy_redirect"),
     # Bot API: the token pages (Trading nav "Bot API") and the token-authenticated JSON API.
     path("bot-api/", include("albright_bot_api.urls")),
+    # The site-wide Admin area (superusers only; separate from Django's /admin/).
+    path("control/", include("albright_control.urls")),
     path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
 ]

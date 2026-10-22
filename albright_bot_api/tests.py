@@ -73,10 +73,19 @@ class BotApiTestCase(TestCase):
 
 
 class TokenTests(BotApiTestCase):
-    def test_token_is_shown_once_and_stored_only_as_a_hash(self):
+    """Token management lives in the Admin area now (superuser + password)."""
+    PASSWORD = "pw-not-real-12345"
+
+    def admin_login(self):
+        self.user.is_superuser = True
+        self.user.save()
         self.client.force_login(self.user)
-        response = self.client.post(reverse("albright_bot_api:tokens"),
-                                    {"name": "Second bot", "scopes": ["reseller:read", "trading:notes"]})
+
+    def test_token_is_shown_once_and_stored_only_as_a_hash(self):
+        self.admin_login()
+        response = self.client.post(reverse("albright_control:bot_api"),
+                                    {"name": "Second bot", "scopes": ["reseller:read", "trading:notes"],
+                                     "password": self.PASSWORD})
         raw = response.context["new_token"]
         self.assertTrue(raw.startswith("abt_") and len(raw) > 40)
         self.assertContains(response, raw)
@@ -87,37 +96,40 @@ class TokenTests(BotApiTestCase):
         for field in token._meta.concrete_fields:   # the raw token is stored nowhere
             self.assertNotEqual(str(getattr(token, field.attname)), raw)
             self.assertNotIn(raw[8:], str(getattr(token, field.attname)))
-        again = self.client.get(reverse("albright_bot_api:tokens"))
+        again = self.client.get(reverse("albright_control:bot_api"))
         self.assertNotContains(again, raw)
         self.assertContains(again, token.display_prefix)
         self.assertEqual(self.call("GET", url("docs"), raw=raw).status_code, 200)
 
     def test_needs_a_scope(self):
-        self.client.force_login(self.user)
-        response = self.client.post(reverse("albright_bot_api:tokens"), {"name": "x"})
+        self.admin_login()
+        response = self.client.post(reverse("albright_control:bot_api"), {"name": "x", "password": self.PASSWORD})
         self.assertContains(response, "Pick at least one scope.")
         self.assertFalse(BotToken.objects.filter(name="x").exists())
 
     def test_list_and_revoke(self):
         self.call("GET", url("docs"))
-        self.client.force_login(self.user)
-        page = self.client.get(reverse("albright_bot_api:tokens"))
+        self.admin_login()
+        page = self.client.get(reverse("albright_control:bot_api"))
         self.assertContains(page, "Grok bot")
         self.assertContains(page, "opportunities:suggest")
         self.assertIsNotNone(BotToken.objects.get().last_used_at)
-        self.client.post(reverse("albright_bot_api:revoke", args=[self.token.pk]))
+        self.client.post(reverse("albright_control:revoke_token", args=[self.token.pk]), {"password": self.PASSWORD})
         self.token.refresh_from_db()
         self.assertFalse(self.token.is_active)
         self.assertEqual(self.call("GET", url("docs")).status_code, 401)
 
-    def test_cannot_revoke_someone_elses_token(self):
-        other = User.objects.create_user(username="intruder", password="pw-not-real-12345")
-        self.client.force_login(other)
-        self.assertEqual(self.client.post(reverse("albright_bot_api:revoke", args=[self.token.pk])).status_code, 404)
+    def test_not_a_superuser_gets_404(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.post(reverse("albright_control:revoke_token", args=[self.token.pk]),
+                                          {"password": self.PASSWORD}).status_code, 404)
+        self.assertTrue(BotToken.objects.get(pk=self.token.pk).is_active)
 
-    def test_pages_need_login(self):
-        self.assertEqual(self.client.get(reverse("albright_bot_api:tokens")).status_code, 302)
-        self.assertEqual(self.client.get(reverse("albright_bot_api:activity")).status_code, 302)
+    def test_old_pages_redirect_to_admin(self):
+        self.assertRedirects(self.client.get("/bot-api/"), reverse("albright_control:bot_api"),
+                             status_code=301, fetch_redirect_response=False)
+        self.assertRedirects(self.client.get("/bot-api/activity/"), reverse("albright_control:bot_activity"),
+                             status_code=301, fetch_redirect_response=False)
 
 
 class AuthTests(BotApiTestCase):
@@ -349,7 +361,7 @@ class HardLimitTests(BotApiTestCase):
         for pattern in api_urlpatterns:
             self.assertIsInstance(pattern, URLPattern)
             self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 9)
+        self.assertEqual(len(api_urlpatterns), 10)   # incl. site-suggestions (Admin inbox)
 
     def test_no_forbidden_side_effects(self):
         from albright_reselling_app.models import LedgerEntry, LedgerSale
@@ -431,22 +443,25 @@ class ActivityLogTests(BotApiTestCase):
         self.assertEqual(logs[2][1:3], ("/api/bot/v1/opportunities/new", 403))
         self.assertEqual(logs[3][0::2], ("(no valid token)", 401))
 
+        self.user.is_superuser = True
+        self.user.save()
         self.client.force_login(self.user)
-        page = self.client.get(reverse("albright_bot_api:activity"))
+        page = self.client.get(reverse("albright_control:bot_activity"))
         self.assertContains(page, "trading note: Iron condor idea")
         self.assertContains(page, "/api/bot/v1/opportunities/new")
-        filtered = self.client.get(reverse("albright_bot_api:activity"), {"token": self.token.pk})
+        filtered = self.client.get(reverse("albright_control:bot_activity"), {"token": self.token.pk})
         self.assertContains(filtered, "Iron condor idea")
         self.assertNotContains(filtered, "/api/bot/v1/opportunities/new")
-        self.assertContains(self.client.get(reverse("albright_bot_api:activity"), {"token": "none"}),
+        self.assertContains(self.client.get(reverse("albright_control:bot_activity"), {"token": "none"}),
                             "rejected: missing or wrong token")
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
-    def test_bot_api_is_in_the_trading_nav_only(self, _outlook):
+    def test_bot_api_is_in_the_admin_nav_not_trading(self, _outlook):
+        self.user.is_superuser = True
+        self.user.save()
         self.client.force_login(self.user)
-        link = f'<a href="{reverse("albright_bot_api:tokens")}">Bot API</a>'
-        self.assertContains(self.client.get(reverse("trading_home")), link)
-        page = self.client.get(reverse("albright_bot_api:tokens"))
-        self.assertContains(page, '<body data-app="trading">')
+        link = f'<a href="{reverse("albright_control:bot_api")}">Bot API</a>'
+        self.assertNotContains(self.client.get(reverse("trading_home")), link)
+        page = self.client.get(reverse("albright_control:bot_api"))
+        self.assertContains(page, '<body data-app="admin">')
         self.assertContains(page, link)
-        self.assertNotContains(self.client.get(reverse("albright_reselling_app:dashboard")), link)

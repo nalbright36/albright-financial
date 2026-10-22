@@ -1,0 +1,36 @@
+{% extends "index.html" %}
+{% block page_title %}Data · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 16px;">Data</h1>
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <div>
+            {% for g in groups %}
+            <section class="card" style="margin-bottom: 16px; padding: 0;">
+                <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">{{ g.group }}</span></div>
+                <table class="holdings row-counts">
+                    <tbody>{% for r in g.rows %}<tr><td>{{ r.model }}<div style="font-size: 0.6875rem; color: var(--text-secondary);"><code>{{ r.label }}</code></div></td><td class="num">{{ r.count }}</td></tr>{% endfor %}</tbody>
+                </table>
+            </section>
+            {% endfor %}
+        </div>
+        <div>
+            <section class="card" style="margin-bottom: 16px;" id="backups">
+                <div class="card__header"><span class="card__label">Download backup</span></div>
+                <p style="margin: 0 0 10px; font-size: 0.8125rem; color: var(--text-secondary);">CSV files in a zip. Each download is recorded in the audit log.</p>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    {% for key, label in backups %}<a class="btn btn-secondary" href="{% url 'albright_control:backup' key %}">{{ label }}</a>{% endfor %}
+                </div>
+            </section>
+            <section class="card" id="prune">
+                <div class="card__header"><span class="card__label">Prune old lots</span></div>
+                <p style="margin: 0 0 10px; font-size: 0.8125rem; color: var(--text-secondary);">A dry run of <code>prune_lots</code> - shows what would be deleted and deletes nothing.</p>
+                <form method="post">{% csrf_token %}<input type="hidden" name="action" value="prune_dry_run">
+                    <button type="submit" class="btn btn-secondary">Run prune_lots --dry-run</button></form>
+                {% if dry_run is not None %}<pre class="crypto-source-text" id="prune-output" style="margin-top: 10px;">{{ dry_run|default:"(no output)" }}</pre>{% endif %}
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

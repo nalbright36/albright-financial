@@ -113,6 +113,7 @@
   --app-trading: #34D399;
   --app-reselling: #60A5FA;
   --app-opportunities: #A78BFA;
+  --app-admin: #94A3B8;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -167,6 +168,7 @@
   --app-trading: #10B981;
   --app-reselling: #3B82F6;
   --app-opportunities: #8B5CF6;
+  --app-admin: #64748B;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -240,6 +242,16 @@ body[data-app="opportunities"] {
   --accent-solid: #6D28D9;
   --accent-solid-hover: #5B21B6;
 }
+/* Admin (/control/): slate gray #64748B. Text: the lighter #94A3B8 in dark
+   mode, the deeper #475569 in light mode (#64748B is only ~4.2:1 on the
+   light cards); white-text fills use #475569 (7.6:1). */
+body[data-app="admin"] {
+  --accent-rgb: 100, 116, 139;
+  --accent: #94A3B8;
+  --accent-hover: #CBD5E1;
+  --accent-solid: #475569;
+  --accent-solid-hover: #334155;
+}
 /* Light: text shades one step deeper (hover goes darker, not lighter). */
 [data-theme="light"] body,
 [data-theme="light"] body[data-app="trading"] {
@@ -253,6 +265,10 @@ body[data-app="opportunities"] {
 [data-theme="light"] body[data-app="opportunities"] {
   --accent: #6D28D9;
   --accent-hover: #5B21B6;
+}
+[data-theme="light"] body[data-app="admin"] {
+  --accent: #475569;
+  --accent-hover: #334155;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1396,6 +1412,17 @@ input[type="range"] { accent-color: var(--accent-solid); }
 }
 .app-switch-btn[data-app-target="reselling"]::before { background: var(--app-reselling); }
 .app-switch-btn[data-app-target="opportunities"]::before { background: var(--app-opportunities); }
+.app-switch-btn[data-app-target="admin"]::before { background: var(--app-admin); }
+/* Phones: the theme toggle and up to four short buttons stay on one line. */
+@media (max-width: 480px) {
+  .navbar__switch-row { gap: 6px; flex-wrap: nowrap; }
+  .app-switch-btn { padding: 4px 9px; gap: 5px; white-space: nowrap; }
+  .app-switch-btn::before { width: 6px; height: 6px; }
+}
+@media (max-width: 340px) {
+  .navbar__switch-row { gap: 4px; padding-left: var(--space-2); padding-right: var(--space-2); }
+  .app-switch-btn { padding: 4px 7px; }
+}
 .app-switch-btn.is-current {
   /* The hover shade (darker in light mode, lighter in dark): the plain
      accent on its own tint over the page glow is just under AA (4.4:1). */

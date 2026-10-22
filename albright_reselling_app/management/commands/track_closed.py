@@ -26,6 +26,7 @@ from albright_reselling_app.scanner.adapters.shopgoodwill import ShopGoodwillAda
 from albright_reselling_app.scanner.bid_watch import resolve_watches
 from albright_reselling_app.scanner.pipeline import _categories_for, _cfg, _keywords_for
 from albright_reselling_app.scanner_models import SourcedLot
+from albright_control.jobs import tracked_job
 
 ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter, "hibid": HiBidAdapter}
 RESULTS_WINDOW_DAYS = 7
@@ -78,6 +79,7 @@ class Command(BaseCommand):
         parser.add_argument("--days-back", type=int, default=2,
                              help="How many days of closed auctions to search (ShopGoodwill only).")
 
+    @tracked_job(lambda opts: f"track_closed:{opts['source']}")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         source = opts["source"]
         adapter = ADAPTERS[source]()

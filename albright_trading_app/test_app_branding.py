@@ -96,10 +96,12 @@ class HeaderTests(TestCase):
                 content = self.page(url_name)
                 row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
                 buttons = re.findall(r'<a href="[^"]*" class="(app-switch-btn[^"]*)" data-app-target="(\w+)"', row)
+                self.assertEqual([label for label in re.findall(r'class="app-switch-btn[^"]*"[^>]*>([^<]+)</a>', row)],
+                                 ["Trade", "Resell", "Opps"])   # short labels (fit a phone); no Admin for a regular user
                 self.assertEqual([target for _cls, target in buttons], ["trading", "reselling", "opportunities"])
                 current = [target for cls, target in buttons if "is-current" in cls]
                 self.assertEqual(current, [app])
-                self.assertIn(f'data-app-target="{app}" aria-current="page"', row)
+                self.assertRegex(row, rf'data-app-target="{app}" title="[^"]+" aria-current="page"')
 
 
 class StylesheetTests(TestCase):

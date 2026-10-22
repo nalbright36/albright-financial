@@ -23,6 +23,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from albright_reselling_app.scanner_models import SpotPrice
+from albright_control.jobs import tracked_job
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--force", action="store_true", help="Fetch even if today's price is already stored")
 
+    @tracked_job("fetch_spot_prices")   # its runs show on Admin > System health
     def handle(self, *args, **opts):
         key = os.environ.get("GOLDAPI_KEY")
         if not key:

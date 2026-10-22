@@ -1,0 +1,55 @@
+{% extends "index.html" %}
+{% block page_title %}Bot suggestions · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    <h1 style="margin: 0 0 6px;">Bot suggestions</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">Website ideas the bot posts with the <code>site:suggest</code> scope. Nothing changes until you act on one; accepted ones can be copied as a Claude Code prompt.</p>
+
+    <nav class="scanner-tabs" id="status-filter" aria-label="Status" style="margin-bottom: 8px;">
+        <a href="?{% if app %}app={{ app }}{% endif %}" class="scanner-tab{% if not status %} is-active{% endif %}">All</a>
+        {% for key, label, count in status_tabs %}<a href="?status={{ key }}{% if app %}&amp;app={{ app }}{% endif %}" class="scanner-tab{% if status == key %} is-active{% endif %}">{{ label }} <span class="tab-badge">{{ count }}</span></a>{% endfor %}
+    </nav>
+    <form method="get" class="scanner-controls" id="app-filter" style="margin-bottom: 16px;">
+        {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+        <select name="app" aria-label="App">
+            <option value="">All apps</option>
+            {% for key, label in apps %}<option value="{{ key }}"{% if app == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+    </form>
+
+    {% for row in rows %}{% with s=row.s %}
+    <section class="card" style="margin-bottom: 14px;" id="suggestion-{{ s.pk }}">
+        <div class="card__header" style="align-items: flex-start;">
+            <div>
+                <strong>{{ s.title }}</strong>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">
+                    {{ s.get_app_display }}{% if s.area %} &middot; {{ s.area }}{% endif %} &middot; {{ s.created_at|date:"M j, Y g:i A" }}{% if s.token %} &middot; {{ s.token.name }}{% endif %}
+                </div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <span class="badge {% if s.priority == 'high' %}warn{% else %}neutral{% endif %}">{{ s.get_priority_display|lower }} priority</span>
+                <span class="badge {% if s.status == 'accepted' %}gain{% elif s.status == 'declined' %}loss{% elif s.status == 'done' %}neutral{% else %}warn{% endif %}">{{ s.get_status_display }}</span>
+            </div>
+        </div>
+        <p class="suggestion-text" style="margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem;">{{ s.description }}</p>
+        <form method="post" action="{% url 'albright_control:update_suggestion' s.pk %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="grid grid-2" style="gap: var(--space-3); align-items: end;">
+            {% csrf_token %}
+            <div class="field" style="margin: 0;"><label for="{{ row.form.my_notes.id_for_label }}">My notes</label>{{ row.form.my_notes }}</div>
+            <div style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap;">
+                <div class="field" style="margin: 0;"><label for="{{ row.form.status.id_for_label }}">Status</label>{{ row.form.status }}</div>
+                <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+                {% if row.prompt %}<button type="button" class="btn btn-primary btn-sm js-copy" data-copy-target="prompt-{{ s.pk }}">Copy as Claude Code prompt</button>{% endif %}
+            </div>
+        </form>
+        {% if row.prompt %}
+        <details style="margin-top: 10px;"><summary style="font-size: 0.8125rem; cursor: pointer;">Preview the prompt</summary>
+            <pre class="crypto-source-text" id="prompt-{{ s.pk }}">{{ row.prompt }}</pre></details>
+        {% endif %}
+    </section>
+    {% endwith %}{% empty %}
+    <p class="card" style="color: var(--text-secondary);">No suggestions{% if status or app %} matching these filters{% endif %}.</p>
+    {% endfor %}
+</div>
+{% load cache_bust %}<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}
