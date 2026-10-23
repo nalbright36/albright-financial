@@ -361,7 +361,7 @@ class HardLimitTests(BotApiTestCase):
         for pattern in api_urlpatterns:
             self.assertIsInstance(pattern, URLPattern)
             self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 10)   # incl. site-suggestions (Admin inbox)
+        self.assertEqual(len(api_urlpatterns), 11)   # incl. site-suggestions and ideas (Admin)
 
     def test_no_forbidden_side_effects(self):
         from albright_reselling_app.models import LedgerEntry, LedgerSale

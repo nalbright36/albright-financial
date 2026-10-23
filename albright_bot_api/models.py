@@ -21,6 +21,8 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("opportunities:read", "Read opportunities found in the last 7 days."),
     ("opportunities:suggest", "Leave notes and proposal drafts on opportunities (never sent anywhere)."),
     ("site:suggest", "Drop website improvement ideas in the Admin inbox (Bot suggestions)."),
+    ("ideas:write", "Save the owner's ideas (what they told the bot) to Admin > Ideas."),
+    ("ideas:read", "List existing idea titles and statuses, to avoid sending duplicates."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

@@ -1,0 +1,15 @@
+{% extends "index.html" %}
+{% block page_title %}Add idea · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 760px;">
+    <a href="{% url 'albright_control:ideas' %}" style="font-size: 0.8125rem;">&larr; Ideas</a>
+    <h1 style="margin: 10px 0 16px;">Add an idea</h1>
+    <form method="post" class="card" id="idea-add-form">{% csrf_token %}
+        {% for field in form %}
+        <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+            {% for e in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Add idea</button>
+    </form>
+</div>
+{% endblock %}

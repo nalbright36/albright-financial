@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import idea_views, views
 
 app_name = "albright_control"
 
@@ -20,4 +20,8 @@ urlpatterns = [
     path("data/", views.data_view, name="data"),
     path("data/backup/<str:key>.zip", views.backup, name="backup"),
     path("audit/", views.audit_log, name="audit"),
+    path("ideas/", idea_views.ideas, name="ideas"),
+    path("ideas/new/", idea_views.idea_add, name="idea_add"),
+    path("ideas/<int:pk>/", idea_views.idea_detail, name="idea"),
+    path("suggestions/<int:pk>/to-idea/", idea_views.suggestion_to_idea, name="suggestion_to_idea"),
 ]

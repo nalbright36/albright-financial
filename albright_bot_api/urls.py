@@ -28,4 +28,5 @@ api_urlpatterns = [
     path("opportunities/<int:opportunity_id>/proposal-draft", api_views.opportunity_proposal,
          name="opportunity_proposal"),
     path("site-suggestions", api_views.site_suggestions, name="site_suggestions"),
+    path("ideas", api_views.ideas, name="ideas"),
 ]

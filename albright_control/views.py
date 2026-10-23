@@ -13,7 +13,7 @@ from albright_bot_api.models import SCOPES, BotRequestLog, BotToken, SiteSuggest
 
 from . import ai_usage, data, integrations, jobs
 from .access import audit, superuser_required
-from .models import AuditEntry, IntegrationCheck
+from .models import AuditEntry, Idea, IntegrationCheck
 from .prompts import claude_code_prompt
 
 ACTIVITY_LIMIT = 300
@@ -60,6 +60,7 @@ def overview(request):
         "status_counts": status_counts, "problems": [r for r in health if r["status"] in ("late", "failing")],
         "integrations": integ, "usage": usage,
         "new_suggestions": SiteSuggestion.objects.filter(status="new").count(),
+        "idea_counts": {key: Idea.objects.filter(status=key).count() for key in ("new", "planned", "in_progress")},
         "active_tokens": BotToken.objects.filter(revoked_at=None).count(),
         "recent_audit": AuditEntry.objects.select_related("user")[:5],
     })

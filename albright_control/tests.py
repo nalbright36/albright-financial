@@ -43,7 +43,7 @@ class AdminTestCase(TestCase):
 
 class AccessTests(AdminTestCase):
     def all_urls(self):
-        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "update_suggestion": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
+        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "update_suggestion": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
         return [(p.name, reverse(f"albright_control:{p.name}", args=args.get(p.name, []))) for p in control_urls]
 
     def test_every_admin_page_is_404_for_non_superusers(self):
@@ -501,7 +501,7 @@ class TokenManagementTests(AdminTestCase):
         from albright_bot_api.models import SCOPES
         page = self.client.get(reverse("albright_control:bot_api")).content.decode()
         form = page.split('id="token-form"', 1)[1].split("</form>", 1)[0]
-        self.assertEqual(len(SCOPES), 6)
+        self.assertEqual(len(SCOPES), 8)
         for key, description in SCOPES:
             self.assertIn(f'value="{key}"', form)
             self.assertIn(f"<code>{key}</code> &mdash; {escape(description)}", form)

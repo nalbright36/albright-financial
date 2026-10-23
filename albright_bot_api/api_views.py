@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from .auth import ApiError, bot_endpoint, json_body
 from .models import MAX_TEXT, SCOPES, InventorySuggestion, LotNote, OpportunityNote, SiteSuggestion, TradingNote
@@ -112,6 +113,24 @@ POST site-suggestions                                 scope: site:suggest
          "priority": "low" | "medium" | "high" (optional, default "medium")}
   The owner reviews it (New -> Accepted / Declined -> Done); nothing changes on the site by itself.
   Returns 201 {"id": int, "status": "new"}.
+
+POST ideas                                            scope: ideas:write
+  Save an idea the owner told you, for them to review on Admin > Ideas.
+  Body: {"original_message": str (REQUIRED - exactly what the owner told you, word for word),
+         "title": str (required, <=200), "description": str (optional - your cleaned-up summary),
+         "app": "trade" | "resell" | "opps" | "admin" | "all",
+         "category": "feature" | "improvement" | "bug" | "business_idea" | "research",
+         "priority": "low" | "medium" | "high" | "urgent", "impact": "low" | "medium" | "high",
+         "effort": "small" | "medium" | "large", "tags": [str, ...] (<=20, each <=50 chars),
+         "links": [url, ...] (http/https only, <=20), "target_date": "YYYY-MM-DD" (optional)}
+  Unknown choice values fall back to the defaults (app "all", category "feature", priority/impact/effort
+  "medium") and are listed in "defaults_applied". Status is always "new"; you can't set status or notes.
+  If the title closely matches an open idea it's still saved, marked as a possible duplicate.
+  Returns 201 {"id": int, "status": "new", "possible_duplicate_of": int | null, "defaults_applied": [str]}.
+
+GET  ideas?page=N                                     scope: ideas:read
+  Existing ideas, newest first, 50 per page - check before sending one. Returns
+  {"ideas": [{"id", "title", "app", "status", "created_at"}], "page", "pages", "total", "next_page" (int | null)}.
 """
 
 
@@ -290,3 +309,84 @@ def site_suggestions(request, token):
         token=token, app=app, area=_text(data, "area", required=False, limit=100),
         title=_text(data, "title", limit=200), description=_text(data, "description"), priority=priority)
     return {"id": suggestion.pk, "status": "new"}, 201, f"site suggestion ({app}): {suggestion.title[:80]}"
+
+
+# ---------------------------------------------------------------------------
+# Ideas (Admin > Ideas)
+# ---------------------------------------------------------------------------
+
+IDEAS_PAGE_SIZE = 50
+MAX_TAGS = MAX_LINKS = 20
+
+
+def _choice(data, key, choices, applied):
+    from albright_control.models import Idea
+    value = data.get(key)
+    if value in dict(choices):
+        return value
+    if value not in (None, ""):
+        applied.append(key)
+    return Idea.DEFAULTS[key]
+
+
+def _string_list(data, key, limit, item_limit, keep=lambda v: True):
+    value = data.get(key) or []
+    if not isinstance(value, list):
+        raise ApiError(400, f'"{key}" must be a list.', f"rejected: {key} not a list")
+    items = []
+    for item in value:
+        if isinstance(item, str) and item.strip() and len(item.strip()) <= item_limit and keep(item.strip()):
+            if item.strip() not in items:
+                items.append(item.strip())
+    return items[:limit]
+
+
+@bot_endpoint("ideas:write", methods=("POST",))
+def ideas_create(request, token):
+    from albright_control.ideas import find_duplicate
+    from albright_control.models import AuditEntry, Idea
+    from .links_check import is_http_url
+    data = json_body(request)
+    original = _text(data, "original_message")
+    title = _text(data, "title", limit=200)
+    applied = []
+    fields = {key: _choice(data, key, choices, applied) for key, choices in (
+        ("app", Idea.APPS), ("category", Idea.CATEGORIES), ("priority", Idea.PRIORITIES),
+        ("impact", Idea.IMPACTS), ("effort", Idea.EFFORTS))}
+    target = data.get("target_date")
+    try:
+        target_date = date.fromisoformat(target) if target else None
+    except (TypeError, ValueError) as exc:
+        raise ApiError(400, '"target_date" must be YYYY-MM-DD.', "rejected: bad target_date") from exc
+    duplicate = find_duplicate(title)
+    idea = Idea.objects.create(
+        title=title, description=_text(data, "description", required=False), original_message=original,
+        tags=_string_list(data, "tags", MAX_TAGS, 50), links=_string_list(data, "links", MAX_LINKS, 500, is_http_url),
+        target_date=target_date, status="new", source="grok", token=token, possible_duplicate_of=duplicate, **fields)
+    AuditEntry.objects.create(action="idea_created", details=f'#{idea.pk} "{title[:80]}" by {token.name} (Bot API)'
+                              + (f" - possible duplicate of #{duplicate.pk}" if duplicate else ""))
+    return ({"id": idea.pk, "status": "new", "possible_duplicate_of": duplicate.pk if duplicate else None,
+             "defaults_applied": applied}, 201,
+            f"idea #{idea.pk}: {title[:80]}" + (f" (possible duplicate of #{duplicate.pk})" if duplicate else ""))
+
+
+@bot_endpoint("ideas:read")
+def ideas_list(request, token):
+    from albright_control.models import Idea
+    try:
+        page = max(1, int(request.GET.get("page") or 1))
+    except ValueError as exc:
+        raise ApiError(400, '"page" must be a number.', "rejected: bad page") from exc
+    qs = Idea.objects.order_by("-created_at", "-pk")
+    total = qs.count()
+    pages = max(1, -(-total // IDEAS_PAGE_SIZE))
+    rows = [{"id": i.pk, "title": i.title, "app": i.app, "status": i.status, "created_at": _iso(i.created_at)}
+            for i in qs[(page - 1) * IDEAS_PAGE_SIZE: page * IDEAS_PAGE_SIZE]]
+    return ({"ideas": rows, "page": page, "pages": pages, "total": total,
+             "next_page": page + 1 if page < pages else None}, 200, f"listed {len(rows)} ideas (page {page})")
+
+
+@csrf_exempt
+def ideas(request):
+    """One path, two scopes: POST creates (ideas:write), anything else lists (ideas:read, GET only)."""
+    return ideas_create(request) if request.method == "POST" else ideas_list(request)

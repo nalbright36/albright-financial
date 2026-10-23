@@ -15,6 +15,11 @@
                 {% if not status_counts.failing and not status_counts.late %}<span style="color: var(--text-secondary);">all jobs on time</span>{% endif %}
             </div>
         </a>
+        <a href="{% url 'albright_control:ideas' %}" class="card" style="display: block;" id="idea-counts">
+            <div class="card__header"><span class="card__label">Ideas</span></div>
+            <span class="ledger-stat__value num">{{ idea_counts.new }} new</span>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ idea_counts.planned }} planned &middot; {{ idea_counts.in_progress }} in progress</div>
+        </a>
         <a href="{% url 'albright_control:suggestions' %}?status=new" class="card" style="display: block;">
             <div class="card__header"><span class="card__label">Bot suggestions</span></div>
             <span class="ledger-stat__value num">{{ new_suggestions }}</span>

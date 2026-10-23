@@ -1,0 +1,73 @@
+{% extends "index.html" %}
+{% block page_title %}Idea #{{ idea.pk }} · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    <a href="{% url 'albright_control:ideas' %}" style="font-size: 0.8125rem;">&larr; Ideas</a>
+    <div class="card__header" style="margin: 10px 0 6px; align-items: flex-start;">
+        <h1 style="margin: 0; overflow-wrap: anywhere;">#{{ idea.pk }} {{ idea.title }}</h1>
+        <button type="button" class="btn btn-primary btn-sm js-copy" data-copy-target="idea-prompt">Copy as Claude Code prompt</button>
+    </div>
+    <p style="margin: 0 0 16px; font-size: 0.8125rem; color: var(--text-secondary);">
+        {{ idea.get_source_display }}{% if idea.token %} ({{ idea.token.name }}){% endif %} &middot; created {{ idea.created_at|date:"M j, Y g:i A" }}
+        {% if idea.status_changed_at %} &middot; status changed {{ idea.status_changed_at|date:"M j, Y" }}{% endif %}
+    </p>
+
+    {% if idea.possible_duplicate_of %}
+    <div class="crypto-warning" style="margin-bottom: 16px;" id="duplicate-warning">
+        Possible duplicate of <a href="{% url 'albright_control:idea' idea.possible_duplicate_of.pk %}">#{{ idea.possible_duplicate_of.pk }} {{ idea.possible_duplicate_of.title }}</a>.
+        <form method="post" style="display: inline; margin: 0 0 0 8px;" data-confirm="Merge this idea into #{{ idea.possible_duplicate_of.pk }}? Both original messages are kept; this idea is then removed.">{% csrf_token %}
+            <input type="hidden" name="action" value="merge"><input type="hidden" name="into" value="{{ idea.possible_duplicate_of.pk }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Merge into #{{ idea.possible_duplicate_of.pk }}</button></form>
+    </div>
+    {% endif %}
+    {% if duplicates %}<p class="crypto-warning" style="margin-bottom: 16px;">Possible duplicates of this idea: {% for d in duplicates %}<a href="{% url 'albright_control:idea' d.pk %}">#{{ d.pk }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+
+    <section class="card" style="margin-bottom: 16px;">
+        <div class="card__header"><span class="card__label">Status</span><span class="badge neutral">{{ idea.get_status_display }}</span></div>
+        <form method="post" class="crypto-status-buttons" id="idea-status-buttons">{% csrf_token %}<input type="hidden" name="action" value="status">
+            {% for value, label in statuses %}<button type="submit" name="status" value="{{ value }}" class="btn btn-secondary btn-sm{% if idea.status == value %} is-current{% endif %}">{{ label }}</button>{% endfor %}
+        </form>
+    </section>
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <form method="post" class="card" id="idea-form">{% csrf_token %}<input type="hidden" name="action" value="edit">
+            <div class="card__header"><span class="card__label">Details</span></div>
+            {% for field in form %}
+            <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+                {% for e in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <div>
+            <section class="card" style="margin-bottom: 16px;">
+                <div class="card__header"><span class="card__label">Original message</span><span style="font-size: 0.75rem; color: var(--text-secondary);">exactly what you told the bot - read-only</span></div>
+                <pre class="crypto-source-text" id="original-message">{{ idea.original_message|default:"(none)" }}</pre>
+            </section>
+            {% if idea.links %}
+            <section class="card" style="margin-bottom: 16px;">
+                <div class="card__header"><span class="card__label">Links</span></div>
+                {% load crypto_links %}{% for link in idea.links %}<div style="font-size: 0.8125rem; overflow-wrap: anywhere;">{% external_link link %}</div>{% endfor %}
+            </section>
+            {% endif %}
+            <section class="card" style="margin-bottom: 16px;">
+                <div class="card__header"><span class="card__label">Claude Code prompt</span></div>
+                <pre class="crypto-source-text" id="idea-prompt">{{ prompt }}</pre>
+            </section>
+            <section class="card" style="margin-bottom: 16px;">
+                <div class="card__header"><span class="card__label">Merge</span></div>
+                <form method="post" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: end;" id="merge-form"
+                      data-confirm="Merge this idea into the one you picked? Both original messages are kept; this idea is then removed.">{% csrf_token %}
+                    <input type="hidden" name="action" value="merge">
+                    <div class="field" style="margin: 0; flex: 1; min-width: 200px;"><label for="merge-into">Merge this idea into</label>
+                        <select name="into" id="merge-into" class="ledger-input"><option value="">Pick an open idea...</option>
+                            {% for t in merge_targets %}<option value="{{ t.pk }}"{% if t.pk == idea.possible_duplicate_of_id %} selected{% endif %}>#{{ t.pk }} {{ t.title|truncatechars:60 }}</option>{% endfor %}</select></div>
+                    <button type="submit" class="btn btn-secondary btn-sm">Merge</button>
+                </form>
+            </section>
+            <form method="post" data-confirm="Delete idea #{{ idea.pk }}? This can't be undone.">{% csrf_token %}<input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-secondary btn-sm">Delete idea</button></form>
+        </div>
+    </div>
+</div>
+{% load cache_bust %}<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}
