@@ -241,7 +241,7 @@ def home(request):
         if remembered == "reseller":
             return redirect("albright_reselling_app:dashboard")
         if remembered in OPPORTUNITIES_COOKIE_VALUES:
-            return redirect("albright_crypto_app:dashboard")
+            return redirect("albright_crypto_app:inbox")
     return _render_trading_home(request)
 
 

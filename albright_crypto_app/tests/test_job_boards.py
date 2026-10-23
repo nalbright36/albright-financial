@@ -183,17 +183,22 @@ class AttributionAndKeepInAppTests(TestCase):
         self.remotive = Opportunity.objects.get(external_id="remotive:1911")
         self.remoteok = Opportunity.objects.get(external_id="remoteok:120345")
 
-    def test_via_link_on_dashboard_and_detail(self):
-        dashboard = self.client.get(reverse("albright_crypto_app:income")).content.decode()
-        for opp, name in ((self.remotive, "Remotive"), (self.remoteok, "Remote OK")):
+    def test_via_link_in_the_inbox_hidden_and_detail(self):
+        Opportunity.objects.filter(pk=self.remoteok.pk).update(hidden_reason="low fit (10/100)")
+        cards = {c["id"]: c for c in self.client.get(reverse("albright_crypto_app:inbox")).context["queue"]}
+        self.assertEqual((cards[self.remotive.pk]["source"], cards[self.remotive.pk]["via"]), ("Remotive", True))
+        self.assertEqual(cards[self.remotive.pk]["open_url"], self.remotive.url)    # the inbox's "via" link: their page
+        hidden = self.client.get(reverse("albright_crypto_app:hidden")).content.decode()
+        for opp, name, page in ((self.remotive, "Remotive", None), (self.remoteok, "Remote OK", hidden)):
             link = (f'<a href="{opp.url}" target="_blank" rel="noopener" class="crypto-link crypto-via">'
                     f'via {name}</a>')
             with self.subTest(name=name):
-                self.assertIn(link, dashboard)
+                if page:
+                    self.assertIn(link, page)
                 detail = self.client.get(reverse("albright_crypto_app:opportunity", args=[opp.pk])).content.decode()
                 self.assertIn(link, detail)
                 self.assertNotIn("nofollow", detail)
-        self.assertNotIn("nofollow", dashboard)
+        self.assertNotIn("nofollow", hidden)
 
     def test_never_sent_to_the_ai_provider(self):
         client = fake_client({"reward_type": "freelance"})
@@ -207,7 +212,7 @@ class AttributionAndKeepInAppTests(TestCase):
         self.assertEqual(send_new_opportunity_alerts(Opportunity.objects.filter(pk=self.remotive.pk)), [])
         send.assert_not_called()
 
-        Opportunity.objects.filter(pk=self.remoteok.pk).update(status="doing",
+        Opportunity.objects.filter(pk=self.remoteok.pk).update(status="working",
                                                                deadline=timezone.now() + timedelta(hours=5))
         send_deadline_reminders()
         message = send.call_args.args[0]

@@ -19,7 +19,8 @@ ALIASES = {
 
 
 def normalize(skill):
-    key = re.sub(r"[^a-z0-9+#]", "", str(skill or "").lower())
+    # "Salesforce (Certified Administrator)" counts as "Salesforce".
+    key = re.sub(r"[^a-z0-9+#]", "", re.sub(r"\(.*?\)", "", str(skill or "")).lower())
     if key in ALIASES:
         return ALIASES[key]  # before the plural rule: "postgres" isn't a plural
     if len(key) > 3 and key.endswith("s") and not key.endswith("ss"):

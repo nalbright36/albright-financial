@@ -30,6 +30,7 @@ class RssCollector(BaseCollector):
                 continue  # no usable link (feedparser can fall back to a bare guid like "q2")
             summary = entry.get("summary") or ""
             content = " ".join(part.get("value", "") for part in entry.get("content") or [])
+            region = str(entry.get("region") or "").strip()[:200]   # We Work Remotely's <region> element
             yield RawOpportunity(
                 external_id=f"rss:{entry.get('id') or link}"[:300],
                 url=link,
@@ -37,4 +38,5 @@ class RssCollector(BaseCollector):
                 text=(content or summary).strip(),
                 metadata={"feed": source.url, "published": entry.get("published") or entry.get("updated") or ""},
                 published=_published(entry),
+                facts={"location_requirement": region} if region else {},
             )

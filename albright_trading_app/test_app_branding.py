@@ -31,8 +31,8 @@ class ContextProcessorTests(TestCase):
             reverse("strategies"): "trading",
             reverse("albright_reselling_app:dashboard"): "reselling",
             reverse("albright_reselling_app:watchlist"): "reselling",
-            reverse("albright_crypto_app:dashboard"): "opportunities",
-            reverse("albright_crypto_app:income"): "opportunities",
+            reverse("albright_crypto_app:inbox"): "opportunities",
+            reverse("albright_crypto_app:pipeline"): "opportunities",
             reverse("albright_crypto_app:profile"): "opportunities",
             reverse("user_login"): "trading",          # outside the three apps -> trading
             reverse("registration"): "trading",
@@ -46,7 +46,7 @@ class ContextProcessorTests(TestCase):
         reseller = processor_for(reverse("albright_reselling_app:dashboard"))
         self.assertEqual((reseller["app_brand"], reseller["in_reselling_app"], reseller["in_opportunities_app"]),
                          ("Albright Reselling", True, False))
-        opp = processor_for(reverse("albright_crypto_app:dashboard"))
+        opp = processor_for(reverse("albright_crypto_app:inbox"))
         self.assertEqual((opp["app_brand"], opp["in_reselling_app"], opp["in_opportunities_app"]),
                          ("Albright Opportunities", False, True))
 
@@ -61,7 +61,7 @@ class HeaderTests(TestCase):
     PAGES = {
         "trading": ("trading_home", "Albright Trading"),
         "reselling": ("albright_reselling_app:dashboard", "Albright Reselling"),
-        "opportunities": ("albright_crypto_app:dashboard", "Albright Opportunities"),
+        "opportunities": ("albright_crypto_app:inbox", "Albright Opportunities"),
     }
 
     def setUp(self):
@@ -82,7 +82,7 @@ class HeaderTests(TestCase):
 
     def test_page_title_prefixes_keep_the_app_brand(self, _outlook):
         self.assertIn("<title>Grok Bot · Albright Trading</title>", self.page("grok_bot"))
-        self.assertIn("<title>Income · Albright Opportunities</title>", self.page("albright_crypto_app:income"))
+        self.assertIn("<title>Pipeline · Albright Opportunities</title>", self.page("albright_crypto_app:pipeline"))
 
     def test_login_page_defaults_to_trading(self, _outlook):
         self.client.logout()

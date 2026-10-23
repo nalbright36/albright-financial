@@ -1,0 +1,23 @@
+{# One Pipeline card (pipeline.html): title, company, type, pay, days in stage, and a move form. #}
+<article class="pipeline-card{% if opp.followup_due %} is-followup{% endif %}" data-opportunity-id="{{ opp.pk }}">
+    <a href="{% url 'albright_crypto_app:opportunity' opp.pk %}" class="pipeline-card__title">{{ opp.title }}</a>
+    <div class="pipeline-card__meta">{% if opp.company %}{{ opp.company }} &middot; {% endif %}<span class="badge neutral">{{ opp.get_work_type_display }}</span>{% if opp.pay_display %} &middot; <span class="num">{{ opp.pay_display }}</span>{% endif %}</div>
+    <div class="pipeline-card__meta">
+        <span class="num" data-days-in-stage="{{ opp.days_in_stage }}">{{ opp.days_in_stage }} day{{ opp.days_in_stage|pluralize }} in {{ opp.get_status_display|lower }}</span>
+        {% if opp.status == "closed" and opp.close_reason %} &middot; {{ opp.get_close_reason_display }}{% endif %}
+        {% if opp.applied_at and opp.status != "applied" %} &middot; applied {{ opp.applied_at|date:"M j" }}{% endif %}
+    </div>
+    {% if opp.followup_due %}<div class="badge warn pipeline-card__followup">Follow up - applied {{ opp.applied_at|date:"M j" }}, no movement since</div>{% endif %}
+    {% if opp.any_deadline and opp.any_deadline < now and opp.status == "saved" %}<div class="badge loss">Deadline passed</div>{% endif %}
+    <form method="post" action="{% url 'albright_crypto_app:pipeline_move' opp.pk %}" class="pipeline-card__move">
+        {% csrf_token %}
+        <label class="visually-hidden" for="move-{{ opp.pk }}">Move {{ opp.title|truncatechars:40 }} to</label>
+        <select name="stage" id="move-{{ opp.pk }}" class="ledger-input js-stage-select">
+            {% for value, label in stages %}<option value="{{ value }}"{% if value == opp.status %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="reason" class="ledger-input js-close-reason" aria-label="Why it closed"{% if opp.status != "closed" %} hidden{% endif %}>
+            {% for value, label in close_reasons %}{% if value != "expired" or opp.close_reason == "expired" %}<option value="{{ value }}"{% if value == opp.close_reason %} selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">Move</button>
+    </form>
+</article>

@@ -1,0 +1,57 @@
+{% extends "index.html" %}
+{% load crypto_links %}
+{% block page_title %}Hidden · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <a href="{% url 'albright_crypto_app:inbox' %}{% if type_key != 'all' %}?type={{ type_key }}{% endif %}" style="font-size: 0.8125rem;">&larr; Inbox</a>
+    <div class="card__header" style="margin: 12px 0 8px;">
+        <h1 style="margin: 0;">Hidden <span class="tab-badge">{{ total }}</span></h1>
+        <a href="{% url 'albright_crypto_app:filters' %}" class="btn btn-secondary btn-sm">Filters</a>
+    </div>
+    <p style="margin: 0 0 16px; font-size: 0.875rem; color: var(--text-secondary);">
+        Kept out of the Inbox: blocked by the safety check (treat their links as dangerous), over your spending budget,
+        filtered out by your Filters, or a low fit score. "Show in Inbox" stops the filters hiding one.
+    </p>
+
+    <nav class="scanner-tabs" id="hidden-type-filter" aria-label="Type" style="margin-bottom: 16px;">
+        {% for key, label in type_filters %}<a href="?type={{ key }}" class="scanner-tab{% if key == type_key %} is-active{% endif %}"{% if key == type_key %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </nav>
+
+    <div class="card" style="padding: 0;">
+    {% if opportunities %}
+    <div style="overflow-x: auto;">
+    <table class="holdings" id="hidden-table">
+        <thead><tr><th class="lot-title-col">Opportunity</th><th>Why it's hidden</th><th>Type</th><th>Found</th><th></th></tr></thead>
+        <tbody>
+        {% for opp in opportunities %}
+        <tr data-opportunity-id="{{ opp.pk }}">
+            <td class="lot-title">
+                <a href="{% url 'albright_crypto_app:opportunity' opp.pk %}">{{ opp.title }}</a>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">{% if opp.company %}{{ opp.company }} &middot; {% endif %}{% if opp.source.attribution %}{% via_link opp %}{% else %}{{ opp.source.get_kind_display }}{% endif %}</div>
+            </td>
+            <td>
+                <ul class="crypto-reasons hidden-reasons" style="font-size: 0.8125rem; margin: 0;{% if opp.is_blocked %} color: var(--loss);{% endif %}">
+                    {% for reason in opp.hide_reasons %}<li>{{ reason }}</li>{% endfor %}
+                </ul>
+            </td>
+            <td><span class="badge neutral">{{ opp.get_work_type_display }}</span></td>
+            <td style="font-size: 0.8125rem;">{{ opp.discovered_at|date:"M j" }}</td>
+            <td>
+                {% if not opp.is_blocked and not opp.excluded %}
+                <form method="post" action="{% url 'albright_crypto_app:show_in_inbox' opp.pk %}" style="margin: 0;">
+                    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-secondary btn-sm">Show in Inbox</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="color: var(--text-secondary); padding: var(--space-5); margin: 0;">Nothing hidden{% if type_key != "all" %} of this type{% endif %}.</p>
+    {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,7 +1,8 @@
 """The pipeline storing the safety check and all four scores, re-scoring
-on edit, the manual "Add opportunity" form, checklist steps, and the
-dashboard's routing: blocked only in Blocked, requires-spending only in
-Excluded, Ranked sorted by EV/hour then confidence."""
+on edit, the manual "Add opportunity" form, checklist steps, and where
+things are listed: blocked (with its reasons) and requires-spending only
+in Hidden, never the Inbox; the Inbox's bounties sorted by EV/hour; work in
+progress on the Pipeline."""
 import json
 from decimal import Decimal
 from unittest import mock
@@ -132,46 +133,49 @@ class RoutingTests(TestCase):
         self.spending = make(title="Deposit promo", reward_usd=Decimal("40"), reward_type="promo_reward",
                              hours_estimate=Decimal("1"), requires_spending=True)
         self.doing = make(title="In progress")
-        Opportunity.objects.filter(pk=self.doing.pk).update(status="doing")
+        Opportunity.objects.filter(pk=self.doing.pk).update(status="working")
 
-    def titles(self, tab):
-        content = self.client.get(reverse("albright_crypto_app:crypto"), {"tab": tab}).content.decode()
-        table = content.split('id="crypto-table"')[1].split("</table>")[0] if 'id="crypto-table"' in content else ""
-        return [o.title for o in Opportunity.objects.all() if f">{o.title}</a>" in table], table
+    def inbox(self):
+        return [card["title"] for card in self.client.get(reverse("albright_crypto_app:inbox")).context["queue"]]
 
-    def test_ranked_excludes_blocked_and_excluded_and_sorts_by_ev_per_hour(self):
-        titles, table = self.titles("ranked")
+    def hidden(self):
+        response = self.client.get(reverse("albright_crypto_app:hidden"))
+        table = response.content.decode().split('id="hidden-table"')[1].split("</table>")[0]
+        return [o.title for o in response.context["opportunities"]], table
+
+    def test_inbox_excludes_blocked_excluded_and_in_progress_and_sorts_by_ev_per_hour(self):
+        titles = self.inbox()
         self.assertNotIn("Wallet sync", titles)
         self.assertNotIn("Deposit promo", titles)
         self.assertNotIn("In progress", titles)
-        self.assertLess(table.index("Fast bounty"), table.index("Slow bounty"))
+        self.assertLess(titles.index("Fast bounty"), titles.index("Slow bounty"))
 
-    def test_blocked_tab_shows_reasons(self):
-        titles, table = self.titles("blocked")
-        self.assertEqual(titles, ["Wallet sync"])
+    def test_blocked_is_in_hidden_with_its_reasons(self):
+        titles, table = self.hidden()
+        self.assertIn("Wallet sync", titles)
         self.assertIn("wallet &#x27;validation&#x27; or &#x27;sync&#x27; request", table)
 
-    def test_excluded_tab(self):
-        titles, table = self.titles("excluded")
-        self.assertEqual(titles, ["Deposit promo"])
+    def test_excluded_is_in_hidden(self):
+        titles, table = self.hidden()
+        self.assertIn("Deposit promo", titles)
         self.assertIn("requires spending above your budget", table)
+        self.assertEqual(sorted(titles), ["Deposit promo", "Wallet sync"])
 
-    def test_doing_tab_and_filters(self):
-        self.assertEqual(self.titles("doing")[0], ["In progress"])
-        content = self.client.get(reverse("albright_crypto_app:crypto"),
-                                  {"tab": "ranked", "confidence": "high"}).content.decode()
-        self.assertIn("Fast bounty", content)
-        self.assertNotIn(">In progress</a>", content)
+    def test_in_progress_is_on_the_pipeline(self):
+        content = self.client.get(reverse("albright_crypto_app:pipeline")).content.decode()
+        working = content.split('data-stage="working"')[1].split("</section>")[0]
+        self.assertIn(">In progress</a>", working)
+        self.assertNotIn(">Fast bounty</a>", content)
 
-    def test_blocked_never_in_the_main_list_even_with_a_high_score(self):
-        Opportunity.objects.filter(pk=self.blocked.pk).update(ev_per_hour=Decimal("999"), confidence="high")
-        self.assertNotIn("Wallet sync", self.titles("ranked")[0])
+    def test_blocked_never_in_the_inbox_even_with_a_high_score(self):
+        Opportunity.objects.filter(pk=self.blocked.pk).update(ev_per_hour=Decimal("999"), confidence="high",
+                                                               fit_score=100)
+        self.assertNotIn("Wallet sync", self.inbox())
 
-    def test_tiles(self):
-        content = self.client.get(reverse("albright_crypto_app:dashboard")).content.decode()
-        self.assertIn("Potential (not earned)", content)
-        self.assertIn("Confirmed earnings", content)
-        self.assertIn("Realized $/hour", content)
+    def test_earnings_tiles(self):
+        content = self.client.get(reverse("albright_crypto_app:earnings")).content.decode()
+        self.assertIn("Total (USD at receipt)", content)
+        self.assertIn("This month", content)
 
     def test_toggle_step(self):
         step = TaskStep.objects.create(opportunity=self.fast, text="Fork")

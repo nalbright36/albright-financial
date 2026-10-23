@@ -28,6 +28,24 @@
         </div>
     </div>
 
+    {% if by_type %}
+    <section class="card" style="margin-bottom: 24px;" id="earnings-by-type">
+        <div class="card__header"><span class="card__label">By type</span><span style="font-size: 0.75rem; color: var(--text-secondary);">Confirmed earnings ÷ hours logged</span></div>
+        <div style="overflow-x: auto;">
+        <table class="holdings">
+            <thead><tr><th>Type</th><th class="num">Earned</th><th class="num">Hours</th><th class="num">$/hour</th></tr></thead>
+            <tbody>
+                {% for row in by_type %}
+                <tr data-type="{{ row.key }}"><td>{{ row.label }}</td><td class="num">${{ row.earned|floatformat:2 }}</td>
+                    <td class="num">{{ row.hours|floatformat:1 }}</td>
+                    <td class="num">{% if row.per_hour is not None %}${{ row.per_hour|floatformat:2 }}{% else %}&mdash;{% endif %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+    {% endif %}
+
     <div class="card" style="padding: 0;">
         {% if earnings %}
         <div style="overflow-x: auto;">

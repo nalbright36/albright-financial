@@ -2,8 +2,9 @@
 site that emails alerts) from one Gmail label, read-only (gmail.py).
 
 Each new message gets one AI call that splits it into its separate
-postings - title, link, pay, skills, deadline - under the same rules as
-fact extraction (only facts in the text; extraction.validate() checks
+postings - title, link, pay, skills, deadline, and each posting's fit with
+My profile (the Inbox's fit step, checked by relevance.validate_fit) - under
+the same rules as fact extraction (only facts in the text; extraction.validate() checks
 every posting, including that its evidence quote is in the email). A
 posting's link must be one actually in the email (the AI picks it by
 number), so it always points at the original posting. Every message ID is
@@ -16,7 +17,8 @@ from ..ai_tasks import run_json
 from ..extraction import ExtractionLimitReached, INCOME_SYSTEM_PROMPT, quote_in_text, validate
 from ..gmail import GmailReader, header, links_in, message_text
 from ..links import is_web_url
-from ..models import GmailConnection, ProcessedItem
+from ..models import GmailConnection, MyProfile, ProcessedItem
+from ..relevance import BATCH_FIT_FIELDS, BATCH_FIT_RULES, profile_brief, validate_fit
 from .base import BaseCollector, RawOpportunity, SourceUnavailable
 
 log = logging.getLogger(__name__)
@@ -29,16 +31,19 @@ SPLIT_PROMPT = """You split one job-alert email into the separate job postings i
 Use ONLY facts stated in the email. Never guess or use outside knowledge; anything not stated is null / "unknown".
 The email's links are numbered [1], [2], ... below the text. For each posting, give the number of the link
 that opens THAT posting (not unsubscribe, settings, or search links), or null if there isn't one.
+%s
 
 Return ONLY a JSON object:
 {"postings": [{
   "title": short title as written in the email,
   "link": link number or null,
   "posting_text": the posting's text copied EXACTLY from the email (max 1500 chars),
+%s
   ...and every field of this extraction schema for the posting:
 %s
 }]}
-Return {"postings": []} if the email lists no postings.""" % INCOME_SYSTEM_PROMPT.split("Return ONLY a JSON object, no other text:")[1]
+Return {"postings": []} if the email lists no postings.""" % (
+    BATCH_FIT_RULES, BATCH_FIT_FIELDS, INCOME_SYSTEM_PROMPT.split("Return ONLY a JSON object, no other text:")[1])
 
 
 def label_for(source):
@@ -76,7 +81,9 @@ class EmailAlertsCollector(BaseCollector):
         links = links_in(body)
         numbered = "\n".join(f"[{i}] {url}" for i, url in enumerate(links, 1))
         email_text = f"Subject: {subject}\n\n{body}"
-        data, _cost = run_json(SPLIT_PROMPT, f"{email_text}\n\nLINKS:\n{numbered}", "email_split",
+        profile = MyProfile.load()
+        data, _cost = run_json(SPLIT_PROMPT, f"=== CANDIDATE PROFILE ===\n{profile_brief(profile)}\n\n"
+                               f"=== EMAIL ===\n{email_text}\n\nLINKS:\n{numbered}", "email_split",
                                client=self.ai_client)
         results = []
         for i, posting in enumerate(data.get("postings") or []):
@@ -93,7 +100,8 @@ class EmailAlertsCollector(BaseCollector):
                 title=title,
                 text=text,
                 metadata={"email_subject": subject[:300], "email_id": message["id"],
-                          "from": header(message, "From")[:200], "link_in_email": url in links},
+                          "from": header(message, "From")[:200], "link_in_email": url in links,
+                          "fit": validate_fit(posting, profile)},   # taken out again by pipeline.store
                 facts=facts,
                 facts_complete=True,
             ))

@@ -287,7 +287,7 @@ HN_AI = {"postings": [
      "evidence_quote": "$90/hr", "skills_required": ["Python", "Django", "PostgreSQL"],
      "location_requirement": "REMOTE (US)"},
     {"id": 2, "title": "BigCo - Senior Rust engineer", "work_types": ["full_time"], "remote": False,
-     "skills_required": ["Rust", "Kubernetes"]},
+     "skills_required": ["Rust", "Kubernetes"], "location_requirement": "Onsite NYC"},
     {"id": 3, "title": "DataCo - Data engineer", "work_types": ["full_time"], "remote": True,
      "skills_required": ["Python", "data pipelines", "PostgreSQL", "API integrations"]},
     {"id": 5, "title": "FrontCo - Frontend", "work_types": ["full_time"], "remote": True,
@@ -315,19 +315,22 @@ class HnHiringTests(TestCase):
             thread = HnHiringCollector().latest_thread()
         self.assertEqual(thread["id"], 9001)   # skips "Who wants to be hired?" and "Freelancer?", not September's
 
-    def test_keeps_contract_work_and_remote_roles_matching_my_skills(self):
+    def test_every_posting_is_stored_and_the_filters_decide(self):
         client = fake_client(HN_AI)
         with mock.patch(GET, side_effect=hn_get) as get:
             new, errors = scan_sources(sources=[self.source], client=client)
         self.assertEqual(errors, [])
-        self.assertEqual(sorted(o.external_id for o in new), ["hn:1", "hn:3"])
+        self.assertEqual(sorted(o.external_id for o in new), ["hn:1", "hn:2", "hn:3", "hn:5"])
+        self.assertEqual(Opportunity.objects.get(external_id="hn:2").hidden_reason,
+                         "location: on-site in Onsite NYC (not within 30 miles of Tampa, FL)")
+        self.assertEqual(Opportunity.objects.get(external_id="hn:1").company, "Acme")
         contract = Opportunity.objects.get(external_id="hn:1")
         self.assertEqual(contract.url, "https://news.ycombinator.com/item?id=1")
         self.assertEqual((contract.reward_type, contract.pay_rate_usd, contract.extraction_status),
                          ("freelance", Decimal("90.00"), "done"))
         self.assertIn("https://acme.example/jobs", contract.raw_text)
         self.assertEqual(Opportunity.objects.get(external_id="hn:3").skill_match, 100)
-        self.assertEqual(client.responses.create.call_count, 1)    # one batch
+        self.assertEqual(client.responses.create.call_count, 1)    # one batch (fit included - no extra calls)
         sent = client.responses.create.call_args.kwargs["input"]
         self.assertIn("id=1", sent)
         self.assertNotIn("id=4", sent)                              # deleted comment never sent
@@ -441,3 +444,36 @@ class NewJobBoardTests(TestCase):
         self.client.post(reverse("albright_crypto_app:settings"), {"action": "add_source", "source-kind": "hn_hiring"})
         source = Source.objects.get(kind="hn_hiring")
         self.assertEqual((source.url, source.terms_checked), ("https://hacker-news.firebaseio.com/v0", False))
+
+
+@override_settings(CRYPTO=CFG)
+class HnFitInTheBatchTests(TestCase):
+    """The fit step for HN rides along in the batch call: with a profile, each
+    posting's fit comes back in the same response - still one AI call."""
+
+    def setUp(self):
+        from albright_crypto_app.models import MyProfile
+        from albright_crypto_app.my_profile import prefill_profile
+        prefill_profile(MyProfile.load())
+        NO_SLEEP.start()
+        self.addCleanup(NO_SLEEP.stop)
+        self.source = Source.objects.create(kind="hn_hiring", name="HN: Who is hiring",
+                                            url="https://hacker-news.firebaseio.com/v0", opportunity_type="income",
+                                            terms_checked=True)
+
+    def test_fit_comes_from_the_batch_and_low_fit_is_hidden(self):
+        scores = {1: 85, 2: 70, 3: 75, 5: 20}
+        reply = {"postings": [{**p, "fit_score": scores.get(p["id"]), "matched_skills": ["Python", "Cobol"],
+                               "role_match": "Data Engineer", "why_it_fits": "Python data work."}
+                              for p in HN_AI["postings"]]}
+        client = fake_client(reply)
+        with mock.patch(GET, side_effect=hn_get):
+            scan_sources(sources=[self.source], client=client)
+        self.assertEqual(client.responses.create.call_count, 1)
+        self.assertIn("=== CANDIDATE PROFILE ===", client.responses.create.call_args.kwargs["input"])
+        data = Opportunity.objects.get(external_id="hn:3")
+        self.assertEqual((data.fit_score, data.fit_method, data.role_match, data.matched_skills),
+                         (75, "ai", "Data Engineer", ["Python"]))
+        self.assertEqual(data.hidden_reason, "")
+        self.assertEqual(Opportunity.objects.get(external_id="hn:5").hidden_reason, "low fit (20/100)")
+        self.assertNotIn("fit", data.metadata)

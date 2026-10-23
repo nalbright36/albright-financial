@@ -3,9 +3,11 @@
 monthly thread, its top-level comments (each one posting).
 
 Every new comment is classified by AI, in batches (one call per BATCH
-comments), with the same "only facts in the text" rules as extraction; a
-posting is kept only if it offers contract, freelance or part-time work, or
-is remote and matches my skills (skill_match >= hn_min_skill_match).
+comments), with the same "only facts in the text" rules as extraction. The
+same call also scores each posting's fit with My profile (the Inbox's fit
+step - relevance.validate_fit checks what comes back), so filtering HN costs
+no extra AI calls: every posting is stored, and the prefilter and the fit
+score decide what reaches the Inbox (the rest goes to Hidden, with why).
 Classified comments are recorded (ProcessedItem) whether kept or not, so
 none is sent to the AI twice. Read-only GETs, at most MAX_NEW_COMMENTS per
 run and once per MIN_INTERVAL.
@@ -15,11 +17,10 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from .. import config
 from ..ai_tasks import run_json
 from ..extraction import ExtractionLimitReached, INCOME_SYSTEM_PROMPT, validate
-from ..models import ProcessedItem
-from ..skills import skill_match
+from ..models import MyProfile, ProcessedItem
+from ..relevance import BATCH_FIT_FIELDS, BATCH_FIT_RULES, profile_brief, validate_fit
 from .base import BaseCollector, RawOpportunity, SourceUnavailable
 
 log = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ KEEP_WORK_TYPES = {"contract", "freelance", "part_time"}
 
 CLASSIFY_PROMPT = """You read job postings from a Hacker News "Who is hiring?" thread. Each posting has an id.
 Use ONLY facts stated in each posting; anything not stated is null / "unknown" / false. Never guess.
+%s
 
 Return ONLY a JSON object:
 {"postings": [{
@@ -40,9 +42,10 @@ Return ONLY a JSON object:
   "title": "Company - role" as written (short),
   "work_types": list from "full_time","contract","freelance","part_time","internship" - only those the posting states,
   "remote": true only if the posting says remote work is allowed,
+%s
   ...and every field of this extraction schema for the posting:
 %s
-}]}""" % INCOME_SYSTEM_PROMPT.split("Return ONLY a JSON object, no other text:")[1]
+}]}""" % (BATCH_FIT_RULES, BATCH_FIT_FIELDS, INCOME_SYSTEM_PROMPT.split("Return ONLY a JSON object, no other text:")[1])
 
 
 def plain_text(comment_html):
@@ -51,14 +54,6 @@ def plain_text(comment_html):
     text = re.sub(r"(?i)<p>", "\n\n", text)
     text = html.unescape(re.sub(r"<[^>]+>", "", text))
     return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-def keep(work_types, remote, skills, min_match):
-    """Contract / freelance / part-time work, or a remote role matching my skills."""
-    if KEEP_WORK_TYPES & set(work_types):
-        return True
-    match = skill_match(skills, config.skills())
-    return bool(remote) and match is not None and match >= min_match
 
 
 class HnHiringCollector(BaseCollector):
@@ -97,11 +92,11 @@ class HnHiringCollector(BaseCollector):
             comments.append(comment)
             if len(comments) >= MAX_NEW_COMMENTS:
                 break
-        min_match = int(config.get("hn_min_skill_match"))
+        profile = MyProfile.load()
         for start in range(0, len(comments), BATCH):
             batch = comments[start:start + BATCH]
             try:
-                kept = self.classify(batch, thread, min_match)
+                kept = self.classify(batch, thread, profile)
             except ExtractionLimitReached as exc:
                 log.info("HN Who is hiring: stopping - %s", exc)
                 return   # unclassified comments wait for the next run
@@ -110,9 +105,10 @@ class HnHiringCollector(BaseCollector):
                                                     defaults={"opportunities_created": int(comment["id"] in kept)})
             yield from kept.values()
 
-    def classify(self, batch, thread, min_match):
+    def classify(self, batch, thread, profile):
         texts = {c["id"]: plain_text(c["text"]) for c in batch}
-        user = "\n\n".join(f"=== POSTING id={cid} ===\n{text}" for cid, text in texts.items())
+        user = f"=== CANDIDATE PROFILE ===\n{profile_brief(profile)}\n\n" + "\n\n".join(
+            f"=== POSTING id={cid} ===\n{text}" for cid, text in texts.items())
         data, _cost = run_json(CLASSIFY_PROMPT, user, "hn_filter", client=self.ai_client, max_tokens=6000)
         kept = {}
         for posting in data.get("postings") or []:
@@ -128,8 +124,6 @@ class HnHiringCollector(BaseCollector):
             facts = validate(posting, text, "income")
             work_types = [w for w in posting.get("work_types") or [] if isinstance(w, str)]
             remote = posting.get("remote") is True
-            if not keep(work_types, remote, facts.get("skills_required"), min_match):
-                continue
             if KEEP_WORK_TYPES & set(work_types) and facts["reward_type"] == "unknown":
                 facts["reward_type"] = "freelance"
             if remote and not facts.get("location_requirement"):
@@ -141,7 +135,8 @@ class HnHiringCollector(BaseCollector):
                 title=(str(posting.get("title") or "").strip() or text.split("\n", 1)[0])[:500],
                 text=text,
                 metadata={"thread_id": thread.get("id"), "thread_title": thread.get("title"), "by": comment.get("by"),
-                          "work_types": work_types, "remote": remote},
+                          "work_types": work_types, "remote": remote,
+                          "fit": validate_fit(posting, profile)},   # taken out again by pipeline.store
                 published=datetime.fromtimestamp(comment["time"], tz=dt_timezone.utc) if comment.get("time") else None,
                 facts=facts,
                 facts_complete=True,

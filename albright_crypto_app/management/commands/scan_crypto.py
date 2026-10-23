@@ -11,9 +11,11 @@ deadline reminders. Read-only toward every outside site (HTTP GET only).
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from albright_crypto_app.alerts import send_deadline_reminders, send_new_opportunity_alerts
+from albright_crypto_app import relevance
+from albright_crypto_app.alerts import (send_deadline_reminders, send_followup_reminders,
+                                         send_new_opportunity_alerts)
 from albright_crypto_app.models import ScanRun
-from albright_crypto_app.pipeline import runnable_sources, scan_sources, sync_sources
+from albright_crypto_app.pipeline import runnable_sources, scan_sources, sync_default_income_sources, sync_sources
 from albright_control.jobs import tracked_job
 
 
@@ -42,6 +44,7 @@ class Command(BaseCommand):
                     return
 
         sync_sources()
+        sync_default_income_sources()
         run = ScanRun.objects.create()
         try:
             new, errors = scan_sources(use_ai=not opts["no_ai"])
@@ -56,10 +59,16 @@ class Command(BaseCommand):
         run.sources_checked = len(runnable_sources())
         run.save()
 
+        # Free upkeep, then fit scores still pending (within the AI limit).
+        upkeep = relevance.refresh_inbox()
+        fits = relevance.score_pending_fits(use_ai=not opts["no_ai"])
         alerts = send_new_opportunity_alerts(new)
         reminders = send_deadline_reminders()
+        followups = send_followup_reminders()
         blocked = sum(1 for o in new if o.safety_verdict == "block")
         self.stdout.write(f"New opportunities: {len(new)} ({blocked} blocked)   Alerts: {len(alerts)}   "
-                          f"Deadline reminders: {len(reminders)}")
+                          f"Deadline reminders: {len(reminders)}   Follow-ups: {len(followups)}")
+        self.stdout.write(f"Inbox upkeep: {upkeep['merged']} duplicates merged, {upkeep['expired']} expired, "
+                          f"{fits} pending fit scores done")
         for error in errors:
             self.stdout.write(self.style.WARNING(error))

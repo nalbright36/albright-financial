@@ -2,8 +2,7 @@
 {% block page_title %}Email alerts · {% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 820px;">
-    <a href="{% url 'albright_crypto_app:settings' %}" style="font-size: 0.8125rem;">&larr; Settings</a>
-    <h1 style="margin: 12px 0 8px;">Email alerts</h1>
+    {% include "albright_crypto_app/_settings_tabs.html" %}
     <p style="color: var(--text-secondary); margin-bottom: 20px;">
         Job-alert emails from Upwork, Fiverr, LinkedIn, Indeed or any site, read from one Gmail label. Each email is split into its separate postings,
         safety-checked and scored like everything else. Access is <strong>read-only</strong> ({{ scope }}): this app never sends, deletes, labels or changes an email.

@@ -335,7 +335,7 @@ class GrokBotPageTests(TestCase):
         self.assertContains(self.client.get(reverse("trading_home")), link)
         self.assertContains(self.get(), link)
         self.assertNotContains(self.client.get(reverse("albright_reselling_app:dashboard")), link)
-        self.assertNotContains(self.client.get(reverse("albright_crypto_app:dashboard")), link)
+        self.assertNotContains(self.client.get(reverse("albright_crypto_app:inbox")), link)
 
 
 # ---------------------------------------------------------------------------

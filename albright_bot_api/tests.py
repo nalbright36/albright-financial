@@ -328,7 +328,7 @@ class EndpointTests(BotApiTestCase):
         self.assertEqual(list(OpportunityNote.objects.values_list("kind", flat=True).order_by("pk")), ["note", "proposal"])
         self.assertFalse(ApplicationDraft.objects.exists())
         self.fresh.refresh_from_db()
-        self.assertEqual(self.fresh.status, "new")
+        self.assertEqual(self.fresh.status, "inbox")
         self.client.force_login(self.user)
         page = self.client.get(reverse("albright_crypto_app:opportunity", args=[self.fresh.pk])).content.decode()
         self.assertIn('id="grok-notes"', page)
@@ -402,7 +402,7 @@ class HardLimitTests(BotApiTestCase):
         self.assertEqual(before, after)
         self.assertEqual(watch.my_max_bid, BW.objects.get(pk=watch.pk).my_max_bid)
         self.assertFalse(ApplicationDraft.objects.exists())
-        self.assertEqual(Opportunity.objects.get(pk=self.fresh.pk).status, "new")
+        self.assertEqual(Opportunity.objects.get(pk=self.fresh.pk).status, "inbox")
         self.assertEqual(InventorySuggestion.objects.get().status, "pending")
 
     def test_no_credentials_keys_tokens_or_profile_in_any_response(self):

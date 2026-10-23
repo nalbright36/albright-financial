@@ -70,7 +70,7 @@ class LinkTests(TestCase):
 
     def test_every_external_link_on_pages_goes_through_the_check(self):
         opp = make(title="Unverified", url="https://someproject.dev/bounty")
-        for name, args in (("crypto", []), ("opportunity", [opp.pk])):
+        for name, args in (("inbox", []), ("opportunity", [opp.pk])):
             content = self.client.get(reverse(f"albright_crypto_app:{name}", args=args)).content.decode()
             self.assertNotIn('href="https://someproject.dev', content, name)
             self.assertIn("leave/?to=https%3A%2F%2Fsomeproject.dev", content, name)
@@ -92,8 +92,7 @@ class EarningsTests(TestCase):
         response = self.client.get(reverse("albright_crypto_app:earnings"))
         self.assertContains(response, '<span class="ledger-stat__value num" id="earnings-total"', html=False)
         self.assertContains(response, "$231.05")
-        dashboard = self.client.get(reverse("albright_crypto_app:crypto")).context
-        tiles = dashboard["tiles"]
+        tiles = self.client.get(reverse("albright_crypto_app:earnings"), {"type": "crypto"}).context["tiles"]
         self.assertEqual(tiles["earned_all_time"], Decimal("231.05"))
         self.assertEqual(tiles["earned_this_month"], Decimal("199.80"))
         self.assertEqual(tiles["hours_logged"], Decimal("2.5"))
@@ -163,13 +162,13 @@ class AlertTests(TestCase):
         self.assertNotIn("someproject.dev", send.call_args.args[0])
 
     @mock.patch(TELEGRAM)
-    def test_deadline_reminder_24h_before_for_doing_only(self, send):
+    def test_deadline_reminder_24h_before_for_working_only(self, send):
         now = timezone.now()
         doing = make(title="Due soon", deadline=now + timedelta(hours=20))
-        Opportunity.objects.filter(pk=doing.pk).update(status="doing")
+        Opportunity.objects.filter(pk=doing.pk).update(status="working")
         make(title="Not doing", deadline=now + timedelta(hours=20))
         later = make(title="Due later", deadline=now + timedelta(hours=40))
-        Opportunity.objects.filter(pk=later.pk).update(status="doing")
+        Opportunity.objects.filter(pk=later.pk).update(status="working")
 
         self.assertEqual(send_deadline_reminders(now=now), [doing.pk])
         self.assertEqual(send_deadline_reminders(now=now), [])
@@ -180,7 +179,7 @@ class AlertTests(TestCase):
         self.qualifying(title="Fresh bounty")
         make(title="Blocked one", text="Enter your seed phrase to claim")
         due = make(title="Due this week", deadline=now + timedelta(days=3))
-        Opportunity.objects.filter(pk=due.pk).update(status="doing")
+        Opportunity.objects.filter(pk=due.pk).update(status="working")
         Earning.objects.create(amount=Decimal("25"), currency="USDC", usd_value_at_receipt=Decimal("25"))
 
         text = "\n".join(digest_lines(now=now))

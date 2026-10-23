@@ -383,8 +383,9 @@ class ProfileDraftTests(TestCase):
         proposal.refresh_from_db()
         self.assertEqual(self.opp.status, "applied")
         self.assertIsNotNone(proposal.sent_at)
-        submitted = self.client.get(reverse("albright_crypto_app:income"), {"tab": "submitted"})
-        self.assertIn(self.opp, list(submitted.context["opportunities"]))
+        board = self.client.get(reverse("albright_crypto_app:pipeline")).context["columns"]
+        self.assertIn(self.opp, next(c["cards"] for c in board if c["stage"] == "applied"))
+        self.assertIsNotNone(self.opp.applied_at)
 
     def test_empty_profile_sends_me_to_fill_it_in(self):
         MyProfile.objects.all().delete()

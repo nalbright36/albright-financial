@@ -252,7 +252,7 @@ def reseller_inventory_suggestion(request, token, entry_id):
 
 def _visible_opportunities():
     from albright_crypto_app.models import Opportunity, Source
-    return (Opportunity.objects.exclude(safety_verdict="block").filter(excluded=False)
+    return (Opportunity.objects.exclude(safety_verdict="block").filter(excluded=False, duplicate_of__isnull=True)
             .exclude(source__kind__in=list(Source.ATTRIBUTED_KINDS)))   # their terms forbid passing jobs on
 
 

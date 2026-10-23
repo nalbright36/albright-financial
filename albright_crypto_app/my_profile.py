@@ -155,7 +155,11 @@ def format_links(links):
 # ---------------------------------------------------------------------------
 
 def profile_text(profile):
-    parts = [profile.name, profile.headline, profile.summary, " ".join(profile.skills or []),
+    """Every fact the drafts may use. Target roles are left out on purpose:
+    they're what I'm looking for, not experience I have."""
+    experience = f"{profile.years_experience} years of experience" if profile.years_experience else ""
+    parts = [profile.name, profile.headline, profile.summary, " ".join(profile.skills or []), experience,
+             ", ".join(profile.industries or []), profile.location,
              format_work_history(profile.work_history), format_projects(profile.projects),
              format_education(profile.education), "\n".join(profile.certifications or []), format_links(profile.links)]
     return "\n".join(p for p in parts if p)
@@ -419,3 +423,49 @@ def resume_docx(profile, draft):
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Prefill from my resume (python manage.py prefill_profile; Settings > Profile)
+# ---------------------------------------------------------------------------
+
+RESUME_PREFILL = {
+    "target_roles": [
+        "Data Analyst", "Business Intelligence Analyst/Developer", "Power BI Developer", "Tableau Developer",
+        "Analytics Engineer", "Data Engineer", "Reporting Analyst", "Data Specialist", "Business Systems Analyst",
+        "Salesforce Administrator", "Data Product Manager/Owner", "Automation/Integration Specialist",
+        "Python/Django Developer (freelance/contract)",
+    ],
+    "skills": [
+        "SQL", "Python", "Django", "PostgreSQL", "Power BI", "Tableau", "data modeling", "analytics engineering",
+        "data products", "metrics/KPI design", "data quality", "business intelligence", "executive dashboards",
+        "Salesforce (Certified Administrator)", "API integrations", "workflow automation", "ClickUp",
+        "AI-assisted development", "project management", "business analysis", "team leadership",
+    ],
+    "years_experience": "8+",
+    "industries": ["insurance/warranty", "healthcare/specialty pharma", "fintech (own project)"],
+    "education": [{"school": "Illinois State University", "degree": "B.S. Finance", "year": "2018"}],
+    "certifications": ["Salesforce Certified Administrator"],
+    "location": "Tampa, FL",
+}
+
+
+def prefill_profile(profile):
+    """Fills only what's empty (my edits are never overwritten); skills I
+    already listed are kept, with the resume's added after them. Returns the
+    names of the fields it changed."""
+    changed = []
+    for field, value in RESUME_PREFILL.items():
+        current = getattr(profile, field)
+        if field == "skills" and current:
+            keys = {normalize_skill(s) for s in current}
+            extra = [s for s in value if normalize_skill(s) not in keys]
+            if extra:
+                setattr(profile, field, list(current) + extra)
+                changed.append(field)
+        elif not current:
+            setattr(profile, field, list(value) if isinstance(value, list) else value)
+            changed.append(field)
+    if changed:
+        profile.save()
+    return changed

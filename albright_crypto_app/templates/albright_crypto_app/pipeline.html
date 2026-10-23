@@ -1,0 +1,40 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}Pipeline · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <div class="card__header" style="margin-bottom: 8px;">
+        <h1 style="margin: 0;">Pipeline</h1>
+        <a href="{% url 'albright_crypto_app:add' %}" class="btn btn-primary btn-sm">Add opportunity</a>
+    </div>
+    <p style="margin: 0 0 16px; font-size: 0.875rem; color: var(--text-secondary);">
+        Kept from the Inbox (K) lands in Saved. Moving a card to Applied records the date; after 7 days with no movement it gets a
+        follow-up reminder (here, and once on Telegram).{% if followups %} <strong id="followup-count">{{ followups }} to follow up.</strong>{% endif %}
+    </p>
+
+    <div class="pipeline-board" id="pipeline-board">
+        {% for column in columns %}
+        <section class="pipeline-column card" data-stage="{{ column.stage }}">
+            <div class="card__header"><span class="card__label">{{ column.label }}</span><span class="tab-badge">{{ column.cards|length }}</span></div>
+            {% for opp in column.cards %}
+            {% include "albright_crypto_app/_pipeline_card.html" %}
+            {% empty %}
+            <p class="pipeline-empty">Nothing here.</p>
+            {% endfor %}
+        </section>
+        {% endfor %}
+    </div>
+
+    <details class="card pipeline-closed" id="pipeline-closed" style="margin-top: 20px;">
+        <summary><span class="card__label">Closed (lost / declined / expired)</span> <span class="tab-badge">{{ closed_count }}</span></summary>
+        <div class="pipeline-closed__list">
+            {% for opp in closed %}
+            {% include "albright_crypto_app/_pipeline_card.html" %}
+            {% empty %}
+            <p class="pipeline-empty">Nothing closed yet.</p>
+            {% endfor %}
+        </div>
+    </details>
+</div>
+<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}

@@ -4,13 +4,14 @@
 {% block page_title %}{{ opp.title|truncatechars:60 }} · {% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
-    <a href="{% url dashboard_url_name %}" style="font-size: 0.8125rem;">&larr; {{ type_label }} opportunities</a>
+    {% if back_to_pipeline %}<a href="{% url 'albright_crypto_app:pipeline' %}" style="font-size: 0.8125rem;">&larr; Pipeline</a>
+    {% else %}<a href="{% url 'albright_crypto_app:inbox' %}" style="font-size: 0.8125rem;">&larr; Inbox</a>{% endif %}
 
     <div class="card__header" style="margin: 12px 0 16px; align-items: flex-start;">
         <div style="min-width: 0;">
             <h1 style="margin: 0; font-size: var(--text-2xl); overflow-wrap: anywhere;">{{ opp.title }}</h1>
             <div style="margin-top: 6px; font-size: 0.8125rem; color: var(--text-secondary);">
-                <span class="badge neutral">{{ type_label }}</span> {{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% if opp.source.attribution %}{% via_link opp %}{% else %}{% external_link opp.url %}{% endif %}
+                <span class="badge neutral">{{ work_type_label }}</span> {% if opp.company %}{{ opp.company }} &middot; {% endif %}{{ opp.source }} &middot; found {{ opp.discovered_at|date:"M j, Y" }} &middot; {% if opp.source.attribution %}{% via_link opp %}{% else %}{% external_link opp.url %}{% endif %}
             </div>
         </div>
         <span class="badge {% if opp.safety_verdict == 'block' %}loss{% elif opp.safety_verdict == 'warn' %}warn{% else %}gain{% endif %}">{{ opp.get_safety_verdict_display }}</span>
@@ -23,10 +24,37 @@
     </div>
     {% elif opp.excluded %}
     <div class="crypto-warning" style="margin-bottom: 20px;"><strong>Excluded:</strong> {{ opp.exclude_reason }} (budget ${{ budget_usd|floatformat:2 }}).</div>
+    {% elif opp.hidden_reason and opp.status == "inbox" %}
+    <div class="crypto-warning" style="margin-bottom: 20px; display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap;" id="hidden-notice">
+        <span><strong>Hidden from the Inbox:</strong> {{ opp.hidden_reason }}</span>
+        <form method="post" action="{% url 'albright_crypto_app:show_in_inbox' opp.pk %}" style="margin: 0;">{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}"><button type="submit" class="btn btn-secondary btn-sm">Show in Inbox</button></form>
+    </div>
+    {% endif %}
+    {% if opp.duplicate_of %}
+    <p class="crypto-warning" style="margin-bottom: 20px;" id="duplicate-notice">The same posting was found earlier - merged into <a href="{% url 'albright_crypto_app:opportunity' opp.duplicate_of.pk %}">{{ opp.duplicate_of.title|truncatechars:80 }}</a>, which keeps this link too.</p>
+    {% endif %}
+    {% if opp.other_links %}
+    <p style="margin: 0 0 20px; font-size: 0.875rem;" id="also-posted">Also posted on: {% for link in opp.other_links %}{% external_link link.url link.source %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
     {% endif %}
 
     <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
         <div>
+            {% if uses_fit %}
+            <!-- Fit with my profile (relevance.py): AI, or keywords for boards that keep their jobs out of the AI -->
+            <section class="card" style="margin-bottom: 20px;" id="fit">
+                <div class="card__header"><span class="card__label">Fit with your profile</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">{% if opp.fit_method %}{{ opp.get_fit_method_display }}{% else %}not scored yet{% endif %}</span></div>
+                <span class="ledger-stat__value num" style="font-size: 1.5rem; border-bottom: none; padding: 0;">{% if opp.fit_score is not None %}{{ opp.fit_score }}/100{% else %}&mdash;{% endif %}</span>
+                {% if opp.role_match %}<span class="badge neutral" style="margin-left: 8px;">{{ opp.role_match }}</span>{% endif %}
+                {% if opp.seniority %}<span class="badge neutral">{{ opp.seniority }}</span>{% endif %}
+                {% if opp.fit_reason %}<p style="margin: 8px 0 0; font-size: 0.875rem;">{{ opp.fit_reason }}</p>{% endif %}
+                {% if opp.matched_skills %}<div style="margin-top: 8px;">{% for skill in opp.matched_skills %}<span class="badge gain" style="margin: 0 4px 4px 0;">{{ skill }}</span>{% endfor %}</div>{% endif %}
+                {% if opp.missing_requirements %}<div class="row-count" style="margin-top: 8px;">Missing requirements</div>
+                <ul style="margin: 4px 0 0; padding-left: 18px; font-size: 0.875rem;">{% for r in opp.missing_requirements %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+            </section>
+            {% endif %}
+
             <!-- Scores: four separate numbers, never merged into one -->
             <section class="card" style="margin-bottom: 20px;">
                 <div class="card__header"><span class="card__label">Scores</span></div>
@@ -154,7 +182,7 @@
                         <form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="proposal"><button type="submit" class="btn btn-primary btn-sm" id="generate-proposal">Generate proposal</button></form>
                         <form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="resume"><button type="submit" class="btn btn-secondary btn-sm" id="tailor-resume">Tailor resume</button></form>
                     </div></div>
-                {% if not profile_ready %}<p class="crypto-warning" style="margin: 0 0 10px;">Fill in <a href="{% url 'albright_crypto_app:profile' %}">My profile</a> first - drafts only ever use facts from it.</p>{% endif %}
+                {% if not profile_ready %}<p class="crypto-warning" style="margin: 0 0 10px;">Fill in <a href="{% url 'albright_crypto_app:profile' %}">Settings &gt; Profile</a> first - drafts only ever use facts from it.</p>{% endif %}
                 {% for d in drafts %}
                 <div class="crypto-draft" style="border-top: 1px solid var(--glass-border); padding-top: 10px; margin-top: 10px;">
                     <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-bottom: 6px;">
@@ -170,7 +198,7 @@
                     <pre class="crypto-source-text" id="draft-text-{{ d.pk }}">{{ d.text }}</pre>
                 </div>
                 {% empty %}
-                <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">Generates a short proposal or a tailored resume from <a href="{% url 'albright_crypto_app:profile' %}">My profile</a> only - it never adds experience you didn't list, and shows which requirements you don't meet.</p>
+                <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">Generates a short proposal or a tailored resume from <a href="{% url 'albright_crypto_app:profile' %}">your Profile</a> only - it never adds experience you didn't list, and shows which requirements you don't meet.</p>
                 {% endfor %}
             </section>
             {% endif %}
@@ -182,14 +210,17 @@
         </div>
 
         <div>
-            <section class="card" style="margin-bottom: 20px;">
-                <div class="card__header"><span class="card__label">Status</span><span>{{ opp.get_status_display }}</span></div>
+            <section class="card" style="margin-bottom: 20px;" id="stage">
+                <div class="card__header"><span class="card__label">Stage</span><span>{{ opp.get_status_display }}{% if opp.status == "closed" and opp.close_reason %} ({{ opp.get_close_reason_display|lower }}){% endif %}{% if opp.status == "skipped" and opp.skip_reason %} ({{ opp.get_skip_reason_display|lower }}){% endif %}</span></div>
                 <form method="post" class="crypto-status-buttons">
                     {% csrf_token %}<input type="hidden" name="action" value="status">
-                    {% for value, label in statuses %}
+                    {% for value, label in stages %}
                     <button type="submit" name="status" value="{{ value }}" class="btn btn-secondary btn-sm{% if opp.status == value %} is-current{% endif %}">{{ label }}</button>
                     {% endfor %}
+                    <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; gap: 6px; align-items: center;">If closing:
+                        <select name="reason" class="ledger-input" style="width: auto;">{% for value, label in close_reasons %}{% if value != "expired" %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}</select></label>
                 </form>
+                {% if opp.applied_at %}<p style="margin: 8px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Applied {{ opp.applied_at|date:"M j, Y" }}{% if opp.followup_due %} - <strong>time to follow up</strong>{% endif %}</p>{% endif %}
             </section>
 
             <section class="card" style="margin-bottom: 20px;" id="steps">

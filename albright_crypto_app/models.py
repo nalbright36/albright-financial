@@ -38,14 +38,26 @@ EVIDENCE = [("explicit", "Explicit"), ("stated", "Stated"), ("none", "None")]
 VERDICTS = [("ok", "OK"), ("warn", "Warning"), ("block", "Blocked")]
 LEVELS = [("high", "High"), ("medium", "Medium"), ("low", "Low")]
 AUTOMATION = [("high", "High"), ("medium", "Medium"), ("low", "Low"), ("none", "None")]
+# The workflow: Inbox (triage, one at a time) -> Pipeline (Saved -> Applied ->
+# Talking/Interview -> Working -> Paid, plus Closed) - or Skipped from the Inbox.
 STATUSES = [
-    ("new", "New"), ("reviewing", "Reviewing"), ("doing", "Doing"), ("applied", "Applied"),
-    ("submitted", "Submitted"), ("paid", "Paid"), ("rejected", "Rejected"), ("skipped", "Skipped"),
-    ("expired", "Expired"),
+    ("inbox", "Inbox"), ("saved", "Saved"), ("applied", "Applied"), ("talking", "Talking / interview"),
+    ("working", "Working"), ("paid", "Paid"), ("closed", "Closed"), ("skipped", "Skipped"),
 ]
-ACTIVE_STATUSES = ("new", "reviewing", "doing", "applied", "submitted")
+PIPELINE_STAGES = ("saved", "applied", "talking", "working", "paid", "closed")
+ACTIVE_STATUSES = ("inbox", "saved", "applied", "talking", "working")
+CLOSE_REASONS = [("lost", "Lost / rejected"), ("declined", "Declined"), ("expired", "Expired")]
+SKIP_REASONS = [("not_relevant", "Not relevant"), ("pay", "Pay too low"), ("location", "Location"),
+                ("seniority", "Seniority")]
+# What kind of work it is - the Inbox's Type filter and Settings' work types.
+WORK_TYPES = [
+    ("full_time", "Full-time"), ("part_time", "Part-time"), ("contract", "Contract"), ("freelance", "Freelance"),
+    ("bounty", "Bounty"), ("paid_task", "Paid task"), ("crypto", "Crypto"), ("other", "Other"),
+]
+FIT_METHODS = [("ai", "AI"), ("keywords", "Keywords")]
 CENT = Decimal("0.01")
-EXTRACTION_STATES = [("pending", "Pending"), ("done", "Done"), ("skipped", "Skipped (limit)"), ("error", "Error")]
+EXTRACTION_STATES = [("pending", "Pending"), ("done", "Done"), ("skipped", "Skipped (limit)"), ("error", "Error"),
+                     ("filtered", "Skipped (filtered out)")]
 
 
 class ConfigOverride(models.Model):
@@ -178,7 +190,35 @@ class Opportunity(models.Model):
     automation = models.CharField(max_length=6, choices=AUTOMATION, default="none")
     reward_counts_as_confirmed = models.BooleanField(default=False)
 
-    status = models.CharField(max_length=10, choices=STATUSES, default="new")
+    # Relevance (relevance.py): what kind of work, who's hiring, when it was posted,
+    # and why it's hidden from the Inbox ("" = not hidden). A free prefilter
+    # (Settings > Filters) runs first; what passes gets a fit score (0-100) -
+    # from the AI, or from keywords for job boards whose terms keep their jobs
+    # out of the AI. Bounties, paid tasks and crypto keep the EV/hour score.
+    work_type = models.CharField(max_length=10, choices=WORK_TYPES, default="other")
+    company = models.CharField(max_length=200, blank=True)
+    posted_at = models.DateTimeField(null=True, blank=True)
+    hidden_reason = models.CharField(max_length=200, blank=True)
+    show_anyway = models.BooleanField(default=False)   # "Show in Inbox" from Hidden: filters no longer hide it
+    fit_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    fit_method = models.CharField(max_length=8, choices=FIT_METHODS, blank=True)
+    matched_skills = models.JSONField(default=list, blank=True)
+    missing_requirements = models.JSONField(default=list, blank=True)
+    role_match = models.CharField(max_length=120, blank=True)
+    seniority = models.CharField(max_length=20, blank=True)
+    fit_reason = models.CharField(max_length=300, blank=True)
+    # The same posting found again elsewhere (same company, similar title,
+    # within 30 days): merged into the first one, which keeps every link.
+    duplicate_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="duplicates")
+    other_links = models.JSONField(default=list, blank=True)   # [{"source": str, "url": str, "opportunity": pk}]
+
+    status = models.CharField(max_length=10, choices=STATUSES, default="inbox")
+    stage_changed_at = models.DateTimeField(null=True, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    followup_sent_at = models.DateTimeField(null=True, blank=True)
+    close_reason = models.CharField(max_length=10, choices=CLOSE_REASONS, blank=True)
+    skip_reason = models.CharField(max_length=12, choices=SKIP_REASONS, blank=True)
     notes = models.TextField(blank=True)
     alert_sent_at = models.DateTimeField(null=True, blank=True)
     deadline_reminder_sent_at = models.DateTimeField(null=True, blank=True)
@@ -205,6 +245,38 @@ class Opportunity(models.Model):
     @property
     def is_blocked(self):
         return self.safety_verdict == "block"
+
+    @property
+    def is_hidden(self):
+        """Out of the Inbox and into Hidden: blocked, excluded (spending), or filtered out."""
+        return self.safety_verdict == "block" or self.excluded or bool(self.hidden_reason)
+
+    @property
+    def hide_reasons(self):
+        if self.safety_verdict == "block":
+            return ["blocked: " + r for r in self.safety_reasons or []] or ["blocked by the safety check"]
+        reasons = [f"excluded: {self.exclude_reason}"] if self.excluded else []
+        return reasons + ([self.hidden_reason] if self.hidden_reason else [])
+
+    @property
+    def stage_since(self):
+        return self.stage_changed_at or self.discovered_at
+
+    @property
+    def days_in_stage(self):
+        return max(0, (timezone.now() - self.stage_since).days)
+
+    @property
+    def followup_due(self):
+        """Applied 7+ days ago with no movement since."""
+        from datetime import timedelta
+        return (self.status == "applied" and self.applied_at is not None
+                and self.stage_since <= timezone.now() - timedelta(days=7))
+
+    @property
+    def any_deadline(self):
+        dates = [d for d in (self.application_deadline, self.deadline) if d]
+        return min(dates) if dates else None
 
 
 class TaskStep(models.Model):
@@ -271,7 +343,7 @@ class AIExtraction(models.Model):
     there is one."""
     PURPOSES = [("extract", "Fact extraction"), ("email_split", "Email alert split"),
                 ("hn_filter", "HN comment filter"), ("walkthrough", "Walkthrough"),
-                ("resume", "Tailored resume"), ("proposal", "Proposal")]
+                ("resume", "Tailored resume"), ("proposal", "Proposal"), ("fit", "Fit score")]
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="extractions",
                                     null=True, blank=True)
     purpose = models.CharField(max_length=12, choices=PURPOSES, default="extract")
@@ -365,6 +437,12 @@ class MyProfile(models.Model):
     name = models.CharField(max_length=120, blank=True)
     headline = models.CharField(max_length=200, blank=True)
     summary = models.TextField(blank=True)
+    # Target roles steer the fit score only - they're goals, not facts, so the
+    # resume/proposal fact check never accepts them as experience.
+    target_roles = models.JSONField(default=list, blank=True)
+    years_experience = models.CharField(max_length=20, blank=True)   # e.g. "8+"
+    industries = models.JSONField(default=list, blank=True)
+    location = models.CharField(max_length=120, blank=True)
     skills = models.JSONField(default=list, blank=True)
     work_history = models.JSONField(default=list, blank=True)    # [{employer, title, start, end, bullets[]}]
     projects = models.JSONField(default=list, blank=True)        # [{name, link, bullets[]}]

@@ -1,0 +1,42 @@
+{% extends "index.html" %}
+{% block page_title %}Filters · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
+    {% include "albright_crypto_app/_settings_tabs.html" %}
+    <p style="color: var(--text-secondary); margin: 0 0 20px; font-size: 0.875rem;">
+        A free first pass: anything that fails a filter goes to Hidden with the reason, and never costs an AI call.
+        Job and freelance postings that pass get a fit score against your Profile; bounties, paid tasks and crypto keep their EV/hour score.
+    </p>
+    <form method="post" class="grid grid-2" id="filters-form" style="align-items: start; gap: var(--space-5);">
+        {% csrf_token %}
+        <section class="card">
+            <div class="card__header"><span class="card__label">Work types</span></div>
+            <div class="filter-checks">{% for box in form.work_types %}<label>{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</div>
+            <div class="card__header" style="margin-top: 16px;"><span class="card__label">Location</span></div>
+            <label class="filter-check">{{ form.remote_us }} {{ form.remote_us.label }}</label>
+            <label class="filter-check">{{ form.local }} {{ form.local.label }}</label>
+            <div class="grid grid-2" style="gap: var(--space-2);">
+                <div class="field"><label for="{{ form.home.id_for_label }}">{{ form.home.label }}</label>{{ form.home }}</div>
+                <div class="field"><label for="{{ form.radius_miles.id_for_label }}">{{ form.radius_miles.label }}</label>{{ form.radius_miles }}</div>
+            </div>
+            <p style="margin: 0; font-size: 0.75rem; color: var(--text-secondary);">Postings restricted to other countries or regions (e.g. "UK only", "Europe") are always hidden.</p>
+            <div class="card__header" style="margin-top: 16px;"><span class="card__label">Seniority</span></div>
+            <label class="filter-check">{{ form.exclude_entry }} {{ form.exclude_entry.label }}</label>
+            <label class="filter-check">{{ form.exclude_executive }} {{ form.exclude_executive.label }}</label>
+        </section>
+        <section class="card">
+            <div class="card__header"><span class="card__label">Pay floors</span><span style="font-size: 0.75rem; color: var(--text-secondary);">only when pay is stated</span></div>
+            {% for field in form %}{% if field.name in "min_salary_year min_rate_hour min_fixed_project min_fit_score" %}
+            <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+                {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-secondary);">{{ field.help_text }}</span>{% endif %}
+                {% for e in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+            {% endif %}{% endfor %}
+            <div class="field"><label for="{{ form.negative_keywords.id_for_label }}">{{ form.negative_keywords.label }}</label>{{ form.negative_keywords }}
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ form.negative_keywords.help_text }}</span></div>
+            {% for e in form.non_field_errors %}<p class="crypto-warning">{{ e }}</p>{% endfor %}
+            {% for field in form %}{% for e in field.errors %}{% if field.name not in "min_salary_year min_rate_hour min_fixed_project min_fit_score" %}<p class="crypto-warning">{{ field.label }}: {{ e }}</p>{% endif %}{% endfor %}{% endfor %}
+            <button type="submit" class="btn btn-primary">Save filters</button>
+        </section>
+    </form>
+</div>
+{% endblock %}

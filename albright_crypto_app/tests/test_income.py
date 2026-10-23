@@ -1,6 +1,6 @@
-"""The Income opportunity type alongside Crypto: type separation in lists,
-tiles, the All overview and the earnings ledger/CSV; skill_match and the
-default hide of low-match freelance work; refundable deposits (warned,
+"""The Income opportunity type alongside Crypto: type separation in the
+Inbox's Type filter, Hidden, and the earnings ledger/CSV (tiles per type);
+skill_match; refundable deposits (warned,
 never excluded); income AI extraction (mocked OpenAI); income sources not
 running until their terms are checked; the JSON API collector; and alerts."""
 import csv
@@ -74,9 +74,10 @@ class SkillMatchTests(TestCase):
         opp = freelance("React job", ["React", "TypeScript"])
         self.assertEqual(opp.skill_match, 0)
         self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
-        response = self.client.post(reverse("albright_crypto_app:settings"), {
-            "action": "settings", "allowlist": "github.com\njobs.example.com", "rss_feeds": "",
-            "skills": "Python\nReact"})
+        response = self.client.post(reverse("albright_crypto_app:profile"), {
+            "skills": "Python\nReact", "target_roles": "", "years_experience": "", "industries": "", "location": "",
+            "work_history": "", "projects": "", "education": "", "certifications": "", "links": "",
+            "resume_template": "{summary}", "proposal_template": "{proposal_body}"})
         self.assertEqual(response.status_code, 302)
         opp.refresh_from_db()
         self.assertEqual(opp.skill_match, 50)
@@ -96,41 +97,46 @@ class TypeSeparationTests(TestCase):
         TimeLog.objects.create(opportunity=self.crypto, minutes=120)
         TimeLog.objects.create(opportunity=self.income, minutes=600)
 
-    def titles(self, name, **params):
-        content = self.client.get(reverse(f"albright_crypto_app:{name}"), params).content.decode()
-        table = content.split('id="crypto-table"')[1].split("</table>")[0] if 'id="crypto-table"' in content else ""
-        return [o.title for o in Opportunity.objects.all() if f">{o.title}</a>" in table]
+    def inbox_titles(self, type_key):
+        response = self.client.get(reverse("albright_crypto_app:inbox"), {"type": type_key})
+        return sorted(card["title"] for card in response.context["queue"])
 
-    def test_each_dashboard_lists_only_its_type(self):
-        self.assertEqual(self.titles("crypto"), ["Crypto bounty"])
-        self.assertEqual(self.titles("income"), ["Django contract"])
+    def test_inbox_type_filter_separates_crypto_from_income(self):
+        self.assertEqual(self.inbox_titles("crypto"), ["Crypto bounty"])
+        self.assertEqual(self.inbox_titles("freelance"), ["Django contract"])     # hourly contract work
+        self.assertEqual(self.inbox_titles("jobs"), [])
+        self.assertEqual(self.inbox_titles("bounties"), ["Crypto bounty"])
+        self.assertEqual(self.inbox_titles("all"), ["Crypto bounty", "Django contract"])
+        options = self.client.get(reverse("albright_crypto_app:inbox")).context["type_options"]
+        self.assertEqual([key for key, _label, _n in options], ["all", "jobs", "freelance", "bounties", "paid_tasks", "crypto"])
+        self.assertEqual(dict((k, n) for k, _l, n in options)["crypto"], 1)
 
-    def test_tab_counts_and_reward_type_filters_are_per_type(self):
-        crypto = self.client.get(reverse("albright_crypto_app:crypto")).context
-        income = self.client.get(reverse("albright_crypto_app:income")).context
-        self.assertEqual(dict((k, c) for k, _l, c in crypto["tabs"])["ranked"], 1)
-        self.assertEqual(dict((k, c) for k, _l, c in income["tabs"])["ranked"], 1)
-        self.assertIn("testnet", dict(crypto["reward_types"]))
-        self.assertNotIn("freelance", dict(crypto["reward_types"]))
-        self.assertEqual([k for k, _l in income["reward_types"]],
-                         ["freelance", "bounty", "research_study", "competition", "bonus", "settlement",
-                          "paid_task", "unknown"])
+    def test_edit_form_reward_types_are_per_type(self):
+        from albright_crypto_app.forms import OpportunityEditForm
+        crypto = dict(OpportunityEditForm(instance=self.crypto).fields["reward_type"].choices)
+        income = [k for k, _l in OpportunityEditForm(instance=self.income).fields["reward_type"].choices]
+        self.assertIn("testnet", crypto)
+        self.assertNotIn("freelance", crypto)
+        self.assertEqual(income, ["freelance", "bounty", "research_study", "competition", "bonus", "settlement",
+                                  "paid_task", "unknown"])
 
-    def test_tiles_are_per_type(self):
-        crypto = self.client.get(reverse("albright_crypto_app:crypto")).context["tiles"]
-        income = self.client.get(reverse("albright_crypto_app:income")).context["tiles"]
+    def test_earnings_tiles_are_per_type(self):
+        crypto = self.client.get(reverse("albright_crypto_app:earnings"), {"type": "crypto"}).context["tiles"]
+        income = self.client.get(reverse("albright_crypto_app:earnings"), {"type": "income"}).context["tiles"]
+        both = self.client.get(reverse("albright_crypto_app:earnings")).context["tiles"]
         self.assertEqual((crypto["earned_all_time"], crypto["hours_logged"], crypto["realized_per_hour"]),
                          (Decimal("200"), Decimal("2"), Decimal("100.00")))
         self.assertEqual((income["earned_all_time"], income["hours_logged"], income["realized_per_hour"]),
                          (Decimal("300"), Decimal("10"), Decimal("30.00")))
+        self.assertEqual((both["earned_all_time"], both["hours_logged"], both["realized_per_hour"]),
+                         (Decimal("500"), Decimal("12"), Decimal("41.67")))
 
-    def test_all_overview_combines_and_splits_by_type(self):
-        context = self.client.get(reverse("albright_crypto_app:dashboard")).context
-        self.assertEqual((context["tiles"]["earned_all_time"], context["tiles"]["hours_logged"],
-                          context["tiles"]["realized_per_hour"]), (Decimal("500"), Decimal("12"), Decimal("41.67")))
-        by_type = {t["key"]: t["tiles"] for t in context["by_type"]}
-        self.assertEqual(by_type["crypto"]["earned_all_time"], Decimal("200"))
-        self.assertEqual(by_type["income"]["realized_per_hour"], Decimal("30.00"))
+    def test_earnings_by_type_splits_hours_and_rate(self):
+        rows = {r["key"]: r for r in self.client.get(reverse("albright_crypto_app:earnings")).context["by_type"]}
+        self.assertEqual((rows["crypto"]["earned"], rows["crypto"]["per_hour"]), (Decimal("200"), Decimal("100.00")))
+        self.assertEqual((rows["freelance"]["earned"], rows["freelance"]["per_hour"]), (Decimal("300"), Decimal("30.00")))
+        income_only = self.client.get(reverse("albright_crypto_app:earnings"), {"type": "income"}).context["by_type"]
+        self.assertEqual([r["key"] for r in income_only], ["freelance"])
 
     def test_earning_takes_its_opportunitys_type(self):
         self.assertEqual(list(Earning.objects.order_by("pk").values_list("opportunity_type", flat=True)),
@@ -154,12 +160,15 @@ class TypeSeparationTests(TestCase):
             reverse("albright_crypto_app:earnings"), {"export": "csv", "type": "crypto"}).content.decode())))
         self.assertEqual([r[-1] for r in rows[1:]], ["crypto"])
 
-    def test_blocked_income_goes_to_its_own_blocked_tab(self):
+    def test_blocked_income_goes_to_hidden_with_its_reasons(self):
         scam = make_income(title="Easy job", text="Great job! You must pay for training before you start.")
         self.assertEqual(scam.safety_verdict, "block")
-        self.assertNotIn("Easy job", self.titles("income"))
-        self.assertEqual(self.titles("income", tab="blocked"), ["Easy job"])
-        self.assertEqual(self.titles("crypto", tab="blocked"), [])
+        self.assertNotIn("Easy job", self.inbox_titles("all"))
+        hidden = self.client.get(reverse("albright_crypto_app:hidden")).context["opportunities"]
+        self.assertEqual([o.title for o in hidden], ["Easy job"])
+        self.assertTrue(all(r.startswith("blocked: ") for r in hidden[0].hide_reasons))
+        crypto_hidden = self.client.get(reverse("albright_crypto_app:hidden"), {"type": "crypto"}).context["opportunities"]
+        self.assertEqual(list(crypto_hidden), [])
 
     def test_manual_add_for_each_type(self):
         response = self.client.post(reverse("albright_crypto_app:add"), {
@@ -171,42 +180,6 @@ class TypeSeparationTests(TestCase):
                          ("income", "manual", "income"))
         self.assertContains(self.client.get(reverse("albright_crypto_app:add"), {"type": "income"}),
                             '<option value="income" selected>')
-
-
-@override_settings(CRYPTO=CFG)
-class LowMatchHideTests(TestCase):
-    def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
-        self.good = freelance("Good fit", ["Python", "Django"])               # 100
-        self.low = freelance("Poor fit", ["React", "Vue", "Python"])          # 33
-        self.unknown = freelance("No skills listed", [])                      # None - stays visible
-        self.study = make_income(title="Research study", url="https://jobs.example.com/s", reward_type="research_study",
-                                 skills_required=["React"], reward_usd=Decimal("50"))
-
-    def ranked(self, **params):
-        response = self.client.get(reverse("albright_crypto_app:income"), params)
-        return [o.title for o in response.context["opportunities"]], response
-
-    def test_freelance_below_50_hidden_by_default(self):
-        titles, response = self.ranked()
-        self.assertNotIn("Poor fit", titles)
-        self.assertEqual(set(titles), {"Good fit", "No skills listed", "Research study"})  # only freelance is hidden
-        self.assertContains(response, "1 freelance opportunity below 50% skill match hidden.")
-        self.assertEqual(dict((k, c) for k, _l, c in response.context["tabs"])["ranked"], 3)
-
-    def test_toggle_shows_them(self):
-        titles, response = self.ranked(show_low_match="1")
-        self.assertIn("Poor fit", titles)
-        self.assertContains(response, 'id="low-match-toggle">Hide low matches</a>')
-        self.assertContains(self.ranked()[1], 'href="?tab=ranked&amp;show_low_match=1" id="low-match-toggle"')
-
-    def test_exactly_50_is_shown(self):
-        freelance("Half fit", ["Python", "React"])
-        self.assertIn("Half fit", self.ranked()[0])
-
-    def test_hide_is_ranked_only(self):
-        Opportunity.objects.filter(pk=self.low.pk).update(status="doing")
-        self.assertIn("Poor fit", self.ranked(tab="doing")[0])
 
 
 @override_settings(CRYPTO=CFG)
@@ -450,8 +423,9 @@ class IncomeDetailAndEditTests(TestCase):
         response = self.client.get(reverse("albright_crypto_app:opportunity", args=[self.opp.pk]))
         self.assertContains(response, 'id="skills-required"')
         self.assertContains(response, "50% match")
-        self.assertContains(response, f'href="{reverse("albright_crypto_app:income")}"')
-        self.assertContains(response, "Income opportunities")
+        self.assertContains(response, f'href="{reverse("albright_crypto_app:inbox")}"')
+        self.assertContains(response, "&larr; Inbox")
+        self.assertContains(response, 'id="fit"')   # contract work: the fit section, even before it's scored
 
     def test_edit_limits_reward_types_and_rescores_skill_match(self):
         response = self.client.get(reverse("albright_crypto_app:opportunity", args=[self.opp.pk]))

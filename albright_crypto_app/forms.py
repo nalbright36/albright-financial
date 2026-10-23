@@ -151,10 +151,6 @@ class EarningForm(forms.ModelForm):
 
 
 class SettingsForm(forms.Form):
-    skills = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={**INPUT, "rows": 5}),
-        help_text="One per line (or comma-separated). An income opportunity's skill match is the share of its "
-                  "required skills in this list.")
     allowlist = forms.CharField(
         required=False, widget=forms.Textarea(attrs={**INPUT, "rows": 6}),
         help_text="One domain per line (e.g. github.com). Subdomains are included. Links anywhere else show a warning first. "
@@ -179,10 +175,6 @@ class SettingsForm(forms.Form):
             if not is_web_url(feed):
                 raise forms.ValidationError(f"“{feed}” isn't an http(s) link.")
         return list(dict.fromkeys(feeds))
-
-    def clean_skills(self):
-        return _skill_list(self.cleaned_data["skills"])
-
 
 class IncomeSourceForm(forms.ModelForm):
     """Adding an income source: Remotive or Remote OK (fixed public APIs -
@@ -270,8 +262,17 @@ class ProfileForm(forms.Form):
     name = forms.CharField(max_length=120, required=False, widget=forms.TextInput(attrs=INPUT))
     headline = forms.CharField(max_length=200, required=False, widget=forms.TextInput(attrs=INPUT))
     summary = forms.CharField(required=False, widget=_textarea(4))
+    target_roles = forms.CharField(required=False, widget=_textarea(6, "Data Analyst\nPower BI Developer"),
+                                   help_text="One per line. Used for the fit score only - never written into a resume "
+                                             "or proposal as experience.")
     skills = forms.CharField(required=False, widget=_textarea(4, "Python, Django, PostgreSQL ..."),
-                             help_text="One per line or comma-separated.")
+                             help_text="One per line or comma-separated. Skill match and the fit score compare "
+                                       "postings with this list.")
+    years_experience = forms.CharField(max_length=20, required=False, label="Years of experience",
+                                       widget=forms.TextInput(attrs={**INPUT, "placeholder": "8+"}))
+    industries = forms.CharField(required=False, widget=_textarea(3), help_text="One per line or comma-separated.")
+    location = forms.CharField(max_length=120, required=False,
+                               widget=forms.TextInput(attrs={**INPUT, "placeholder": "Tampa, FL"}))
     work_history = forms.CharField(required=False, widget=_textarea(10, "Employer | Title | 2019-01 | 2023-06\n- What you did"),
                                    help_text="Employer | Title | Start | End, then \"- bullet\" lines. Blank line between jobs.")
     projects = forms.CharField(required=False, widget=_textarea(6, "Project | https://link\n- What it does"),
@@ -289,7 +290,10 @@ class ProfileForm(forms.Form):
     def initial_for(cls, profile):
         return {
             "name": profile.name, "headline": profile.headline, "summary": profile.summary,
+            "target_roles": "\n".join(profile.target_roles or []),
             "skills": "\n".join(profile.skills or []),
+            "years_experience": profile.years_experience, "industries": "\n".join(profile.industries or []),
+            "location": profile.location,
             "work_history": my_profile.format_work_history(profile.work_history),
             "projects": my_profile.format_projects(profile.projects),
             "education": my_profile.format_education(profile.education),
@@ -317,6 +321,9 @@ class ProfileForm(forms.Form):
         d = self.cleaned_data
         profile.name, profile.headline, profile.summary = d["name"], d["headline"], d["summary"]
         profile.skills = my_profile.parse_skills(d["skills"])
+        profile.target_roles = my_profile.parse_lines(d["target_roles"])
+        profile.years_experience, profile.location = d["years_experience"].strip(), d["location"].strip()
+        profile.industries = my_profile.parse_skills(d["industries"])
         profile.work_history = my_profile.parse_work_history(d["work_history"])
         profile.projects = my_profile.parse_projects(d["projects"])
         profile.education = my_profile.parse_education(d["education"])
@@ -325,3 +332,53 @@ class ProfileForm(forms.Form):
         profile.resume_template, profile.proposal_template = d["resume_template"], d["proposal_template"]
         profile.save()
         return profile
+
+
+class FiltersForm(forms.Form):
+    """Settings > Filters - the free prefilter (relevance.prefilter). Saved
+    as one value (config "filters"); pay floors apply only when pay is stated."""
+    WORK_TYPE_CHOICES = [("full_time", "Full-time"), ("contract", "Contract"), ("freelance", "Freelance"),
+                         ("part_time", "Part-time"), ("bounty", "Bounties"), ("paid_task", "Paid tasks")]
+    work_types = forms.MultipleChoiceField(choices=WORK_TYPE_CHOICES, required=False,
+                                           widget=forms.CheckboxSelectMultiple, label="Work types")
+    remote_us = forms.BooleanField(required=False, label="Remote (US-eligible)")
+    local = forms.BooleanField(required=False, label="Hybrid / on-site near home")
+    home = forms.CharField(max_length=120, widget=forms.TextInput(attrs=INPUT), label="Home")
+    radius_miles = forms.IntegerField(min_value=0, max_value=500, label="Within (miles)",
+                                      widget=forms.NumberInput(attrs=INPUT))
+    min_salary_year = forms.IntegerField(min_value=0, label="Full-time: at least ($/year)",
+                                         widget=forms.NumberInput(attrs=INPUT))
+    min_rate_hour = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2,
+                                       label="Contract / freelance: at least ($/hour)",
+                                       widget=forms.NumberInput(attrs={**INPUT, "step": "0.01"}))
+    min_fixed_project = forms.IntegerField(min_value=0, label="...or per fixed-price project ($)",
+                                           widget=forms.NumberInput(attrs=INPUT))
+    exclude_entry = forms.BooleanField(required=False, label="Hide intern / entry-level-only roles")
+    exclude_executive = forms.BooleanField(required=False, label="Hide VP / C-level roles")
+    negative_keywords = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={**INPUT, "rows": 8}), label="Negative keywords",
+        help_text="One per line. A single word hides a posting when it's in the title; a phrase (two or more words) "
+                  "also when it's anywhere in the text.")
+    min_fit_score = forms.IntegerField(min_value=0, max_value=100, label="Minimum fit score (0-100)",
+                                       widget=forms.NumberInput(attrs=INPUT),
+                                       help_text="Job and freelance postings scoring lower go to Hidden (\"low fit\").")
+
+    @classmethod
+    def initial_for(cls, saved):
+        return {**saved, "negative_keywords": "\n".join(saved.get("negative_keywords") or [])}
+
+    def clean_home(self):
+        home = self.cleaned_data["home"].strip()
+        reject_secrets(home)
+        return home
+
+    def clean_negative_keywords(self):
+        keywords = []
+        for line in _lines(self.cleaned_data["negative_keywords"]):
+            reject_secrets(line)
+            if line.lower() not in (k.lower() for k in keywords):
+                keywords.append(line[:60])
+        return keywords
+
+    def to_config(self):
+        return {**self.cleaned_data, "min_rate_hour": float(self.cleaned_data["min_rate_hour"])}

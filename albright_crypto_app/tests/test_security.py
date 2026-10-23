@@ -24,6 +24,7 @@ from albright_crypto_app.models import Opportunity, Source, TimeLog
 
 APP_DIR = Path(apps.get_app_config("albright_crypto_app").path)
 APP_JS = Path(settings.BASE_DIR) / "albright_trading_app" / "static" / "js" / "crypto.js"
+INBOX_JS = APP_JS.with_name("opportunity_inbox.js")   # the Inbox page's script
 
 FORBIDDEN_NAME = re.compile(
     r"seed|mnemonic|recovery[_ ]?phrase|private[_ ]?key|priv[_ ]?key|secret|passphrase|api[_ ]?key|api[_ ]?secret"
@@ -59,7 +60,7 @@ def _code_only(path):
 def app_source_files():
     files = [p for p in APP_DIR.rglob("*") if p.suffix in (".py", ".html", ".js")
              and "tests" not in p.parts and "migrations" not in p.parts]
-    return files + [APP_JS]
+    return files + [APP_JS, INBOX_JS]
 
 
 class NoSecretStorageTests(TestCase):

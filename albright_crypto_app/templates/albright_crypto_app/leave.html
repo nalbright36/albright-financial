@@ -17,13 +17,13 @@
             <li>Check the domain letter by letter against the project's official links.</li>
         </ul>
         <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 16px;">
-            <a href="{% url 'albright_crypto_app:dashboard' %}" class="btn btn-primary" id="leave-back">Back to opportunities</a>
+            <a href="{% url 'albright_crypto_app:inbox' %}" class="btn btn-primary" id="leave-back">Back to opportunities</a>
             <a href="{{ url }}" class="btn btn-secondary" id="leave-continue" rel="noopener noreferrer nofollow" target="_blank">Continue to {{ domain }}</a>
         </div>
         {% else %}
         <h1 style="margin: 0 0 12px; font-size: var(--text-2xl);">That isn't a web link</h1>
         <p style="color: var(--text-secondary);">Only http(s) links can be opened from this app.</p>
-        <a href="{% url 'albright_crypto_app:dashboard' %}" class="btn btn-secondary">Back to opportunities</a>
+        <a href="{% url 'albright_crypto_app:inbox' %}" class="btn btn-secondary">Back to opportunities</a>
         {% endif %}
     </section>
 </div>

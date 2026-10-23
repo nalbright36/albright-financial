@@ -1,0 +1,8 @@
+{# Settings' sub-pages. `settings_tab` is "profile", "filters", "sources" or "gmail". #}
+<h1 style="margin: 0 0 12px;">Settings</h1>
+<nav class="scanner-tabs" id="settings-tabs" aria-label="Settings" style="margin-bottom: 20px;">
+    <a href="{% url 'albright_crypto_app:profile' %}" class="scanner-tab{% if settings_tab == 'profile' %} is-active{% endif %}"{% if settings_tab == 'profile' %} aria-current="page"{% endif %}>Profile</a>
+    <a href="{% url 'albright_crypto_app:filters' %}" class="scanner-tab{% if settings_tab == 'filters' %} is-active{% endif %}"{% if settings_tab == 'filters' %} aria-current="page"{% endif %}>Filters</a>
+    <a href="{% url 'albright_crypto_app:settings' %}" class="scanner-tab{% if settings_tab == 'sources' %} is-active{% endif %}"{% if settings_tab == 'sources' %} aria-current="page"{% endif %}>Sources &amp; links</a>
+    <a href="{% url 'albright_crypto_app:gmail' %}" class="scanner-tab{% if settings_tab == 'gmail' %} is-active{% endif %}"{% if settings_tab == 'gmail' %} aria-current="page"{% endif %}>Email alerts</a>
+</nav>

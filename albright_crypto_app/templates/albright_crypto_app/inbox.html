@@ -1,0 +1,160 @@
+{% extends "index.html" %}
+{% load static %}
+{% load cache_bust %}
+{% block page_title %}Inbox · {% endblock %}
+{% block content %}
+{% comment %}
+The Inbox (inbox_views.inbox): one opportunity at a time, keyboard first -
+the reseller review queue's pattern and CSS. The queue is embedded as JSON;
+static/js/opportunity_inbox.js renders the card and calls inbox_views' JSON
+endpoints. The legend, help overlay and phone buttons all come from
+inbox_views.SHORTCUTS, so they always list the same keys.
+{% endcomment %}
+<div class="container review-page" style="padding-top: 32px; padding-bottom: 48px;">
+
+    <div class="card__header" style="margin-bottom: 12px; flex-wrap: wrap; gap: var(--space-3);">
+        <h1 style="margin: 0;">Inbox</h1>
+        <span style="display: inline-flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
+            <form method="get" action="{% url 'albright_crypto_app:inbox' %}" class="review-scope" id="inbox-type-form">
+                <label for="inbox-type" class="review-scope__label">Type:</label>
+                <select name="type" id="inbox-type" class="review-scope__select">
+                    {% for key, label, count in type_options %}<option value="{{ key }}"{% if key == type_key %} selected{% endif %}>{{ label }} ({{ count }})</option>{% endfor %}
+                </select>
+                <noscript><button type="submit" class="btn btn-secondary btn-sm">Go</button></noscript>
+                <span aria-hidden="true">&middot;</span>
+                <span id="inbox-progress" class="review-progress num" aria-live="polite">{% if total %}1{% else %}0{% endif %} of {{ total }}</span>
+            </form>
+            <a href="{% url 'albright_crypto_app:hidden' %}{% if type_key != 'all' %}?type={{ type_key }}{% endif %}" id="hidden-link" style="font-size: 0.8125rem;">Hidden ({{ hidden_count }})</a>
+            <a href="{% url 'albright_crypto_app:add' %}" class="btn btn-primary btn-sm">Add opportunity</a>
+        </span>
+    </div>
+
+    <p style="margin: 0 0 16px; font-size: 0.8125rem; color: var(--text-secondary);" id="skip-summary">
+        {% if skip_summary %}Skip reasons this week: {% for label, n in skip_summary %}{{ n }} skipped for {{ label|lower }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}
+        &middot; <a href="{% url 'albright_crypto_app:filters' %}">Tune filters</a>
+        {% else %}No skips this week.{% endif %}
+        {% if pending_fit %}&middot; <span id="pending-fit">{{ pending_fit }} waiting for a fit score (scored on the next scan, within the daily AI limit)</span>{% endif %}
+    </p>
+
+    {% if queue %}
+    {{ queue|json_script:"inbox-data" }}
+
+    <div class="review-layout" id="review-layout">
+        <div class="review-main">
+            <section class="card review-card" id="in-card" aria-live="polite">
+                <div id="in-status" class="review-status" hidden></div>
+                <div class="review-card__info">
+                    <div class="review-card__badges">
+                        <span class="badge neutral" id="in-type"></span>
+                        <span class="badge neutral" id="in-source"></span>
+                        <span class="badge" id="in-safety"></span>
+                    </div>
+                    <h2 class="review-card__title" style="margin-bottom: 4px;"><a id="in-title" href="#"></a></h2>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: var(--space-4);" id="in-subtitle"></div>
+                    <div class="grid grid-2 review-stats">
+                        <div><div class="row-count">Pay</div><span class="num" id="in-pay"></span></div>
+                        <div><div class="row-count" id="in-score-label">Fit score</div><span class="num" id="in-score"></span></div>
+                        <div><div class="row-count">Deadline</div><span class="num" id="in-deadline"></span></div>
+                        <div><div class="row-count">Posted</div><span class="num" id="in-posted"></span></div>
+                    </div>
+                </div>
+
+                <div class="review-why" id="in-why-box">
+                    <div class="review-why__label" id="in-why-label">Why it fits</div>
+                    <p style="margin: 0 0 6px;" id="in-why"></p>
+                    <div id="in-skills"></div>
+                </div>
+                <div class="review-why" id="in-missing-box" hidden>
+                    <div class="review-why__label">Missing requirements</div>
+                    <ul id="in-missing"></ul>
+                </div>
+                <div class="crypto-warning" id="in-warnings-box" style="margin-top: var(--space-3);" hidden>
+                    <strong>Safety warnings</strong>
+                    <ul class="crypto-reasons" id="in-warnings" style="margin: 4px 0 0;"></ul>
+                </div>
+                <p style="margin: var(--space-3) 0 0; font-size: 0.8125rem;" id="in-also" hidden></p>
+
+                <div class="review-ai" id="in-ai" hidden></div>
+
+                <div class="review-reasons" id="in-reasons" hidden>
+                    <span class="review-reasons__label">Skipped &middot; reason?</span>
+                    {% for key, value, label in skip_reasons %}
+                    <button type="button" class="btn btn-secondary btn-sm" data-reason="{{ value }}"><kbd class="kbd">{{ key }}</kbd> {{ label }}</button>
+                    {% endfor %}
+                    <span class="review-reasons__timer" id="in-reasons-timer"></span>
+                </div>
+
+                <div class="review-actions" id="in-actions">
+                    {% for keys, label, action in shortcuts %}{% if action != "help" %}
+                    <button type="button" class="btn btn-secondary review-action" data-action="{{ action }}">
+                        <span class="review-action__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% endfor %}</span>
+                        <span>{% if action == "skip" %}Skip{% elif action == "keep" %}Keep{% elif action == "draft" %}Proposal / resume{% else %}{{ label }}{% endif %}</span>
+                    </button>
+                    {% endif %}{% endfor %}
+                </div>
+            </section>
+
+            <section class="card review-done" id="in-done" hidden>
+                <h2 id="in-done-title">All caught up</h2>
+                <p id="in-done-text" style="color: var(--text-secondary);"></p>
+                <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="in-review-passed" hidden>Back to the ones you passed</button>
+                    <a href="{% url 'albright_crypto_app:pipeline' %}" class="btn btn-primary">Open the Pipeline</a>
+                </div>
+            </section>
+        </div>
+
+        <aside class="card review-legend" id="in-legend" aria-label="Keyboard shortcuts">
+            <div class="card__header">
+                <span class="card__label">Shortcuts</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="in-legend-collapse" aria-label="Hide shortcuts">&rsaquo;</button>
+            </div>
+            <ul class="review-legend__list" id="in-legend-main">
+                {% for keys, label, action in shortcuts %}
+                <li data-legend="{{ action }}">
+                    <span class="review-legend__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% endfor %}</span>
+                    <span>{{ label }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <ul class="review-legend__list" id="in-legend-reasons" hidden>
+                <li class="review-legend__hint">Skip reason:</li>
+                {% for key, value, label in skip_reasons %}
+                <li data-legend="reason-{{ key }}"><span class="review-legend__keys"><kbd class="kbd">{{ key }}</kbd></span><span>{{ label }}</span></li>
+                {% endfor %}
+            </ul>
+        </aside>
+        <button type="button" class="review-legend-tab" id="in-legend-tab" hidden aria-label="Show shortcuts">Shortcuts</button>
+    </div>
+
+    <div class="review-help" id="in-help" hidden role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+        <div class="card review-help__panel">
+            <div class="card__header">
+                <span class="card__label">Keyboard shortcuts</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="in-help-close" aria-label="Close help">&#10005;</button>
+            </div>
+            <ul class="review-legend__list">
+                {% for keys, label, action in shortcuts %}
+                <li><span class="review-legend__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% endfor %}</span><span>{{ label }}</span></li>
+                {% endfor %}
+                {% for key, value, label in skip_reasons %}
+                <li><span class="review-legend__keys"><kbd class="kbd">S</kbd><kbd class="kbd">{{ key }}</kbd></span><span>Skip: {{ label }}</span></li>
+                {% endfor %}
+                <li><span class="review-legend__keys"><kbd class="kbd">Esc</kbd></span><span>Close this help</span></li>
+            </ul>
+            <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Shortcuts pause while you're typing. Kept items go to the Pipeline as Saved; skipped ones leave the Inbox.</p>
+        </div>
+    </div>
+    {% else %}
+    <section class="card review-done" id="in-done">
+        <h2>All caught up</h2>
+        <p style="color: var(--text-secondary);">Nothing {% if type_key != "all" %}of this type {% endif %}in the Inbox right now. New postings arrive with each scan; filtered-out ones are under <a href="{% url 'albright_crypto_app:hidden' %}">Hidden ({{ hidden_count }})</a>.</p>
+        <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+            <a href="{% url 'albright_crypto_app:pipeline' %}" class="btn btn-primary">Open the Pipeline</a>
+            <a href="{% url 'albright_crypto_app:add' %}" class="btn btn-secondary">Add opportunity</a>
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% if queue %}<script src="{% static_version 'js/opportunity_inbox.js' %}" defer></script>{% endif %}
+{% endblock %}

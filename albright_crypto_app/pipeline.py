@@ -17,7 +17,7 @@ from decimal import Decimal
 from django.db.models import F
 from django.utils import timezone
 
-from . import config
+from . import config, relevance
 from .collectors import COLLECTORS
 from .collectors.base import SourceBlocked, SourceUnavailable
 from .core.safety import check_domain, check_opportunity
@@ -32,6 +32,7 @@ MANUAL_SOURCE_NAMES = {"crypto": "Manual", "income": "Manual (income)"}
 REFUNDABLE_DEPOSIT_REASON = "requires a refundable deposit"
 # Facts a structured API states in its own fields (RawOpportunity.facts) - saved as-is.
 STRUCTURED_FACTS = ("reward_type", "location_requirement", "skills_required")
+FIT_FIELDS = ("fit_score", "matched_skills", "missing_requirements", "role_match", "seniority", "fit_reason")
 # Everything extraction.validate() returns - what a collector that ran the AI itself may set.
 AI_FACT_FIELDS = (
     "reward_usd", "reward_currency", "reward_type", "evidence", "evidence_quote", "deadline", "hours_estimate",
@@ -66,6 +67,50 @@ def sync_sources():
     Source.objects.filter(kind="rss", active=True).exclude(url__in=feeds).update(active=False)
     for opportunity_type in MANUAL_SOURCE_NAMES:
         manual_source(opportunity_type)
+
+
+# The default job sources (tuned for my target roles). Created once - each
+# can be switched off on the Settings page and stays off. A new one inherits
+# "terms checked" from another source on the same site (the terms are the
+# site's), so a site whose terms I haven't checked still never runs; every
+# site's minimum interval (Remotive / Remote OK: one fetch per 6 hours across
+# all their sources) still applies.
+DEFAULT_INCOME_SOURCES = [
+    ("remotive", "Remotive: data", {"category": "data"}),
+    ("remotive", "Remotive: software-dev", {"category": "software-dev"}),
+    ("remotive", "Remotive: power bi", {"search": "power bi"}),
+    ("remotive", "Remotive: tableau", {"search": "tableau"}),
+    ("remotive", "Remotive: analytics engineer", {"search": "analytics engineer"}),
+    ("remotive", "Remotive: salesforce administrator", {"search": "salesforce administrator"}),
+    ("remoteok", "Remote OK: data", {"tag": "data"}),
+    ("remoteok", "Remote OK: analytics", {"tag": "analytics"}),
+    ("remoteok", "Remote OK: python", {"tag": "python"}),
+    ("remoteok", "Remote OK: salesforce", {"tag": "salesforce"}),
+    ("rss_income", "We Work Remotely: programming",
+     "https://weworkremotely.com/categories/remote-programming-jobs.rss"),
+    ("rss_income", "We Work Remotely: data", "https://weworkremotely.com/categories/remote-data-jobs.rss"),
+    ("hn_hiring", "HN: Who is hiring", None),
+]
+# Couldn't be confirmed when added (the site refuses automated checks) - starts switched off.
+UNVERIFIED_SOURCE_URLS = {"https://weworkremotely.com/categories/remote-data-jobs.rss"}
+
+
+def sync_default_income_sources():
+    from .collectors.hn_hiring import API as HN_API
+    from .collectors.job_boards import endpoint_url
+    for kind, name, spec in DEFAULT_INCOME_SOURCES:
+        options = spec if isinstance(spec, dict) else {}
+        url = endpoint_url(kind, options) if kind in Source.ATTRIBUTED_KINDS else (HN_API if kind == "hn_hiring" else spec)
+        if Source.objects.filter(kind=kind, url=url, opportunity_type="income").exists():
+            continue
+        site_terms = Source.objects.filter(kind=kind, opportunity_type="income", terms_checked=True)
+        if kind == "rss_income":
+            site_terms = site_terms.filter(url__startswith=url.split("/categories/")[0])
+        unverified = url in UNVERIFIED_SOURCE_URLS
+        Source.objects.create(
+            kind=kind, url=url, name=name, opportunity_type="income", options=options,
+            active=not unverified, terms_checked=site_terms.exists(),
+            notes="Feed URL not confirmed - check it opens, then switch it on." if unverified else "")
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +157,8 @@ def apply_safety_and_score(opp):
     opp.reward_counts_as_confirmed = s.reward_counts_as_confirmed
     opp.skill_match = (skill_match(opp.skills_required, config.skills())
                        if opp.opportunity_type == "income" else None)
+    relevance.derive(opp)
+    relevance.apply_hidden(opp)   # the free prefilter (and a low fit score) -> Hidden
     return opp
 
 
@@ -137,9 +184,23 @@ def extract_and_score(opp, use_ai=True, client=None):
     Jobs from Remotive / Remote OK are never sent to the AI provider
     (Source.keep_in_app) - their facts come from the API's own fields.
     An item whose collector already extracted its facts (email alerts, HN)
-    isn't sent to the AI again."""
+    isn't sent to the AI again.
+
+    To keep AI cost down: a posting that's the same as one already found
+    elsewhere is merged into it and goes no further; one the free prefilter
+    already rules out (from its title and the API's own fields) isn't sent
+    for extraction; and only job/freelance postings that pass every filter
+    get a fit score (relevance.score_fit)."""
+    if opp.source.kind != "manual":
+        primary = relevance.find_duplicate(relevance.derive(opp))
+        if primary is not None:
+            relevance.merge_into(opp, primary)
+            opp.extraction_status = "filtered"
+            return rescore(opp)
     if opp.extraction_status == "done":
         pass
+    elif not opp.show_anyway and relevance.prefilter(relevance.derive(opp)):
+        opp.extraction_status = "filtered"
     elif use_ai and not opp.source.keep_in_app:
         try:
             facts = extract(opp, client=client)
@@ -154,7 +215,10 @@ def extract_and_score(opp, use_ai=True, client=None):
             opp.extraction_status = "done"
     else:
         opp.extraction_status = "skipped"
-    rescore(opp)
+    apply_safety_and_score(opp)
+    if opp.safety_verdict != "block" and not opp.excluded and relevance.score_fit(opp, use_ai=use_ai, client=client):
+        relevance.apply_hidden(opp)
+    opp.save()
     _sync_task_steps(opp)
     return opp
 
@@ -173,9 +237,14 @@ def store(source, raw):
         facts["extraction_status"] = "done"
     else:
         facts = {k: v for k, v in (raw.facts or {}).items() if k in STRUCTURED_FACTS and v not in (None, "", [])}
+    metadata = dict(raw.metadata or {})
+    fit = metadata.pop("fit", None)   # a collector that scored fit in its own AI call (HN)
+    if isinstance(fit, dict) and fit.get("fit_score") is not None:
+        facts.update({k: fit[k] for k in FIT_FIELDS}, fit_method="ai")
+        facts["company"] = fit.get("company") or ""
     return Opportunity.objects.create(
         source=source, opportunity_type=source.opportunity_type, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
-        raw_text=raw.text or "", metadata=raw.metadata or {}, **facts,
+        raw_text=raw.text or "", metadata=metadata, posted_at=raw.published, **facts,
     )
 
 
@@ -187,7 +256,8 @@ def add_manual(url, title, text, use_ai=True, client=None, opportunity_type="cry
     opp, created = Opportunity.objects.get_or_create(
         source=source, external_id=external_id,
         defaults={"url": url, "title": (title or url)[:500], "raw_text": text or "",
-                  "opportunity_type": opportunity_type},
+                  "opportunity_type": opportunity_type,
+                  "show_anyway": True},   # something I added myself is never filtered out (only blocked)
     )
     if created:
         extract_and_score(opp, use_ai=use_ai, client=client)

@@ -1,18 +1,22 @@
 {% extends "index.html" %}
-{% block page_title %}My profile · {% endblock %}
+{% block page_title %}Profile · {% endblock %}
 {% block content %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
-    <h1 style="margin: 0 0 8px;">My profile</h1>
-    <p style="color: var(--text-secondary); margin-bottom: 20px;">
-        The only facts "Generate proposal" and "Tailor resume" may use. They reorder and emphasize what's here for each posting -
+    {% include "albright_crypto_app/_settings_tabs.html" %}
+    <div class="card__header" style="margin-bottom: 12px; align-items: flex-start; gap: var(--space-3);">
+        <p style="color: var(--text-secondary); margin: 0;">
+        Your target roles and skills drive the Inbox's fit score. Everything else here is the only set of facts "Generate proposal" and "Tailor resume" may use. They reorder and emphasize what's here for each posting -
         they never add employers, dates, skills, numbers or experience that aren't. Anything they write that isn't backed by this page is removed and shown to you.
-    </p>
+        </p>
+        <form method="post" style="margin: 0; flex-shrink: 0;">{% csrf_token %}<input type="hidden" name="action" value="prefill">
+            <button type="submit" class="btn btn-secondary btn-sm" id="prefill-profile" title="Fills only empty fields">Fill from my resume</button></form>
+    </div>
 
     <form method="post" class="card" id="profile-form">
         {% csrf_token %}
         <div class="grid grid-2" style="gap: var(--space-4); align-items: start;">
             {% for field in form %}
-            <div class="field"{% if field.name in "summary work_history projects resume_template proposal_template" %} style="grid-column: 1 / -1;"{% endif %}>
+            <div class="field"{% if field.name in "summary target_roles work_history projects resume_template proposal_template" %} style="grid-column: 1 / -1;"{% endif %}>
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
                 {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-secondary);">{{ field.help_text }}</span>{% endif %}

@@ -5,7 +5,8 @@ helper (scanner.alerts.send_telegram - never raises, no-ops without a token):
     excluded, with confidence >= alert_min_confidence and EV/hour >=
     alert_min_ev_per_hour - and, for freelance work, skill_match >=
     alert_min_skill_match
-  - one reminder 24 hours before the deadline of anything I'm doing
+  - one reminder 24 hours before the deadline of anything I'm working on
+  - one follow-up reminder 7 days after applying, if nothing has moved since
   - digest_lines(): the "Opportunities" section of the daily digest, with a
     Crypto and an Income line
 
@@ -56,6 +57,7 @@ def qualifies_for_alert(opp):
     return (
         opp.safety_verdict != "block"
         and not opp.excluded
+        and not opp.hidden_reason and opp.duplicate_of_id is None   # filtered out / merged: never alerted
         and config.CONFIDENCE_RANK.get(opp.confidence, 0) >= min_rank
         and opp.ev_per_hour is not None
         and opp.ev_per_hour >= Decimal(str(config.get("alert_min_ev_per_hour")))
@@ -108,7 +110,7 @@ def send_new_opportunity_alerts(opportunities, now=None):
 def send_deadline_reminders(now=None):
     """One reminder per opportunity I'm doing, once its deadline is within 24h."""
     now = now or timezone.now()
-    due = Opportunity.objects.filter(status="doing", deadline__gt=now, deadline__lte=now + REMINDER_WINDOW,
+    due = Opportunity.objects.filter(status="working", deadline__gt=now, deadline__lte=now + REMINDER_WINDOW,
                                      deadline_reminder_sent_at__isnull=True)
     sent = []
     for opp in due:
@@ -127,10 +129,38 @@ def send_deadline_reminders(now=None):
     return sent
 
 
+FOLLOWUP_AFTER = timedelta(days=7)
+
+
+def send_followup_reminders(now=None):
+    """Once per application: applied 7+ days ago and still in Applied with
+    no movement since (Pipeline cards show "Follow up" from then on too)."""
+    now = now or timezone.now()
+    cutoff = now - FOLLOWUP_AFTER
+    due = (Opportunity.objects.select_related("source")
+           .filter(status="applied", applied_at__lte=cutoff, followup_sent_at__isnull=True)
+           .exclude(stage_changed_at__gt=cutoff))
+    sent = []
+    for opp in due:
+        if not Opportunity.objects.filter(pk=opp.pk, followup_sent_at__isnull=True).update(followup_sent_at=now):
+            continue
+        days = (now - opp.applied_at).days
+        company = "" if opp.source.keep_in_app or not opp.company else f" at {escape(opp.company[:60])}"
+        send_telegram("\n".join([
+            "<b>Follow up on an application</b>",
+            _title(opp, 150) + company,
+            f"Applied {timezone.localtime(opp.applied_at):%b %d} - no movement in {days} days",
+            _links(opp),
+        ]))
+        sent.append(opp.pk)
+    return sent
+
+
 def _type_lines(opportunity_type, now, week_start):
     """One digest line (plus up to 3 best by EV/hour) for crypto or income."""
-    new = Opportunity.objects.filter(opportunity_type=opportunity_type, discovered_at__gte=now - timedelta(hours=24))
-    actionable = new.exclude(safety_verdict="block").filter(excluded=False)
+    new = Opportunity.objects.filter(opportunity_type=opportunity_type, discovered_at__gte=now - timedelta(hours=24),
+                                     duplicate_of__isnull=True)
+    actionable = new.exclude(safety_verdict="block").filter(excluded=False, hidden_reason="")
     blocked = new.filter(safety_verdict="block").count()
     earned = Earning.objects.filter(kind="confirmed", opportunity_type=opportunity_type, date__gte=week_start).aggregate(
         total=Sum("usd_value_at_receipt"))["total"] or Decimal("0")
@@ -147,11 +177,11 @@ def _type_lines(opportunity_type, now, week_start):
 def digest_lines(now=None):
     """The daily digest's "Opportunities" section: a Crypto and an Income
     line (new opportunities in 24h, blocked, confirmed earnings this week,
-    best by EV/hour), then deadlines coming up (7 days, things I'm doing or
-    have submitted) and total confirmed earnings this week."""
+    best by EV/hour), then deadlines coming up (7 days, anything in the
+    Pipeline) and total confirmed earnings this week."""
     now = now or timezone.now()
     week_start = timezone.localdate(now) - timedelta(days=6)
-    deadlines = Opportunity.objects.filter(status__in=("doing", "submitted"), deadline__gt=now,
+    deadlines = Opportunity.objects.filter(status__in=("saved", "applied", "talking", "working"), deadline__gt=now,
                                            deadline__lte=now + timedelta(days=7)).order_by("deadline")
     earned = Earning.objects.filter(kind="confirmed", date__gte=week_start).aggregate(
         total=Sum("usd_value_at_receipt"))["total"] or Decimal("0")

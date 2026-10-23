@@ -1,9 +1,9 @@
-"""Views for the Opportunities app (package albright_crypto_app): the "All"
-overview (confirmed earnings, hours and realized $/hour, split by type), a
-Crypto and an Income dashboard (tiles + tabs, same template), opportunity
-detail (checklist, time, status, earnings, fact edits), the manual "Add
-opportunity" form, the earnings ledger (+ CSV for taxes), the Settings
-page, the external-link warning page, and the redirect from the old URLs.
+"""Views for the Opportunities app (package albright_crypto_app), besides
+the Inbox / Hidden / Pipeline pages (inbox_views.py): opportunity detail
+(checklist, time, stage, earnings, fact edits), the manual "Add
+opportunity" form, the earnings ledger (+ CSV for taxes, hours and $/hour
+by type), Settings (Profile, Filters, Sources & links), the external-link
+warning page, and the redirect from the old URL prefixes.
 
 Nothing here (or anywhere in this app) connects a wallet, signs or sends a
 transaction, approves a token, or buys anything - it tracks opportunities
@@ -16,20 +16,19 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Case, F, IntegerField, Sum, Value, When
+from django.db.models import Sum
 from django.http import HttpResponse, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import config
-from .forms import (EarningForm, IncomeSourceForm, ManualOpportunityForm, OpportunityEditForm, SettingsForm,
-                    TimeLogForm)
+from . import config, relevance, workflow
+from .forms import (EarningForm, FiltersForm, IncomeSourceForm, ManualOpportunityForm, OpportunityEditForm,
+                    SettingsForm, TimeLogForm)
 from .links import is_web_url, link_status
-from .models import (ACTIVE_STATUSES, LEVELS, OPPORTUNITY_TYPES, REWARD_TYPES_BY_OPPORTUNITY_TYPE, STATUSES, Earning,
-                     Opportunity, Source, TaskStep, TimeLog)
-from .pipeline import add_manual, rescore, sync_sources
+from .models import ACTIVE_STATUSES, CLOSE_REASONS, OPPORTUNITY_TYPES, Earning, Opportunity, Source, TaskStep, TimeLog
+from .pipeline import add_manual, rescore, sync_default_income_sources, sync_sources
 from .skills import matched_skills, skill_match
 
 # Features added later, kept together: walkthroughs, profile + drafts, Gmail.
@@ -38,42 +37,11 @@ from .extraction import ExtractionLimitReached  # noqa: E402
 from .forms import GmailLabelForm, ProfileForm  # noqa: E402
 from .models import ApplicationDraft, GmailConnection, MyProfile, Walkthrough  # noqa: E402
 
-TABS = [("ranked", "Ranked"), ("doing", "Doing"), ("submitted", "Submitted"), ("blocked", "Blocked"),
-        ("excluded", "Excluded")]
 TYPE_LABELS = dict(OPPORTUNITY_TYPES)
-CONFIDENCE_ORDER = Case(When(confidence="high", then=Value(2)), When(confidence="medium", then=Value(1)),
-                        default=Value(0), output_field=IntegerField())
 
 
 def _wants_json(request):
     return request.headers.get("x-requested-with") == "XMLHttpRequest"
-
-
-def tab_queryset(tab, opportunity_type=None):
-    """Ranked: actionable (new/reviewing), not blocked, not excluded, by
-    EV/hour (unknown hours last) then confidence. Blocked never shows
-    anywhere but its own tab; Excluded (spending above budget) likewise.
-    opportunity_type limits it to crypto or income (None: both)."""
-    qs = Opportunity.objects.select_related("source")
-    if opportunity_type:
-        qs = qs.filter(opportunity_type=opportunity_type)
-    not_blocked = qs.exclude(safety_verdict="block")
-    if tab == "blocked":
-        return qs.filter(safety_verdict="block").order_by("-discovered_at")
-    if tab == "excluded":
-        return not_blocked.filter(excluded=True).order_by("-discovered_at")
-    if tab in ("doing", "submitted"):
-        statuses = ("submitted", "applied") if tab == "submitted" else (tab,)   # applied counts as submitted
-        return not_blocked.filter(excluded=False, status__in=statuses).order_by(F("deadline").asc(nulls_last=True))
-    return (not_blocked.filter(excluded=False, status__in=("new", "reviewing"))
-            .annotate(conf_rank=CONFIDENCE_ORDER)
-            .order_by(F("ev_per_hour").desc(nulls_last=True), "-conf_rank", "-discovered_at"))
-
-
-def hide_low_skill_match(qs):
-    """Freelance work below freelance_min_skill_match is hidden from Ranked
-    by default. Unknown skill_match (no skills listed) stays visible."""
-    return qs.exclude(reward_type="freelance", skill_match__lt=int(config.get("freelance_min_skill_match")))
 
 
 def dashboard_tiles(today=None, opportunity_type=None):
@@ -99,69 +67,6 @@ def dashboard_tiles(today=None, opportunity_type=None):
     }
 
 
-def _unchecked_sources(opportunity_type=None):
-    qs = Source.objects.filter(active=True, terms_checked=False).exclude(kind="manual")
-    return qs.filter(opportunity_type=opportunity_type).count() if opportunity_type else qs.count()
-
-
-@login_required
-def overview(request):
-    """"All": confirmed earnings, hours and realized $/hour - combined and by type."""
-    by_type = []
-    for key, label in OPPORTUNITY_TYPES:
-        ranked = tab_queryset("ranked", key)
-        if key == "income":
-            ranked = hide_low_skill_match(ranked)
-        by_type.append({"key": key, "label": label, "tiles": dashboard_tiles(opportunity_type=key),
-                        "ranked": ranked.count(), "doing": tab_queryset("doing", key).count(),
-                        "top": list(ranked[:3]), "url_name": f"albright_crypto_app:{key}"})
-    return render(request, "albright_crypto_app/overview.html", {
-        "tiles": dashboard_tiles(), "by_type": by_type, "unchecked_sources": _unchecked_sources(),
-    })
-
-
-@login_required
-def type_dashboard(request, opportunity_type):
-    tab = request.GET.get("tab") if request.GET.get("tab") in dict(TABS) else "ranked"
-    filters = {key: request.GET.get(key, "") for key in ("type", "confidence", "status")}
-    reward_types = REWARD_TYPES_BY_OPPORTUNITY_TYPE[opportunity_type]
-    is_income = opportunity_type == "income"
-    show_low_match = request.GET.get("show_low_match") == "1"
-
-    def listed(key):
-        qs = tab_queryset(key, opportunity_type)
-        return hide_low_skill_match(qs) if key == "ranked" and is_income and not show_low_match else qs
-
-    qs = listed(tab)
-    if filters["type"] in dict(reward_types):
-        qs = qs.filter(reward_type=filters["type"])
-    if filters["confidence"] in dict(LEVELS):
-        qs = qs.filter(confidence=filters["confidence"])
-    if filters["status"] in dict(STATUSES):
-        qs = qs.filter(status=filters["status"])
-
-    hidden_low_match = 0
-    if is_income and tab == "ranked":
-        hidden_low_match = tab_queryset("ranked", "income").count() - hide_low_skill_match(
-            tab_queryset("ranked", "income")).count()
-    toggle_params = {k: v for k, v in {"tab": tab, **filters}.items() if v}
-    if not show_low_match:
-        toggle_params["show_low_match"] = "1"
-
-    counts = {key: listed(key).count() for key, _label in TABS}
-    return render(request, "albright_crypto_app/dashboard.html", {
-        "opportunity_type": opportunity_type, "type_label": TYPE_LABELS[opportunity_type], "is_income": is_income,
-        "tiles": dashboard_tiles(opportunity_type=opportunity_type), "tab": tab,
-        "tabs": [(k, label, counts[k]) for k, label in TABS],
-        "opportunities": qs[:200], "filters": filters, "reward_types": reward_types, "levels": LEVELS,
-        "statuses": STATUSES, "unchecked_sources": _unchecked_sources(opportunity_type),
-        "budget_usd": config.budget_usd(),
-        "show_low_match": show_low_match, "hidden_low_match": hidden_low_match,
-        "min_skill_match": int(config.get("freelance_min_skill_match")),
-        "low_match_query": urlencode(toggle_params),
-    })
-
-
 @login_required
 def opportunity_detail(request, pk):
     opp = get_object_or_404(Opportunity.objects.select_related("source"), pk=pk)
@@ -171,10 +76,9 @@ def opportunity_detail(request, pk):
 
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "status" and request.POST.get("status") in dict(STATUSES):
-            opp.status = request.POST["status"]
-            opp.save(update_fields=["status"])
-            messages.success(request, f"Status: {opp.get_status_display()}.")
+        if action == "status" and request.POST.get("status") in workflow.STAGE_LABELS:
+            workflow.move(opp, request.POST["status"], request.POST.get("reason", ""))
+            messages.success(request, f"Stage: {opp.get_status_display()}.")
             return redirect("albright_crypto_app:opportunity", pk=opp.pk)
         if action == "edit":
             edit_form = OpportunityEditForm(request.POST, instance=opp)
@@ -208,9 +112,8 @@ def opportunity_detail(request, pk):
             draft = get_object_or_404(ApplicationDraft, pk=request.POST.get("draft"), opportunity=opp)
             draft.sent_at = timezone.now()
             draft.save(update_fields=["sent_at"])
-            opp.status = "applied"
-            opp.save(update_fields=["status"])
-            messages.success(request, "Marked as sent - status set to Applied.")
+            workflow.move(opp, "applied", now=draft.sent_at)
+            messages.success(request, "Marked as sent - moved to Applied in the Pipeline.")
             return redirect(reverse("albright_crypto_app:opportunity", args=[opp.pk]) + "#drafts")
 
     minutes = opp.time_logs.aggregate(t=Sum("minutes"))["t"] or 0
@@ -221,9 +124,12 @@ def opportunity_detail(request, pk):
     return render(request, "albright_crypto_app/opportunity.html", {
         "opp": opp, "edit_form": edit_form, "time_form": time_form, "earning_form": earning_form,
         "steps": opp.task_steps.all(), "time_logs": opp.time_logs.all(), "earnings": opp.earnings.all(),
-        "minutes_logged": minutes, "statuses": STATUSES, "budget_usd": config.budget_usd(),
+        "minutes_logged": minutes, "stages": list(workflow.STAGE_LABELS.items()), "close_reasons": CLOSE_REASONS,
+        "budget_usd": config.budget_usd(),
         "type_label": TYPE_LABELS[opp.opportunity_type], "is_income": opp.opportunity_type == "income",
-        "dashboard_url_name": f"albright_crypto_app:{opp.opportunity_type}",
+        "work_type_label": relevance.WORK_TYPE_LABELS.get(opp.work_type, "Other"),
+        "uses_fit": opp.work_type in relevance.JOB_WORK_TYPES,
+        "back_to_pipeline": opp.status in workflow.STAGE_LABELS and opp.status not in ("inbox", "skipped"),
         "my_matched_skills": matched_skills(opp.skills_required, config.skills()),
         "walkthroughs": saved_walkthroughs, "walkthrough": shown,
         "drafts": opp.drafts.all(), "profile_ready": bool(profile and (profile.work_history or profile.summary)),
@@ -246,7 +152,7 @@ def _run_ai_action(request, opp, action):
                 return redirect(reverse("albright_crypto_app:opportunity", args=[opp.pk]))
             profile = MyProfile.load()
             if not (profile.work_history or profile.summary or profile.skills):
-                messages.error(request, "Fill in My profile first - drafts only use facts from it.")
+                messages.error(request, "Fill in Settings > Profile first - drafts only use facts from it.")
                 return redirect("albright_crypto_app:profile")
             draft = (my_profile.generate_proposal if action == "proposal" else my_profile.tailor_resume)(opp, profile)
             if draft.removed_claims:
@@ -278,13 +184,26 @@ def draft_download(request, pk):
 
 @login_required
 def profile_view(request):
+    """Settings > Profile. "Fill from my resume" fills only empty fields."""
     profile = MyProfile.load()
+    if request.method == "POST" and request.POST.get("action") == "prefill":
+        skills_before = config.skills()
+        changed = my_profile.prefill_profile(profile)
+        if config.skills() != skills_before:
+            _recompute_skill_matches()
+        messages.success(request, f"Filled from your resume: {', '.join(f.replace('_', ' ') for f in changed)}."
+                         if changed else "Nothing to fill - every resume field already has something.")
+        return redirect("albright_crypto_app:profile")
     form = ProfileForm(request.POST or None, initial=ProfileForm.initial_for(profile))
     if request.method == "POST" and form.is_valid():
+        skills_before = config.skills()
         form.save(profile)
+        if config.skills() != skills_before:
+            _recompute_skill_matches()
         messages.success(request, "Profile saved.")
         return redirect("albright_crypto_app:profile")
-    return render(request, "albright_crypto_app/profile.html", {"form": form, "profile": profile})
+    return render(request, "albright_crypto_app/profile.html", {"form": form, "profile": profile,
+                                                                "settings_tab": "profile"})
 
 
 @login_required
@@ -300,7 +219,7 @@ def toggle_step(request, pk, step_id):
 
 @login_required
 def add_opportunity(request):
-    initial_type = request.GET.get("type") if request.GET.get("type") in TYPE_LABELS else "crypto"
+    initial_type = "crypto" if request.GET.get("type") == "crypto" else "income"
     form = ManualOpportunityForm(request.POST or None, initial={"opportunity_type": initial_type})
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
@@ -343,13 +262,48 @@ def earnings(request):
                              e.opportunity_type])
         return response
     totals = rows.aggregate(usd=Sum("usd_value_at_receipt"))
+    by_type = earnings_by_type(rows)
     by_currency = rows.values("currency").annotate(amount=Sum("amount"), usd=Sum("usd_value_at_receipt")).order_by("currency")
     return render(request, "albright_crypto_app/earnings.html", {
         "earnings": rows, "total_usd": totals["usd"] or Decimal("0"), "by_currency": by_currency,
         "tiles": dashboard_tiles(opportunity_type=type_filter or None), "type_filter": type_filter,
-        "opportunity_types": OPPORTUNITY_TYPES,
+        "opportunity_types": OPPORTUNITY_TYPES, "by_type": by_type,
         "csv_query": urlencode({"export": "csv", **({"type": type_filter} if type_filter else {})}),
     })
+
+
+EARNING_GROUPS = [("jobs", "Jobs"), ("freelance", "Freelance"), ("bounties", "Bounties"),
+                  ("paid_tasks", "Paid tasks"), ("crypto", "Crypto"), ("other", "Other")]
+WORK_TYPE_GROUP = {"full_time": "jobs", "part_time": "jobs", "contract": "freelance", "freelance": "freelance",
+                   "bounty": "bounties", "paid_task": "paid_tasks"}
+
+
+def _group(opportunity_type, work_type):
+    return "crypto" if opportunity_type == "crypto" else WORK_TYPE_GROUP.get(work_type, "other")
+
+
+def earnings_by_type(rows):
+    """[{key, label, earned, hours, per_hour}] - confirmed earnings and logged
+    hours per kind of work (an earning without an opportunity counts as
+    Crypto or Other by its own type). Only groups with either appear."""
+    earned, hours = {}, {}
+    for e in rows.values("opportunity_type", "opportunity__work_type").annotate(usd=Sum("usd_value_at_receipt")):
+        key = _group(e["opportunity_type"], e["opportunity__work_type"])
+        earned[key] = earned.get(key, Decimal("0")) + (e["usd"] or Decimal("0"))
+    logs = TimeLog.objects.all()
+    if rows.query.where:   # the page's type filter applies to hours too
+        types = set(rows.values_list("opportunity_type", flat=True).distinct())
+        logs = logs.filter(opportunity__opportunity_type__in=types)
+    for t in logs.values("opportunity__opportunity_type", "opportunity__work_type").annotate(m=Sum("minutes")):
+        key = _group(t["opportunity__opportunity_type"], t["opportunity__work_type"])
+        hours[key] = hours.get(key, Decimal("0")) + Decimal(t["m"] or 0) / Decimal(60)
+    result = []
+    for key, label in EARNING_GROUPS:
+        if key in earned or key in hours:
+            e, h = earned.get(key, Decimal("0")), hours.get(key, Decimal("0"))
+            result.append({"key": key, "label": label, "earned": e, "hours": h,
+                           "per_hour": (e / h).quantize(Decimal("0.01")) if h else None})
+    return result
 
 
 def _recompute_skill_matches():
@@ -364,6 +318,7 @@ def _recompute_skill_matches():
 @login_required
 def settings_view(request):
     sync_sources()
+    sync_default_income_sources()
     action = request.POST.get("action") if request.method == "POST" else None
     if action == "sources":
         for source in Source.objects.exclude(kind="manual"):
@@ -381,24 +336,33 @@ def settings_view(request):
 
     settings_post = request.method == "POST" and action in (None, "", "settings")
     form = SettingsForm(request.POST if settings_post else None, initial={
-        "allowlist": "\n".join(config.allowlist()), "rss_feeds": "\n".join(config.get("rss_feeds") or []),
-        "skills": "\n".join(config.skills())})
+        "allowlist": "\n".join(config.allowlist()), "rss_feeds": "\n".join(config.get("rss_feeds") or [])})
     if settings_post and form.is_valid():
         config.set_value("allowlist", form.cleaned_data["allowlist"])
         config.set_value("rss_feeds", form.cleaned_data["rss_feeds"])
-        skills_changed = form.cleaned_data["skills"] != config.skills()
-        config.set_value("skills", form.cleaned_data["skills"])
-        if skills_changed:
-            _recompute_skill_matches()
         sync_sources()
         Source.objects.filter(kind="rss", url__in=form.cleaned_data["rss_feeds"]).update(active=True)  # re-added = on
-        messages.success(request, "Settings saved. Existing opportunities keep their scores until edited or rescanned"
-                                  + (" (skill matches updated)." if skills_changed else "."))
+        messages.success(request, "Settings saved. Existing opportunities keep their scores until edited or rescanned.")
         return redirect("albright_crypto_app:settings")
     return render(request, "albright_crypto_app/settings.html", {
         "form": form, "source_form": source_form, "sources": Source.objects.exclude(kind="manual"),
         "github_queries": config.get("github_queries"), "budget_usd": config.budget_usd(),
+        "unchecked_sources": Source.objects.filter(active=True, terms_checked=False).exclude(kind="manual").count(),
+        "settings_tab": "sources",
     })
+
+
+@login_required
+def filters_view(request):
+    """Settings > Filters. Saving re-sorts the Inbox and Hidden at once (no AI)."""
+    form = FiltersForm(request.POST or None, initial=FiltersForm.initial_for(config.filters()))
+    if request.method == "POST" and form.is_valid():
+        config.set_value("filters", form.to_config())
+        result = relevance.refresh_inbox()
+        messages.success(request, f"Filters saved - {result['updated']} Inbox item{'s' if result['updated'] != 1 else ''} "
+                                  "moved between the Inbox and Hidden.")
+        return redirect("albright_crypto_app:filters")
+    return render(request, "albright_crypto_app/filters.html", {"form": form, "settings_tab": "filters"})
 
 
 @login_required
@@ -416,7 +380,7 @@ def leave(request):
 def legacy_redirect(request, rest=""):
     """/crypto/... and /albright_crypto_app/... (the app's old prefixes) ->
     the same path under the Opportunities prefix, query string kept."""
-    url = reverse("albright_crypto_app:dashboard") + rest
+    url = reverse("albright_crypto_app:inbox") + rest
     query = request.META.get("QUERY_STRING", "")
     return HttpResponsePermanentRedirect(f"{url}?{query}" if query else url)
 
@@ -458,7 +422,7 @@ def gmail_setup(request):
     return render(request, "albright_crypto_app/gmail.html", {
         "connection": connection, "source": source, "form": form, "configured": configured,
         "redirect_uri": _gmail_redirect_uri(request), "scope": gmail.SCOPE,
-        "processed": source.processed_items.count() if source else 0,
+        "processed": source.processed_items.count() if source else 0, "settings_tab": "gmail",
     })
 
 

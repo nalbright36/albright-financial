@@ -97,7 +97,7 @@ class HeaderTests(AdminTestCase):
     def test_brand_names_stay_full(self, _outlook):
         for url, brand in ((reverse("trading_home"), "Albright Trading"),
                            (reverse("albright_reselling_app:dashboard"), "Albright Reselling"),
-                           (reverse("albright_crypto_app:dashboard"), "Albright Opportunities"),
+                           (reverse("albright_crypto_app:inbox"), "Albright Opportunities"),
                            (reverse("albright_control:health"), "Albright Admin")):
             with self.subTest(url=url):
                 content = self.client.get(url).content.decode()

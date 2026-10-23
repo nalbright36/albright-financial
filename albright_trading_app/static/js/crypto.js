@@ -47,4 +47,13 @@
             setTimeout(function () { button.textContent = label; }, 1500);
         });
     });
+
+    // Pipeline / detail stage forms: the "why it closed" choice only shows
+    // when Closed is picked (without JS it's shown and ignored for other stages).
+    document.addEventListener("change", function (event) {
+        var select = event.target.closest(".js-stage-select");
+        if (!select) return;
+        var reason = select.form.querySelector(".js-close-reason");
+        if (reason) reason.hidden = select.value !== "closed";
+    });
 })();

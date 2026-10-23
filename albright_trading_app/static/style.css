@@ -1482,3 +1482,32 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .crypto-nolink { color: var(--text-secondary); overflow-wrap: anywhere; }
 .crypto-status-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .crypto-status-buttons .btn.is-current { border-color: var(--accent); color: var(--accent); }
+
+/* ===== Opportunities: Inbox, Pipeline, Filters ===== */
+.review-why[hidden], .crypto-warning[hidden], #in-also[hidden], .review-action[hidden] { display: none; }
+.pipeline-board {
+  display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: var(--space-3);
+  overflow-x: auto; padding-bottom: var(--space-2); align-items: start;
+}
+.pipeline-column { padding: var(--space-3); min-width: 0; }
+.pipeline-card {
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-elevated);
+  padding: var(--space-3); margin-top: var(--space-2); font-size: var(--text-sm);
+}
+.pipeline-card.is-followup { border-color: var(--warn); }
+.pipeline-card__title { display: block; font-weight: 600; overflow-wrap: anywhere; margin-bottom: 4px; }
+.pipeline-card__meta { color: var(--text-secondary); font-size: var(--text-xs); margin-bottom: 4px; }
+.pipeline-card__followup { display: inline-block; white-space: normal; margin: 4px 0; }
+.pipeline-card__move { display: flex; flex-wrap: wrap; gap: var(--space-1, 4px); margin-top: var(--space-2); }
+.pipeline-card__move select { flex: 1 1 110px; min-width: 0; padding: 4px 6px; font-size: var(--text-xs); }
+.pipeline-card__move select[hidden] { display: none; }
+.pipeline-empty { color: var(--text-secondary); font-size: var(--text-sm); margin: var(--space-2) 0 0; }
+.pipeline-closed summary { cursor: pointer; display: flex; gap: var(--space-2); align-items: center; }
+.pipeline-closed__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
+.filter-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.filter-checks label, .filter-check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--text-sm); }
+.filter-check { margin-bottom: var(--space-2); }
+@media (max-width: 760px) {
+  .pipeline-board { grid-template-columns: repeat(5, minmax(240px, 82vw)); scroll-snap-type: x mandatory; }
+  .pipeline-column { scroll-snap-align: start; }
+}
