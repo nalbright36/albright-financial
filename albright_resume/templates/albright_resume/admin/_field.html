@@ -1,0 +1,9 @@
+{% if field.is_hidden %}{{ field }}{% elif field.widget_type == 'checkbox' %}
+<div class="field"><label style="flex-direction: row; display: flex; gap: 8px; align-items: center;">{{ field }} {{ field.label }}</label>
+    {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-tertiary);">{{ field.help_text }}</span>{% endif %}
+    {% for e in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+{% else %}
+<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+    {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-tertiary);">{{ field.help_text }}</span>{% endif %}
+    {% for e in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+{% endif %}

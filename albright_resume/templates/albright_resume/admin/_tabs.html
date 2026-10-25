@@ -1,0 +1,15 @@
+<div class="card__header" style="margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
+    <h1 style="margin: 0;">Public resume</h1>
+    <a href="{% url 'albright_resume:page' %}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">View public page &nearr;</a>
+</div>
+<nav class="scanner-tabs" aria-label="Resume sections" style="margin-bottom: 16px;">
+    {% url 'albright_resume_admin:overview' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Overview</a>
+    {% url 'albright_resume_admin:profile' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Profile &amp; PDF</a>
+    {% url 'albright_resume_admin:experience' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Work history</a>
+    {% url 'albright_resume_admin:projects' as u %}<a href="{{ u }}" class="scanner-tab{% if u in request.path %} is-active{% endif %}">Projects</a>
+    {% url 'albright_resume_admin:skills' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Skills</a>
+    {% url 'albright_resume_admin:education' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Education</a>
+    {% url 'albright_resume_admin:chatbot' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Chatbot</a>
+    {% url 'albright_resume_admin:drafts' as u %}<a href="{{ u }}" class="scanner-tab{% if u in request.path %} is-active{% endif %}">AI summary</a>
+    {% url 'albright_resume_admin:questions' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Questions</a>
+</nav>

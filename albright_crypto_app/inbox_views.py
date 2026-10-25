@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import my_profile, relevance, walkthrough as walkthroughs, workflow
+from .collectors.utils import on_site
 from .extraction import ExtractionLimitReached
 from .links import outbound_href
 from .models import CLOSE_REASONS, SKIP_REASONS, MyProfile, Opportunity
@@ -99,8 +100,7 @@ def pay_text(opp):
 def open_url(opp):
     """Job boards' own links open directly (their terms want the visit);
     everything else goes through the verified-list check."""
-    from .collectors.job_boards import _on_site
-    if opp.source.attribution and _on_site(opp.url, opp.source.attribution[1]):
+    if opp.source.attribution and on_site(opp.url, opp.source.attribution[1]):
         return opp.url
     return outbound_href(opp.url)
 

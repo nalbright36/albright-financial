@@ -1,0 +1,6 @@
+<div class="rs-card rs-mini">
+    <span class="rs-chip">{{ e.get_kind_display }}</span>
+    <h3>{{ e.title }}</h3>
+    {% if e.institution or e.year_label %}<p class="rs-job__org">{{ e.institution }}{% if e.institution and e.year_label %} · {% endif %}{{ e.year_label }}</p>{% endif %}
+    {% if e.details %}<p>{{ e.details }}</p>{% endif %}
+</div>

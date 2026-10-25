@@ -1,0 +1,27 @@
+{% extends "index.html" %}
+{% block page_title %}Resume profile · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <form method="post" class="card" id="profile-form">{% csrf_token %}
+            <div class="card__header"><span class="card__label">Header &amp; summary</span></div>
+            {% for field in form %}{% include "albright_resume/admin/_field.html" %}{% endfor %}
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <section class="card">
+            <div class="card__header"><span class="card__label">Downloadable PDF</span></div>
+            {% if site.has_pdf %}
+            <p style="font-size: 0.875rem;">Current: <a href="{% url 'albright_resume:pdf' %}">{{ site.resume_pdf_name }}</a> &middot; {{ site.resume_pdf_updated_at|date:"M j, Y g:i A" }}</p>
+            <form method="post" data-confirm="Remove the PDF from the public page?">{% csrf_token %}<input type="hidden" name="action" value="remove_pdf">
+                <button type="submit" class="btn btn-secondary btn-sm">Remove PDF</button></form>
+            {% else %}<p style="font-size: 0.875rem; color: var(--text-secondary);">No PDF yet, so the Download button is hidden.</p>{% endif %}
+            <form method="post" enctype="multipart/form-data" style="margin-top: 16px;">{% csrf_token %}<input type="hidden" name="action" value="upload_pdf">
+                {% for field in pdf_form %}{% include "albright_resume/admin/_field.html" %}{% endfor %}
+                <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+            </form>
+            <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 12px;">Tip: remove your street address and personal phone from the public PDF.</p>
+        </section>
+    </div>
+</div>
+{% endblock %}

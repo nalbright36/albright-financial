@@ -32,6 +32,9 @@ urlpatterns = [
     # Bot API: the token pages (Trading nav "Bot API") and the token-authenticated JSON API.
     path("bot-api/", include("albright_bot_api.urls")),
     # The site-wide Admin area (superusers only; separate from Django's /admin/).
+    # Public resume + employer chatbot (no login). Its management pages live in the Admin area.
+    path("resume/", include("albright_resume.urls")),
+    path("control/resume/", include("albright_resume.admin_urls")),
     path("control/", include("albright_control.urls")),
     path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
 ]

@@ -1,0 +1,22 @@
+{% extends "index.html" %}
+{% block page_title %}AI summary · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <section class="card" style="margin-bottom: 16px;">
+        <div class="card__header"><span class="card__label">Summarize my projects</span></div>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0;">The AI reads all {{ project_count }} project{{ project_count|pluralize }} (hidden ones too), your work history and education, then drafts a summary, a skills list and short project blurbs. <strong>Nothing goes on your page</strong> until you review the draft and press Apply. Costs about a cent and counts toward the monthly cap.</p>
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="generate">
+            <button type="submit" class="btn btn-primary" {% if not key_set %}disabled title="ANTHROPIC_API_KEY not set"{% endif %}>Generate draft</button></form>
+    </section>
+    <section class="card"><div class="table-scroll">
+        <table class="holdings" id="resume-drafts">
+            <thead><tr><th>Draft</th><th>Created</th><th>Status</th></tr></thead>
+            <tbody>{% for d in drafts %}
+                <tr><td><a href="{% url 'albright_resume_admin:draft' d.pk %}">#{{ d.pk }}</a></td><td>{{ d.created_at|date:"M j, Y g:i A" }}</td>
+                    <td><span class="badge {% if d.status == 'applied' %}gain{% elif d.status == 'draft' %}warn{% else %}neutral{% endif %}">{{ d.get_status_display }}</span></td></tr>
+            {% empty %}<tr><td colspan="3">No drafts yet.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div></section>
+</div>
+{% endblock %}

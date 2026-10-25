@@ -1,0 +1,22 @@
+{% extends "index.html" %}
+{% block page_title %}{{ title }} · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0 0 16px;">{{ intro }}</p>
+    <form method="post" id="resume-formset">{% csrf_token %}
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<p style="color: var(--loss);">{{ e }}</p>{% endfor %}
+        <div class="grid grid-2" style="gap: var(--space-4); align-items: start;">
+        {% for form in formset %}
+            <section class="card">
+                <div class="card__header"><span class="card__label">{% if form.instance.pk %}{{ form.instance }}{% else %}Add new{% endif %}</span></div>
+                {% for field in form %}{% include "albright_resume/admin/_field.html" %}{% endfor %}
+            </section>
+        {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Save all</button>
+        <span style="font-size: 0.75rem; color: var(--text-tertiary); margin-left: 8px;">Save to get another blank row.</span>
+    </form>
+</div>
+{% endblock %}

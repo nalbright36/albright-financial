@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'albright_crypto_app',
     'albright_bot_api',
     'albright_control',
+    'albright_resume',
     'django.contrib.humanize',
 ]
 
@@ -325,3 +326,20 @@ GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 
 # Bot API (albright_bot_api): token requests must arrive over HTTPS whenever DEBUG is off.
 BOT_API_REQUIRE_HTTPS = not DEBUG
+
+# Public resume page + employer chatbot (albright_resume, /resume/). The AI key is
+# the existing ANTHROPIC_API_KEY env var, read only in albright_resume/ai.py.
+# Spend cap, rate limits, starter questions and off-limits topics are edited in
+# Admin > Resume > Chatbot; these are the provider/model knobs.
+RESUME_AI = {
+    "MODEL": os.environ.get("RESUME_AI_MODEL", "claude-haiku-5-5"),
+    "EFFORT": "low",
+    "DISABLE_THINKING": True,
+    # USD per million tokens (Haiku 5.5, prompts up to 100k tokens). Update if you change model.
+    "PRICE_INPUT_PER_MTOK": "0.10",
+    "PRICE_OUTPUT_PER_MTOK": "0.50",
+    "PRICE_CACHE_WRITE_PER_MTOK": "0.125",
+    "PRICE_CACHE_READ_PER_MTOK": "0.01",
+}
+# PythonAnywhere's front-end proxy puts the visitor's IP in X-Real-IP (REMOTE_ADDR is the proxy).
+RESUME_CLIENT_IP_HEADER = "HTTP_X_REAL_IP"

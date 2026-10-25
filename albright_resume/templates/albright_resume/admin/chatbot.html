@@ -1,0 +1,43 @@
+{% extends "index.html" %}
+{% block page_title %}Resume chatbot · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <p class="crypto-warning" style="margin-bottom: 16px;">Treat the knowledge document as public. The bot is told not to repeat off-limits topics, but the only real guarantee is to leave private information out of it.</p>
+    <form method="post" id="chatbot-form">{% csrf_token %}
+        <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+            <section class="card">
+                <div class="card__header"><span class="card__label">Knowledge document</span></div>
+                {% include "albright_resume/admin/_field.html" with field=form.knowledge_doc %}
+                {% include "albright_resume/admin/_field.html" with field=form.include_resume_in_chat %}
+            </section>
+            <div>
+                <section class="card" style="margin-bottom: 16px;">
+                    <div class="card__header"><span class="card__label">Behavior</span></div>
+                    {% include "albright_resume/admin/_field.html" with field=form.off_limits_topics %}
+                    {% include "albright_resume/admin/_field.html" with field=form.starter_questions %}
+                </section>
+                <section class="card">
+                    <div class="card__header"><span class="card__label">Limits &amp; cost</span></div>
+                    {% include "albright_resume/admin/_field.html" with field=form.monthly_cap_usd %}
+                    <div class="grid grid-2" style="gap: 0 12px;">
+                    {% include "albright_resume/admin/_field.html" with field=form.max_message_chars %}
+                    {% include "albright_resume/admin/_field.html" with field=form.max_messages_per_session %}
+                    {% include "albright_resume/admin/_field.html" with field=form.per_ip_per_minute %}
+                    {% include "albright_resume/admin/_field.html" with field=form.per_ip_per_hour %}
+                    {% include "albright_resume/admin/_field.html" with field=form.per_ip_per_day %}
+                    {% include "albright_resume/admin/_field.html" with field=form.global_per_day %}
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin: 0;">Also set a monthly spend limit in the Anthropic Console as a hard backstop.</p>
+                </section>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Save</button>
+    </form>
+    <details class="card" style="margin-top: 16px;" id="knowledge-preview">
+        <summary style="cursor: pointer;"><span class="card__label">Exactly what the chatbot reads</span>
+            <span style="font-size: 0.75rem; color: var(--text-tertiary);">{{ knowledge_chars }} characters &middot; about {{ est_tokens }} tokens per call with rules</span></summary>
+        <pre style="white-space: pre-wrap; font-size: 0.75rem; max-height: 480px; overflow: auto; margin-top: 12px;">{{ knowledge|default:"(empty)" }}</pre>
+    </details>
+</div>
+{% endblock %}

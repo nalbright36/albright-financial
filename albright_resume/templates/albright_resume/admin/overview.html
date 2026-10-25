@@ -1,0 +1,36 @@
+{% extends "index.html" %}
+{% block page_title %}Resume · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+
+    {% if placeholders %}<p class="crypto-warning" id="placeholder-warning" style="margin-bottom: 16px;">{{ placeholders }} item{{ placeholders|pluralize }} still contain <strong>[PLACEHOLDER]</strong> text. Replace or unpublish them before switching the page on. (Placeholder lines are never shown to the chatbot.)</p>{% endif %}
+    {% if not key_set %}<p class="crypto-warning" style="margin-bottom: 16px;">ANTHROPIC_API_KEY isn't set on the server, so the chatbot will show its "unavailable" message.</p>{% endif %}
+
+    <div class="grid grid-3" style="gap: var(--space-5); align-items: start; margin-bottom: 16px;">
+        <form method="post" class="card" id="resume-switches">{% csrf_token %}
+            <div class="card__header"><span class="card__label">Switches</span></div>
+            {% for field in form %}{% include "albright_resume/admin/_field.html" %}{% endfor %}
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            <p style="font-size: 0.75rem; color: var(--text-tertiary); margin: 10px 0 0;">While off, only you (signed in as superuser) can preview the page and test the chat.</p>
+        </form>
+        <section class="card">
+            <div class="card__header"><span class="card__label">AI spend this month</span>
+                <span class="badge {% if cap_pct >= 100 %}loss{% elif cap_pct >= 75 %}warn{% else %}gain{% endif %}">{{ cap_pct }}%</span></div>
+            <p style="font-size: 1.5rem; font-family: var(--font-mono); margin: 4px 0;">${{ spend|floatformat:4 }} <span style="font-size: 0.875rem; color: var(--text-secondary);">of ${{ site.monthly_cap_usd }}</span></p>
+            <p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 0;">Model <code>{{ model }}</code> &middot; API key {% if key_set %}<span class="badge gain">set</span>{% else %}<span class="badge loss">missing</span>{% endif %}</p>
+        </section>
+        <section class="card">
+            <div class="card__header"><span class="card__label">Content</span></div>
+            <ul style="margin: 0; padding-left: 18px; font-size: 0.875rem; line-height: 1.8;">
+                <li>{{ counts.jobs }} published job{{ counts.jobs|pluralize }}</li>
+                <li>{{ counts.projects }} published project{{ counts.projects|pluralize }}</li>
+                <li>{{ counts.skills }} published skill{{ counts.skills|pluralize }}</li>
+                <li>{{ counts.education }} education/cert item{{ counts.education|pluralize }}</li>
+                <li><a href="{% url 'albright_resume_admin:questions' %}">{{ week_questions }} question{{ week_questions|pluralize }} this week</a></li>
+                <li>Resume PDF: {% if site.has_pdf %}uploaded{% else %}<a href="{% url 'albright_resume_admin:profile' %}">not uploaded</a>{% endif %}</li>
+            </ul>
+        </section>
+    </div>
+</div>
+{% endblock %}

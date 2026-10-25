@@ -1,0 +1,35 @@
+{% extends "index.html" %}
+{% block page_title %}AI draft #{{ draft.pk }} · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <a href="{% url 'albright_resume_admin:drafts' %}" style="font-size: 0.8125rem;">&larr; All drafts</a>
+    <p class="crypto-warning" style="margin: 10px 0 16px;">AI-generated draft ({{ draft.get_status_display|lower }}). Check every claim against reality and edit before applying.</p>
+    <form method="post" id="draft-form">{% csrf_token %}
+        <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+            <section class="card">
+                <div class="card__header"><span class="card__label">Summary &amp; skills</span></div>
+                {% include "albright_resume/admin/_field.html" with field=form.summary %}
+                {% include "albright_resume/admin/_field.html" with field=form.skills %}
+            </section>
+            <section class="card">
+                <div class="card__header"><span class="card__label">Project summaries</span></div>
+                {% for field in form %}{% if field.name|slice:":8" == "project_" %}{% include "albright_resume/admin/_field.html" %}{% endif %}{% empty %}{% endfor %}
+                {% if not rows %}<p style="font-size: 0.875rem; color: var(--text-secondary);">No project summaries in this draft.</p>{% endif %}
+            </section>
+        </div>
+        <section class="card" style="margin-top: 16px;">
+            <div class="card__header"><span class="card__label">Apply</span></div>
+            {% include "albright_resume/admin/_field.html" with field=form.apply_summary %}
+            {% include "albright_resume/admin/_field.html" with field=form.apply_skills %}
+            {% include "albright_resume/admin/_field.html" with field=form.publish_skills %}
+            {% include "albright_resume/admin/_field.html" with field=form.apply_projects %}
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="submit" name="action" value="save" class="btn btn-secondary">Save edits only</button>
+                <button type="submit" name="action" value="apply" class="btn btn-primary">Apply ticked items</button>
+                <button type="submit" name="action" value="discard" class="btn btn-secondary">Discard draft</button>
+            </div>
+        </section>
+    </form>
+</div>
+{% endblock %}

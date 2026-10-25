@@ -4,12 +4,11 @@ object holding one (under "jobs", "results", "data", "items" ...); each
 item's fields are read by their usual names. Same polite GET as every
 collector (403/429 stops the source). Nothing is scraped: an item without
 an http(s) link of its own is skipped."""
-import html
-import re
 from datetime import datetime, timezone as dt_timezone
 
 from ..links import is_web_url
 from .base import BaseCollector, RawOpportunity
+from .utils import plain as _plain
 
 LIST_KEYS = ("jobs", "results", "data", "items", "listings", "postings", "opportunities")
 ID_KEYS = ("id", "guid", "slug", "uuid")
@@ -29,13 +28,6 @@ def _first(item, keys):
         if value not in (None, "", []):
             return value
     return None
-
-
-def _plain(text):
-    text = re.sub(r"<(br|/p|/li|/h\d)\s*/?>", "\n", str(text or ""), flags=re.I)
-    text = html.unescape(re.sub(r"<[^>]+>", " ", text))
-    text = re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n\n", text))
-    return re.sub(r" +([.,;:!?)])", r"\1", text).strip()  # "<i>pipelines</i>." -> "pipelines."
 
 
 def _items(payload):

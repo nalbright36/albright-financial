@@ -4,8 +4,10 @@ header's brand name, app-switch buttons, per-app nav, and accent color
 
 # URL namespace (app_name) -> the app's key. Anything else - the trading
 # app's own pages, login/logout, Django's /admin/ - is "trading". The
-# site-wide Admin area (/control/, albright_control) is "admin".
-APP_KEYS = {"albright_reselling_app": "reselling", "albright_crypto_app": "opportunities", "albright_control": "admin"}
+# site-wide Admin area (/control/, albright_control) is "admin", and so are
+# the resume management pages (/control/resume/, albright_resume_admin).
+APP_KEYS = {"albright_reselling_app": "reselling", "albright_crypto_app": "opportunities", "albright_control": "admin",
+            "albright_resume_admin": "admin"}
 APP_BRANDS = {"trading": "Albright Trading", "reselling": "Albright Reselling",
               "opportunities": "Albright Opportunities", "admin": "Albright Admin"}
 

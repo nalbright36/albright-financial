@@ -1,0 +1,171 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ site.full_name }}{% if site.headline %} · {{ site.headline }}{% endif %}</title>
+    <meta name="description" content="{{ site.headline|default:site.full_name }}{% if site.summary %} — {{ site.summary|truncatechars:150 }}{% endif %}">
+    {% if preview %}<meta name="robots" content="noindex">{% endif %}
+    <link rel="stylesheet" href="{% static 'resume/resume.css' %}">
+    <script src="{% static 'resume/resume.js' %}" defer></script>
+</head>
+<body>
+{% if preview or chat_preview %}<div class="rs-preview" role="status">Preview — {% if preview %}this page is switched off and only you can see it{% else %}the chat is switched off for visitors; your test messages still count toward the cap{% endif %}.</div>{% endif %}
+
+<header class="rs-top">
+    <div class="rs-wrap rs-top__inner">
+        <a href="#top" class="rs-logo" aria-label="Top">{{ site.full_name|default:"Resume" }}</a>
+        <nav class="rs-top__nav" aria-label="Sections">
+            {% if site.summary %}<a href="#about">About</a>{% endif %}
+            {% if built %}<a href="#built">Built</a>{% endif %}
+            {% if jobs %}<a href="#experience">Experience</a>{% endif %}
+            {% if skills %}<a href="#skills">Skills</a>{% endif %}
+            {% if education or certifications %}<a href="#education">Education</a>{% endif %}
+            {% if chat_live %}<a href="#ask">Ask AI</a>{% endif %}
+        </nav>
+        {% if site.contact_email %}<a class="rs-btn rs-btn--sm rs-btn--primary" href="mailto:{{ site.contact_email }}">Contact me</a>{% endif %}
+    </div>
+</header>
+
+<main id="top">
+    <section class="rs-hero">
+        <div class="rs-wrap rs-hero__grid">
+            <div class="rs-hero__intro">
+                {% if site.open_to %}<p class="rs-eyebrow"><span class="rs-dot" aria-hidden="true"></span>{{ site.open_to }}</p>{% endif %}
+                <h1 class="rs-name">{{ site.full_name }}</h1>
+                {% if site.headline %}<p class="rs-headline">{{ site.headline }}</p>{% endif %}
+                {% if site.location %}<p class="rs-location">{{ site.location }}</p>{% endif %}
+                <div class="rs-actions">
+                    {% if site.contact_email %}<a class="rs-btn rs-btn--primary" href="mailto:{{ site.contact_email }}?subject={{ 'Opportunity for you'|urlencode }}">Contact me</a>{% endif %}
+                    {% if site.book_call_url %}<a class="rs-btn" href="{{ site.book_call_url }}" target="_blank" rel="noopener noreferrer">Book a call</a>{% endif %}
+                    {% if site.has_pdf %}<a class="rs-btn" href="{% url 'albright_resume:pdf' %}">Download PDF</a>{% endif %}
+                    {% if site.linkedin_url %}<a class="rs-btn rs-btn--ghost" href="{{ site.linkedin_url }}" target="_blank" rel="noopener noreferrer">LinkedIn</a>{% endif %}
+                    {% if site.github_url %}<a class="rs-btn rs-btn--ghost" href="{{ site.github_url }}" target="_blank" rel="noopener noreferrer">GitHub</a>{% endif %}
+                </div>
+            </div>
+
+            {% if chat_live %}
+            <aside class="rs-chat" id="ask" aria-labelledby="rs-chat-title">
+                <div class="rs-chat__head">
+                    <div><h2 id="rs-chat-title">Ask my AI assistant</h2>
+                        <p class="rs-chat__note">AI-generated from my profile. It may be imperfect, so contact me to confirm anything important.</p></div>
+                    <span class="rs-chip rs-chip--live">Beta</span>
+                </div>
+                <div class="rs-chat__log" id="rs-chat-log" aria-live="polite">
+                    <div class="rs-msg rs-msg--bot">Hi! Ask me about {{ site.full_name|default:"my" }}'s experience, projects or skills.</div>
+                </div>
+                {% if site.starter_list %}<div class="rs-starters" id="rs-starters">
+                    {% for q in site.starter_list %}<button type="button" class="rs-starter" data-q="{{ q }}">{{ q }}</button>{% endfor %}
+                </div>{% endif %}
+                <form class="rs-chat__form" id="rs-chat-form" data-endpoint="{% url 'albright_resume:chat' %}" data-max="{{ site.max_message_chars }}" autocomplete="off">
+                    {% csrf_token %}
+                    <label class="rs-hp" aria-hidden="true">Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+                    <label for="rs-chat-input" class="rs-sr">Your question</label>
+                    <textarea id="rs-chat-input" name="message" rows="2" maxlength="{{ site.max_message_chars }}" placeholder="e.g. What did Nathan build with Django?" required></textarea>
+                    <div class="rs-chat__bar"><span id="rs-chat-count" class="rs-chat__count">0/{{ site.max_message_chars }}</span>
+                        <button type="submit" class="rs-btn rs-btn--primary rs-btn--sm" id="rs-chat-send">Send</button></div>
+                </form>
+            </aside>
+            {% endif %}
+        </div>
+    </section>
+
+    {% if site.summary %}
+    <section class="rs-section" id="about"><div class="rs-wrap">
+        <h2 class="rs-h2">About</h2>
+        <div class="rs-card rs-summary">{{ site.summary|linebreaks }}</div>
+    </div></section>
+    {% endif %}
+
+    {% if built %}
+    <section class="rs-section" id="built"><div class="rs-wrap">
+        <h2 class="rs-h2">What I've built</h2>
+        <div class="rs-built">
+            {% for p in built %}
+            <article class="rs-card rs-project">
+                <div class="rs-project__shot">
+                    {% if p.has_screenshot %}<img src="{% url 'albright_resume:screenshot' p.pk p.updated_at|date:'U' %}" alt="{{ p.screenshot_alt|default:p.title }}" loading="lazy">
+                    {% else %}<div class="rs-project__ph" aria-hidden="true">{{ p.title|slice:":1" }}</div>{% endif %}
+                </div>
+                <div class="rs-project__body">
+                    <h3>{{ p.title }}</h3>
+                    {% if p.tagline %}<p class="rs-project__tag">{{ p.tagline }}</p>{% endif %}
+                    {% if p.description %}<div class="rs-project__desc">{{ p.description|linebreaks }}</div>{% endif %}
+                    {% if p.tech_list %}<ul class="rs-chips">{% for t in p.tech_list %}<li class="rs-chip">{{ t }}</li>{% endfor %}</ul>{% endif %}
+                    {% if p.link_url or p.repo_url %}<p class="rs-links">{% if p.link_url %}<a href="{{ p.link_url }}" target="_blank" rel="noopener noreferrer">Live &nearr;</a>{% endif %}{% if p.repo_url %}<a href="{{ p.repo_url }}" target="_blank" rel="noopener noreferrer">Code &nearr;</a>{% endif %}</p>{% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </div></section>
+    {% endif %}
+
+    {% if jobs %}
+    <section class="rs-section" id="experience"><div class="rs-wrap">
+        <h2 class="rs-h2">Experience</h2>
+        <ol class="rs-timeline">
+            {% for j in jobs %}
+            <li class="rs-card rs-job">
+                <div class="rs-job__head"><div><h3>{{ j.role }}</h3><p class="rs-job__org">{{ j.organization }}{% if j.location %} · {{ j.location }}{% endif %}</p></div>
+                    {% if j.start_label or j.end_label %}<span class="rs-job__dates">{{ j.start_label }}{% if j.start_label and j.end_label %} – {% endif %}{{ j.end_label }}</span>{% endif %}</div>
+                {% if j.highlight_list %}<ul class="rs-bullets">{% for h in j.highlight_list %}<li>{{ h }}</li>{% endfor %}</ul>{% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+    </div></section>
+    {% endif %}
+
+    {% if other_projects %}
+    <section class="rs-section" id="projects"><div class="rs-wrap">
+        <h2 class="rs-h2">Other projects</h2>
+        <div class="rs-grid">
+            {% for p in other_projects %}
+            <article class="rs-card rs-mini">
+                <h3>{{ p.title }}</h3>
+                {% if p.tagline %}<p class="rs-project__tag">{{ p.tagline }}</p>{% endif %}
+                {% if p.description %}<p>{{ p.description|truncatewords:60 }}</p>{% endif %}
+                {% if p.tech_list %}<ul class="rs-chips">{% for t in p.tech_list %}<li class="rs-chip">{{ t }}</li>{% endfor %}</ul>{% endif %}
+                {% if p.link_url or p.repo_url %}<p class="rs-links">{% if p.link_url %}<a href="{{ p.link_url }}" target="_blank" rel="noopener noreferrer">Live &nearr;</a>{% endif %}{% if p.repo_url %}<a href="{{ p.repo_url }}" target="_blank" rel="noopener noreferrer">Code &nearr;</a>{% endif %}</p>{% endif %}
+            </article>
+            {% endfor %}
+        </div>
+    </div></section>
+    {% endif %}
+
+    {% if skills %}
+    <section class="rs-section" id="skills"><div class="rs-wrap">
+        <h2 class="rs-h2">Skills</h2>
+        <div class="rs-grid">
+            {% for category, items in skills.items %}
+            <div class="rs-card"><h3 class="rs-h3">{{ category }}</h3>
+                <ul class="rs-chips">{% for s in items %}<li class="rs-chip">{{ s.name }}</li>{% endfor %}</ul></div>
+            {% endfor %}
+        </div>
+    </div></section>
+    {% endif %}
+
+    {% if education or certifications %}
+    <section class="rs-section" id="education"><div class="rs-wrap">
+        <h2 class="rs-h2">Education &amp; certifications</h2>
+        <div class="rs-grid">
+            {% for e in education %}{% include "albright_resume/_edu.html" %}{% endfor %}
+            {% for e in certifications %}{% include "albright_resume/_edu.html" %}{% endfor %}
+        </div>
+    </div></section>
+    {% endif %}
+
+    <section class="rs-section rs-cta"><div class="rs-wrap">
+        <div class="rs-card rs-cta__card">
+            <div><h2 class="rs-h2 rs-cta__title">Let's talk</h2><p>Hiring for a role that fits? I'd love to hear about it.</p></div>
+            <div class="rs-actions">
+                {% if site.contact_email %}<a class="rs-btn rs-btn--primary" href="mailto:{{ site.contact_email }}">Contact me</a>{% endif %}
+                {% if site.book_call_url %}<a class="rs-btn" href="{{ site.book_call_url }}" target="_blank" rel="noopener noreferrer">Book a call</a>{% endif %}
+                {% if site.linkedin_url %}<a class="rs-btn rs-btn--ghost" href="{{ site.linkedin_url }}" target="_blank" rel="noopener noreferrer">LinkedIn</a>{% endif %}
+            </div>
+        </div>
+    </div></section>
+</main>
+
+<footer class="rs-footer"><div class="rs-wrap">&copy; {% now "Y" %} {{ site.full_name }}</div></footer>
+</body>
+</html>

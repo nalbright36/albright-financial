@@ -1,0 +1,32 @@
+{% extends "index.html" %}
+{% block page_title %}{% if project %}{{ project.title }}{% else %}New project{% endif %} · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <a href="{% url 'albright_resume_admin:projects' %}" style="font-size: 0.8125rem;">&larr; Projects</a>
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5); margin-top: 10px;">
+        <form method="post" enctype="multipart/form-data" class="card" id="project-form">{% csrf_token %}
+            <div class="card__header"><span class="card__label">{% if project %}Edit project{% else %}New project{% endif %}</span></div>
+            {% for field in form %}{% include "albright_resume/admin/_field.html" %}{% endfor %}
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <div>
+            {% if project.has_screenshot %}
+            <section class="card" style="margin-bottom: 16px;">
+                <div class="card__header"><span class="card__label">Current screenshot</span></div>
+                <img src="{% url 'albright_resume:screenshot' project.pk project.updated_at|date:'U' %}" alt="{{ project.screenshot_alt }}" style="max-width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border);">
+            </section>
+            {% endif %}
+            <section class="card" style="margin-bottom: 16px; font-size: 0.8125rem; color: var(--text-secondary);">
+                <div class="card__header"><span class="card__label">Tips</span></div>
+                <p style="margin-top: 0;">Put the full story in <strong>Details for AI</strong>: the problem, what you built, the stack, and results. The chatbot answers from it, and so does the AI summary.</p>
+                <p style="margin-bottom: 0;">Everything here can be read by the public. Leave out keys, account numbers, balances and private URLs.</p>
+            </section>
+            {% if project %}
+            <form method="post" class="card" data-confirm="Delete “{{ project.title }}”? This can't be undone.">{% csrf_token %}<input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-secondary btn-sm">Delete project</button></form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -11,7 +11,7 @@ through the "not on your verified list" warning page first (links.py).
 from django import template
 from django.utils.html import format_html
 
-from ..collectors.job_boards import _on_site
+from ..collectors.utils import on_site
 from ..links import link_status, outbound_href
 
 register = template.Library()
@@ -47,7 +47,7 @@ def via_link(opp):
     if not attribution:
         return ""
     name, domain = attribution
-    if not _on_site(opp.url, domain):
+    if not on_site(opp.url, domain):
         return format_html('<span class="crypto-via">via {}</span>', name)
     return format_html('<a href="{}" target="_blank" rel="noopener" class="crypto-link crypto-via">via {}</a>',
                        opp.url, name)

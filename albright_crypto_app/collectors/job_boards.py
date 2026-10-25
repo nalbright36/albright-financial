@@ -20,24 +20,14 @@ the fixed endpoint below (never to Source.url, which is only a label);
 Source.options holds the optional parameters.
 """
 from datetime import datetime, timedelta, timezone as dt_timezone
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 
 from .base import BaseCollector, RawOpportunity
-from .json_api import _plain
+from .utils import facts_text as _facts_text, on_site as _on_site, plain as _plain
 
 MIN_INTERVAL = timedelta(hours=6)
 REMOTEOK_USER_AGENT = ("AlbrightOpportunities/1.0 (personal remote-job search tool; reads remoteok.com/api at most "
                        "once every 6 hours; every job is shown with a link back to Remote OK)")
-
-
-def _on_site(url, domain):
-    host = (urlparse(url or "").hostname or "").lower()
-    return urlparse(url or "").scheme == "https" and (host == domain or host.endswith("." + domain))
-
-
-def _facts_text(description, facts):
-    lines = [f"{label}: {value}" for label, value in facts if value not in (None, "", [])]
-    return "\n".join(filter(None, [_plain(description), "\n".join(lines)]))
 
 
 FREELANCE_JOB_TYPES = {"contract", "contractor", "freelance", "freelancer", "part_time", "parttime"}

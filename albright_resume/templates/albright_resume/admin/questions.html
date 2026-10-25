@@ -1,0 +1,48 @@
+{% extends "index.html" %}
+{% block page_title %}Resume questions · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1040px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <div class="grid grid-2" style="gap: var(--space-5); align-items: start; margin-bottom: 16px;">
+        <section class="card">
+            <div class="card__header"><span class="card__label">This month's AI usage</span><span style="font-family: var(--font-mono);">${{ spend|floatformat:4 }} / ${{ site.monthly_cap_usd }}</span></div>
+            <div class="table-scroll"><table class="holdings">
+                <thead><tr><th>Purpose</th><th>Calls</th><th>Input tok</th><th>Cached tok</th><th>Output tok</th><th>Cost</th></tr></thead>
+                <tbody>{% for u in usage %}<tr><td>{{ u.purpose|capfirst }}</td><td>{{ u.calls }}</td><td>{{ u.tin|default:0 }}</td><td>{{ u.tcache|default:0 }}</td><td>{{ u.tout|default:0 }}</td><td>${{ u.cost|floatformat:4 }}</td></tr>
+                {% empty %}<tr><td colspan="6">No AI calls this month.</td></tr>{% endfor %}</tbody>
+            </table></div>
+            {% if failures %}<p style="font-size: 0.8125rem; color: var(--loss); margin-bottom: 0;">{{ failures }} failed call{{ failures|pluralize }} this month.</p>{% endif %}
+        </section>
+        <section class="card">
+            <div class="card__header"><span class="card__label">Outcomes (all time)</span></div>
+            <ul style="margin: 0; padding-left: 18px; font-size: 0.875rem; line-height: 1.8;">
+            {% for key, label, n in outcome_rows %}<li>{{ label }}: {{ n }}</li>{% endfor %}
+            </ul>
+            <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0;">Anonymous: no IPs or visitor details are stored, and emails and phone numbers are redacted. "Not in profile" questions are good prompts for what to add to the knowledge document.</p>
+        </section>
+    </div>
+    <nav class="scanner-tabs" aria-label="Outcome" style="margin-bottom: 12px;">
+        <a href="?" class="scanner-tab{% if not outcome %} is-active{% endif %}">All</a>
+        {% for key, label in outcomes %}<a href="?outcome={{ key }}" class="scanner-tab{% if outcome == key %} is-active{% endif %}">{{ label }}</a>{% endfor %}
+    </nav>
+    <section class="card"><div class="table-scroll">
+        <table class="holdings" id="resume-questions">
+            <thead><tr><th>When</th><th>Question</th><th>Outcome</th><th>Reply</th></tr></thead>
+            <tbody>{% for q in page %}
+                <tr><td style="white-space: nowrap;">{{ q.created_at|date:"M j, g:i A" }}</td>
+                    <td style="overflow-wrap: anywhere;">{{ q.question }}</td>
+                    <td><span class="badge {% if q.outcome == 'answered' %}gain{% elif q.outcome == 'not_sure' or q.outcome == 'declined' %}warn{% elif q.outcome == 'error' %}loss{% else %}neutral{% endif %}">{{ q.get_outcome_display }}</span></td>
+                    <td style="font-size: 0.8125rem; color: var(--text-secondary); overflow-wrap: anywhere;">{{ q.reply|truncatechars:240 }}</td></tr>
+            {% empty %}<tr><td colspan="4">No questions yet.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div></section>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 8px;">
+        <span style="font-size: 0.8125rem;">
+            {% if page.has_previous %}<a href="?outcome={{ outcome }}&page={{ page.previous_page_number }}">&larr; Newer</a>{% endif %}
+            Page {{ page.number }} of {{ page.paginator.num_pages }}
+            {% if page.has_next %}<a href="?outcome={{ outcome }}&page={{ page.next_page_number }}">Older &rarr;</a>{% endif %}</span>
+        <form method="post" data-confirm="Delete every logged question?">{% csrf_token %}<input type="hidden" name="action" value="clear">
+            <button type="submit" class="btn btn-secondary btn-sm">Clear log</button></form>
+    </div>
+</div>
+{% endblock %}
