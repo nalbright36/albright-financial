@@ -6,6 +6,7 @@
     <title>{{ site.full_name }}{% if site.headline %} · {{ site.headline }}{% endif %}</title>
     <meta name="description" content="{{ site.headline|default:site.full_name }}{% if site.summary %} — {{ site.summary|truncatechars:150 }}{% endif %}">
     {% if preview %}<meta name="robots" content="noindex">{% endif %}
+    <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
     <script src="{% static 'labs/theme.js' %}"></script>
     <link rel="stylesheet" href="{% static 'resume/resume.css' %}">
     <script src="{% static 'resume/resume.js' %}" defer></script>

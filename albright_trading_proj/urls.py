@@ -14,7 +14,9 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
+from django.contrib.staticfiles.views import serve as serve_static
 from django.urls import path, re_path
 
 from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
@@ -41,3 +43,12 @@ urlpatterns = [
     path("control/", include("albright_control.urls")),
     path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
 ]
+
+# Local development with DEBUG off: `runserver` serves no static files, so every
+# page renders unstyled (the browser refuses the 404 page as CSS - "Refused to
+# apply style ... MIME type ('text/html')"). SERVE_STATIC_LOCALLY=1 in .env makes
+# Django serve /static/ straight from the apps, like `runserver --insecure`,
+# without turning on DEBUG. Harmless if copied to PythonAnywhere: its own
+# /static/ mapping answers those requests before they ever reach Django.
+if not settings.DEBUG and settings.SERVE_STATIC_LOCALLY:
+    urlpatterns.append(re_path(r"^static/(?P<path>.*)$", serve_static, {"insecure": True}))

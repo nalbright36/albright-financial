@@ -292,3 +292,79 @@ class ResumeStylesheetTests(TestCase):
                 self.assertEqual(static_files_collected(), [])
                 os.remove(os.path.join(root, "resume", "resume.css"))
                 self.assertIn("resume/resume.css", static_files_collected()[0].msg)
+
+
+class SecurityHeaderScopeTests(TestCase):
+    """The strict CSP is only on the public pages ("/" for visitors, /resume/),
+    and those pages have nothing inline for it to block; the signed-in apps
+    send no CSP (as before), so their own assets - inline theme script, Google
+    Fonts, chart library - keep working."""
+
+    PUBLIC_INLINE = r"<script(?![^>]*\bsrc=)[^>]*>|<style\b|\sstyle=\"|\son[a-z]+=\""
+
+    def setUp(self):
+        resume_site(enabled=True)
+
+    def test_public_pages_get_the_strict_csp_and_have_nothing_inline(self):
+        import re
+        for url in ("/", reverse("albright_resume:page")):
+            with self.subTest(url=url):
+                with mock.patch(OUTLOOK):
+                    response = self.client.get(url)
+                csp = response["Content-Security-Policy"]
+                for directive in ("default-src 'self'", "script-src 'self'", "style-src 'self'",
+                                  "font-src 'self'", "img-src 'self' data:"):
+                    self.assertIn(directive, csp)
+                self.assertIsNone(re.search(self.PUBLIC_INLINE, response.content.decode()), url)
+
+    def test_signed_in_apps_send_no_csp(self):
+        self.client.force_login(User.objects.create_superuser(username="boss", password="pw-not-real-12345", email=""))
+        with mock.patch(OUTLOOK, return_value=None):
+            for url in ("/", reverse("labs:hub"), reverse("trading_home"), reverse("albright_reselling_app:dashboard"),
+                        reverse("albright_crypto_app:inbox"), reverse("albright_control:overview"),
+                        reverse("albright_resume_admin:overview"), reverse("user_login")):
+                with self.subTest(url=url):
+                    response = self.client.get(url)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertNotIn("Content-Security-Policy", response)
+
+    def test_login_page_for_visitors_has_no_csp(self):
+        self.assertNotIn("Content-Security-Policy", self.client.get(reverse("user_login")))
+
+    def test_every_page_layout_points_at_a_favicon_that_exists(self):
+        self.assertTrue(finders.find("images/favicon.svg"))
+        with mock.patch(OUTLOOK):
+            for url in ("/", reverse("albright_resume:page"), reverse("user_login")):
+                self.assertIn('href="/static/images/favicon.svg"', self.client.get(url).content.decode())
+
+
+class LocalStaticServingTests(TestCase):
+    """SERVE_STATIC_LOCALLY=1 (local .env) serves /static/ with DEBUG off;
+    without it nothing is added (production serves static files itself)."""
+
+    def urls_with(self, **flags):
+        import importlib
+        from django.urls import clear_url_caches
+        import albright_trading_proj.urls as project_urls
+        with override_settings(**flags):
+            module = importlib.reload(project_urls)
+            patterns = list(module.urlpatterns)
+        importlib.reload(project_urls)
+        clear_url_caches()
+        return patterns
+
+    def serves_static(self, patterns):
+        return any(getattr(p, "pattern", None) and p.pattern.match("static/style.css") for p in patterns
+                   if "static" in str(getattr(p, "pattern", "")))
+
+    def test_flag_adds_static_serving_only_when_debug_is_off(self):
+        self.assertTrue(self.serves_static(self.urls_with(DEBUG=False, SERVE_STATIC_LOCALLY=True)))
+        self.assertFalse(self.serves_static(self.urls_with(DEBUG=False, SERVE_STATIC_LOCALLY=False)))
+        self.assertFalse(self.serves_static(self.urls_with(DEBUG=True, SERVE_STATIC_LOCALLY=True)))
+
+    def test_served_css_has_the_css_type(self):
+        from django.contrib.staticfiles.views import serve
+        from django.test import RequestFactory
+        response = serve(RequestFactory().get("/static/style.css"), "style.css", insecure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response["Content-Type"].startswith("text/css"))

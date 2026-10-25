@@ -45,6 +45,8 @@ SECRET_KEY = required_env("SECRET_KEY")
 # Off unless .env says DJANGO_DEBUG=1 (local work only - with DEBUG off, runserver serves no
 # static files, so pages render without CSS; production serves them from STATIC_ROOT).
 DEBUG = os.environ.get("DJANGO_DEBUG", "").strip() == "1"
+# Local only: serve /static/ through Django while DEBUG is off (see the end of urls.py).
+SERVE_STATIC_LOCALLY = os.environ.get("SERVE_STATIC_LOCALLY", "").strip() == "1"
 
 ALLOWED_HOSTS = ["www.sportslabalgo.com",
                  "127.0.0.1"]
