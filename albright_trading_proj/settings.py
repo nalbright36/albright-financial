@@ -14,20 +14,37 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+
+
+def required_env(name):
+    """A setting that must come from .env (or the server's environment) - no
+    default on purpose, so a missing secret stops startup instead of the app
+    quietly running on a value that's in the repo. See .env.example."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise ImproperlyConfigured(
+            f"{name} is not set. Add it to {BASE_DIR / '.env'} (locally) or the server's .env / environment "
+            f"(PythonAnywhere), then restart. Every required name is listed in .env.example.")
+    return value
+
+
 TEMPLATE_DIR = os.path.join(BASE_DIR,"templates")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-s%$41@b03e!rmoxdxnxctjw4y^u17skbo^0t$(c@mih6b*)r-+'
+# SECURITY WARNING: keep the secret key used in production secret! (.env only - never in this file)
+SECRET_KEY = required_env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+# Off unless .env says DJANGO_DEBUG=1 (local work only - with DEBUG off, runserver serves no
+# static files, so pages render without CSS; production serves them from STATIC_ROOT).
+DEBUG = os.environ.get("DJANGO_DEBUG", "").strip() == "1"
 
 ALLOWED_HOSTS = ["www.sportslabalgo.com",
                  "127.0.0.1"]
@@ -48,6 +65,7 @@ INSTALLED_APPS = [
     'albright_bot_api',
     'albright_control',
     'albright_resume',
+    'albright_labs',
     'django.contrib.humanize',
 ]
 
@@ -91,11 +109,11 @@ WSGI_APPLICATION = 'albright_trading_proj.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'defaultdb',
-        'USER': 'doadmin',
-        "PASSWORD": os.environ.get("DB_PASSWORD"),
-        'HOST': 'db-pgsql-nyc3-98011-do-user-17268853-0.e.db.ondigitalocean.com',
-        'PORT': '25060',
+        'NAME': required_env("DB_NAME"),
+        'USER': required_env("DB_USER"),
+        'PASSWORD': required_env("DB_PASSWORD"),
+        'HOST': required_env("DB_HOST"),
+        'PORT': required_env("DB_PORT"),
     }
 }
 
@@ -141,33 +159,37 @@ STATICFILES_DIRS = [
     BASE_DIR / "albright_trading_app" / "static",
 ]
 
-# SMTP Configuration
-'''
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'sportslabalgo@gmail.com'
-EMAIL_HOST_PASSWORD = 'weqwxnrhunzrpbud'
-'''
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Recaptcha Settings
-'''
-RECAPTCHA_PUBLIC_KEY = '6LeizuwqAAAAAMf9pXZk-sHoZVKJsxIZwd_ucQHw'
-RECAPTCHA_PRIVATE_KEY = '6LeizuwqAAAAABI0EFSnLFrQuHBmfWYDgTvNo1to'
-RECAPTCHA_DOMAIN = 'www.recaptcha.net'
-'''
-
 # Alpaca
 ALPACA_API_KEY = os.environ.get("ALPACA_API_KEY")
 ALPACA_SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY")
 ALPACA_PAPER = True  # flip to False once you're trading live
-ALPACA_CREDENTIALS_ENCRYPTION_KEY = "YjaZLd11-N65By3GD2MVt7w02yDM-IoFyH8OpDvlwkg="
+# Fernet key for the stored Alpaca credentials and the Gmail token (albright_trading_app/crypto_utils.py).
+# .env only. During a key rotation, ALPACA_CREDENTIALS_ENCRYPTION_OLD_KEYS (comma-separated) holds the
+# previous key(s) so stored values stay readable until `python manage.py rotate_encryption_key` re-encrypts
+# them - then remove it. See albright_trading_app/management/commands/rotate_encryption_key.py.
+ALPACA_CREDENTIALS_ENCRYPTION_KEY = required_env("ALPACA_CREDENTIALS_ENCRYPTION_KEY")
+ALPACA_CREDENTIALS_ENCRYPTION_OLD_KEYS = [k.strip() for k in os.environ.get(
+    "ALPACA_CREDENTIALS_ENCRYPTION_OLD_KEYS", "").split(",") if k.strip()]
+
+
+def _check_fernet_keys():
+    from cryptography.fernet import Fernet
+    for name, key in [("ALPACA_CREDENTIALS_ENCRYPTION_KEY", ALPACA_CREDENTIALS_ENCRYPTION_KEY)] + [
+            ("ALPACA_CREDENTIALS_ENCRYPTION_OLD_KEYS", k) for k in ALPACA_CREDENTIALS_ENCRYPTION_OLD_KEYS]:
+        try:
+            Fernet(key.encode())
+        except (ValueError, TypeError):
+            raise ImproperlyConfigured(f"{name} isn't a valid Fernet key (32 url-safe base64-encoded bytes). "
+                                       "Generate one with: python -c \"from cryptography.fernet import Fernet; "
+                                       "print(Fernet.generate_key().decode())\"") from None
+
+
+_check_fernet_keys()
 
 # Reddit
 REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID")

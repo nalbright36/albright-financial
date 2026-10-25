@@ -23,6 +23,8 @@ from django.conf.urls import include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Albright Labs, the hub: "/" (public landing, or the signed-in user's landing setting) and "/home/".
+    path("", include("albright_labs.urls")),
     path("", include("albright_trading_app.urls")),
     path("albright_reselling_app/", include("albright_reselling_app.urls")),
     # The Opportunities app (package albright_crypto_app). Its old prefixes
@@ -35,6 +37,7 @@ urlpatterns = [
     # Public resume + employer chatbot (no login). Its management pages live in the Admin area.
     path("resume/", include("albright_resume.urls")),
     path("control/resume/", include("albright_resume.admin_urls")),
+    path("control/labs/", include("albright_labs.admin_urls")),
     path("control/", include("albright_control.urls")),
     path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
 ]

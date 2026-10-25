@@ -1,0 +1,43 @@
+{% extends "index.html" %}
+{% load static %}
+{% load cache_bust %}
+{% block page_title %}Home · {% endblock %}
+{% block content %}
+{% comment %}
+Home (labs.views.hub): a tile per app with one live number each. The numbers
+load separately (static/labs/hub.js -> labs:tile, one request per tile), so a
+slow or failing one never holds up the page or the others; without JS the
+tiles still link to each app.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 6px;">Albright Labs</h1>
+    <p style="margin: 0 0 24px; color: var(--text-secondary);">Everything in one place. Pick an app, or set where you land after signing in below.</p>
+
+    <div class="labs-tiles" id="labs-tiles">
+        {% for card in cards %}
+        <a href="{% url card.url_name %}" class="card labs-tile" data-app-accent="{{ card.accent }}" data-tile="{{ card.key }}"
+           data-tile-url="{% url 'labs:tile' card.key %}">
+            <div class="labs-tile__head"><span class="labs-tile__dot" aria-hidden="true"></span><span class="labs-tile__name">{{ card.label }}</span></div>
+            <p class="labs-tile__desc">{{ card.description }}</p>
+            <div class="labs-tile__value num" data-tile-value aria-live="polite">&hellip;</div>
+            <div class="labs-tile__note" data-tile-note>Loading</div>
+        </a>
+        {% endfor %}
+    </div>
+
+    <form method="post" action="{% url 'labs:save_landing' %}" class="card labs-landing-form" id="landing-form">
+        {% csrf_token %}
+        <div class="card__header"><span class="card__label">Where I land after signing in</span></div>
+        <div class="labs-landing-form__choices">
+            {% for radio in landing_form.landing %}<label class="labs-choice">{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}
+        </div>
+        <div class="field" style="margin: 12px 0 0; max-width: 360px;">
+            <label for="{{ landing_form.landing_page.id_for_label }}">{{ landing_form.landing_page.label }} (for "A specific page")</label>
+            {{ landing_form.landing_page }}
+        </div>
+        <p style="margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary);">"Last used app" reopens whichever app you were in last. A link that sent you to sign in (e.g. a bookmarked page) always wins.</p>
+        <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save</button>
+    </form>
+</div>
+<script src="{% static_version 'labs/hub.js' %}" defer></script>
+{% endblock %}

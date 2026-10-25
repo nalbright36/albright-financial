@@ -114,6 +114,7 @@
   --app-reselling: #60A5FA;
   --app-opportunities: #A78BFA;
   --app-admin: #94A3B8;
+  --app-labs: #2DD4BF;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -169,6 +170,7 @@
   --app-reselling: #3B82F6;
   --app-opportunities: #8B5CF6;
   --app-admin: #64748B;
+  --app-labs: #14B8A6;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -252,6 +254,16 @@ body[data-app="admin"] {
   --accent-solid: #475569;
   --accent-solid-hover: #334155;
 }
+/* Albright Labs (the hub, "/" and /home/): neutral teal #14B8A6. Text: the
+   lighter #2DD4BF in dark mode, the deeper #0F766E in light mode (#14B8A6 is
+   only ~2.5:1 on white); white-text fills use #0F766E (5.5:1). */
+body[data-app="labs"] {
+  --accent-rgb: 20, 184, 166;
+  --accent: #2DD4BF;
+  --accent-hover: #5EEAD4;
+  --accent-solid: #0F766E;
+  --accent-solid-hover: #115E59;
+}
 /* Light: text shades one step deeper (hover goes darker, not lighter). */
 [data-theme="light"] body,
 [data-theme="light"] body[data-app="trading"] {
@@ -269,6 +281,10 @@ body[data-app="admin"] {
 [data-theme="light"] body[data-app="admin"] {
   --accent: #475569;
   --accent-hover: #334155;
+}
+[data-theme="light"] body[data-app="labs"] {
+  --accent: #0F766E;
+  --accent-hover: #115E59;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1413,15 +1429,22 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .app-switch-btn[data-app-target="reselling"]::before { background: var(--app-reselling); }
 .app-switch-btn[data-app-target="opportunities"]::before { background: var(--app-opportunities); }
 .app-switch-btn[data-app-target="admin"]::before { background: var(--app-admin); }
+.app-switch-btn[data-app-target="labs"]::before { background: var(--app-labs); }
 /* Phones: the theme toggle and up to four short buttons stay on one line. */
 @media (max-width: 480px) {
-  .navbar__switch-row { gap: 6px; flex-wrap: nowrap; }
-  .app-switch-btn { padding: 4px 9px; gap: 5px; white-space: nowrap; }
+  /* Home + four apps + the theme toggle: tighter on a phone, and the row
+     scrolls sideways (from the left, never clipped) if it still can't fit. */
+  .navbar__switch-row { gap: 4px; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto;
+    scrollbar-width: none; padding-left: var(--space-3); padding-right: var(--space-3); }
+  .navbar__switch-row::-webkit-scrollbar { display: none; }
+  .navbar__switch-row > * { flex-shrink: 0; }
+  .app-switch-btn { padding: 4px 7px; gap: 4px; white-space: nowrap; }
   .app-switch-btn::before { width: 6px; height: 6px; }
 }
-@media (max-width: 340px) {
-  .navbar__switch-row { gap: 4px; padding-left: var(--space-2); padding-right: var(--space-2); }
-  .app-switch-btn { padding: 4px 7px; }
+@media (max-width: 370px) {
+  .navbar__switch-row { gap: 3px; padding-left: var(--space-2); padding-right: var(--space-2); }
+  .app-switch-btn { padding: 3px 6px; gap: 3px; font-size: 0.6875rem; }
+  .app-switch-btn::before { width: 5px; height: 5px; }
 }
 .app-switch-btn.is-current {
   /* The hover shade (darker in light mode, lighter in dark): the plain
@@ -1511,3 +1534,27 @@ input[type="range"] { accent-color: var(--accent-solid); }
   .pipeline-board { grid-template-columns: repeat(5, minmax(240px, 82vw)); scroll-snap-type: x mandatory; }
   .pipeline-column { scroll-snap-align: start; }
 }
+
+/* ===== Albright Labs: Home tiles ===== */
+.labs-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-4);
+  margin-bottom: var(--space-6, 24px); }
+.labs-tile { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit;
+  border-top: 3px solid var(--labs-tile-color, var(--accent)); transition: transform .15s ease, box-shadow .15s ease; }
+.labs-tile:hover { transform: translateY(-2px); text-decoration: none; }
+.labs-tile[data-app-accent="trading"] { --labs-tile-color: var(--app-trading); }
+.labs-tile[data-app-accent="reselling"] { --labs-tile-color: var(--app-reselling); }
+.labs-tile[data-app-accent="opportunities"] { --labs-tile-color: var(--app-opportunities); }
+.labs-tile[data-app-accent="admin"] { --labs-tile-color: var(--app-admin); }
+.labs-tile__head { display: flex; align-items: center; gap: 8px; }
+.labs-tile__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--labs-tile-color); flex-shrink: 0; }
+.labs-tile__name { font-weight: 700; font-size: 1.0625rem; color: var(--text-primary); }
+.labs-tile__desc { margin: 0; font-size: 0.8125rem; color: var(--text-secondary); min-height: 2.6em; }
+.labs-tile__value { font-size: 1.625rem; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+.labs-tile__value.gain { color: var(--gain); }
+.labs-tile__value.loss { color: var(--loss); }
+.labs-tile__value.warn { color: var(--warn); }
+.labs-tile__note { font-size: 0.75rem; color: var(--text-secondary); }
+.labs-tile.is-unavailable .labs-tile__value { color: var(--text-secondary); }
+.labs-landing-form__choices { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.labs-choice { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
+@media (prefers-reduced-motion: reduce) { .labs-tile { transition: none; } }

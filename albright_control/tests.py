@@ -85,13 +85,13 @@ class HeaderTests(AdminTestCase):
 
     def test_short_labels_and_admin_only_for_superusers(self, _outlook):
         page = self.client.get(reverse("trading_home")).content.decode()
-        self.assertEqual(self.buttons(page), [("trading", "Trade"), ("reselling", "Resell"), ("opportunities", "Opps"),
-                                              ("admin", "Admin")])
+        self.assertEqual(self.buttons(page), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
+                                              ("opportunities", "Opps"), ("admin", "Admin")])
         self.assertIn('title="Albright Trading"', page)
         regular = Client()
         regular.force_login(self.user)
         page = regular.get(reverse("trading_home")).content.decode()
-        self.assertEqual([t for t, _l in self.buttons(page)], ["trading", "reselling", "opportunities"])
+        self.assertEqual([t for t, _l in self.buttons(page)], ["labs", "trading", "reselling", "opportunities"])
         self.assertNotIn(reverse("albright_control:overview"), page)
 
     def test_brand_names_stay_full(self, _outlook):

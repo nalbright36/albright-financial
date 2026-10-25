@@ -30,7 +30,8 @@
                     <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
                     <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
                 </button>
-                {# One short button per app (fits a phone), straight to its landing page (never "/"); dot in the app's color, current app highlighted; Admin for superusers only. #}
+                {# Home (the Labs hub) then one short button per app (fits a phone), straight to its landing page (never "/"); dot in the app's color, current one highlighted; Admin for superusers only. #}
+                {% if user.is_authenticated %}<a href="{% url 'labs:hub' %}" class="app-switch-btn{% if current_app == 'labs' %} is-current{% endif %}" data-app-target="labs" title="Albright Labs"{% if current_app == 'labs' %} aria-current="page"{% endif %}>Home</a>{% endif %}
                 <a href="{% url 'trading_home' %}" class="app-switch-btn{% if current_app == 'trading' %} is-current{% endif %}" data-app-target="trading" title="Albright Trading"{% if current_app == 'trading' %} aria-current="page"{% endif %}>Trade</a>
                 <a href="{% url 'albright_reselling_app:dashboard' %}" class="app-switch-btn{% if current_app == 'reselling' %} is-current{% endif %}" data-app-target="reselling" title="Albright Reselling"{% if current_app == 'reselling' %} aria-current="page"{% endif %}>Resell</a>
                 <a href="{% url 'albright_crypto_app:inbox' %}" class="app-switch-btn{% if current_app == 'opportunities' %} is-current{% endif %}" data-app-target="opportunities" title="Albright Opportunities"{% if current_app == 'opportunities' %} aria-current="page"{% endif %}>Opps</a>
@@ -39,7 +40,7 @@
 
             <div class="navbar__main-row">
                 {# The brand stays within the current app - never "/", which follows the remembered app. #}
-                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
+                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
 
                 <input type="checkbox" id="nav-toggle" class="navbar__toggle-checkbox">
                 <label for="nav-toggle" class="navbar__toggle" aria-label="Menu">
@@ -80,8 +81,12 @@
                         <a href="{% url 'albright_control:integrations' %}">Integrations</a>
                         <a href="{% url 'albright_control:ai_usage' %}">AI usage</a>
                         <a href="{% url 'albright_resume_admin:overview' %}">Resume</a>
+                        <a href="{% url 'labs_admin:settings' %}">Home page</a>
                         <a href="{% url 'albright_control:data' %}">Data</a>
                         <a href="{% url 'albright_control:audit' %}">Audit log</a>
+                        {% elif in_labs %}
+                        <a href="{% url 'labs:hub' %}">Home</a>
+                        <a href="{% url 'albright_resume:page' %}">Resume</a>
                         {% elif in_opportunities_app %}
                         <a href="{% url 'albright_crypto_app:inbox' %}">Inbox</a>
                         <a href="{% url 'albright_crypto_app:pipeline' %}">Pipeline</a>

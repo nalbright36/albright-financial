@@ -1,8 +1,7 @@
-"""Remembers which app (the reselling app, the Opportunities app, or the trading
-app) a logged-in user last visited, in a long-lived cookie - read by albright_trading_app's
-home view (the "/" root) to send a returning user straight back to
-whichever app they were using, instead of always defaulting to the trading
-app's own landing page.
+"""Remembers which app (the reselling app, the Opportunities app, the Admin
+area, or the trading app) a logged-in user last visited, in a long-lived
+cookie - used only by the "Last used app" landing setting
+(albright_labs.landing), which sends a returning user straight back there.
 """
 from django.conf import settings
 
@@ -11,7 +10,10 @@ LAST_APP_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 RESELLER_APP_NAME = "albright_reselling_app"
 OPPORTUNITIES_APP_NAME = "albright_crypto_app"  # the Opportunities app (package name kept)
-APP_COOKIE_VALUES = {RESELLER_APP_NAME: "reseller", OPPORTUNITIES_APP_NAME: "opportunities"}  # else: "trading"
+APP_COOKIE_VALUES = {RESELLER_APP_NAME: "reseller", OPPORTUNITIES_APP_NAME: "opportunities",
+                     "albright_control": "admin", "albright_resume_admin": "admin", "labs_admin": "admin"}  # else: "trading"
+# Not an app at all (the Labs hub, the public resume) - never recorded.
+_EXCLUDED_APP_NAMES = {"labs", "albright_resume"}
 # Cookie values that mean the Opportunities app - "crypto" is what it was
 # called before the rename, still in returning users' browsers.
 OPPORTUNITIES_COOKIE_VALUES = ("opportunities", "crypto")
@@ -52,6 +54,8 @@ class LastAppMiddleware:
 
         resolver_match = request.resolver_match
         if resolver_match is None or resolver_match.url_name in _EXCLUDED_URL_NAMES:
+            return
+        if resolver_match.app_name in _EXCLUDED_APP_NAMES:
             return
 
         app = APP_COOKIE_VALUES.get(resolver_match.app_name, "trading")

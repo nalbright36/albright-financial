@@ -6,6 +6,7 @@
     <title>{{ site.full_name }}{% if site.headline %} · {{ site.headline }}{% endif %}</title>
     <meta name="description" content="{{ site.headline|default:site.full_name }}{% if site.summary %} — {{ site.summary|truncatechars:150 }}{% endif %}">
     {% if preview %}<meta name="robots" content="noindex">{% endif %}
+    <script src="{% static 'labs/theme.js' %}"></script>
     <link rel="stylesheet" href="{% static 'resume/resume.css' %}">
     <script src="{% static 'resume/resume.js' %}" defer></script>
 </head>
@@ -166,6 +167,6 @@
     </div></section>
 </main>
 
-<footer class="rs-footer"><div class="rs-wrap">&copy; {% now "Y" %} {{ site.full_name }}</div></footer>
+<footer class="rs-footer"><div class="rs-wrap">&copy; {% now "Y" %} {{ site.full_name }} &middot; <a href="{% url 'labs:root' %}" id="labs-link">Albright Labs</a></div></footer>
 </body>
 </html>

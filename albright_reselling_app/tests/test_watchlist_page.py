@@ -223,6 +223,8 @@ class DashboardAndRedirectTests(LoggedInTestCase):
         self.assertRedirects(response, reverse("albright_reselling_app:dashboard"))
 
     def test_remembered_app_redirect_goes_to_dashboard(self):
+        from albright_labs.models import UserPreference
+        UserPreference.objects.update_or_create(user=self.user, defaults={"landing": "last_app"})
         self.client.cookies["last_app"] = "reseller"
 
         response = self.client.get("/")

@@ -1,6 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from albright_trading_app.forms import UserForm, LoginForm, InvestorProfileForm
-from albright_trading_proj.middleware import LAST_APP_COOKIE, OPPORTUNITIES_COOKIE_VALUES
 from django.urls import reverse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -226,29 +225,9 @@ def _render_trading_home(request):
     return render(request, 'home.html', context=context)
 
 
-def home(request):
-    """"/" - redirects a logged-in user straight to the reseller or
-    Opportunities app's dashboard if that's the last app they used (see
-    albright_trading_proj.middleware.LastAppMiddleware); otherwise renders
-    this app's own landing page, exactly as before (the default for
-    anonymous users and anyone whose last_app cookie says "trading" or
-    isn't set yet). Links that mean "the trading app" specifically (the
-    app-switch button, the brand, the trading nav's Home) use trading_home
-    below instead - "/" would bounce a reseller/Opportunities user straight back.
-    The old "crypto" cookie value counts as Opportunities."""
-    if request.user.is_authenticated:
-        remembered = request.COOKIES.get(LAST_APP_COOKIE)
-        if remembered == "reseller":
-            return redirect("albright_reselling_app:dashboard")
-        if remembered in OPPORTUNITIES_COOKIE_VALUES:
-            return redirect("albright_crypto_app:inbox")
-    return _render_trading_home(request)
-
-
 def trading_home(request):
-    """The trading app's own landing page - the same page "/" shows, but
-    never redirected by the remembered app, so the "Trading" switch button
-    always lands here (and LastAppMiddleware then records "trading")."""
+    """The trading app's own landing page (the "Trade" switch button). "/" is
+    Albright Labs now (albright_labs.views.root)."""
     return _render_trading_home(request)
 
 @login_required
@@ -1871,14 +1850,14 @@ def user_login(request):
                 auth.login(request, user)
 
                 # Honor an explicit ?next= (e.g. @login_required bouncing
-                # back to the page the user actually wanted); otherwise "/"
-                # itself now remembers the last app (see home() above), so
-                # a plain redirect there already lands the right place.
+                # back to the page the user actually wanted); otherwise "/",
+                # which applies the user's "where I land" setting
+                # (albright_labs.landing).
                 if next_url and url_has_allowed_host_and_scheme(
                     next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
                 ):
                     return redirect(next_url)
-                return redirect('home')  # "/": the remembered app
+                return redirect('labs:root')
     context = {'login_form': login_form, 'next': next_url}
 
     return render(request,'user_login.html', context)

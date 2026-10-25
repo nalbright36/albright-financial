@@ -20,9 +20,16 @@ atenv/
 db.sqlite3
 staticfiles/
 /media/
+media/
+/images/
 
 # Editor/OS cruft
 .vscode/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Spreadsheets (exports, imports - may hold personal or financial data)
+*.xlsx
+*.xls
+~$*.xlsx

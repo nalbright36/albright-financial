@@ -46,7 +46,7 @@ class OpportunitiesNavTests(TestCase):
     def test_opportunities_app_shows_all_three_with_itself_highlighted(self, _outlook):
         content = self.client.get(reverse("albright_crypto_app:inbox")).content.decode()
         buttons = self.switch_buttons(reverse("albright_crypto_app:inbox"))
-        self.assertEqual(buttons, {"Trade": reverse("trading_home"),
+        self.assertEqual(buttons, {"Home": reverse("labs:hub"), "Trade": reverse("trading_home"),
                                    "Resell": reverse("albright_reselling_app:dashboard"),
                                    "Opps": reverse("albright_crypto_app:inbox")})
         self.assertIn('class="app-switch-btn is-current" data-app-target="opportunities" title="Albright Opportunities" '
@@ -77,12 +77,18 @@ class OpportunitiesNavTests(TestCase):
                      reverse("albright_crypto_app:inbox")):
             self.assertNotIn("/", self.switch_buttons(page).values())
 
+    def last_used_app(self):
+        from albright_labs.models import UserPreference
+        UserPreference.objects.create(user=User.objects.get(username="tester"), landing="last_app")
+
     def test_visiting_sets_cookie_and_root_returns_there(self, _outlook):
+        self.last_used_app()   # "/" follows the cookie only with the "Last used app" landing setting
         response = self.client.get(reverse("albright_crypto_app:pipeline"))
         self.assertEqual(response.cookies[LAST_APP_COOKIE].value, "opportunities")
         self.assertRedirects(self.client.get("/"), reverse("albright_crypto_app:inbox"))
 
     def test_old_crypto_cookie_is_treated_the_same(self, _outlook):
+        self.last_used_app()
         self.client.cookies[LAST_APP_COOKIE] = "crypto"
         self.assertRedirects(self.client.get("/"), reverse("albright_crypto_app:inbox"))
 

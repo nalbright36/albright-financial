@@ -1,0 +1,29 @@
+{% extends "index.html" %}
+{% block page_title %}Home page · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 820px;">
+    <h1 style="margin: 0 0 6px;">Public home page</h1>
+    <p style="margin: 0 0 20px; color: var(--text-secondary);">What signed-out visitors see at <a href="{% url 'labs:root' %}">/</a>.
+        The "What I build" strip shows your <a href="{% url 'albright_resume_admin:projects' %}">published resume projects</a>;
+        the resume button appears only while the <a href="{% url 'albright_resume_admin:overview' %}">resume page</a> is switched on
+        (it's {% if resume_on %}<strong>on</strong>{% else %}<strong>off</strong>, so the button is hidden{% endif %}).</p>
+    <form method="post" class="card" id="landing-settings-form">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+            {% if field.help_text %}<span style="font-size: 0.75rem; color: var(--text-secondary);">{{ field.help_text }}</span>{% endif %}
+            {% for e in field.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+        </div>
+        {% endfor %}
+        {% for e in form.non_field_errors %}<p class="crypto-warning">{{ e }}</p>{% endfor %}
+        <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+    <section class="card" style="margin-top: 20px;">
+        <div class="card__header"><span class="card__label">Visitors see</span></div>
+        <p style="margin: 0; font-size: 1.25rem; font-weight: 700;">{{ name }}</p>
+        <p style="margin: 4px 0 0; color: var(--text-secondary);">{{ headline|default:"(no headline)" }}</p>
+        <p style="margin: 8px 0 0; font-size: 0.8125rem; color: var(--text-secondary);">{{ projects|length }} published project{{ projects|length|pluralize }} in "What I build".</p>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Albright Labs{% if name and name != "Albright Labs" %} · {{ name }}{% endif %}</title>
+    <meta name="description" content="{{ headline|default:'Albright Labs' }}">
+    <script src="{% static 'labs/theme.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'resume/resume.css' %}">
+    <link rel="icon" type="image/png" href="{% static 'images/Favicon2.png' %}">
+</head>
+{% comment %}
+The public landing page (labs.views.public_landing): no login, no private data,
+no market data, no API calls - only the landing settings and the resume app's
+PUBLISHED projects. Served with the resume app's strict security headers
+(script/style 'self' only), so everything here is static files.
+{% endcomment %}
+<body class="labs-landing">
+<header class="rs-top">
+    <div class="rs-wrap rs-top__inner">
+        <a href="{% url 'labs:root' %}" class="rs-logo" id="labs-brand"><span class="rs-dot" aria-hidden="true"></span> Albright Labs</a>
+        <nav class="rs-top__nav labs-top__nav" aria-label="Site">
+            {% if resume_on %}<a href="{% url 'albright_resume:page' %}">Resume</a>{% endif %}
+            {% if projects %}<a href="#build">What I build</a>{% endif %}
+        </nav>
+        <a class="rs-btn rs-btn--sm rs-btn--ghost" href="{% url 'user_login' %}" id="sign-in">Sign in</a>
+    </div>
+</header>
+
+<main id="top">
+    <section class="rs-hero labs-hero">
+        <div class="rs-wrap">
+            <p class="rs-eyebrow"><span class="rs-dot" aria-hidden="true"></span> Albright Labs</p>
+            <h1 class="rs-name" id="labs-name">{{ name }}</h1>
+            {% if headline %}<p class="rs-headline" id="labs-headline">{{ headline }}</p>{% endif %}
+            {% if resume_on %}
+            <div class="rs-actions">
+                <a class="rs-btn rs-btn--primary" href="{% url 'albright_resume:page' %}" id="resume-button">View my interactive resume</a>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% if projects %}
+    <section class="rs-section" id="build">
+        <div class="rs-wrap">
+            <h2 class="rs-h2">What I build</h2>
+            <div class="rs-grid">
+                {% for p in projects %}
+                <article class="rs-card rs-mini">
+                    <h3>{{ p.title }}</h3>
+                    {% if p.blurb %}<p>{{ p.blurb|truncatechars:180 }}</p>{% endif %}
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+</main>
+
+<footer class="rs-footer">
+    <div class="rs-wrap">
+        {% if resume_on %}<a href="{% url 'albright_resume:page' %}">Resume</a> &middot; {% endif %}&copy; {% now "Y" %} {{ name }}
+    </div>
+</footer>
+</body>
+</html>
