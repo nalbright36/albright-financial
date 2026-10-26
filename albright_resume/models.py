@@ -3,7 +3,11 @@
 Everything the public page or the chatbot can show lives in these tables and
 nowhere else. No visitor IPs or personal data are stored: rate-limit counters
 hold only a keyed hash of the IP that expires within a day, and question logs
-hold the (redacted) question text and the outcome."""
+hold the (redacted) question text and the outcome. Chat conversations
+(ChatConversation/ChatMessage) are anonymous too: a random ID, the referring
+site's domain and mobile/desktop - never an IP, session key, cookie or full
+user agent - and they're deleted after chat_retention_days."""
+import uuid
 from decimal import Decimal
 
 from django.conf import settings
@@ -58,6 +62,15 @@ class ResumeSettings(models.Model):
     per_ip_per_hour = models.PositiveIntegerField(default=20)
     per_ip_per_day = models.PositiveIntegerField(default=40)
     global_per_day = models.PositiveIntegerField(default=400, help_text="All visitors combined, per day.")
+
+    # Conversation records (Admin > Resume > Conversations)
+    store_contact_details = models.BooleanField(
+        default=False, help_text="Store emails and phone numbers visitors type in the chat. Off: they're saved as "
+                                 "[email] / [phone].")
+    chat_retention_days = models.PositiveIntegerField(
+        default=90, help_text="Conversations older than this are deleted (prune_resume_chats, daily).")
+    employer_alerts = models.BooleanField(
+        default=True, help_text="Telegram me once when a conversation looks like a possible employer.")
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -242,3 +255,58 @@ class RateCounter(models.Model):
     key = models.CharField(max_length=96, unique=True)
     count = models.PositiveIntegerField(default=0)
     expires_at = models.DateTimeField(db_index=True)
+
+
+class ChatConversation(models.Model):
+    """One visitor's chat, kept anonymously for review. public_id is random
+    (uuid4) - not the session key, not derived from the IP; the visitor's
+    session holds only this id so later messages join the same conversation.
+    The referrer is stored as a bare domain and the device as mobile/desktop;
+    no IP, session key, cookie or user agent is ever stored."""
+    DEVICES = [("mobile", "Mobile"), ("desktop", "Desktop")]
+    FLAGS = [("knowledge_gap", "Knowledge gap"), ("off_limits", "Off-limits asked"),
+             ("injection", "Injection attempt"), ("long", "Long conversation"),
+             ("possible_employer", "Possible employer")]
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    started_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    message_count = models.PositiveIntegerField(default=0)
+    referrer_domain = models.CharField(max_length=100, blank=True)
+    device = models.CharField(max_length=8, choices=DEVICES, default="desktop")
+    flags = models.JSONField(default=list, blank=True)
+    reviewed = models.BooleanField(default=False)
+    my_notes = models.TextField(blank=True)
+    employer_alert_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"Conversation {str(self.public_id)[:8]}"
+
+    @property
+    def flag_labels(self):
+        labels = dict(self.FLAGS)
+        return [labels[f] for f in self.flags if f in labels]
+
+
+class ChatMessage(models.Model):
+    ROLES = [("visitor", "Visitor"), ("assistant", "Assistant")]
+    OUTCOMES = [("answered", "Answered"), ("not_sure", "Not sure"), ("declined_off_limits", "Declined (off-limits)"),
+                ("blocked_leak_guard", "Blocked (leak guard)"), ("unavailable", "Unavailable"),
+                ("rate_limited", "Rate limited")]
+
+    conversation = models.ForeignKey(ChatConversation, on_delete=models.CASCADE, related_name="messages")
+    role = models.CharField(max_length=9, choices=ROLES)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    outcome = models.CharField(max_length=20, choices=OUTCOMES, blank=True)   # assistant messages only
+    tokens = models.PositiveIntegerField(default=0)                             # input + output, assistant only
+    cost_usd = models.DecimalField(max_digits=10, decimal_places=6, default=Decimal("0"))
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+
+    def __str__(self):
+        return f"{self.role}: {self.text[:40]}"

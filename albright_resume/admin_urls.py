@@ -18,4 +18,8 @@ urlpatterns = [
     path("ai-summary/", v.drafts, name="drafts"),
     path("ai-summary/<int:pk>/", v.draft, name="draft"),
     path("questions/", v.questions, name="questions"),
+    path("conversations/", v.conversations, name="conversations"),
+    path("conversations/export.csv", v.conversations_csv, name="conversations_csv"),
+    path("conversations/gaps/", v.knowledge_gaps, name="knowledge_gaps"),
+    path("conversations/<uuid:public_id>/", v.conversation, name="conversation"),
 ]

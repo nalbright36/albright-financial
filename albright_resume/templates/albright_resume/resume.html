@@ -66,6 +66,7 @@
                     <textarea id="rs-chat-input" name="message" rows="2" maxlength="{{ site.max_message_chars }}" placeholder="e.g. What did Nathan build with Django?" required></textarea>
                     <div class="rs-chat__bar"><span id="rs-chat-count" class="rs-chat__count">0/{{ site.max_message_chars }}</span>
                         <button type="submit" class="rs-btn rs-btn--primary rs-btn--sm" id="rs-chat-send">Send</button></div>
+                    <p class="rs-chat__privacy" id="rs-chat-privacy">Conversations are saved anonymously so {{ first_name }} can improve this page. <a href="#privacy">What's saved</a></p>
                 </form>
             </aside>
             {% endif %}
@@ -168,6 +169,21 @@
     </div></section>
 </main>
 
+{% if chat_live %}
+<section class="rs-section rs-privacy" id="privacy" aria-labelledby="rs-privacy-title">
+    <div class="rs-wrap">
+        <div class="rs-card">
+            <h2 class="rs-h3" id="rs-privacy-title">About the chat: what's saved</h2>
+            <p>Questions you ask the assistant and its answers are saved so {{ first_name }} can see what visitors want to know and improve this page. Each conversation is stored with only:</p>
+            <ul class="rs-bullets">
+                <li>the messages, with email addresses and phone numbers removed{% if site.store_contact_details %} &mdash; unless you share them on purpose, so {{ first_name }} can reply{% endif %};</li>
+                <li>when it happened, the site you came from (just its name, like linkedin.com), and whether you used a phone or a computer.</li>
+            </ul>
+            <p>Nothing that identifies you is kept: no IP address, no cookies or tracking IDs, no device details. Conversations are deleted after {{ site.chat_retention_days }} days.</p>
+        </div>
+    </div>
+</section>
+{% endif %}
 <footer class="rs-footer"><div class="rs-wrap">&copy; {% now "Y" %} {{ site.full_name }} &middot; <a href="{% url 'labs:root' %}" id="labs-link">Albright Labs</a></div></footer>
 </body>
 </html>

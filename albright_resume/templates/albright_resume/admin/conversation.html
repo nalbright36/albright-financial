@@ -1,0 +1,46 @@
+{% extends "index.html" %}
+{% block page_title %}Conversation · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 900px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <a href="{% url 'albright_resume_admin:conversations' %}" style="font-size: 0.8125rem;">&larr; All conversations</a>
+    <div class="card__header" style="margin: 12px 0; flex-wrap: wrap; gap: 8px;">
+        <div>
+            <h2 style="margin: 0;">Conversation {{ conv.public_id|stringformat:"s"|slice:":8" }}</h2>
+            <p style="margin: 4px 0 0; font-size: 0.8125rem; color: var(--text-secondary);">
+                {{ conv.started_at|date:"M j, Y g:i A" }} &middot; {{ conv.message_count }} messages &middot;
+                from {{ conv.referrer_domain|default:"a direct visit" }} &middot; {{ conv.get_device_display|lower }} &middot;
+                ${{ total_cost|floatformat:4 }} ({{ total_tokens }} tokens)</p>
+            <div style="margin-top: 6px;">{% for label in conv.flag_labels %}<span class="badge {% if label == 'Possible employer' %}gain{% elif label == 'Injection attempt' %}loss{% else %}warn{% endif %}" style="margin-right: 4px;">{{ label }}</span>{% endfor %}</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="review">
+                <button type="submit" class="btn {% if conv.reviewed %}btn-secondary{% else %}btn-primary{% endif %} btn-sm" id="mark-reviewed">{% if conv.reviewed %}Mark not reviewed{% else %}Mark reviewed{% endif %}</button></form>
+            <form method="post" data-confirm="Delete this conversation? This can't be undone.">{% csrf_token %}<input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-secondary btn-sm">Delete</button></form>
+        </div>
+    </div>
+
+    <section class="card" id="transcript">
+        {% for m in messages_list %}
+        <div class="transcript-msg transcript-msg--{{ m.role }}">
+            <div class="transcript-msg__meta">
+                <strong>{{ m.get_role_display }}</strong> &middot; {{ m.created_at|date:"g:i:s A" }}
+                {% if m.role == "assistant" %}
+                &middot; <span class="badge {% if m.outcome == 'answered' %}gain{% elif m.outcome == 'blocked_leak_guard' %}loss{% elif m.outcome == 'not_sure' or m.outcome == 'declined_off_limits' %}warn{% else %}neutral{% endif %}">{{ m.get_outcome_display }}</span>
+                {% if m.tokens %}&middot; {{ m.tokens }} tokens &middot; ${{ m.cost_usd|floatformat:5 }}{% endif %}
+                {% endif %}
+            </div>
+            <div class="transcript-msg__text">{{ m.text|linebreaksbr }}</div>
+        </div>
+        {% empty %}<p style="margin: 0; color: var(--text-secondary);">No messages.</p>{% endfor %}
+    </section>
+
+    <form method="post" class="card" style="margin-top: 16px;" id="notes-form">
+        {% csrf_token %}<input type="hidden" name="action" value="notes">
+        <div class="card__header"><span class="card__label">My notes</span></div>
+        <textarea name="my_notes" rows="4" class="ledger-input" style="width: 100%;">{{ conv.my_notes }}</textarea>
+        <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 8px;">Save notes</button>
+    </form>
+</div>
+{% endblock %}

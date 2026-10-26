@@ -186,3 +186,7 @@ h1, h2, h3 { line-height: 1.2; margin: 0; }
 .rs-cta__title { margin: 0 0 6px; }
 .rs-footer a { color: var(--text-2); }
 .rs-footer a:hover { color: var(--accent); }
+.rs-chat__privacy { margin: 8px 0 0; font-size: 0.75rem; color: var(--text-3); }
+.rs-chat__privacy a { font-weight: 600; }
+.rs-privacy .rs-card p, .rs-privacy .rs-card li { color: var(--text-2); font-size: 0.9375rem; }
+.rs-privacy .rs-card p { margin: 8px 0 0; }

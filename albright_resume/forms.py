@@ -44,14 +44,15 @@ class ChatbotForm(StyledModelForm):
         model = ResumeSettings
         fields = ["knowledge_doc", "include_resume_in_chat", "off_limits_topics", "starter_questions",
                   "monthly_cap_usd", "max_message_chars", "max_messages_per_session", "per_ip_per_minute",
-                  "per_ip_per_hour", "per_ip_per_day", "global_per_day"]
+                  "per_ip_per_hour", "per_ip_per_day", "global_per_day",
+                  "store_contact_details", "chat_retention_days", "employer_alerts"]
         widgets = {"knowledge_doc": forms.Textarea(attrs={"rows": 24, "style": "font-family: var(--font-mono); font-size: 0.8125rem;"}),
                    "off_limits_topics": forms.Textarea(attrs={"rows": 5}),
                    "starter_questions": forms.Textarea(attrs={"rows": 4})}
 
     LIMITS = {"monthly_cap_usd": (0, 100), "max_message_chars": (50, 2000), "max_messages_per_session": (1, 50),
               "per_ip_per_minute": (1, 30), "per_ip_per_hour": (1, 200), "per_ip_per_day": (1, 500),
-              "global_per_day": (1, 5000)}
+              "global_per_day": (1, 5000), "chat_retention_days": (1, 730)}
 
     def clean(self):
         data = super().clean()

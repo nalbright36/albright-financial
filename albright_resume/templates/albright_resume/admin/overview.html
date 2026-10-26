@@ -27,6 +27,9 @@
                 <li>{{ counts.projects }} published project{{ counts.projects|pluralize }}</li>
                 <li>{{ counts.skills }} published skill{{ counts.skills|pluralize }}</li>
                 <li>{{ counts.education }} education/cert item{{ counts.education|pluralize }}</li>
+                <li><a href="{% url 'albright_resume_admin:conversations' %}" id="overview-conversations">{{ week_conversations }} conversation{{ week_conversations|pluralize }} this week</a>
+                    &middot; <a href="{% url 'albright_resume_admin:conversations' %}?reviewed=no">{{ unreviewed }} unreviewed</a></li>
+                <li><a href="{% url 'albright_resume_admin:knowledge_gaps' %}" id="overview-gaps">{{ gap_count }} knowledge gap{{ gap_count|pluralize }}</a></li>
                 <li><a href="{% url 'albright_resume_admin:questions' %}">{{ week_questions }} question{{ week_questions|pluralize }} this week</a></li>
                 <li>Resume PDF: {% if site.has_pdf %}uploaded{% else %}<a href="{% url 'albright_resume_admin:profile' %}">not uploaded</a>{% endif %}</li>
             </ul>

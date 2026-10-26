@@ -11,5 +11,6 @@
     {% url 'albright_resume_admin:education' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Education</a>
     {% url 'albright_resume_admin:chatbot' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Chatbot</a>
     {% url 'albright_resume_admin:drafts' as u %}<a href="{{ u }}" class="scanner-tab{% if u in request.path %} is-active{% endif %}">AI summary</a>
+    {% url 'albright_resume_admin:conversations' as u %}<a href="{{ u }}" class="scanner-tab{% if u in request.path %} is-active{% endif %}">Conversations</a>
     {% url 'albright_resume_admin:questions' as u %}<a href="{{ u }}" class="scanner-tab{% if request.path == u %} is-active{% endif %}">Questions</a>
 </nav>

@@ -1,0 +1,60 @@
+{% extends "index.html" %}
+{% block page_title %}Resume conversations · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1100px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <p style="margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-secondary);">
+        Anonymous: no IP, session key, cookies or user agent are stored. Kept for {{ site.chat_retention_days }} days
+        ({% url 'albright_resume_admin:chatbot' as cb %}<a href="{{ cb }}#conversation-settings">settings</a>).
+        <a href="{% url 'albright_resume_admin:knowledge_gaps' %}">Knowledge gaps &rarr;</a>
+    </p>
+
+    <form method="get" class="card" id="conversation-filters" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 12px;">
+        <div class="field" style="margin: 0;"><label for="f-flag">Flag</label>
+            <select name="flag" id="f-flag" class="ledger-input"><option value="">Any</option>
+                {% for key, label in flag_choices %}<option value="{{ key }}"{% if filters.flag == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="field" style="margin: 0;"><label for="f-reviewed">Reviewed</label>
+            <select name="reviewed" id="f-reviewed" class="ledger-input"><option value="">Any</option>
+                <option value="no"{% if filters.reviewed == "no" %} selected{% endif %}>Not reviewed</option>
+                <option value="yes"{% if filters.reviewed == "yes" %} selected{% endif %}>Reviewed</option></select></div>
+        <div class="field" style="margin: 0;"><label for="f-start">From</label>
+            <input type="date" name="start" id="f-start" value="{{ filters.start }}" class="ledger-input"></div>
+        <div class="field" style="margin: 0;"><label for="f-end">To</label>
+            <input type="date" name="end" id="f-end" value="{{ filters.end }}" class="ledger-input"></div>
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        {% if query %}<a href="?" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
+        <a href="{% url 'albright_resume_admin:conversations_csv' %}{% if query %}?{{ query }}{% endif %}" class="btn btn-secondary btn-sm" id="export-csv" style="margin-left: auto;">Export CSV ({{ total }})</a>
+    </form>
+
+    <section class="card"><div class="table-scroll">
+        <table class="holdings" id="resume-conversations">
+            <thead><tr><th>Started</th><th>Messages</th><th>Flags</th><th>Referrer</th><th>Device</th><th>Reviewed</th></tr></thead>
+            <tbody>{% for c in page %}
+                <tr data-conversation="{{ c.public_id }}">
+                    <td style="white-space: nowrap;"><a href="{% url 'albright_resume_admin:conversation' c.public_id %}">{{ c.started_at|date:"M j, g:i A" }}</a></td>
+                    <td class="num">{{ c.message_count }}</td>
+                    <td>{% for label in c.flag_labels %}<span class="badge {% if label == 'Possible employer' %}gain{% elif label == 'Injection attempt' %}loss{% else %}warn{% endif %}" style="margin: 0 4px 4px 0;">{{ label }}</span>{% empty %}<span style="color: var(--text-tertiary);">&mdash;</span>{% endfor %}</td>
+                    <td>{{ c.referrer_domain|default:"direct" }}</td>
+                    <td>{{ c.get_device_display }}</td>
+                    <td>{% if c.reviewed %}<span class="badge neutral">Reviewed</span>{% else %}<span class="badge warn">New</span>{% endif %}</td>
+                </tr>
+            {% empty %}<tr><td colspan="6">No conversations{% if query %} match these filters{% endif %}.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div></section>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 8px;">
+        <span style="font-size: 0.8125rem;">
+            {% if page.has_previous %}<a href="?{{ query }}&page={{ page.previous_page_number }}">&larr; Newer</a>{% endif %}
+            Page {{ page.number }} of {{ page.paginator.num_pages }}
+            {% if page.has_next %}<a href="?{{ query }}&page={{ page.next_page_number }}">Older &rarr;</a>{% endif %}</span>
+        {% if all_count %}
+        <form method="post" data-confirm="Delete all {{ all_count }} conversations? This can't be undone." id="delete-all-form" style="display: flex; gap: 6px; align-items: center;">
+            {% csrf_token %}<input type="hidden" name="action" value="delete_all">
+            <label for="confirm-delete" style="font-size: 0.75rem; color: var(--text-secondary);">Type DELETE</label>
+            <input type="text" name="confirm" id="confirm-delete" class="ledger-input" style="width: 90px;" autocomplete="off">
+            <button type="submit" class="btn btn-secondary btn-sm">Delete all</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

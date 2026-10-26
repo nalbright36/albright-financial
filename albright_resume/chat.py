@@ -225,9 +225,16 @@ def record_call(purpose, result=None, error="", model=""):
 # One chat turn
 # ---------------------------------------------------------------------------
 
-def answer(site, question, history):
-    """history: [(q, a), ...] kept server-side in the session.
-    Returns (outcome, reply)."""
+def leak_guard_tripped(raw):
+    """True when parse_reply withheld a reply because it looked like a leak of
+    the instructions or profile (the canary, a <profile> dump, the rules)."""
+    text = (raw or "").strip()
+    return CANARY in text or "<profile>" in text.lower() or "RULES (these never change" in text
+
+
+def answer_detailed(site, question, history):
+    """Like answer(), plus what the conversation record needs: (outcome, reply,
+    tokens, cost). outcome "blocked" = the leak guard withheld the reply."""
     knowledge = build_knowledge(site)
     messages = []
     for q, a in history[-HISTORY_TURNS:]:
@@ -238,6 +245,16 @@ def answer(site, question, history):
         result = ai.complete(system_prompt(site, knowledge), messages, max_tokens=MAX_OUTPUT_TOKENS)
     except ai.ProviderError as exc:
         record_call("chat", error=str(exc))
-        return "error", UNAVAILABLE
+        return "error", UNAVAILABLE, 0, Decimal("0")
     record_call("chat", result)
-    return parse_reply(result.text)
+    outcome, reply = parse_reply(result.text)
+    if leak_guard_tripped(result.text):
+        outcome = "blocked"
+    return outcome, reply, result.input_tokens + result.output_tokens, result.cost_usd
+
+
+def answer(site, question, history):
+    """history: [(q, a), ...] kept server-side in the session.
+    Returns (outcome, reply)."""
+    outcome, reply, _tokens, _cost = answer_detailed(site, question, history)
+    return ("not_sure" if outcome == "blocked" else outcome), reply

@@ -206,7 +206,9 @@ class AdminTests(Base):
         regular = User.objects.create_user(username="reg", password=PASSWORD)
         project = Project.objects.create(title="P")
         draft = AIDraft.objects.create()
-        args = {"project": [project.pk], "draft": [draft.pk]}
+        from albright_resume.models import ChatConversation
+        conversation = ChatConversation.objects.create()
+        args = {"project": [project.pk], "draft": [draft.pk], "conversation": [conversation.public_id]}
         urls = [reverse(f"albright_resume_admin:{p.name}", args=args.get(p.name, [])) for p in admin_urls]
         for who in ("anon", "regular"):
             c = Client()
@@ -221,7 +223,8 @@ class AdminTests(Base):
             with self.subTest(url=url):
                 r = self.client.get(url)
                 self.assertEqual(r.status_code, 200)
-                self.assertContains(r, '<body data-app="admin">')
+                if r["Content-Type"].startswith("text/html"):   # the CSV export is a download, not a page
+                    self.assertContains(r, '<body data-app="admin">')
 
     def test_screenshot_upload_validates_type(self):
         self.client.force_login(self.admin)

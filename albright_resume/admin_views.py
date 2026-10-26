@@ -1,21 +1,23 @@
 """Nathan's management pages for the public resume, under /control/resume/.
 Superuser-only (404 for everyone else) using the Admin area's own guard, and
 every change is written to the Admin audit log."""
-from datetime import timedelta
+import csv
+from datetime import datetime, time, timedelta
 
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from albright_control.access import audit, superuser_required
 
-from . import ai, chat, summarize
+from . import ai, chat, conversations as conv_records, summarize
 from .forms import (ChatbotForm, DraftReviewForm, EducationFormSet, PDFUploadForm, ProfileForm, ProjectForm,
                     SkillFormSet, SwitchesForm, WorkFormSet)
-from .models import (PLACEHOLDER, AICall, AIDraft, EducationItem, Project, QuestionLog, ResumeSettings, Skill,
-                     WorkExperience)
+from .models import (PLACEHOLDER, AICall, AIDraft, ChatConversation, ChatMessage, EducationItem, Project,
+                     QuestionLog, ResumeSettings, Skill, WorkExperience)
 
 
 def _placeholder_count():
@@ -49,6 +51,9 @@ def overview(request):
         "key_set": ai.api_key_configured(), "model": ai.config()["MODEL"],
         "placeholders": _placeholder_count(),
         "week_questions": QuestionLog.objects.filter(created_at__gte=week).count(),
+        "week_conversations": ChatConversation.objects.filter(started_at__gte=week).count(),
+        "unreviewed": ChatConversation.objects.filter(reviewed=False).count(),
+        "gap_count": len(conv_records.knowledge_gaps()),
         "counts": {"jobs": WorkExperience.objects.filter(published=True).count(),
                    "projects": Project.objects.filter(published=True).count(),
                    "skills": Skill.objects.filter(published=True).count(),
@@ -254,3 +259,108 @@ def questions(request):
         "usage": usage, "spend": chat.month_spend(), "site": ResumeSettings.load(),
         "failures": AICall.objects.filter(created_at__gte=month, ok=False).count(),
     })
+
+
+# ---------------------------------------------------------------------------
+# Conversations (anonymous records - see conversations.py)
+# ---------------------------------------------------------------------------
+
+def _parse_date(value):
+    try:
+        return datetime.strptime(value or "", "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _filtered_conversations(params):
+    """The list's filters (flag, reviewed, date range) - shared with the CSV export."""
+    qs = ChatConversation.objects.all()
+    flag = params.get("flag", "")
+    if flag in dict(ChatConversation.FLAGS):
+        qs = qs.filter(flags__contains=[flag])
+    reviewed = params.get("reviewed", "")
+    if reviewed in ("yes", "no"):
+        qs = qs.filter(reviewed=reviewed == "yes")
+    start, end = _parse_date(params.get("start")), _parse_date(params.get("end"))
+    tz = timezone.get_current_timezone()
+    if start:
+        qs = qs.filter(started_at__gte=datetime.combine(start, time.min, tzinfo=tz))
+    if end:
+        qs = qs.filter(started_at__lt=datetime.combine(end + timedelta(days=1), time.min, tzinfo=tz))
+    filters = {"flag": flag if flag in dict(ChatConversation.FLAGS) else "", "reviewed": reviewed,
+               "start": start.isoformat() if start else "", "end": end.isoformat() if end else ""}
+    return qs.order_by("-started_at"), filters
+
+
+@superuser_required
+def conversations(request):
+    if request.method == "POST" and request.POST.get("action") == "delete_all":
+        if request.POST.get("confirm") != "DELETE":
+            messages.error(request, 'Type DELETE to confirm deleting every conversation.')
+        else:
+            deleted = ChatConversation.objects.count()
+            ChatConversation.objects.all().delete()
+            audit(request, "resume_conversations_delete_all", f"{deleted} conversations")
+            messages.success(request, f"Deleted {deleted} conversation{'s' if deleted != 1 else ''}.")
+        return redirect("albright_resume_admin:conversations")
+    qs, filters = _filtered_conversations(request.GET)
+    page = Paginator(qs, 40).get_page(request.GET.get("page"))
+    query = "&".join(f"{k}={v}" for k, v in filters.items() if v)
+    return render(request, "albright_resume/admin/conversations.html", {
+        "page": page, "filters": filters, "flag_choices": ChatConversation.FLAGS, "query": query,
+        "total": qs.count(), "all_count": ChatConversation.objects.count(), "site": ResumeSettings.load(),
+    })
+
+
+@superuser_required
+def conversation(request, public_id):
+    conv = get_object_or_404(ChatConversation, public_id=public_id)
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "delete":
+            conv.delete()
+            audit(request, "resume_conversation_delete", str(public_id)[:8])
+            messages.success(request, "Conversation deleted.")
+            return redirect("albright_resume_admin:conversations")
+        if action == "review":
+            conv.reviewed = not conv.reviewed
+            conv.save(update_fields=["reviewed"])
+            messages.success(request, "Marked reviewed." if conv.reviewed else "Marked not reviewed.")
+        elif action == "notes":
+            conv.my_notes = (request.POST.get("my_notes") or "")[:5000]
+            conv.save(update_fields=["my_notes"])
+            messages.success(request, "Notes saved.")
+        return redirect("albright_resume_admin:conversation", public_id=public_id)
+    msgs = list(conv.messages.all())
+    return render(request, "albright_resume/admin/conversation.html", {
+        "conv": conv, "messages_list": msgs,
+        "total_cost": sum((m.cost_usd for m in msgs), start=0), "total_tokens": sum(m.tokens for m in msgs),
+    })
+
+
+@superuser_required
+def knowledge_gaps(request):
+    return render(request, "albright_resume/admin/knowledge_gaps.html", {
+        "gaps": conv_records.knowledge_gaps(), "site": ResumeSettings.load(),
+    })
+
+
+@superuser_required
+def conversations_csv(request):
+    """One row per message of the filtered conversations (same filters as the list)."""
+    qs, filters = _filtered_conversations(request.GET)
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="resume_conversations.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["conversation", "started_at", "referrer", "device", "flags", "reviewed", "my_notes",
+                     "message_at", "role", "outcome", "text", "tokens", "cost_usd"])
+    rows = 0
+    for conv in qs.prefetch_related("messages"):
+        for m in conv.messages.all():
+            writer.writerow([str(conv.public_id)[:8], conv.started_at.isoformat(), conv.referrer_domain, conv.device,
+                             "; ".join(conv.flag_labels), "yes" if conv.reviewed else "no", conv.my_notes,
+                             m.created_at.isoformat(), m.role, m.get_outcome_display() if m.outcome else "",
+                             m.text, m.tokens, f"{m.cost_usd:.6f}"])
+            rows += 1
+    audit(request, "resume_conversations_export", f"{qs.count()} conversations, {rows} messages")
+    return response

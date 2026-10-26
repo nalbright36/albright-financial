@@ -1,0 +1,24 @@
+{% extends "index.html" %}
+{% block page_title %}Knowledge gaps · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1000px;">
+    {% include "albright_resume/admin/_tabs.html" %}
+    <div class="card__header" style="margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <h2 style="margin: 0;">Knowledge gaps</h2>
+        {% url 'albright_resume_admin:chatbot' as cb %}<a href="{{ cb }}#id_knowledge_doc" class="btn btn-primary btn-sm" id="edit-knowledge">Edit the knowledge document</a>
+    </div>
+    <p style="margin: 0 0 16px; font-size: 0.8125rem; color: var(--text-secondary);">Every question the assistant wasn't sure about, grouped by similar wording, most asked first. Add the answers to the knowledge document and it can answer next time.</p>
+    <section class="card"><div class="table-scroll">
+        <table class="holdings" id="knowledge-gaps">
+            <thead><tr><th>Question</th><th class="num">Asked</th><th>Last asked</th><th>Conversations</th></tr></thead>
+            <tbody>{% for g in gaps %}
+                <tr><td style="overflow-wrap: anywhere;">{{ g.question }}
+                        {% if g.examples|length > 1 %}<div style="font-size: 0.75rem; color: var(--text-secondary);">Also: {% for e in g.examples|slice:"1:" %}&ldquo;{{ e|truncatechars:90 }}&rdquo;{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}</td>
+                    <td class="num">{{ g.count }}</td>
+                    <td style="white-space: nowrap;">{{ g.last_asked|date:"M j" }}</td>
+                    <td>{% for pid in g.conversations|slice:":5" %}<a href="{% url 'albright_resume_admin:conversation' pid %}">{{ pid|stringformat:"s"|slice:":8" }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% if g.conversations|length > 5 %} &hellip;{% endif %}</td></tr>
+            {% empty %}<tr><td colspan="4">No knowledge gaps - every question so far was answered (or declined).</td></tr>{% endfor %}</tbody>
+        </table>
+    </div></section>
+</div>
+{% endblock %}

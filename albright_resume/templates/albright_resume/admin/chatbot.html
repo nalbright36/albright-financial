@@ -30,6 +30,14 @@
                     </div>
                     <p style="font-size: 0.75rem; color: var(--text-tertiary); margin: 0;">Also set a monthly spend limit in the Anthropic Console as a hard backstop.</p>
                 </section>
+                <section class="card" style="margin-top: 16px;" id="conversation-settings">
+                    <div class="card__header"><span class="card__label">Conversation records</span>
+                        <a href="{% url 'albright_resume_admin:conversations' %}" style="font-size: 0.8125rem;">Conversations &rarr;</a></div>
+                    {% include "albright_resume/admin/_field.html" with field=form.chat_retention_days %}
+                    {% include "albright_resume/admin/_field.html" with field=form.store_contact_details %}
+                    {% include "albright_resume/admin/_field.html" with field=form.employer_alerts %}
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin: 0;">Saved anonymously: no IP, session or device details. Visitors see a notice and a short privacy note under the chat.</p>
+                </section>
             </div>
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Save</button>

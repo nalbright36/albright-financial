@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from . import ai, chat
+from . import ai, chat, conversations
 from .models import EducationItem, Project, ResumeSettings, Skill, WorkExperience
 from .security import public_headers
 
@@ -54,6 +54,7 @@ def resume_page(request):
         "skills": skills,
         "education": [e for e in edu if e.kind == "education"],
         "certifications": [e for e in edu if e.kind == "certification"],
+        "first_name": (site.full_name or "Nathan").split()[0],
     })
 
 
@@ -122,23 +123,35 @@ def chat_api(request):
                        "reply": "That's the question limit for this conversation. Thanks for your interest! "
                                 "Please use the Contact me button to reach Nathan directly."})
 
+    def keep(outcome, reply, tokens=0, cost=0):
+        """The conversation record (anonymous; see conversations.py) - the
+        session only ever holds its random id."""
+        conversations.record_turn(request, state, site, question, outcome, reply, tokens, cost, alert=not owner)
+        request.session[SESSION_KEY] = state
+
     limited = chat.check_rate_limits(request, site)
     if limited:
         chat.log_question(question, "rate_limited", turn=used + 1)
+        keep("rate_limited", limited)
         return _reply({"ok": False, "limit": True, "reply": limited}, 429)
     if chat.cap_reached(site):
         chat.log_question(question, "cap", turn=used + 1)
+        keep("cap", chat.UNAVAILABLE)
         return _reply({"ok": False, "unavailable": True, "reply": chat.UNAVAILABLE})
     if not ai.api_key_configured():
         chat.log_question(question, "unavailable", turn=used + 1)
+        keep("unavailable", chat.UNAVAILABLE)
         return _reply({"ok": False, "unavailable": True, "reply": chat.UNAVAILABLE})
 
     history = [tuple(pair) for pair in state.get("h", []) if isinstance(pair, (list, tuple)) and len(pair) == 2]
-    outcome, reply = chat.answer(site, question, history)
-    chat.log_question(question, outcome, reply, turn=used + 1)
+    outcome, reply, tokens, cost = chat.answer_detailed(site, question, history)
+    chat.log_question(question, "not_sure" if outcome == "blocked" else outcome, reply, turn=used + 1)
+    keep(outcome, reply, tokens, cost)
     if outcome == "error":
         return _reply({"ok": False, "unavailable": True, "reply": reply})
     used += 1
     history.append((question, reply))
-    request.session[SESSION_KEY] = {"n": used, "h": [list(p) for p in history[-chat.HISTORY_TURNS:]]}
-    return _reply({"reply": reply, "outcome": outcome, "remaining": max(site.max_messages_per_session - used, 0)})
+    state.update({"n": used, "h": [list(p) for p in history[-chat.HISTORY_TURNS:]]})
+    request.session[SESSION_KEY] = state
+    return _reply({"reply": reply, "outcome": "not_sure" if outcome == "blocked" else outcome,
+                   "remaining": max(site.max_messages_per_session - used, 0)})
