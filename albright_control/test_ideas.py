@@ -255,7 +255,8 @@ class IdeasPageTests(TestCase):
         page = self.client.get(reverse("albright_control:overview"))
         self.assertContains(page, "3 new</span>")       # Quick big win, Big project, Medium thing
         self.assertContains(page, "1 planned &middot; 1 in progress")
-        self.assertContains(page, f'<a href="{reverse("albright_control:ideas")}">Ideas</a>')
+        self.assertContains(page, f'<a href="{reverse("albright_control:ideas")}"><span>Ideas</span> '
+                                  '<span class="badge warn navbar__badge">3</span></a>')   # Bot group, 3 new
 
     def test_non_superusers_get_404(self):
         regular = User.objects.create_user(username="regular", password=PASSWORD)

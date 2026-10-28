@@ -18,6 +18,9 @@
                     ? stored
                     : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
                 document.documentElement.setAttribute('data-theme', theme);
+                // The header's dropdowns open on click (the script at the bottom);
+                // without JS they still open on hover (style.css: html:not(.js)).
+                document.documentElement.classList.add('js');
             })();
         </script>
     </head>
@@ -43,12 +46,13 @@
                 {# The brand stays within the current app - never "/", which follows the remembered app. #}
                 <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
 
-                <input type="checkbox" id="nav-toggle" class="navbar__toggle-checkbox">
-                <label for="nav-toggle" class="navbar__toggle" aria-label="Menu">
-                    <span></span><span></span><span></span>
-                </label>
+                {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
+                <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">
+                    <span class="navbar__toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="navbar__toggle-label" aria-hidden="true">Menu <span class="navbar__dropdown-caret">&#9662;</span></span>
+                </button>
 
-                <div class="navbar__links">
+                <div class="navbar__links" id="navbar-links">
                     {% if user.is_authenticated %}
                         {% if in_reselling_app %}
                         <a href="{% url 'albright_reselling_app:watchlist' %}" id="nav-watchlist-link"
@@ -74,18 +78,20 @@
                             </div>
                         </div>
                         {% elif in_admin_area %}
-                        <a href="{% url 'albright_control:overview' %}">Overview</a>
-                        <a href="{% url 'albright_control:bot_api' %}">Bot API</a>
-                        <a href="{% url 'albright_control:ideas' %}">Ideas</a>
-                        <a href="{% url 'albright_control:suggestions' %}">Bot suggestions</a>
-                        <a href="{% url 'albright_control:health' %}">System health</a>
-                        <a href="{% url 'albright_control:integrations' %}">Integrations</a>
-                        <a href="{% url 'albright_control:ai_usage' %}">AI usage</a>
-                        <a href="{% url 'albright_resume_admin:overview' %}">Resume</a>
-                        <a href="{% url 'labs_admin:settings' %}">Home page</a>
-                        <a href="{% url 'albright_control:users' %}">Users</a>
-                        <a href="{% url 'albright_control:data' %}">Data</a>
-                        <a href="{% url 'albright_control:audit' %}">Audit log</a>
+                        {# Overview, then the Bot / System / Site groups (albright_control.nav): the open page's group is marked, a badge counts what needs attention. #}
+                        {% for group in admin_nav %}{% if not group.dropdown %}{% with item=group.items.0 %}
+                        <a href="{{ item.url }}"{% if item.active %} class="active" aria-current="page"{% endif %}>{{ item.label }}</a>{% endwith %}
+                        {% else %}
+                        <div class="navbar__dropdown{% if group.active %} is-active{% endif %}" data-nav-group="{{ group.key }}">
+                            <button type="button" class="navbar__dropdown-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="admin-{{ group.key }}-menu">
+                                {{ group.label }}{% if group.badge %} <span class="badge {{ group.tone }} navbar__badge">{{ group.badge }}<span class="visually-hidden"> need attention</span></span>{% endif %}{% if group.active %}<span class="visually-hidden"> (current section)</span>{% endif %} <span class="navbar__dropdown-caret">&#9662;</span>
+                            </button>
+                            <div class="navbar__dropdown-menu" id="admin-{{ group.key }}-menu">
+                                {% for item in group.items %}<a href="{{ item.url }}"{% if item.active %} class="active" aria-current="page"{% endif %}><span>{{ item.label }}</span>{% if item.badge %} <span class="badge {{ item.tone }} navbar__badge">{{ item.badge }}</span>{% endif %}</a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}{% endfor %}
                         {% elif in_labs %}
                         <a href="{% url 'labs:hub' %}">Home</a>
                         <a href="{% url 'albright_resume:page' %}">Resume</a>
@@ -101,21 +107,34 @@
                         <a href="{% url 'market_scanner' %}">Market Scanner</a>
 
                         <div class="navbar__dropdown">
-                            <span class="navbar__dropdown-trigger">Strategies <span class="navbar__dropdown-caret">&#9662;</span></span>
-                            <div class="navbar__dropdown-menu">
+                            <button type="button" class="navbar__dropdown-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="strategies-dropdown-menu">
+                                Strategies <span class="navbar__dropdown-caret">&#9662;</span>
+                            </button>
+                            <div class="navbar__dropdown-menu" id="strategies-dropdown-menu">
                                 <a href="{% url 'strategies' %}">Stock Strategies</a>
                                 <a href="{% url 'option_strategies' %}">Options Strategies</a>
                             </div>
                         </div>
                         {% endif %}
-
-                    <a href="{% url 'labs:account' %}" id="nav-account-link">My account</a>
-                    <a href="{% url 'user_logout' %}">Logout</a>
                     {% else %}
                     <a href="{% url 'user_login' %}">Login</a>
                     <a href="{% url 'registration' %}">Register</a>
                     {% endif %}
                 </div>
+
+                {% if user.is_authenticated %}
+                {# The account menu, far right in every app: My account and Logout. #}
+                <div class="navbar__dropdown navbar__account">
+                    <button type="button" class="navbar__dropdown-trigger navbar__account-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu" title="Signed in as {{ user.get_username }}">
+                        <svg class="navbar__account-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+                        <span class="navbar__account-name">{{ user.get_username }}</span><span class="visually-hidden"> - account menu</span> <span class="navbar__dropdown-caret" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <div class="navbar__dropdown-menu navbar__dropdown-menu--end" id="account-menu">
+                        <a href="{% url 'labs:account' %}" id="nav-account-link">My account</a>
+                        <a href="{% url 'user_logout' %}">Logout</a>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </nav>
 
@@ -141,36 +160,103 @@
         {% endblock %}
 
         <script>
-            // Nav dropdowns (Tools, and Strategies on the trading side):
-            // :hover already opens them for mouse users (see style.css) -
-            // this adds click-to-toggle so they also work by keyboard
-            // (trigger is a real <button>, so Enter/Space fires this same
-            // click handler) and on touch, where :hover doesn't fire.
+            // Nav dropdowns (Tools, Strategies, Admin's Bot/System/Site groups, the
+            // account menu): open on click (Enter/Space on the real <button>
+            // trigger), one at a time; close on Escape, a click outside, or Tab
+            // moving focus out. ArrowDown/ArrowUp on the trigger open it at the
+            // first/last item; inside, the arrows, Home and End move between items.
+            var navDropdowns = [];
             document.querySelectorAll('.navbar__dropdown').forEach(function (dropdown) {
                 var trigger = dropdown.querySelector('.navbar__dropdown-trigger');
                 var menu = dropdown.querySelector('.navbar__dropdown-menu');
                 if (!trigger || !menu) return;
-
-                function closeDropdown() {
+                function items() { return Array.prototype.slice.call(menu.querySelectorAll('a[href], button:not([disabled])')); }
+                function isOpen() { return dropdown.classList.contains('navbar__dropdown--open'); }
+                function close() {
                     dropdown.classList.remove('navbar__dropdown--open');
                     trigger.setAttribute('aria-expanded', 'false');
                 }
-                function openDropdown() {
+                function open() {
+                    navDropdowns.forEach(function (other) { if (other !== close) other(); });
                     dropdown.classList.add('navbar__dropdown--open');
                     trigger.setAttribute('aria-expanded', 'true');
                 }
+                navDropdowns.push(close);
 
                 trigger.addEventListener('click', function (e) {
                     e.stopPropagation();
-                    if (dropdown.classList.contains('navbar__dropdown--open')) closeDropdown(); else openDropdown();
+                    if (isOpen()) close(); else open();
                 });
-                document.addEventListener('click', function (e) {
-                    if (!dropdown.contains(e.target)) closeDropdown();
+                trigger.addEventListener('keydown', function (e) {
+                    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                    e.preventDefault();
+                    open();
+                    var list = items();
+                    if (list.length) list[e.key === 'ArrowDown' ? 0 : list.length - 1].focus();
+                });
+                menu.addEventListener('keydown', function (e) {
+                    var list = items(), i = list.indexOf(document.activeElement), next = null;
+                    if (e.key === 'ArrowDown') next = list[(i + 1) % list.length];
+                    else if (e.key === 'ArrowUp') next = list[(i - 1 + list.length) % list.length];
+                    else if (e.key === 'Home') next = list[0];
+                    else if (e.key === 'End') next = list[list.length - 1];
+                    if (next) { e.preventDefault(); next.focus(); }
                 });
                 dropdown.addEventListener('keydown', function (e) {
-                    if (e.key === 'Escape') { closeDropdown(); trigger.focus(); }
+                    if (e.key === 'Escape' && isOpen()) { e.stopPropagation(); close(); trigger.focus(); }
+                });
+                dropdown.addEventListener('focusout', function (e) {
+                    if (e.relatedTarget && !dropdown.contains(e.relatedTarget)) close();
+                });
+                document.addEventListener('click', function (e) {
+                    if (!dropdown.contains(e.target)) close();
                 });
             });
+
+            // When the app's links don't fit beside the brand on one line, the
+            // whole nav collapses into one "Menu" button (a hamburger on phones)
+            // instead of wrapping - rechecked on resize and once fonts load.
+            (function () {
+                var nav = document.querySelector('.navbar');
+                var row = nav && nav.querySelector('.navbar__main-row');
+                var toggle = document.getElementById('nav-toggle');
+                var links = document.getElementById('navbar-links');
+                if (!row || !toggle || !links) return;
+                var phone = window.matchMedia('(max-width: 640px)');
+                function setOpen(open) {
+                    nav.classList.toggle('navbar--menu-open', open);
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                }
+                function fit() {
+                    var was = nav.classList.contains('navbar--collapsed');
+                    nav.classList.remove('navbar--collapsed');
+                    var collapse = phone.matches || row.scrollWidth > row.clientWidth + 1;
+                    nav.classList.toggle('navbar--collapsed', collapse);
+                    if (collapse !== was) setOpen(false);
+                }
+                fit();
+                var pending = false;
+                window.addEventListener('resize', function () {
+                    if (pending) return;
+                    pending = true;
+                    window.requestAnimationFrame(function () { pending = false; fit(); });
+                });
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    setOpen(!nav.classList.contains('navbar--menu-open'));
+                });
+                nav.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape' && nav.classList.contains('navbar--menu-open')) { setOpen(false); toggle.focus(); }
+                });
+                document.addEventListener('click', function (e) {
+                    if (!nav.contains(e.target)) setOpen(false);
+                });
+                links.addEventListener('focusout', function (e) {
+                    if (e.relatedTarget && !links.contains(e.relatedTarget) && e.relatedTarget !== toggle) setOpen(false);
+                });
+            })();
 
             // The header's "More" app menu (<details>): closes on a click elsewhere or Escape.
             (function () {

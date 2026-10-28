@@ -331,7 +331,8 @@ class AdminUsersTests(Base):
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Superuser - every app")
-        self.assertIn(f'<a href="{url}">Users</a>', page.content.decode())         # in the Admin nav
+        self.assertIn(f'<a href="{url}" class="active" aria-current="page"><span>Users</span></a>',
+                      page.content.decode())                                         # in the Admin nav's Site group
 
     def test_changing_access(self):
         self.client.force_login(User.objects.create_superuser(username="boss", password=PASSWORD, email=""))

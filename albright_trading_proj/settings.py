@@ -100,6 +100,7 @@ TEMPLATES = [
                 'albright_trading_app.context_processors.current_app',
                 'albright_reselling_app.context_processors.watchlist_nav',
                 'albright_labs.context_processors.app_nav',
+                'albright_control.nav.admin_nav',
             ],
         },
     },

@@ -69,10 +69,11 @@ class AccessTests(AdminTestCase):
                 self.assertContains(response, 'class="navbar__brand">Albright Admin</a>')
 
     def test_admin_nav(self):
+        """Every Admin page is in the nav (the groups themselves: test_header_nav)."""
         content = self.client.get(reverse("albright_control:overview")).content.decode()
-        nav = content.split('class="navbar__links"', 1)[1].split("</div>", 1)[0]
+        nav = content.split('id="navbar-links"', 1)[1].split('class="navbar__dropdown navbar__account"', 1)[0]
         labels = [label for label in ("Overview", "Bot API", "Bot suggestions", "System health", "Integrations",
-                                      "AI usage", "Data", "Audit log") if f">{label}</a>" in nav]
+                                      "AI usage", "Data", "Audit log") if f">{label}</" in nav]
         self.assertEqual(len(labels), 8)
 
 

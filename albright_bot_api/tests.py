@@ -460,8 +460,10 @@ class ActivityLogTests(BotApiTestCase):
         self.user.is_superuser = True
         self.user.save()
         self.client.force_login(self.user)
-        link = f'<a href="{reverse("albright_control:bot_api")}">Bot API</a>'
-        self.assertNotContains(self.client.get(reverse("trading_home")), link)
-        page = self.client.get(reverse("albright_control:bot_api"))
+        url = reverse("albright_control:bot_api")
+        self.assertNotContains(self.client.get(reverse("trading_home")), f'<a href="{url}"')
+        page = self.client.get(url)
         self.assertContains(page, '<body data-app="admin">')
-        self.assertContains(page, link)
+        # In the Admin nav's Bot group, marked as the open page.
+        self.assertContains(page, f'<a href="{url}" class="active" aria-current="page"><span>Bot API</span></a>')
+        self.assertContains(page, 'class="navbar__dropdown is-active" data-nav-group="bot"')

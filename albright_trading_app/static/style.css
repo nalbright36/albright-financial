@@ -405,6 +405,8 @@ a:hover { color: var(--accent-hover); }
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  white-space: nowrap;   /* never wraps or shrinks - the nav collapses into "Menu" instead */
+  flex-shrink: 0;
   font-size: var(--text-md);
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -424,6 +426,10 @@ a:hover { color: var(--accent-hover); }
   align-items: center;
   gap: var(--space-6);
   font-size: var(--text-sm);
+  flex-wrap: nowrap;     /* one line, or the whole nav collapses (index.html's fit check) */
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .navbar__links a {
   color: var(--text-secondary);
@@ -470,11 +476,10 @@ a:hover { color: var(--accent-hover); }
 :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
-/* Nav dropdown (trading's Strategies submenu; reselling's Tools menu).
-   :hover opens it for mouse users; the JS in index.html toggles the
-   --open modifier too, so it also works by keyboard (the trigger is a
-   real <button> for Tools - Enter/Space fires a native click) and on
-   touch, where :hover doesn't fire. */
+/* Nav dropdown (trading's Strategies, reselling's Tools, Admin's groups,
+   the account menu). The JS in index.html opens it on click and by
+   keyboard (the trigger is a real <button>) via the --open modifier;
+   :hover opens it only when JS is off (html:not(.js)). */
 .navbar__dropdown { position: relative; }
 .navbar__dropdown-trigger {
   display: inline-flex; align-items: center; gap: var(--space-1);
@@ -484,17 +489,17 @@ a:hover { color: var(--accent-hover); }
 .navbar__dropdown-trigger:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm);
 }
-.navbar__dropdown:hover .navbar__dropdown-trigger,
+html:not(.js) .navbar__dropdown:hover .navbar__dropdown-trigger,
 .navbar__dropdown--open .navbar__dropdown-trigger { color: var(--text-primary); }
 .navbar__dropdown-caret { font-size: 0.6875rem; transition: transform var(--transition); }
-.navbar__dropdown:hover .navbar__dropdown-caret,
+html:not(.js) .navbar__dropdown:hover .navbar__dropdown-caret,
 .navbar__dropdown--open .navbar__dropdown-caret { transform: rotate(180deg); }
 .navbar__dropdown-menu {
   display: none; position: absolute; top: 100%; left: 0; min-width: 170px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md);
   box-shadow: var(--shadow-md); padding: var(--space-2); z-index: 30;
 }
-.navbar__dropdown:hover .navbar__dropdown-menu,
+html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 .navbar__dropdown--open .navbar__dropdown-menu { display: block; }
 .navbar__dropdown-menu a {
   display: block; padding: var(--space-2); border-radius: var(--radius-sm);
@@ -502,16 +507,58 @@ a:hover { color: var(--accent-hover); }
 }
 .navbar__dropdown-menu a:hover { background: var(--surface-hover); color: var(--text-primary); }
 
-/* Mobile nav toggle */
-.navbar__toggle-checkbox { display: none; }
+/* "Menu" toggle: only when the nav is collapsed (.navbar--collapsed - set by
+   index.html's fit check when the links don't fit on one line, and always on
+   phones), where it shows "Menu" - a hamburger on phones. */
 .navbar__toggle {
-  display: none; flex-direction: column; justify-content: center; gap: 5px;
-  width: 28px; height: 28px; cursor: pointer;
+  display: none; align-items: center; gap: var(--space-1); margin-left: auto; cursor: pointer;
+  padding: 4px 10px; min-height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-primary); font: inherit; font-size: var(--text-sm); font-weight: 600;
+  white-space: nowrap; flex-shrink: 0;
 }
-.navbar__toggle span {
+.navbar__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.navbar__toggle-bars { display: none; flex-direction: column; justify-content: center; gap: 5px; width: 22px; height: 20px; }
+.navbar__toggle-bars span {
   display: block; height: 2px; width: 100%; background: var(--text-primary);
   border-radius: 1px; transition: transform var(--transition), opacity var(--transition);
 }
+.navbar--collapsed .navbar__toggle { display: inline-flex; }
+.navbar--menu-open .navbar__toggle .navbar__dropdown-caret { transform: rotate(180deg); }
+/* Collapsed: the links become a panel under the header, opened by the toggle. */
+.navbar--collapsed .navbar__links {
+  display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch;
+  gap: 0; margin: 0; white-space: normal; max-height: calc(100vh - 120px); overflow-y: auto;
+  background: var(--surface-raised); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-md);
+  padding: var(--space-2) var(--space-6) var(--space-4);
+}
+.navbar--collapsed.navbar--menu-open .navbar__links { display: flex; }
+.navbar--collapsed .navbar__links > a { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+.navbar--collapsed .navbar__links > a:last-child { border-bottom: none; }
+/* In the panel a dropdown opens in place, as part of the list. */
+.navbar--collapsed .navbar__links .navbar__dropdown { width: 100%; border-bottom: 1px solid var(--border); }
+.navbar--collapsed .navbar__links .navbar__dropdown-trigger { width: 100%; justify-content: flex-start; padding: var(--space-3) 0; }
+.navbar--collapsed .navbar__links .navbar__dropdown-trigger .navbar__dropdown-caret { margin-left: auto; }
+.navbar--collapsed .navbar__links .navbar__dropdown-menu {
+  position: static; border: none; box-shadow: none; padding: 0 0 var(--space-2) var(--space-3); background: transparent;
+}
+.navbar--collapsed .navbar__links .navbar__dropdown-menu a { padding: var(--space-2); }
+
+/* The account menu: far right in every app (My account, Logout). */
+.navbar__account { flex-shrink: 0; margin-left: var(--space-6); }
+.navbar--collapsed .navbar__account { margin-left: var(--space-3); }
+.navbar__account-trigger { gap: 6px; }
+.navbar__account-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.navbar__account-name { overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.navbar__dropdown-menu--end { left: auto; right: 0; }
+
+/* Admin's groups: the open page's group is marked, and counts that need attention. */
+.navbar__dropdown.is-active > .navbar__dropdown-trigger,
+.navbar__links > a.active { color: var(--accent-hover); box-shadow: inset 0 -2px 0 var(--accent); }
+.navbar--collapsed .navbar__dropdown.is-active > .navbar__dropdown-trigger,
+.navbar--collapsed .navbar__links > a.active { box-shadow: inset 2px 0 0 var(--accent); padding-left: var(--space-2); }
+.navbar__dropdown-menu a { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.navbar__dropdown-menu a.active { color: var(--accent-hover); background: var(--accent-soft); }
+.navbar__badge { margin-left: 4px; padding: 0 6px; font-size: 0.6875rem; line-height: 1.5; }
 
 /* ---------- Page header: title + subtitle + actions ---------- */
 .page-header {
@@ -1092,28 +1139,18 @@ tr.scanner-detail td {
 @media (max-width: 640px) {
   .navbar__main-row { padding: var(--space-3) var(--space-4); }
   .navbar__switch-row { padding: var(--space-2) var(--space-4) 0; }
-  .navbar__toggle { display: flex; }
-  .navbar__links {
-    display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 0;
-    background: var(--surface-raised); border-bottom: 1px solid var(--border); padding: var(--space-2) var(--space-4) var(--space-4);
-  }
-  .navbar__links a { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
-  .navbar__links a:last-child { border-bottom: none; }
-
-  /* The dropdown menu becomes part of the vertical mobile menu's own
-     flow instead of an absolutely-positioned floating box - same
-     bordered-row look as its sibling links. */
-  .navbar__dropdown { width: 100%; border-bottom: 1px solid var(--border); }
-  .navbar__dropdown-trigger { width: 100%; justify-content: space-between; padding: var(--space-3) 0; }
-  .navbar__dropdown-menu {
-    position: static; border: none; box-shadow: none; padding: 0 0 var(--space-2) var(--space-3);
-    background: transparent;
-  }
-  .navbar__dropdown-menu a { padding: var(--space-2) 0; }
-  #nav-toggle:checked ~ .navbar__links { display: flex; }
-  #nav-toggle:checked ~ .navbar__toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-  #nav-toggle:checked ~ .navbar__toggle span:nth-child(2) { opacity: 0; }
-  #nav-toggle:checked ~ .navbar__toggle span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+  /* Phones: always collapsed (index.html's fit check) - a hamburger, not "Menu". */
+  .navbar__toggle { padding: 4px 6px; border-color: transparent; background: none; }
+  .navbar__toggle-bars { display: flex; }
+  .navbar__toggle-label { display: none; }
+  .navbar--collapsed .navbar__links { padding: var(--space-2) var(--space-4) var(--space-4); }
+  .navbar--menu-open .navbar__toggle-bars span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .navbar--menu-open .navbar__toggle-bars span:nth-child(2) { opacity: 0; }
+  .navbar--menu-open .navbar__toggle-bars span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+  .navbar__account-name { display: none; }
+  /* Without JS the links simply wrap under the brand. */
+  html:not(.js) .navbar__main-row { flex-wrap: wrap; }
+  html:not(.js) .navbar__links { flex-wrap: wrap; white-space: normal; gap: var(--space-2) var(--space-4); margin-left: 0; }
 
   .container { padding: 0 var(--space-4); }
   .card { padding: var(--space-4); }
@@ -1582,10 +1619,18 @@ input[type="range"] { accent-color: var(--accent-solid); }
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 .app-switch-more:not([open]) .app-switch-more__menu { display: none; }
-/* The phone row scrolls sideways; with a "More" menu it fits, so let the menu drop out of it. */
+/* Phones: the row keeps scrolling sideways when it can't fit, so the menu is
+   placed against the whole header instead (its containing block is .navbar,
+   outside the scrolling row, so the row doesn't clip it). */
 @media (max-width: 480px) {
-  .navbar__switch-row:has(.app-switch-more) { overflow: visible; }
-  .app-switch-more__menu { left: auto; right: 0; }
+  .app-switch-more { position: static; }
+  .app-switch-more__menu { top: 44px; left: auto; right: var(--space-3); }
+}
+/* The smallest phones: a little less space around the brand, Menu and account buttons. */
+@media (max-width: 370px) {
+  .navbar__main-row { gap: var(--space-2); padding-left: var(--space-3); padding-right: var(--space-3); }
+  .navbar--collapsed .navbar__account { margin-left: 0; }
+  .navbar__account-trigger { gap: 2px; }
 }
 
 /* "Hidden from your nav · Show it" on a page of an app the user has hidden. */
