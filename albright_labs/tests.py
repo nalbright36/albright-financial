@@ -146,15 +146,13 @@ class HomeTests(TestCase):
                              {"ok": False, "note": "Couldn't reach Alpaca"})
 
     def test_a_failing_tile_fails_alone(self):
-        broken = dict(tiles.TILES)
-        broken["resell"] = (*tiles.TILES["resell"][:2], mock.Mock(side_effect=ValueError("boom")), False,
-                            tiles.TILES["resell"][4])
-        with mock.patch.dict(tiles.TILES, broken), self.assertLogs("albright_labs.views", "ERROR"):
+        broken = mock.patch.object(tiles, "resell", side_effect=ValueError("boom"))
+        with broken, self.assertLogs("albright_labs.views", "ERROR"):
             response = self.client.get(reverse("labs:tile", args=["resell"]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"ok": False, "note": "Not available right now"})
         self.assertTrue(self.client.get(reverse("labs:tile", args=["opps"])).json()["ok"])   # the others still work
-        with mock.patch.dict(tiles.TILES, broken):
+        with broken:
             self.assertEqual(self.client.get(reverse("labs:hub")).status_code, 200)   # Home itself never calls them
         self.assertEqual(self.client.get(reverse("labs:tile", args=["nope"])).status_code, 404)
 

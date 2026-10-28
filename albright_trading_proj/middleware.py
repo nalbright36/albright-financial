@@ -5,13 +5,14 @@ cookie - used only by the "Last used app" landing setting
 """
 from django.conf import settings
 
+from albright_labs import apps_registry
+
 LAST_APP_COOKIE = "last_app"
 LAST_APP_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
-RESELLER_APP_NAME = "albright_reselling_app"
-OPPORTUNITIES_APP_NAME = "albright_crypto_app"  # the Opportunities app (package name kept)
-APP_COOKIE_VALUES = {RESELLER_APP_NAME: "reseller", OPPORTUNITIES_APP_NAME: "opportunities",
-                     "albright_control": "admin", "albright_resume_admin": "admin", "labs_admin": "admin"}  # else: "trading"
+# URL namespace -> the app's cookie value, from the app registry ("reseller",
+# "opportunities", "admin"); anything else is the trading app's "trading".
+APP_COOKIE_VALUES = {ns: app.last_app_cookie for ns, app in apps_registry.BY_NAMESPACE.items() if ns}
 # Not an app at all (the Labs hub, the public resume) - never recorded.
 _EXCLUDED_APP_NAMES = {"labs", "albright_resume"}
 # Cookie values that mean the Opportunities app - "crypto" is what it was
@@ -58,7 +59,7 @@ class LastAppMiddleware:
         if resolver_match.app_name in _EXCLUDED_APP_NAMES:
             return
 
-        app = APP_COOKIE_VALUES.get(resolver_match.app_name, "trading")
+        app = APP_COOKIE_VALUES.get(resolver_match.app_name, apps_registry.DEFAULT_APP.last_app_cookie)
         response.set_cookie(
             LAST_APP_COOKIE, app, max_age=LAST_APP_COOKIE_MAX_AGE, httponly=True, samesite="Lax",
         )

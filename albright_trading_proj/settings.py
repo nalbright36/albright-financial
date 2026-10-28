@@ -77,6 +77,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # 404 for any view of an app the user can't open (Admin > Users).
+    'albright_labs.app_access.AppAccessMiddleware',
     'albright_trading_proj.middleware.LastAppMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -97,6 +99,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'albright_trading_app.context_processors.current_app',
                 'albright_reselling_app.context_processors.watchlist_nav',
+                'albright_labs.context_processors.app_nav',
             ],
         },
     },

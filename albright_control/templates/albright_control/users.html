@@ -1,0 +1,53 @@
+{% extends "index.html" %}
+{% block page_title %}Users · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1000px;">
+    <h1 style="margin: 0 0 6px;">Users</h1>
+    <p style="margin: 0 0 16px; font-size: 0.8125rem; color: var(--text-secondary);">Which apps each person can open. Without access, every page of that app is a "not found" page for them, so they never see it exists. Superusers always have every app, plus Admin. Each person chooses for themselves which of their apps show in their navigation.</p>
+
+    <section class="card" style="padding: 0;">
+        <div class="table-scroll">
+        <table class="holdings" id="users-table">
+            <thead><tr><th>User</th>{% for app in apps %}<th>{{ app.label }}</th>{% endfor %}<th></th></tr></thead>
+            <tbody>
+            {% for row in rows %}
+            <tr>
+                <td><strong>{{ row.user.username }}</strong>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{% if row.user.is_superuser %}Superuser - every app{% elif not row.user.is_active %}Inactive{% else %}Joined {{ row.user.date_joined|date:"M j, Y" }}{% endif %}</div></td>
+                {% if row.user.is_superuser %}
+                {% for cell in row.cells %}<td><input type="checkbox" checked disabled aria-label="{{ row.user.username }}: {{ cell.label }}"></td>{% endfor %}
+                <td></td>
+                {% else %}
+                {% for cell in row.cells %}<td><input type="checkbox" name="apps" value="{{ cell.key }}" form="access-{{ row.user.pk }}"{% if cell.on %} checked{% endif %} aria-label="{{ row.user.username }}: {{ cell.label }}"></td>{% endfor %}
+                <td><form method="post" id="access-{{ row.user.pk }}">{% csrf_token %}<input type="hidden" name="action" value="access"><input type="hidden" name="user_id" value="{{ row.user.pk }}">
+                    <button type="submit" class="btn btn-secondary btn-sm">Save</button></form></td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+
+    <form method="post" class="card" style="margin-top: 16px;" id="create-user-form" autocomplete="off">
+        {% csrf_token %}<input type="hidden" name="action" value="create">
+        <div class="card__header"><span class="card__label">Add a user</span></div>
+        {% if form.non_field_errors %}<p class="field-error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+        <div class="users-create-grid">
+            {% for field in form %}{% if field.name != "apps" %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required %} (optional){% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<small style="color: var(--text-secondary);">{{ field.help_text }}</small>{% endif %}
+                {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}{% endfor %}
+        </div>
+        <fieldset class="users-create-apps">
+            <legend>{{ form.apps.label }}</legend>
+            {% for box in form.apps %}<label class="labs-choice">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}
+        </fieldset>
+        <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Add user</button>
+    </form>
+</div>
+{% endblock %}

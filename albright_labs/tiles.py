@@ -1,7 +1,8 @@
 """Home's live numbers - one function per tile, each fetched by its own
 request (hub.js -> views.tile) so a slow or failing one (e.g. Alpaca down)
 never holds up or breaks the others. Each returns {"value": str, "note": str}
-or raises TileUnavailable with a short, safe message."""
+or raises TileUnavailable with a short, safe message. Which function is
+each app's tile: App.tile in apps_registry."""
 from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
@@ -67,16 +68,3 @@ def admin(user):
     return {"value": str(failing + late), "note": "all jobs on time" if not (failing or late)
             else f"{failing} failing · {late} late", "tone": "loss" if failing else ("warn" if late else "gain")}
 
-
-# key -> (label, description, function, superusers only, landing URL name)
-TILES = {
-    "trade": ("Trade", "Algorithmic trading on Alpaca - strategies, positions, the Grok bot.", trade, False,
-              "trading_home"),
-    "resell": ("Resell", "Auction scanning, the watchlist, and the resale ledger.", resell, False,
-               "albright_reselling_app:dashboard"),
-    "opps": ("Opps", "Jobs, freelance work, bounties and crypto - triaged in one Inbox.", opps, False,
-             "albright_crypto_app:inbox"),
-    "admin": ("Admin", "System health, integrations, AI spend, ideas and the audit log.", admin, True,
-              "albright_control:overview"),
-}
-ACCENTS = {"trade": "trading", "resell": "reselling", "opps": "opportunities", "admin": "admin"}

@@ -56,7 +56,7 @@ class OpportunitiesNavTests(TestCase):
         for name in ("inbox", "pipeline", "earnings", "settings"):
             with self.subTest(page=name):
                 links = [link for link in self.nav_links(reverse(f"albright_crypto_app:{name}"))
-                         if link[1] != "Logout"]
+                         if link[1] not in ("My account", "Logout")]
                 self.assertEqual(links, [
                     (reverse("albright_crypto_app:inbox"), "Inbox"),
                     (reverse("albright_crypto_app:pipeline"), "Pipeline"),

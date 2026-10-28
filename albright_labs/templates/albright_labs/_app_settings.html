@@ -1,0 +1,45 @@
+{% load static %}{% load cache_bust %}
+{% comment %}
+Home and My account: "Show in my navigation" (which apps, and their order) and
+"Where I land after signing in". Both forms come back to the page they're on.
+The up/down buttons work without JS (they submit move=up:<key>);
+static/labs/nav_settings.js moves the rows in place instead, saved with Save.
+{% endcomment %}
+<form method="post" action="{% url 'labs:save_nav' %}" class="card labs-nav-form" id="nav-form">
+    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="card__header"><span class="card__label">Show in my navigation</span></div>
+    {% if nav_rows %}
+    <ol class="labs-nav-order" id="nav-order">
+        {% for row in nav_rows %}
+        <li class="labs-nav-row" data-key="{{ row.key }}" data-app-accent="{{ row.accent }}" style="--app-dot: var(--app-{{ row.accent }}, {{ row.color }});">
+            <input type="hidden" name="order" value="{{ row.key }}">
+            <label class="labs-choice"><input type="checkbox" name="visible" value="{{ row.key }}"{% if row.shown %} checked{% endif %}>
+                <span class="labs-tile__dot" aria-hidden="true"></span> {{ row.label }}</label>
+            <span class="labs-nav-row__move">
+                <button type="submit" name="move" value="up:{{ row.key }}" class="btn btn-secondary btn-sm" data-move="up" aria-label="Move {{ row.label }} up"{% if forloop.first %} disabled{% endif %}>&uarr;</button>
+                <button type="submit" name="move" value="down:{{ row.key }}" class="btn btn-secondary btn-sm" data-move="down" aria-label="Move {{ row.label }} down"{% if forloop.last %} disabled{% endif %}>&darr;</button>
+            </span>
+        </li>
+        {% endfor %}
+    </ol>
+    <p class="labs-nav-form__note" id="nav-form-note" aria-live="polite">Home is always shown, and at least one app stays in your navigation. Hiding an app only takes it off the header and Home - you can still open it by its address.</p>
+    <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save</button>
+    {% else %}
+    <p class="labs-nav-form__note">You don't have access to any apps yet - ask the site's owner.</p>
+    {% endif %}
+</form>
+
+<form method="post" action="{% url 'labs:save_landing' %}" class="card labs-landing-form" id="landing-form">
+    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="card__header"><span class="card__label">Where I land after signing in</span></div>
+    <div class="labs-landing-form__choices">
+        {% for radio in landing_form.landing %}<label class="labs-choice">{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}
+    </div>
+    <div class="field" style="margin: 12px 0 0; max-width: 360px;">
+        <label for="{{ landing_form.landing_page.id_for_label }}">{{ landing_form.landing_page.label }} (for "A specific page")</label>
+        {{ landing_form.landing_page }}
+    </div>
+    <p style="margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary);">"Last used app" reopens whichever app you were in last. Only apps in your navigation are offered; if yours is hidden or no longer available, you land on Home. A link that sent you to sign in (e.g. a bookmarked page) always wins.</p>
+    <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save</button>
+</form>
+<script src="{% static_version 'labs/nav_settings.js' %}" defer></script>

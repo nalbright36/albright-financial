@@ -1,0 +1,10 @@
+{% extends "index.html" %}
+{% block page_title %}My account · {% endblock %}
+{% block content %}
+{% comment %}My account (labs.views.account, linked from the header): the same settings as Home.{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 760px;">
+    <h1 style="margin: 0 0 6px;">My account</h1>
+    <p style="margin: 0 0 8px; color: var(--text-secondary);">Signed in as <strong>{{ user.username }}</strong>. Choose which apps show in your navigation, their order, and where you land after signing in.</p>
+    {% include "albright_labs/_app_settings.html" %}
+</div>
+{% endblock %}

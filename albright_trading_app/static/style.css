@@ -1424,7 +1424,7 @@ input[type="range"] { accent-color: var(--accent-solid); }
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--app-trading);
+  background: var(--app-dot, var(--app-trading));
 }
 .app-switch-btn[data-app-target="reselling"]::before { background: var(--app-reselling); }
 .app-switch-btn[data-app-target="opportunities"]::before { background: var(--app-opportunities); }
@@ -1538,7 +1538,7 @@ input[type="range"] { accent-color: var(--accent-solid); }
 /* ===== Albright Labs: Home tiles ===== */
 .labs-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-4);
   margin-bottom: var(--space-6, 24px); }
-.labs-tile { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit;
+.labs-tile { --labs-tile-color: var(--app-dot, var(--accent)); display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit;
   border-top: 3px solid var(--labs-tile-color, var(--accent)); transition: transform .15s ease, box-shadow .15s ease; }
 .labs-tile:hover { transform: translateY(-2px); text-decoration: none; }
 .labs-tile[data-app-accent="trading"] { --labs-tile-color: var(--app-trading); }
@@ -1567,3 +1567,54 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .transcript-msg__text { font-size: var(--text-sm); overflow-wrap: anywhere; }
 .transcript-msg--visitor .transcript-msg__text { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
   background: var(--accent-soft); }
+
+/* ---------- App navigation (albright_labs: the app registry) ---------- */
+/* The header's "More" app menu - Home + 3 apps stay on the row, the rest drop down. */
+.app-switch-more { position: relative; }
+.app-switch-more__toggle { cursor: pointer; list-style: none; user-select: none; }
+.app-switch-more__toggle::-webkit-details-marker { display: none; }
+.app-switch-more__toggle::before { display: none; }
+.app-switch-more__menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 120px;
+  padding: var(--space-2); background: var(--glass-bg-dialog); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md, 10px); box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.app-switch-more:not([open]) .app-switch-more__menu { display: none; }
+/* The phone row scrolls sideways; with a "More" menu it fits, so let the menu drop out of it. */
+@media (max-width: 480px) {
+  .navbar__switch-row:has(.app-switch-more) { overflow: visible; }
+  .app-switch-more__menu { left: auto; right: 0; }
+}
+
+/* "Hidden from your nav · Show it" on a page of an app the user has hidden. */
+.nav-hidden-note {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px;
+  padding: 6px var(--space-4); font-size: var(--text-xs); color: var(--text-secondary);
+  background: var(--accent-soft); border-bottom: 1px solid var(--border);
+}
+.nav-hidden-note form { display: inline; margin: 0; }
+.nav-hidden-note__show {
+  padding: 0; border: 0; background: none; font: inherit; font-weight: 600; cursor: pointer;
+  color: var(--accent-hover); text-decoration: underline;
+}
+
+/* Home and My account: "Show in my navigation" with up/down buttons. */
+.labs-nav-form, .labs-landing-form { margin-top: var(--space-6); }
+.labs-nav-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+.labs-nav-row {
+  --labs-tile-color: var(--app-dot, var(--accent));
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: 6px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+}
+.labs-nav-row__move { display: inline-flex; gap: 4px; }
+.labs-nav-row__move .btn { min-width: 34px; justify-content: center; }
+.labs-nav-form__note { margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary); }
+
+/* Admin > Users */
+.users-create-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); }
+.users-create-grid .field { margin: 0; }
+.users-create-apps { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-3) 0 0; padding: 0; border: 0; }
+.users-create-apps legend { font-size: var(--text-sm); font-weight: 600; margin-bottom: 6px; padding: 0; }
+.field-error { margin: 4px 0 0; color: var(--loss); font-size: 0.8125rem; }
