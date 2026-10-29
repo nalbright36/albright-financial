@@ -1,0 +1,85 @@
+/* The header's app launcher (templates/index.html, labs/launcher.js) - "Option B:
+   App grid launcher" in docs/design/app_switcher_options.html, with that file's
+   colors swapped for the site's tokens:
+     --menu -> --surface-raised   --line -> --border      --hover -> --surface-hover
+     --ink  -> --text-primary     --muted -> --text-secondary
+     --trade/--resell/... -> --app-trading/--app-reselling/... (style.css)
+   The panel is also hidden by the HTML `hidden` attribute and every SVG has
+   width/height attributes, so without this file nothing opens or blows up. */
+
+/* .dd */
+.app-launcher { position: relative; }
+
+/* .btn.gridbtn.trigger */
+.app-launcher__button {
+  width: 38px; height: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; color: var(--text-primary); background: transparent; border: 1px solid var(--border);
+  border-radius: 10px; cursor: pointer; flex-shrink: 0;
+}
+.app-launcher__button:hover { background: var(--surface-hover); }
+.app-launcher__button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+.app-launcher__button svg { width: 16px; height: 16px; display: block; }
+
+/* .menu + .b .menu */
+.app-launcher__menu {
+  display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 330px; padding: 12px;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+}
+.app-launcher.open .app-launcher__menu { display: block; }
+.app-launcher__menu[hidden] { display: none; }
+
+/* .grid */
+.app-launcher__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+/* .tile */
+.app-launcher__tile {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px;
+  text-decoration: none; color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: 1.3;
+  border: 1px solid transparent; text-align: center; min-width: 0;
+}
+.app-launcher__tile:hover, .app-launcher__tile:focus-visible {
+  background: var(--surface-hover); outline: none; text-decoration: none; color: var(--text-primary); box-shadow: none;
+}
+.app-launcher__tile.is-current { border-color: var(--border); background: var(--surface-hover); }
+
+/* .tile .icon - tinted with the app's own color at 18% */
+.app-launcher__tile { --app-color: var(--app-labs); }
+.app-launcher__tile[data-app-target="trading"] { --app-color: var(--app-trading); }
+.app-launcher__tile[data-app-target="reselling"] { --app-color: var(--app-reselling); }
+.app-launcher__tile[data-app-target="opportunities"] { --app-color: var(--app-opportunities); }
+.app-launcher__tile[data-app-target="meals"] { --app-color: var(--app-meals); }
+.app-launcher__tile[data-app-target="admin"] { --app-color: var(--app-admin); }
+.app-launcher__icon {
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0;
+  color: var(--app-color); background: color-mix(in srgb, var(--app-color) 18%, transparent);
+}
+.app-launcher__icon svg { width: 19px; height: 19px; display: block; }
+
+.app-launcher__label { font-size: 13px; font-weight: 500; }
+
+/* .tile span (the live line) */
+.app-launcher__line {
+  font-size: 11px; color: var(--text-secondary); font-weight: 400; min-height: 1.3em; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* My account > Show in my navigation (below a .sep line) */
+.app-launcher__sep { height: 1px; background: var(--border); margin: 8px 4px 6px; }
+.app-launcher__customize {
+  display: block; padding: 6px 10px; border-radius: 9px; text-align: center; text-decoration: none;
+  font-size: 12px; color: var(--text-secondary);
+}
+.app-launcher__customize:hover, .app-launcher__customize:focus-visible {
+  background: var(--surface-hover); color: var(--text-primary); outline: none; text-decoration: none; box-shadow: none;
+}
+
+/* Phones: a full-width sheet under the header, still three columns. Placed against
+   .navbar (sticky, so a containing block), not the button. */
+@media (max-width: 639.98px) {
+  .app-launcher { position: static; }
+  .app-launcher__menu {
+    left: 0; right: 0; top: 100%; width: auto; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px;
+    max-height: calc(100vh - 80px); overflow-y: auto;
+  }
+}

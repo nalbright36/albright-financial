@@ -1,8 +1,8 @@
 """Test helpers for the header's app launcher (templates/index.html), shared by the apps' tests."""
 import re
 
-TILE = re.compile(r'<a href="([^"]*)" class="(app-launcher__tile[^"]*)" role="menuitem" data-app-key="(\w+)" '
-                  r'data-app-target="(\w+)".*?<span class="app-launcher__label">([^<]+)</span>', re.S)
+TILE = re.compile(r'<a href="([^"]*)" class="(app-launcher__tile[^"]*)" role="menuitem" tabindex="-1" '
+                  r'data-app-key="(\w+)" data-app-target="(\w+)".*?<span class="app-launcher__label">([^<]+)</span>', re.S)
 
 
 def launcher_panel(content):

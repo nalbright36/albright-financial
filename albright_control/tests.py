@@ -114,7 +114,8 @@ class HeaderTests(AdminTestCase):
         self.assertIn("--accent: #94A3B8;", block)
         self.assertIn("--accent: #475569;", css.split('[data-theme="light"] body[data-app="admin"] {', 1)[1].split("}", 1)[0])
         self.assertIn("--gain: var(--emerald);", css)
-        self.assertIn('.app-launcher__tile[data-app-target="admin"] { --app-dot: var(--app-admin); }', css)
+        launcher_css = (settings.BASE_DIR / "albright_labs" / "static" / "labs" / "launcher.css").read_text(encoding="utf-8")
+        self.assertIn('.app-launcher__tile[data-app-target="admin"] { --app-color: var(--app-admin); }', launcher_css)
 
 
 # ---------------------------------------------------------------------------

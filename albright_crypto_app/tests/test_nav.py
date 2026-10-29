@@ -47,7 +47,7 @@ class OpportunitiesNavTests(TestCase):
         self.assertEqual(buttons, {"Home": reverse("labs:hub"), "Trade": reverse("trading_home"),
                                    "Resell": reverse("albright_reselling_app:dashboard"),
                                    "Opps": reverse("albright_crypto_app:inbox"), "Meals": reverse("albright_meals:week")})
-        self.assertIn('class="app-launcher__tile is-current" role="menuitem" data-app-key="opps" '
+        self.assertIn('class="app-launcher__tile is-current" role="menuitem" tabindex="-1" data-app-key="opps" '
                       'data-app-target="opportunities" title="Albright Opportunities" aria-current="page"', content)
 
     def test_nav_is_inbox_pipeline_earnings_settings(self, _outlook):
