@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import api_views, views
+from . import api_views, meals_api, views
 
 # Site pages. Token management and the activity log moved to the Admin area
 # (/control/bot-api/); the old URLs redirect there.
@@ -29,4 +29,11 @@ api_urlpatterns = [
          name="opportunity_proposal"),
     path("site-suggestions", api_views.site_suggestions, name="site_suggestions"),
     path("ideas", api_views.ideas, name="ideas"),
+    # Meals (albright_bot_api.meals_api) - the Recipe Bot.
+    path("meals/plan", meals_api.plan, name="meals_plan"),
+    path("meals/plan/<int:entry_id>", meals_api.plan_delete, name="meals_plan_entry"),
+    path("meals/groceries", meals_api.groceries, name="meals_groceries"),
+    path("meals/groceries/<int:item_id>", meals_api.grocery_update, name="meals_grocery_item"),
+    path("meals/ideas", meals_api.ideas, name="meals_ideas"),
+    path("meals/recipes", meals_api.recipes, name="meals_recipes"),
 ]

@@ -1,0 +1,46 @@
+{% extends "index.html" %}
+{% block page_title %}{{ recipe.title }} · {% endblock %}
+{% block content %}
+<div class="container meals-page meals-narrow">
+    <a href="{% url 'albright_meals:recipes' %}" class="meals-back">&larr; Recipes</a>
+    <article class="meals-recipe">
+        <h1 class="meals-head__title">{{ recipe.title }}</h1>
+        <p class="meals-head__sub">
+            {% if recipe.prep_minutes %}Prep {{ recipe.prep_minutes }} min &middot; {% endif %}{% if recipe.cook_minutes %}Cook {{ recipe.cook_minutes }} min &middot; {% endif %}{% if recipe.servings %}Serves {{ recipe.servings }} &middot; {% endif %}Added by <span class="meals-by">{{ recipe.author_label|default:"someone" }}</span>
+        </p>
+        {% if recipe.image_url %}<img src="{{ recipe.image_url }}" alt="" class="meals-recipe__image" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        {% if recipe.description %}<p>{{ recipe.description|linebreaksbr }}</p>{% endif %}
+        {% if recipe.tags %}<div class="meals-tags">{% for t in recipe.tags %}<a href="{% url 'albright_meals:recipes' %}?tag={{ t|urlencode }}" class="meals-tag">{{ t }}</a>{% endfor %}</div>{% endif %}
+
+        <div class="meals-recipe__actions">
+            <form method="post" action="{% url 'albright_meals:recipe_plan' recipe.pk %}" class="meals-inline" id="recipe-plan-form">{% csrf_token %}
+                <div class="field"><label for="{{ plan_form.date.id_for_label }}">Day</label>{{ plan_form.date }}</div>
+                <div class="field"><label for="{{ plan_form.slot.id_for_label }}">Slot</label>{{ plan_form.slot }}</div>
+                <button type="submit" class="btn btn-primary">Add to plan</button>
+            </form>
+            <form method="post" action="{% url 'albright_meals:recipe_groceries' recipe.pk %}">{% csrf_token %}
+                <button type="submit" class="btn btn-secondary"{% if not ingredients %} disabled{% endif %}>Add ingredients to grocery list</button>
+            </form>
+        </div>
+
+        <section class="card meals-section" id="ingredients">
+            <h2 class="meals-section__title">Ingredients</h2>
+            {% if ingredients %}
+            <ul class="meals-ingredients">
+                {% for i in ingredients %}<li>{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}</li>{% endfor %}
+            </ul>
+            {% else %}<p class="meals-hint">No ingredients listed.</p>{% endif %}
+        </section>
+
+        <section class="card meals-section" id="steps">
+            <h2 class="meals-section__title">Steps</h2>
+            {% if recipe.steps %}
+            <ol class="meals-steps">{% for step in recipe.steps %}<li>{{ step|linebreaksbr }}</li>{% endfor %}</ol>
+            {% else %}<p class="meals-hint">No steps listed.</p>{% endif %}
+        </section>
+
+        {% if recipe.notes %}<section class="card meals-section"><h2 class="meals-section__title">Notes</h2><p>{{ recipe.notes|linebreaksbr }}</p></section>{% endif %}
+        <p class="meals-hint">{% if recipe.source_url %}<a href="{{ recipe.source_url }}" target="_blank" rel="noopener noreferrer nofollow">Original recipe</a> &middot; {% endif %}<a href="{% url 'albright_meals:recipe_edit' recipe.pk %}">Edit this recipe</a></p>
+    </article>
+</div>
+{% endblock %}

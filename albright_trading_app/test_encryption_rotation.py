@@ -37,8 +37,12 @@ class RequiredSettingsTests(TestCase):
 
     def test_settings_file_has_no_secrets_left(self):
         source = open(project_settings.__file__, encoding="utf-8").read()
-        for marker in ("django-insecure", "EMAIL_HOST_PASSWORD", "RECAPTCHA", "ondigitalocean", "doadmin"):
+        for marker in ("django-insecure", "RECAPTCHA", "ondigitalocean", "doadmin"):
             self.assertNotIn(marker, source)
+        # The email password may only ever be read from .env, never written here.
+        password_lines = [line.strip() for line in source.splitlines() if "EMAIL_HOST_PASSWORD" in line]
+        self.assertEqual(password_lines,
+                         ['EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip()'])
         for name in ("SECRET_KEY", "ALPACA_CREDENTIALS_ENCRYPTION_KEY", "DB_HOST", "DB_PASSWORD"):
             self.assertIn(f'required_env("{name}")', source)
 

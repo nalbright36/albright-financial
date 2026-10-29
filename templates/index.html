@@ -44,7 +44,7 @@
 
             <div class="navbar__main-row">
                 {# The brand stays within the current app - never "/", which follows the remembered app. #}
-                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
+                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% elif in_meals_app %}{% url 'albright_meals:week' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
 
                 {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
                 <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">
@@ -95,6 +95,11 @@
                         {% elif in_labs %}
                         <a href="{% url 'labs:hub' %}">Home</a>
                         <a href="{% url 'albright_resume:page' %}">Resume</a>
+                        {% elif in_meals_app %}
+                        <a href="{% url 'albright_meals:week' %}"{% if request.resolver_match.url_name in 'week plan_entry' %} class="active" aria-current="page"{% endif %}>This week</a>
+                        <a href="{% url 'albright_meals:groceries' %}"{% if request.resolver_match.url_name == 'groceries' %} class="active" aria-current="page"{% endif %}>Groceries</a>
+                        <a href="{% url 'albright_meals:ideas' %}"{% if request.resolver_match.url_name == 'ideas' %} class="active" aria-current="page"{% endif %}>Ideas</a>
+                        <a href="{% url 'albright_meals:recipes' %}"{% if request.resolver_match.url_name in 'recipes recipe recipe_add recipe_edit' %} class="active" aria-current="page"{% endif %}>Recipes</a>
                         {% elif in_opportunities_app %}
                         <a href="{% url 'albright_crypto_app:inbox' %}">Inbox</a>
                         <a href="{% url 'albright_crypto_app:pipeline' %}">Pipeline</a>

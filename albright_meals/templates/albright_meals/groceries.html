@@ -1,0 +1,44 @@
+{% extends "index.html" %}
+{% load static %}{% load cache_bust %}
+{% block page_title %}Groceries · {% endblock %}
+{% block content %}
+{% comment %}
+Groceries (albright_meals.views.grocery_page): one shared list, grouped by
+aisle. static/meals/groceries.js checks items off and adds without a page
+reload, and re-fetches the list every 20 seconds (grocery_list) so two
+people shopping see each other's changes - only the list is replaced, never
+the quick-add box, so nothing being typed is lost. Without JS every button
+is a plain form.
+{% endcomment %}
+<div class="container meals-page meals-narrow">
+    <div class="meals-head">
+        <div>
+            <h1 class="meals-head__title">Groceries</h1>
+            <p class="meals-head__sub"><span id="grocery-count">{{ unchecked }}</span> to get</p>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'albright_meals:groceries' %}" class="meals-quickadd" id="grocery-add" autocomplete="off">{% csrf_token %}
+        <label for="grocery-line" class="visually-hidden">Add an item</label>
+        <input type="text" name="line" id="grocery-line" class="ledger-input meals-quickadd__input" maxlength="200"
+               placeholder="e.g. 2 lb chicken thighs" enterkeyhint="done" autocapitalize="none">
+        <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+
+    <div id="grocery-list" data-list-url="{% url 'albright_meals:grocery_list' %}" data-version="{{ version }}" aria-live="polite">
+        {{ list_html }}
+    </div>
+    <p class="meals-hint" id="grocery-sync" aria-live="off">Updates by itself every 20 seconds.</p>
+
+    <div class="meals-grocery-actions">
+        <form method="post" action="{% url 'albright_meals:grocery_from_week' %}">{% csrf_token %}
+            <input type="hidden" name="start" value="{{ week_start|date:'Y-m-d' }}">
+            <button type="submit" class="btn btn-secondary">Add ingredients from this week's meals</button>
+        </form>
+        <form method="post" action="{% url 'albright_meals:grocery_clear' %}" data-confirm="Remove every checked item from the list?">{% csrf_token %}
+            <button type="submit" class="btn btn-secondary" id="grocery-clear"{% if not checked_count %} disabled{% endif %}>Clear checked items</button>
+        </form>
+    </div>
+</div>
+<script src="{% static_version 'meals/groceries.js' %}" defer></script>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "index.html" %}
+{% block page_title %}Reset password · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
+    <div class="card">
+        <div class="card__header"><span class="card__label">Reset your password</span></div>
+        {% if email_off %}
+        <p style="margin: 0;" id="reset-email-off">This site can't send email, so ask the site's owner for a password link.</p>
+        {% else %}
+        <p style="margin: 0 0 12px; font-size: 0.875rem; color: var(--text-secondary);">Enter your account's email address and we'll send you a link.</p>
+        <form method="post">{% csrf_token %}
+            <div class="field">
+                <label for="{{ form.email.id_for_label }}">Email</label>
+                {{ form.email }}
+                {% for error in form.email.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;">Send the link</button>
+        </form>
+        {% endif %}
+        <p style="margin: 16px 0 0; font-size: 0.8125rem;"><a href="{% url 'user_login' %}" style="color: var(--text-secondary);">Back to sign in</a></p>
+    </div>
+</div>
+{% endblock %}

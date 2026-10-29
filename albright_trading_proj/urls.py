@@ -22,9 +22,15 @@ from django.urls import path, re_path
 from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
 from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
+from albright_labs import password_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Password setup/reset links (Admin > Users "Send password setup link", and "Reset password" on sign-in).
+    path("reset_password/", password_views.reset_request, name="password_reset"),
+    path("reset_password/sent/", password_views.ResetDone.as_view(), name="password_reset_done"),
+    path("reset/<uidb64>/<token>/", password_views.ResetConfirm.as_view(), name="password_reset_confirm"),
+    path("reset/done/", password_views.ResetComplete.as_view(), name="password_reset_complete"),
     # Albright Labs, the hub: "/" (public landing, or the signed-in user's landing setting) and "/home/".
     path("", include("albright_labs.urls")),
     path("", include("albright_trading_app.urls")),
@@ -32,6 +38,8 @@ urlpatterns = [
     # The Opportunities app (package albright_crypto_app). Its old prefixes
     # redirect here, keeping the rest of the path and the query string.
     path("opportunities/", include("albright_crypto_app.urls")),
+    # Albright Meals: the meal plan, the shared grocery list, ideas and recipes.
+    path("meals/", include("albright_meals.urls")),
     re_path(r"^(?:crypto|albright_crypto_app)/(?P<rest>.*)$", legacy_redirect, name="opportunities_legacy_redirect"),
     # Bot API: the token pages (Trading nav "Bot API") and the token-authenticated JSON API.
     path("bot-api/", include("albright_bot_api.urls")),

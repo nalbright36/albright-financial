@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'albright_control',
     'albright_resume',
     'albright_labs',
+    'albright_meals',
     'django.contrib.humanize',
 ]
 
@@ -152,6 +153,20 @@ TIME_ZONE = 'America/New_York'
 USE_I18N = True
 
 USE_TZ = True
+
+
+# Outgoing email (optional) - only for password setup/reset links. With no
+# EMAIL_HOST in .env, email is "not configured": Admin > Users shows the setup
+# link for you to send yourself, and the public "Reset password" page says to
+# ask the site's owner instead of trying to send.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "").strip()
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587") or 587)
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "").strip()
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip()
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1").strip() != "0"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "").strip() or EMAIL_HOST_USER or "webmaster@localhost"
+EMAIL_CONFIGURED = bool(EMAIL_HOST)
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24 * 3   # setup/reset links work for 3 days
 
 
 # Static files (CSS, JavaScript, Images)

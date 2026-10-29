@@ -1,0 +1,39 @@
+{% extends "index.html" %}
+{% block page_title %}Recipes · {% endblock %}
+{% block content %}
+<div class="container meals-page">
+    <div class="meals-head">
+        <div>
+            <h1 class="meals-head__title">Recipes</h1>
+            <p class="meals-head__sub">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag %} found{% endif %}</p>
+        </div>
+        <a href="{% url 'albright_meals:recipe_add' %}" class="btn btn-primary btn-sm">Add a recipe</a>
+    </div>
+
+    <form method="get" class="meals-search" role="search">
+        <label for="recipe-q" class="visually-hidden">Search recipes</label>
+        <input type="search" name="q" id="recipe-q" value="{{ q }}" class="ledger-input" placeholder="Search recipes">
+        {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+        <button type="submit" class="btn btn-secondary">Search</button>
+    </form>
+    {% if tags %}
+    <div class="meals-tags" aria-label="Tags">
+        <a href="?{% if q %}q={{ q|urlencode }}{% endif %}" class="meals-tag{% if not tag %} is-active{% endif %}">All</a>
+        {% for t in tags %}<a href="?tag={{ t|urlencode }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}" class="meals-tag{% if t == tag %} is-active" aria-current="true{% endif %}">{{ t }}</a>{% endfor %}
+    </div>
+    {% endif %}
+
+    <ul class="meals-recipe-grid" id="recipe-list">
+        {% for r in recipes %}
+        <li><a href="{% url 'albright_meals:recipe' r.pk %}" class="card meals-recipe-card">
+            <strong class="meals-recipe-card__title">{{ r.title }}</strong>
+            {% if r.description %}<span class="meals-recipe-card__desc">{{ r.description|truncatechars:110 }}</span>{% endif %}
+            <span class="meals-hint">{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
+            {% if r.tags %}<span class="meals-tags meals-tags--small">{% for t in r.tags|slice:":4" %}<span class="meals-tag">{{ t }}</span>{% endfor %}</span>{% endif %}
+        </a></li>
+        {% empty %}
+        <li class="meals-empty">{% if q or tag %}No recipes match.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

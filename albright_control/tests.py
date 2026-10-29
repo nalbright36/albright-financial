@@ -87,12 +87,12 @@ class HeaderTests(AdminTestCase):
     def test_short_labels_and_admin_only_for_superusers(self, _outlook):
         page = self.client.get(reverse("trading_home")).content.decode()
         self.assertEqual(self.buttons(page), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
-                                              ("opportunities", "Opps"), ("admin", "Admin")])
+                                              ("opportunities", "Opps"), ("meals", "Meals"), ("admin", "Admin")])
         self.assertIn('title="Albright Trading"', page)
         regular = Client()
         regular.force_login(self.user)
         page = regular.get(reverse("trading_home")).content.decode()
-        self.assertEqual([t for t, _l in self.buttons(page)], ["labs", "trading", "reselling", "opportunities"])
+        self.assertEqual([t for t, _l in self.buttons(page)], ["labs", "trading", "reselling", "opportunities", "meals"])
         self.assertNotIn(reverse("albright_control:overview"), page)
 
     def test_brand_names_stay_full(self, _outlook):
@@ -502,7 +502,7 @@ class TokenManagementTests(AdminTestCase):
         from albright_bot_api.models import SCOPES
         page = self.client.get(reverse("albright_control:bot_api")).content.decode()
         form = page.split('id="token-form"', 1)[1].split("</form>", 1)[0]
-        self.assertEqual(len(SCOPES), 8)
+        self.assertEqual(len(SCOPES), 10)
         for key, description in SCOPES:
             self.assertIn(f'value="{key}"', form)
             self.assertIn(f"<code>{key}</code> &mdash; {escape(description)}", form)

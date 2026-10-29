@@ -97,8 +97,8 @@ class HeaderTests(TestCase):
                 row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
                 buttons = re.findall(r'<a href="[^"]*" class="(app-switch-btn[^"]*)" data-app-target="(\w+)"', row)
                 self.assertEqual([label for label in re.findall(r'class="app-switch-btn[^"]*"[^>]*>([^<]+)</a>', row)],
-                                 ["Home", "Trade", "Resell", "Opps"])   # short labels (fit a phone); no Admin for a regular user
-                self.assertEqual([target for _cls, target in buttons], ["labs", "trading", "reselling", "opportunities"])
+                                 ["Home", "Trade", "Resell", "Opps", "Meals"])   # short labels (fit a phone); no Admin for a regular user
+                self.assertEqual([target for _cls, target in buttons], ["labs", "trading", "reselling", "opportunities", "meals"])
                 current = [target for cls, target in buttons if "is-current" in cls]
                 self.assertEqual(current, [app])
                 self.assertRegex(row, rf'data-app-target="{app}" title="[^"]+" aria-current="page"')

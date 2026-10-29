@@ -44,7 +44,9 @@ def _iso(value):
 # Docs
 # ---------------------------------------------------------------------------
 
-DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions.
+DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions - except in Meals,
+whose meals:write endpoints add to the household's plan, grocery list, ideas and recipes directly (labeled
+"Recipe Bot" on the site).
 
 BASE URL: <site>/api/bot/v1/
 AUTH: send "Authorization: Bearer <token>" on every request, over HTTPS.
@@ -131,6 +133,58 @@ POST ideas                                            scope: ideas:write
 GET  ideas?page=N                                     scope: ideas:read
   Existing ideas, newest first, 50 per page - check before sending one. Returns
   {"ideas": [{"id", "title", "app", "status", "created_at"}], "page", "pages", "total", "next_page" (int | null)}.
+
+MEALS (the household's meal planning - you are the "Recipe Bot")
+------------------------------------------------------------------
+Slots: "breakfast" | "lunch" | "dinner" | "snack" - one meal per day per slot. Aisles: "produce" | "meat" |
+"dairy" | "bakery" | "pantry" | "frozen" | "household" | "other". Quantities: a number (2, 0.5) or a string
+("1 1/2"), up to 100000. "added_by" is "Recipe Bot" for what you created, else the person's name.
+
+GET  meals/plan?start=YYYY-MM-DD&end=YYYY-MM-DD       scope: meals:read
+  The plan between two dates (default: this week, Monday to Sunday; at most 62 days). Returns
+  {"start", "end", "entries": [{"id", "date", "slot", "title", "recipe_id" (int | null), "status"
+  ("planned"|"cooked"|"skipped"), "notes", "added_by"}]}.
+
+POST meals/plan                                       scope: meals:write
+  Set a day's slot - replaces whatever is planned there. Body: {"date": "YYYY-MM-DD" (required), "slot" (required),
+  "recipe_id": int (optional), "title": str (<=200; required without recipe_id), "notes": str (optional)}.
+  Returns 201 (new) or 200 (replaced) {"id", "created": bool, ...the entry}. 404 if recipe_id doesn't exist.
+
+DELETE meals/plan/<id>                                scope: meals:write
+  Remove a plan entry the Recipe Bot created (403 for anyone else's). Returns {"deleted": id}.
+
+GET  meals/groceries                                  scope: meals:read
+  The shared grocery list. Returns {"items": [{"id", "name", "quantity" (str | null), "unit", "aisle", "note",
+  "checked", "added_by"}]}.
+
+POST meals/groceries                                  scope: meals:write
+  Add one item {"name": str (required, <=120), "quantity", "unit" (<=20), "aisle" (optional - guessed from the
+  name), "note" (<=200)} or many: {"items": [ ...up to 100 of those ]}. An item merges into an UNCHECKED line
+  with the same name and unit (quantities added). Returns 201 {"items": [{"id", "merged": bool, ...}]}.
+
+PATCH meals/groceries/<id>                            scope: meals:write
+  Body: any of {"quantity", "note", "checked": true|false}. Returns the item.
+
+GET  meals/ideas                                      scope: meals:read
+  Meal ideas, newest first (up to 200). Returns {"ideas": [{"id", "title", "notes", "link", "status"
+  ("new"|"planned"|"declined"), "added_by", "created_at"}]}.
+
+POST meals/ideas                                      scope: meals:write
+  Body: {"title": str (required, <=200), "notes": str (optional), "link": http(s) URL (optional)}.
+  Returns 201 {"id", ...}.
+
+GET  meals/recipes?q=<words>                          scope: meals:read
+  Recipes, most recently changed first (up to 200; q filters by title). Each: {"id", "title", "description",
+  "ingredients": [{"name", "quantity", "unit", "note"}], "steps": [str], "prep_minutes", "cook_minutes",
+  "servings", "tags", "source_url", "image_url", "notes", "added_by", "updated_at"}.
+
+POST meals/recipes                                    scope: meals:write
+  Create a recipe, or update the one with the same title (case-insensitive) - only the fields you send change.
+  Body: {"title": str (required, <=200), "description", "notes" (<=5000), "ingredients": [{"name" (required,
+  <=120), "quantity" (<=20), "unit" (<=20), "note" (<=200)} or "2 lb chicken thighs", ...] (<=100),
+  "steps": [str (<=2000)] (<=100), "prep_minutes" / "cook_minutes" (0-2880), "servings" (1-100),
+  "tags": [str (<=50)] (<=20), "source_url" / "image_url" (http(s), <=500)}.
+  Returns 201 (created) or 200 (updated) {"id": int, "created": bool}.
 """
 
 

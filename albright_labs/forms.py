@@ -46,9 +46,13 @@ class LandingSettingsForm(forms.ModelForm):
 class CreateUserForm(forms.Form):
     """Admin > Users: add someone and choose the apps they can open."""
     username = forms.CharField(max_length=150, widget=forms.TextInput(attrs={**INPUT, "autocomplete": "off"}))
-    email = forms.EmailField(required=False, widget=forms.EmailInput(attrs={**INPUT, "autocomplete": "off"}))
-    password = forms.CharField(widget=forms.PasswordInput(attrs={**INPUT, "autocomplete": "new-password"}),
-                               help_text="Give it to them yourself; they sign in with it.")
+    first_name = forms.CharField(max_length=150, required=False, label="First name",
+                                 widget=forms.TextInput(attrs={**INPUT, "autocomplete": "off"}),
+                                 help_text='Shown as who added things (e.g. on the grocery list).')
+    email = forms.EmailField(required=False, widget=forms.EmailInput(attrs={**INPUT, "autocomplete": "off"}),
+                             help_text="Where the password setup link goes, if this site can send email.")
+    password = forms.CharField(required=False, widget=forms.PasswordInput(attrs={**INPUT, "autocomplete": "new-password"}),
+                               help_text='Leave blank and use "Send password setup link" to let them choose their own.')
     apps = forms.MultipleChoiceField(required=False, widget=forms.CheckboxSelectMultiple, label="Apps they can open")
 
     def __init__(self, *args, **kwargs):

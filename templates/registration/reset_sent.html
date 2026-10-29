@@ -1,0 +1,11 @@
+{% extends "index.html" %}
+{% block page_title %}Check your email · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
+    <div class="card">
+        <div class="card__header"><span class="card__label">Check your email</span></div>
+        <p style="margin: 0;">If that address belongs to an account, a link to choose a new password is on its way.</p>
+        <p style="margin: 16px 0 0; font-size: 0.8125rem;"><a href="{% url 'user_login' %}" style="color: var(--text-secondary);">Back to sign in</a></p>
+    </div>
+</div>
+{% endblock %}

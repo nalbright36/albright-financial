@@ -1,0 +1,7 @@
+{% autoescape off %}Hi {{ user.first_name|default:user.get_username }},
+
+Someone asked to reset the password for your Albright Labs account ({{ user.get_username }}). Choose a new one here:
+
+{{ protocol }}://{{ domain }}{% url 'password_reset_confirm' uidb64=uid token=token %}
+
+The link works once. If you didn't ask for this, you can ignore this email.{% endautoescape %}

@@ -48,7 +48,7 @@ class OpportunitiesNavTests(TestCase):
         buttons = self.switch_buttons(reverse("albright_crypto_app:inbox"))
         self.assertEqual(buttons, {"Home": reverse("labs:hub"), "Trade": reverse("trading_home"),
                                    "Resell": reverse("albright_reselling_app:dashboard"),
-                                   "Opps": reverse("albright_crypto_app:inbox")})
+                                   "Opps": reverse("albright_crypto_app:inbox"), "Meals": reverse("albright_meals:week")})
         self.assertIn('class="app-switch-btn is-current" data-app-target="opportunities" title="Albright Opportunities" '
                       'aria-current="page"', content)
 

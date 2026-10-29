@@ -5,6 +5,17 @@
     <h1 style="margin: 0 0 6px;">Users</h1>
     <p style="margin: 0 0 16px; font-size: 0.8125rem; color: var(--text-secondary);">Which apps each person can open. Without access, every page of that app is a "not found" page for them, so they never see it exists. Superusers always have every app, plus Admin. Each person chooses for themselves which of their apps show in their navigation.</p>
 
+    {% if setup_link %}
+    <section class="card users-setup-link" id="setup-link" aria-live="polite">
+        <div class="card__header"><span class="card__label">Password setup link for {{ setup_user.username }}</span></div>
+        <p style="margin: 0 0 8px; font-size: 0.875rem;">Not emailed, because {{ email_reason }}. Send it to them yourself (a text is fine). It works once and expires in {{ setup_days }} days.</p>
+        <div class="users-setup-link__row">
+            <input type="text" readonly value="{{ setup_link }}" id="setup-link-value" class="ledger-input" aria-label="Password setup link" onfocus="this.select()">
+            <button type="button" class="btn btn-secondary btn-sm" data-copy-target="setup-link-value">Copy</button>
+        </div>
+    </section>
+    {% endif %}
+
     <section class="card" style="padding: 0;">
         <div class="table-scroll">
         <table class="holdings" id="users-table">
@@ -13,14 +24,16 @@
             {% for row in rows %}
             <tr>
                 <td><strong>{{ row.user.username }}</strong>
-                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{% if row.user.is_superuser %}Superuser - every app{% elif not row.user.is_active %}Inactive{% else %}Joined {{ row.user.date_joined|date:"M j, Y" }}{% endif %}</div></td>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{% if row.user.is_superuser %}Superuser - every app{% elif not row.user.is_active %}Inactive{% else %}Joined {{ row.user.date_joined|date:"M j, Y" }}{% if not row.user.has_usable_password %} &middot; no password yet{% endif %}{% endif %}</div></td>
                 {% if row.user.is_superuser %}
                 {% for cell in row.cells %}<td><input type="checkbox" checked disabled aria-label="{{ row.user.username }}: {{ cell.label }}"></td>{% endfor %}
                 <td></td>
                 {% else %}
                 {% for cell in row.cells %}<td><input type="checkbox" name="apps" value="{{ cell.key }}" form="access-{{ row.user.pk }}"{% if cell.on %} checked{% endif %} aria-label="{{ row.user.username }}: {{ cell.label }}"></td>{% endfor %}
-                <td><form method="post" id="access-{{ row.user.pk }}">{% csrf_token %}<input type="hidden" name="action" value="access"><input type="hidden" name="user_id" value="{{ row.user.pk }}">
-                    <button type="submit" class="btn btn-secondary btn-sm">Save</button></form></td>
+                <td class="users-actions"><form method="post" id="access-{{ row.user.pk }}">{% csrf_token %}<input type="hidden" name="action" value="access"><input type="hidden" name="user_id" value="{{ row.user.pk }}">
+                    <button type="submit" class="btn btn-secondary btn-sm">Save</button></form>
+                    {% if row.user.is_active %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="setup_link"><input type="hidden" name="user_id" value="{{ row.user.pk }}">
+                    <button type="submit" class="btn btn-secondary btn-sm">Send password setup link</button></form>{% endif %}</td>
                 {% endif %}
             </tr>
             {% endfor %}
@@ -38,7 +51,7 @@
             <div class="field">
                 <label for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required %} (optional){% endif %}</label>
                 {{ field }}
-                {% if field.help_text %}<small style="color: var(--text-secondary);">{{ field.help_text }}</small>{% endif %}
+                {% if field.help_text %}<small style="color: var(--text-secondary);" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</small>{% endif %}
                 {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
             </div>
             {% endif %}{% endfor %}
@@ -50,4 +63,16 @@
         <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Add user</button>
     </form>
 </div>
+<script>
+    // "Copy" next to the setup link.
+    document.addEventListener('click', function (e) {
+        var button = e.target.closest('[data-copy-target]');
+        if (!button) return;
+        var field = document.getElementById(button.dataset.copyTarget);
+        field.select();
+        (navigator.clipboard ? navigator.clipboard.writeText(field.value) : Promise.reject())
+            .then(function () { button.textContent = 'Copied'; })
+            .catch(function () { document.execCommand('copy'); button.textContent = 'Copied'; });
+    });
+</script>
 {% endblock %}

@@ -9,7 +9,8 @@
     document.querySelectorAll("[data-tile-url]").forEach(function (tile) {
         var value = tile.querySelector("[data-tile-value]");
         var note = tile.querySelector("[data-tile-note]");
-        function show(text, detail, tone) {
+        function show(text, detail, tone, size) {
+            value.classList.toggle("is-text", size === "text");   // a name (Meals' dinner), not a number
             value.textContent = text;
             note.textContent = detail || "";
             tile.classList.toggle("is-unavailable", text === "—");
@@ -18,7 +19,7 @@
         fetch(tile.dataset.tileUrl, {headers: {"X-Requested-With": "XMLHttpRequest"}, credentials: "same-origin"})
             .then(function (r) { return r.ok ? r.json() : {ok: false, note: "Not available right now"}; })
             .then(function (data) {
-                if (data.ok) show(data.value, data.note, data.tone);
+                if (data.ok) show(data.value, data.note, data.tone, data.size);
                 else show("—", data.note);
             })
             .catch(function () { show("—", "Not available right now"); });

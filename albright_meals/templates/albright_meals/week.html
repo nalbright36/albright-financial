@@ -1,0 +1,122 @@
+{% extends "index.html" %}
+{% block page_title %}This week · {% endblock %}
+{% block content %}
+{% comment %}
+This week (albright_meals.views.week): seven day cards - stacked on a phone,
+a grid on wider screens. Each meal links to its recipe (or its own page when
+it's just a title); its "..." menu marks it cooked/skipped, moves it, edits
+or removes it. Every action is a plain form, so it all works without JS.
+{% endcomment %}
+<div class="container meals-page">
+    <div class="meals-head">
+        <div>
+            <h1 class="meals-head__title">This week</h1>
+            <p class="meals-head__sub">{{ start|date:"M j" }} &ndash; {{ end|date:"M j, Y" }}</p>
+        </div>
+        <nav class="meals-weeknav" aria-label="Week">
+            <a href="?start={{ prev|date:'Y-m-d' }}" class="btn btn-secondary btn-sm" aria-label="Previous week">&larr;</a>
+            {% if start != this_week %}<a href="{% url 'albright_meals:week' %}" class="btn btn-secondary btn-sm">Today</a>{% endif %}
+            <a href="?start={{ next|date:'Y-m-d' }}" class="btn btn-secondary btn-sm" aria-label="Next week">&rarr;</a>
+        </nav>
+    </div>
+
+    <div class="meals-week" id="meals-week">
+        {% for day, slot_rows, has_meals in days %}
+        <section class="card meals-day{% if day == today %} is-today{% endif %}" data-day="{{ day|date:'Y-m-d' }}" aria-label="{{ day|date:'l, F j' }}">
+            <header class="meals-day__head">
+                <span class="meals-day__name">{{ day|date:"D" }}</span>
+                <span class="meals-day__date">{{ day|date:"M j" }}</span>
+                {% if day == today %}<span class="badge meals-today-badge">Today</span>{% endif %}
+            </header>
+            <ul class="meals-day__list">
+                {% for slot, slot_label, entry in slot_rows %}{% if entry %}
+                <li class="meals-meal meals-meal--{{ entry.status }}" data-entry="{{ entry.pk }}">
+                    <span class="meals-meal__slot">{{ slot_label }}</span>
+                    <a class="meals-meal__title" href="{% if entry.recipe_id %}{% url 'albright_meals:recipe' entry.recipe_id %}{% else %}{% url 'albright_meals:plan_entry' entry.pk %}{% endif %}">{{ entry.display_title }}</a>
+                    <span class="meals-meal__meta">{% if entry.status != "planned" %}<span class="badge {% if entry.status == 'cooked' %}gain{% else %}neutral{% endif %}">{{ entry.get_status_display }}</span>{% endif %}{% if entry.from_bot %} <span class="meals-by">Recipe Bot</span>{% endif %}</span>
+                    <details class="meals-actions">
+                        <summary class="meals-actions__toggle" aria-label="Actions for {{ entry.display_title }}">&hellip;</summary>
+                        <div class="meals-actions__panel">
+                            <div class="meals-actions__row">
+                                {% for value, label in entry.STATUSES %}{% if value != entry.status %}
+                                <form method="post" action="{% url 'albright_meals:plan_status' entry.pk %}">{% csrf_token %}<input type="hidden" name="status" value="{{ value }}">
+                                    <button type="submit" class="btn btn-secondary btn-sm">{% if value == "planned" %}Back to planned{% else %}{{ label }}{% endif %}</button></form>
+                                {% endif %}{% endfor %}
+                            </div>
+                            <form method="post" action="{% url 'albright_meals:plan_move' entry.pk %}" class="meals-move">{% csrf_token %}
+                                <label class="visually-hidden" for="move-day-{{ entry.pk }}">Move to day</label>
+                                <select name="date" id="move-day-{{ entry.pk }}" class="ledger-input">
+                                    {% for other_day, _rows, _has in days %}<option value="{{ other_day|date:'Y-m-d' }}"{% if other_day == day %} selected{% endif %}>{{ other_day|date:"D M j" }}</option>{% endfor %}
+                                    <option value="{{ next|date:'Y-m-d' }}">Next {{ next|date:"D M j" }}</option>
+                                </select>
+                                <label class="visually-hidden" for="move-slot-{{ entry.pk }}">Slot</label>
+                                <select name="slot" id="move-slot-{{ entry.pk }}" class="ledger-input">
+                                    {% for value, label in slots %}<option value="{{ value }}"{% if value == entry.slot %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-secondary btn-sm">Move</button>
+                            </form>
+                            <div class="meals-actions__row">
+                                <a href="{% url 'albright_meals:plan_entry' entry.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                <form method="post" action="{% url 'albright_meals:plan_delete' entry.pk %}" data-confirm="Remove {{ entry.display_title }} from the plan?">{% csrf_token %}
+                                    <button type="submit" class="btn btn-secondary btn-sm">Remove</button></form>
+                            </div>
+                        </div>
+                    </details>
+                </li>
+                {% endif %}{% endfor %}
+                {% if not has_meals %}<li class="meals-day__empty">Nothing planned</li>{% endif %}
+            </ul>
+            <details class="meals-add">
+                <summary class="meals-add__toggle">+ Add a meal</summary>
+                <form method="post" action="{% url 'albright_meals:plan_add' %}" class="meals-add__form">{% csrf_token %}
+                    <input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}">
+                    <label for="add-slot-{{ forloop.counter }}">Slot</label>
+                    <select name="slot" id="add-slot-{{ forloop.counter }}" class="ledger-input">
+                        {% for value, label in slots %}<option value="{{ value }}"{% if value == "dinner" %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <label for="add-recipe-{{ forloop.counter }}">Recipe</label>
+                    <select name="recipe" id="add-recipe-{{ forloop.counter }}" class="ledger-input">
+                        <option value="">No recipe - just a title</option>
+                        {% for r in recipes %}<option value="{{ r.pk }}">{{ r.title }}</option>{% endfor %}
+                    </select>
+                    <label for="add-title-{{ forloop.counter }}">Or a title</label>
+                    <input type="text" name="title" id="add-title-{{ forloop.counter }}" class="ledger-input" maxlength="200" placeholder="e.g. Leftovers, Pizza night">
+                    <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                </form>
+            </details>
+        </section>
+        {% endfor %}
+    </div>
+
+    <form method="post" action="{% url 'albright_meals:grocery_from_week' %}" class="meals-week-foot">{% csrf_token %}
+        <input type="hidden" name="start" value="{{ start|date:'Y-m-d' }}">
+        <button type="submit" class="btn btn-secondary">Add this week's ingredients to Groceries</button>
+    </form>
+
+    {% if settings_form %}
+    <form method="post" action="{% url 'albright_meals:settings' %}" class="card meals-settings" id="meals-settings">{% csrf_token %}
+        <div class="card__header"><span class="card__label">My daily digest</span></div>
+        <label class="labs-choice">{{ settings_form.digest_tonight }} Add &ldquo;Tonight: &lt;dinner&gt;&rdquo; to my daily Telegram digest</label>
+        <p class="meals-hint">Only you get the digest. Nothing from Meals is sent to anyone else.</p>
+        <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+    </form>
+    {% endif %}
+</div>
+<script>
+    // One meal's "..." menu open at a time; a tap elsewhere or Escape closes it.
+    (function () {
+        var menus = document.querySelectorAll('.meals-actions');
+        menus.forEach(function (menu) {
+            menu.addEventListener('toggle', function () {
+                if (menu.open) menus.forEach(function (other) { if (other !== menu) other.open = false; });
+            });
+            menu.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && menu.open) { menu.open = false; menu.querySelector('summary').focus(); }
+            });
+        });
+        document.addEventListener('click', function (e) {
+            menus.forEach(function (menu) { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+        });
+    })();
+</script>
+{% endblock %}

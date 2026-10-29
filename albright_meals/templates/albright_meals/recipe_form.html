@@ -1,0 +1,19 @@
+{% extends "index.html" %}
+{% block page_title %}{% if recipe %}Edit {{ recipe.title }}{% else %}New recipe{% endif %} · {% endblock %}
+{% block content %}
+<div class="container meals-page meals-narrow">
+    <a href="{% if recipe %}{% url 'albright_meals:recipe' recipe.pk %}{% else %}{% url 'albright_meals:recipes' %}{% endif %}" class="meals-back">&larr; {% if recipe %}{{ recipe.title }}{% else %}Recipes{% endif %}</a>
+    <h1 class="meals-head__title">{% if recipe %}Edit recipe{% else %}New recipe{% endif %}</h1>
+    <form method="post" class="card meals-form" id="recipe-form">{% csrf_token %}
+        {% for field in form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required %} (optional){% endif %}</label>
+            {{ field }}
+            {% if field.name == "ingredients_text" %}<small class="meals-hint">Like the grocery list: "2 lb chicken thighs", "1 onion, diced".</small>{% endif %}
+            {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Save recipe</button>
+    </form>
+</div>
+{% endblock %}

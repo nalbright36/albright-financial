@@ -1,0 +1,25 @@
+{% load meals_extras %}{% for key, label, rows in groups %}
+<section class="meals-aisle" data-aisle="{{ key }}">
+    <h2 class="meals-aisle__name">{{ label }}</h2>
+    <ul class="meals-aisle__list">
+        {% for item in rows %}
+        <li class="meals-item{% if item.checked %} is-checked{% endif %}" data-item="{{ item.pk }}">
+            <form method="post" action="{% url 'albright_meals:grocery_toggle' item.pk %}" class="meals-item__toggle-form" data-list-action>{% csrf_token %}
+                <button type="submit" class="meals-item__toggle" aria-pressed="{% if item.checked %}true{% else %}false{% endif %}" data-item-button="{{ item.pk }}">
+                    <span class="meals-item__box" aria-hidden="true"></span>
+                    <span class="meals-item__text">
+                        <span class="meals-item__name">{% if item.quantity is not None %}<span class="meals-item__qty">{{ item.quantity|qty }}{% if item.unit %} {{ item.unit }}{% endif %}</span> {% elif item.unit %}<span class="meals-item__qty">{{ item.unit }}</span> {% endif %}{{ item.name }}</span>
+                        {% if item.note or item.from_bot %}<span class="meals-item__note">{{ item.note }}{% if item.note and item.from_bot %} &middot; {% endif %}{% if item.from_bot %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>{% endif %}
+                    </span>
+                </button>
+            </form>
+            <form method="post" action="{% url 'albright_meals:grocery_delete' item.pk %}" class="meals-item__delete-form" data-list-action>{% csrf_token %}
+                <button type="submit" class="meals-item__delete" aria-label="Remove {{ item.name }}">&times;</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% empty %}
+<p class="meals-empty" id="grocery-empty">The list is empty. Add something above, or add this week's ingredients.</p>
+{% endfor %}

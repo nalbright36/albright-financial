@@ -23,6 +23,9 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("site:suggest", "Drop website improvement ideas in the Admin inbox (Bot suggestions)."),
     ("ideas:write", "Save the owner's ideas (what they told the bot) to Admin > Ideas."),
     ("ideas:read", "List existing idea titles and statuses, to avoid sending duplicates."),
+    ("meals:read", "Read the Meals plan, grocery list, meal ideas and recipes."),
+    ("meals:write", "Add and change Meals data: save recipes, set a day's meal (and remove its own), add to or "
+                    "update the grocery list, add meal ideas. Shown on the site as \"Recipe Bot\"."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

@@ -63,7 +63,10 @@ def nav_keys(user, pref):
     least one always shows while they can open any (if access to every shown app was
     removed, the first one they still have)."""
     ordered = ordered_keys(user, pref)
-    visible = set(pref.visible_apps or [])
+    # An app the user has never arranged (not in their saved order - e.g. one added to
+    # the registry after they last saved) shows until they choose otherwise.
+    arranged = set(pref.app_order or [])
+    visible = set(pref.visible_apps or []) | {key for key in ordered if key not in arranged}
     shown = [key for key in ordered if key in visible]
     return shown or ordered[:1]
 

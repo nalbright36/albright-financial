@@ -1,0 +1,11 @@
+{% extends "index.html" %}
+{% block page_title %}Password saved · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
+    <div class="card">
+        <div class="card__header"><span class="card__label">Password saved</span></div>
+        <p style="margin: 0 0 16px;">You can sign in with it now.</p>
+        <a href="{% url 'user_login' %}" class="btn btn-primary" style="width: 100%; justify-content: center;">Sign in</a>
+    </div>
+</div>
+{% endblock %}

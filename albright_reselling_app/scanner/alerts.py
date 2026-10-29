@@ -665,6 +665,10 @@ def build_digest_message(now=None):
     if apps.is_installed("albright_crypto_app"):
         from albright_crypto_app.alerts import digest_lines as crypto_digest_lines
         lines += crypto_digest_lines(now=now)
+    # Meals: "Tonight: <dinner>" (albright_meals.digest - its own on/off setting).
+    if apps.is_installed("albright_meals"):
+        from albright_meals.digest import digest_lines as meals_digest_lines
+        lines += meals_digest_lines(now=now)
 
     return "\n".join(lines)
 

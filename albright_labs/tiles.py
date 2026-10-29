@@ -59,6 +59,19 @@ def opps(user):
     return {"value": str(inbox.count()), "note": f"in the Inbox · {today} new today"}
 
 
+def meals(user):
+    """Tonight's dinner, and what's still on the grocery list."""
+    from albright_meals.models import GroceryItem
+    from albright_meals.plan import tonight
+    dinner = tonight()
+    to_get = GroceryItem.objects.filter(checked=False).count()
+    title = dinner.display_title if dinner else "Nothing planned"
+    if len(title) > 40:
+        title = title[:39].rstrip() + "…"
+    return {"value": title, "note": f"tonight · {to_get} on the grocery list", "tone": "" if dinner else "warn",
+            "size": "text"}
+
+
 def admin(user):
     """Scheduled jobs that are late or failing (Admin > System health)."""
     from albright_control import jobs

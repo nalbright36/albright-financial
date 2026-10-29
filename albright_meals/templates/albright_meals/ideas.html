@@ -1,0 +1,57 @@
+{% extends "index.html" %}
+{% block page_title %}Ideas · {% endblock %}
+{% block content %}
+<div class="container meals-page meals-narrow">
+    <div class="meals-head">
+        <div>
+            <h1 class="meals-head__title">Ideas</h1>
+            <p class="meals-head__sub">Meals to try some day - put one in the plan, or decline it.</p>
+        </div>
+    </div>
+
+    <form method="post" class="card meals-form" id="idea-form">{% csrf_token %}
+        <div class="card__header"><span class="card__label">Add an idea</span></div>
+        {% for field in form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required %} (optional){% endif %}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Save idea</button>
+    </form>
+
+    <nav class="meals-tabs" aria-label="Which ideas">
+        <a href="?show=new" class="meals-tab{% if show == 'new' %} is-active" aria-current="page{% endif %}">New ({{ new_count }})</a>
+        <a href="?show=done" class="meals-tab{% if show != 'new' %} is-active" aria-current="page{% endif %}">Planned &amp; declined</a>
+    </nav>
+
+    <ul class="meals-cards" id="idea-list">
+        {% for idea in ideas %}
+        <li class="card meals-idea meals-idea--{{ idea.status }}">
+            <div class="meals-idea__head">
+                <strong class="meals-idea__title">{{ idea.title }}</strong>
+                {% if idea.status != "new" %}<span class="badge {% if idea.status == 'planned' %}gain{% else %}neutral{% endif %}">{{ idea.get_status_display }}</span>{% endif %}
+            </div>
+            {% if idea.notes %}<p class="meals-notes">{{ idea.notes|linebreaksbr }}</p>{% endif %}
+            {% if idea.link %}<p class="meals-link"><a href="{{ idea.link }}" target="_blank" rel="noopener noreferrer nofollow">{{ idea.link|truncatechars:60 }}</a></p>{% endif %}
+            <p class="meals-hint">Added by <span class="meals-by">{{ idea.author_label|default:"someone" }}</span> &middot; {{ idea.created_at|date:"M j" }}{% if idea.planned_entry %} &middot; planned for <a href="{% url 'albright_meals:week' %}?start={{ idea.planned_entry.date|date:'Y-m-d' }}">{{ idea.planned_entry.date|date:"D M j" }}</a>{% endif %}</p>
+            {% if idea.status == "new" %}
+            <form method="post" action="{% url 'albright_meals:idea_plan' idea.pk %}" class="meals-inline">{% csrf_token %}
+                <div class="field"><label for="idea-day-{{ idea.pk }}">Day</label>
+                    <input type="date" name="date" id="idea-day-{{ idea.pk }}" class="ledger-input" value="{{ plan_form.date.value|date:'Y-m-d' }}" required></div>
+                <div class="field"><label for="idea-slot-{{ idea.pk }}">Slot</label>
+                    <select name="slot" id="idea-slot-{{ idea.pk }}" class="ledger-input">{% for value, label in slots %}<option value="{{ value }}"{% if value == "dinner" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <button type="submit" class="btn btn-primary btn-sm">Put in the plan</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'albright_meals:idea_decline' idea.pk %}">{% csrf_token %}
+                <button type="submit" class="btn btn-secondary btn-sm">{% if idea.status == "declined" %}Bring it back{% else %}Decline{% endif %}</button>
+            </form>
+        </li>
+        {% empty %}
+        <li class="meals-empty">{% if show == "new" %}No new ideas. Add one above - or ask the Recipe Bot.{% else %}Nothing planned or declined yet.{% endif %}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
