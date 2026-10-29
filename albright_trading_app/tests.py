@@ -190,7 +190,7 @@ class LoginRedirectTests(TestCase):
 
 
 class AppSwitchTests(TestCase):
-    """The header's app-switch buttons (and the brand link) go straight to
+    """The header launcher's app tiles (and the brand link) go straight to
     each app's own landing page by URL name - never "/", which follows the
     remembered app and so used to bounce "Trading" back to the reseller."""
 
@@ -204,14 +204,14 @@ class AppSwitchTests(TestCase):
 
     def href(self, nav_html, css_class, target=None):
         if target:
-            return re.search(rf'<a href="([^"]*)" class="{css_class}[^"]*" data-app-target="{target}"', nav_html).group(1)
+            return re.search(rf'<a href="([^"]*)" class="{css_class}[^"]*"[^>]*data-app-target="{target}"', nav_html).group(1)
         return re.search(rf'<a href="([^"]*)" class="{css_class}"', nav_html).group(1)
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_trading_button_goes_to_trading_landing_and_sets_cookie(self, mock_outlook):
         dashboard = self.client.get(reverse("albright_reselling_app:dashboard"))
         self.assertEqual(dashboard.cookies[LAST_APP_COOKIE].value, "reseller")
-        trading_href = self.href(self.nav(dashboard), "app-switch-btn", "trading")
+        trading_href = self.href(self.nav(dashboard), "app-launcher__tile", "trading")
 
         self.assertEqual(trading_href, reverse("trading_home"))
         self.assertNotEqual(trading_href, "/")
@@ -225,7 +225,7 @@ class AppSwitchTests(TestCase):
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_reselling_button_goes_to_reseller_dashboard_and_sets_cookie(self, mock_outlook):
         trading = self.client.get(reverse("trading_home"))
-        reseller_href = self.href(self.nav(trading), "app-switch-btn", "reselling")
+        reseller_href = self.href(self.nav(trading), "app-launcher__tile", "reselling")
 
         self.assertEqual(reseller_href, reverse("albright_reselling_app:dashboard"))
 

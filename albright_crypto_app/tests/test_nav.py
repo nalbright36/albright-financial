@@ -1,6 +1,6 @@
 """The Opportunities app's navigation (display name only - package, app label
-and URL namespace stay albright_crypto_app): the header's "Opps" app-switch
-button in every app (linking straight to the Inbox, never "/"), the app's own
+and URL namespace stay albright_crypto_app): the header launcher's "Opps" tile
+in every app (linking straight to the Inbox, never "/"), the app's own
 nav (Inbox, Pipeline, Earnings, Settings - no type or status tabs), the
 /opportunities/ prefix with the old /crypto/ and /albright_crypto_app/ URLs
 and the old Crypto / Income pages redirecting, the remembered-app cookie,
@@ -14,6 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from albright_trading_proj.middleware import LAST_APP_COOKIE
+from albright_labs.testing import launcher_links
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 
@@ -24,10 +25,7 @@ class OpportunitiesNavTests(TestCase):
         self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def switch_buttons(self, url):
-        content = self.client.get(url).content.decode()
-        row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
-        return dict((label, href) for href, label in
-                    re.findall(r'<a href="([^"]*)" class="app-switch-btn[^"]*"[^>]*>([^<]+)</a>', row))
+        return launcher_links(self.client.get(url).content.decode())
 
     def nav_links(self, url):
         content = self.client.get(url).content.decode()
@@ -49,8 +47,8 @@ class OpportunitiesNavTests(TestCase):
         self.assertEqual(buttons, {"Home": reverse("labs:hub"), "Trade": reverse("trading_home"),
                                    "Resell": reverse("albright_reselling_app:dashboard"),
                                    "Opps": reverse("albright_crypto_app:inbox"), "Meals": reverse("albright_meals:week")})
-        self.assertIn('class="app-switch-btn is-current" data-app-target="opportunities" title="Albright Opportunities" '
-                      'aria-current="page"', content)
+        self.assertIn('class="app-launcher__tile is-current" role="menuitem" data-app-key="opps" '
+                      'data-app-target="opportunities" title="Albright Opportunities" aria-current="page"', content)
 
     def test_nav_is_inbox_pipeline_earnings_settings(self, _outlook):
         for name in ("inbox", "pipeline", "earnings", "settings"):

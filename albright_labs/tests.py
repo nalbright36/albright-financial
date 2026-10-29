@@ -19,6 +19,7 @@ from albright_resume.models import Project, ResumeSettings
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import tiles
+from .testing import current_tiles, launcher_links, launcher_tiles
 from .checks import static_files_collected
 from .models import LandingSettings, UserPreference
 
@@ -71,7 +72,7 @@ class PublicLandingTests(TestCase):
         User.objects.create_user(username="someone-private", password="pw-not-real-12345")
         page = self.get().content.decode()
         for private in ("someone-private", "Logout", "Grok Bot", "Watchlist", "Inbox", "Trading Account",
-                        "equity", "app-switch-btn", "navbar__links"):
+                        "equity", "app-launcher", "navbar__links"):
             self.assertNotIn(private, page)
 
     def test_strict_security_headers(self):
@@ -237,19 +238,18 @@ class HeaderTests(TestCase):
     def setUp(self):
         self.client.force_login(User.objects.create_user(username="nate", password="pw-not-real-12345"))
 
-    def switch_row(self, url):
+    def content(self, url):
         with mock.patch(OUTLOOK, return_value=None):
-            content = self.client.get(url).content.decode()
-        return content.split('class="navbar__switch-row"')[1].split("</div>")[0]
+            return self.client.get(url).content.decode()
 
-    def test_home_button_comes_first_with_the_labs_dot(self):
+    def test_home_tile_comes_first_in_the_launcher(self):
         for url in (reverse("labs:hub"), reverse("trading_home"), reverse("albright_reselling_app:dashboard"),
                     reverse("albright_crypto_app:inbox")):
             with self.subTest(url=url):
-                row = self.switch_row(url)
-                self.assertLess(row.index('data-app-target="labs"'), row.index('data-app-target="trading"'))
-                self.assertIn(f'<a href="{reverse("labs:hub")}" class="app-switch-btn', row)
-        self.assertIn('class="app-switch-btn is-current" data-app-target="labs"', self.switch_row(reverse("labs:hub")))
+                content = self.content(url)
+                self.assertEqual(launcher_tiles(content)[0], ("labs", "Home"))
+                self.assertEqual(launcher_links(content)["Home"], reverse("labs:hub"))
+        self.assertEqual(current_tiles(self.content(reverse("labs:hub"))), ["labs"])
 
     def test_app_brands_unchanged(self):
         with mock.patch(OUTLOOK, return_value=None):

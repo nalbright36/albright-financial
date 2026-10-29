@@ -2,8 +2,8 @@
 and the "where I land" options (a new app is one entry); access is enforced
 with a 404 on page and JSON views; superusers always have everything;
 hiding an app changes only the menu, not access; at least one app stays
-visible; the user's order is respected; at 5+ buttons the extras go in
-"More"; the landing preference falls back to Home when its app is hidden or
+visible; the user's order is respected in the header's app launcher (Admin
+last); the landing preference falls back to Home when its app is hidden or
 access is removed; and Admin > Users is superuser-only."""
 import dataclasses
 import re
@@ -17,29 +17,16 @@ from albright_control.models import AuditEntry
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import apps_registry
+from .testing import current_tiles, launcher_tiles
 from .models import UserPreference
 from .tests import OUTLOOK, resume_site
 
 PASSWORD = "pw-not-real-12345"
 
 
-def switch_row(content):
-    return content.split('class="navbar__switch-row"')[1].split("</div>")[0]
-
-
 def buttons(content):
-    """[(data-app-target, label), ...] of the header's app buttons, inline and in "More"."""
-    return re.findall(r'class="app-switch-btn[^"]*" data-app-target="(\w+)"[^>]*>([^<]+)</a>', switch_row(content))
-
-
-def inline_buttons(content):
-    return buttons(content.split('id="app-switch-more"')[0] + "</div>")
-
-
-def more_buttons(content):
-    if 'id="app-switch-more"' not in content:
-        return []
-    return buttons('class="navbar__switch-row"' + content.split('id="app-switch-more"')[1])
+    """[(data-app-target, label), ...] of the header launcher's tiles ([] when there's no launcher)."""
+    return launcher_tiles(content)
 
 
 class Base(TestCase):
@@ -92,10 +79,8 @@ class RegistryTests(Base):
     def test_a_new_app_is_one_entry(self):
         self.with_garden()
         hub = self.page(reverse("labs:hub"))
-        # Home + five apps: Home + three on the row, the other two in "More".
-        self.assertEqual(inline_buttons(hub), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
-                                               ("opportunities", "Opps")])
-        self.assertEqual(more_buttons(hub), [("meals", "Meals"), ("garden", "Garden")])
+        self.assertEqual(buttons(hub), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
+                                        ("opportunities", "Opps"), ("meals", "Meals"), ("garden", "Garden")])
         self.assertIn('style="--app-dot: var(--app-garden, #F59E0B);"', hub)
         self.assertIn('data-tile="garden"', hub)
         self.assertIn("Plan the week&#x27;s watering.", hub)
@@ -140,9 +125,10 @@ class AccessTests(Base):
 
     def test_header_and_home_show_only_allowed_apps(self):
         hub = self.page(reverse("labs:hub"))
-        self.assertEqual(buttons(hub), [("labs", "Home"), ("reselling", "Resell")])
+        # One app: nothing to switch to, so no launcher at all.
+        self.assertEqual(buttons(hub), [])
+        self.assertNotIn('id="app-launcher"', hub)
         self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["resell"])
-        self.assertNotIn("Trade", [label for _, label in buttons(hub)])
 
     def test_public_pages_bot_api_and_sign_in_are_unaffected(self):
         resume_site()
@@ -168,7 +154,7 @@ class AccessTests(Base):
     def test_no_apps_at_all(self):
         self.set_pref(allowed_apps=[])
         hub = self.page(reverse("labs:hub"))
-        self.assertEqual(buttons(hub), [("labs", "Home")])
+        self.assertNotIn('id="app-launcher"', hub)
         self.assertIn("You don't have access to any apps yet", hub)
         self.assertEqual(self.client.get(reverse("albright_reselling_app:dashboard")).status_code, 404)
 
@@ -184,18 +170,20 @@ class SuperuserTests(Base):
                 self.assertEqual(self.client.get(url).status_code, 200)
         hub = self.page(reverse("labs:hub"))
         self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["trade", "resell", "opps", "meals", "admin"])
-        # Home + five apps: Meals and Admin go into "More"; Admin is highlighted there in the Admin area.
-        self.assertEqual([label for _, label in inline_buttons(hub)], ["Home", "Trade", "Resell", "Opps"])
-        self.assertEqual(more_buttons(hub), [("meals", "Meals"), ("admin", "Admin")])
+        self.assertEqual([label for _, label in buttons(hub)], ["Home", "Trade", "Resell", "Opps", "Meals", "Admin"])
         admin = self.page(reverse("albright_control:overview"))
-        self.assertIn('app-switch-more__toggle is-current', admin)
+        self.assertEqual(current_tiles(admin), ["admin"])
         self.assertIn('data-app-target="admin" title="Albright Admin" aria-current="page"', admin)
 
-    def test_three_apps_fit_without_more(self):
-        self.set_pref(allowed_apps=["trade", "resell", "opps"])
-        self.assertNotIn('id="app-switch-more"', self.page(reverse("labs:hub")))
-        self.set_pref(allowed_apps=["trade", "resell", "opps", "meals"])                 # Home + 4: "More"
-        self.assertEqual(more_buttons(self.page(reverse("labs:hub"))), [("meals", "Meals")])
+    def test_admin_is_always_last_and_only_for_superusers(self):
+        self.user.is_superuser = True
+        self.user.save()
+        self.set_pref(visible_apps=["admin", "opps", "trade"], app_order=["admin", "opps", "trade", "resell", "meals"])
+        self.assertEqual([label for _, label in buttons(self.page(reverse("labs:hub")))], ["Home", "Opps", "Trade", "Admin"])
+        self.user.is_superuser = False
+        self.user.save()
+        self.set_pref(allowed_apps=["trade", "opps"])
+        self.assertEqual([label for _, label in buttons(self.page(reverse("labs:hub")))], ["Home", "Opps", "Trade"])
 
 
 class VisibilityTests(Base):
@@ -400,7 +388,7 @@ class ExistingUsersTests(Base):
         UserPreference.objects.create(user=self.user, visible_apps=["trade", "opps", "admin"],
                                       app_order=["opps", "trade", "resell", "admin"])
         labels = [label for _, label in buttons(self.page(reverse("labs:hub")))]
-        self.assertEqual(labels, ["Home", "Opps", "Trade", "Admin", "Meals"])          # Resell stays hidden
+        self.assertEqual(labels, ["Home", "Opps", "Trade", "Meals", "Admin"])          # Resell stays hidden
 
     def test_the_registry_entries_are_complete(self):
         for app in apps_registry.APPS:

@@ -1,6 +1,6 @@
 """Per-app branding: the context processor's app for URLs in each app
 (trading by default - login, admin, anything outside the three apps), the
-header's brand name and tab title, <body data-app>, and the app-switch
+header's brand name and tab title, <body data-app>, and the app launcher
 buttons (all three, each with its own dot, the current one highlighted)."""
 import re
 from pathlib import Path
@@ -11,6 +11,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import resolve, reverse
 
 from albright_trading_app.context_processors import current_app
+from albright_labs.testing import current_tiles, launcher_panel, launcher_tiles
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 STYLE = Path(__file__).resolve().parent / "static" / "style.css"
@@ -94,14 +95,12 @@ class HeaderTests(TestCase):
         for app, (url_name, _brand) in self.PAGES.items():
             with self.subTest(app=app):
                 content = self.page(url_name)
-                row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
-                buttons = re.findall(r'<a href="[^"]*" class="(app-switch-btn[^"]*)" data-app-target="(\w+)"', row)
-                self.assertEqual([label for label in re.findall(r'class="app-switch-btn[^"]*"[^>]*>([^<]+)</a>', row)],
-                                 ["Home", "Trade", "Resell", "Opps", "Meals"])   # short labels (fit a phone); no Admin for a regular user
-                self.assertEqual([target for _cls, target in buttons], ["labs", "trading", "reselling", "opportunities", "meals"])
-                current = [target for cls, target in buttons if "is-current" in cls]
-                self.assertEqual(current, [app])
-                self.assertRegex(row, rf'data-app-target="{app}" title="[^"]+" aria-current="page"')
+                tiles = launcher_tiles(content)
+                self.assertEqual([label for _target, label in tiles],
+                                 ["Home", "Trade", "Resell", "Opps", "Meals"])   # short labels; no Admin for a regular user
+                self.assertEqual([target for target, _label in tiles], ["labs", "trading", "reselling", "opportunities", "meals"])
+                self.assertEqual(current_tiles(content), [app])
+                self.assertRegex(launcher_panel(content), rf'data-app-target="{app}" title="[^"]+" aria-current="page"')
 
 
 class StylesheetTests(TestCase):

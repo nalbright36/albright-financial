@@ -29,11 +29,6 @@ OUTLOOK = "albright_trading_app.views.get_market_outlook"
 API = "/api/bot/v1/"
 
 
-def switch_buttons(content):
-    row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
-    return re.findall(r'class="app-switch-btn[^"]*" data-app-target="(\w+)"[^>]*>([^<]+)</a>', row)
-
-
 class Base(TestCase):
     def setUp(self):
         self.outlook = mock.patch(OUTLOOK, return_value=None)
@@ -73,7 +68,9 @@ class MealsOnlyAccountTests(Base):
         self.client.force_login(sam)
         week = self.client.get(reverse("albright_meals:week"))
         self.assertEqual(week.status_code, 200)
-        self.assertEqual(switch_buttons(week.content.decode()), [("labs", "Home"), ("meals", "Meals")])
+        # Meals is her only app: no app launcher in her header at all.
+        self.assertNotContains(week, 'id="app-launcher"')
+        self.assertNotContains(week, "Switch app")
         self.assertContains(week, '<body data-app="meals">')
         self.assertContains(week, 'class="navbar__brand">Albright Meals</a>')
         for url in (reverse("trading_home"), reverse("grok_bot"), reverse("albright_reselling_app:dashboard"),

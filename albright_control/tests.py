@@ -80,9 +80,8 @@ class AccessTests(AdminTestCase):
 @mock.patch(HOME_OUTLOOK, return_value=None)
 class HeaderTests(AdminTestCase):
     def buttons(self, content):
-        row = content.split('class="navbar__switch-row"')[1].split("</div>")[0]
-        import re
-        return re.findall(r'class="app-switch-btn[^"]*" data-app-target="(\w+)"[^>]*>([^<]+)</a>', row)
+        from albright_labs.testing import launcher_tiles
+        return launcher_tiles(content)
 
     def test_short_labels_and_admin_only_for_superusers(self, _outlook):
         page = self.client.get(reverse("trading_home")).content.decode()
@@ -115,7 +114,7 @@ class HeaderTests(AdminTestCase):
         self.assertIn("--accent: #94A3B8;", block)
         self.assertIn("--accent: #475569;", css.split('[data-theme="light"] body[data-app="admin"] {', 1)[1].split("}", 1)[0])
         self.assertIn("--gain: var(--emerald);", css)
-        self.assertIn('.app-switch-btn[data-app-target="admin"]::before { background: var(--app-admin); }', css)
+        self.assertIn('.app-launcher__tile[data-app-target="admin"] { --app-dot: var(--app-admin); }', css)
 
 
 # ---------------------------------------------------------------------------

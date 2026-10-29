@@ -22,7 +22,7 @@ from django.views.decorators.http import require_POST
 from albright_control.access import audit, superuser_required
 from albright_resume.security import public_headers
 
-from . import app_access, apps_registry, landing, tiles
+from . import app_access, apps_registry, landing, launcher, tiles
 from .forms import LandingPreferenceForm, LandingSettingsForm
 from .models import LandingSettings
 
@@ -121,6 +121,14 @@ def tile(request, key):
         log.exception("Home tile %s failed", key)
         return JsonResponse({"ok": False, "note": "Not available right now"})
     return JsonResponse({"ok": True, **data})
+
+
+@login_required
+@never_cache
+def launcher_lines(request):
+    """The header launcher's live lines, as JSON: {"lines": {app key: text or null}} for
+    the tiles in this user's launcher (albright_labs.launcher - cached 60s per user)."""
+    return JsonResponse({"lines": launcher.lines(request.user, app_access.preference(request))})
 
 
 @login_required

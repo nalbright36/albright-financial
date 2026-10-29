@@ -1,4 +1,4 @@
-"""The one list of apps on the site. The header's app-switch buttons, Home's
+"""The one list of apps on the site. The header's app launcher, Home's
 launcher tiles, the "where I land" dropdown, the last_app cookie, the header
 brand/accent and the access checks (albright_labs.access) all read from it -
 adding an app (e.g. "Meals") is one more App(...) below, plus its URLs.
@@ -17,11 +17,11 @@ from dataclasses import dataclass, field
 class App:
     key: str                  # stored in UserPreference.allowed_apps / visible_apps / app_order
     label: str                # "Trading" - Admin > Users, My account
-    short_label: str          # "Trade" - the header button and Home tile (fits a phone)
+    short_label: str          # "Trade" - the header launcher's tile and Home's tile
     brand: str                # "Albright Trading" - the header brand and tab title
-    accent: str               # <body data-app>, the button's data-app-target and the tile's accent
-    color: str                # the app's dot color, used if style.css has no --app-<accent> for it
-    landing_url_name: str     # where its header button and tile go (never "/")
+    accent: str               # <body data-app>, the launcher tile's data-app-target and Home tile's accent
+    color: str                # the app's own color, used if style.css has no --app-<accent> for it
+    landing_url_name: str     # where its launcher tile and Home tile go (never "/")
     namespaces: tuple         # URL namespaces (app_name) whose views belong to it; "" = no namespace
     description: str          # Home tile
     last_app_cookie: str      # the last_app cookie's value for it (albright_trading_proj.middleware)
@@ -66,7 +66,7 @@ APPS = (
                ("opps:pipeline", "Pipeline", "albright_crypto_app:pipeline"),
                ("opps:earnings", "Earnings", "albright_crypto_app:earnings"))),
     App(key="meals", label="Meals", short_label="Meals", brand="Albright Meals", accent="meals",
-        color="#EC4899", landing_url_name="albright_meals:week", namespaces=("albright_meals",),
+        color="#F97316", landing_url_name="albright_meals:week", namespaces=("albright_meals",),
         description="This week's meals, the shared grocery list, meal ideas and recipes.",
         last_app_cookie="meals", tile="meals",
         pages=(("meals:week", "This week", "albright_meals:week"),

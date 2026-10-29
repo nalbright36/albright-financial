@@ -96,8 +96,8 @@
 
   --red: #FB7185;
   --red-bg: rgba(244, 63, 94, 0.14);
-  --amber: #FBBF24;
-  --amber-bg: rgba(245, 158, 11, 0.14);
+  --amber: #FACC15;
+  --amber-bg: rgba(234, 179, 8, 0.14);
   --blue: #60A5FA;
   --blue-bg: rgba(59, 130, 246, 0.14);
   --emerald: #34D399;
@@ -108,14 +108,14 @@
   --page-glow-1-alpha: 0.14;
   --page-glow-2-alpha: 0.11;
   --accent-ring-alpha: 0.3;
-  /* Each app's own color (the app-switch buttons' dots) - fixed per app,
+  /* Each app's own color (the app launcher's tiles, Home's tiles) - fixed per app,
      whichever app you're in. */
   --app-trading: #34D399;
   --app-reselling: #60A5FA;
   --app-opportunities: #A78BFA;
   --app-admin: #94A3B8;
   --app-labs: #2DD4BF;
-  --app-meals: #F472B6;
+  --app-meals: #FB923C;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -126,7 +126,7 @@
   --nav-border: rgba(255, 255, 255, 0.06);
   --glow-gain: rgba(52, 211, 153, 0.22);
   --glow-loss: rgba(251, 113, 133, 0.22);
-  --glow-warn: rgba(251, 191, 36, 0.20);
+  --glow-warn: rgba(250, 204, 21, 0.20);
   --money-gradient: linear-gradient(90deg, #34D399, #60A5FA);
   --chart-grid: rgba(255, 255, 255, 0.06);
   --chart-text: var(--text-secondary);
@@ -156,8 +156,8 @@
      WCAG AA (4.5:1) on the translucent cards, even over the page glows. */
   --red: #C2143C;
   --red-bg: rgba(244, 63, 94, 0.10);
-  --amber: #A64B08;
-  --amber-bg: rgba(245, 158, 11, 0.14);
+  --amber: #865E00;
+  --amber-bg: rgba(234, 179, 8, 0.14);
   --blue: #2563EB;
   --blue-bg: rgba(59, 130, 246, 0.10);
   --emerald: #047857;
@@ -172,7 +172,7 @@
   --app-opportunities: #8B5CF6;
   --app-admin: #64748B;
   --app-labs: #14B8A6;
-  --app-meals: #EC4899;
+  --app-meals: #F97316;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -182,7 +182,7 @@
   --nav-border: rgba(15, 23, 42, 0.06);
   --glow-gain: rgba(16, 185, 129, 0.20);
   --glow-loss: rgba(244, 63, 94, 0.18);
-  --glow-warn: rgba(245, 158, 11, 0.18);
+  --glow-warn: rgba(234, 179, 8, 0.18);
   --money-gradient: linear-gradient(90deg, #047857, #1D4ED8);
   --chart-grid: rgba(15, 23, 42, 0.08);
   --chart-text: var(--text-secondary);
@@ -266,15 +266,15 @@ body[data-app="labs"] {
   --accent-solid: #0F766E;
   --accent-solid-hover: #115E59;
 }
-/* Albright Meals: pink #EC4899. Text: the lighter #F472B6 in dark mode, the
-   deeper #BE185D in light mode (#EC4899 is ~3.5:1 on white); white-text fills
-   use #BE185D (6:1). */
+/* Albright Meals: orange #F97316. Text: the lighter #FB923C in dark mode, the
+   deeper #C2410C in light mode (#F97316 is ~2.8:1 on white); white-text fills
+   use #C2410C (5.2:1). Warnings (--amber) lean yellow so they never read as Meals. */
 body[data-app="meals"] {
-  --accent-rgb: 236, 72, 153;
-  --accent: #F472B6;
-  --accent-hover: #F9A8D4;
-  --accent-solid: #BE185D;
-  --accent-solid-hover: #9D174D;
+  --accent-rgb: 249, 115, 22;
+  --accent: #FB923C;
+  --accent-hover: #FDBA74;
+  --accent-solid: #C2410C;
+  --accent-solid-hover: #9A3412;
 }
 /* Light: text shades one step deeper (hover goes darker, not lighter). */
 [data-theme="light"] body,
@@ -299,8 +299,8 @@ body[data-app="meals"] {
   --accent-hover: #115E59;
 }
 [data-theme="light"] body[data-app="meals"] {
-  --accent: #BE185D;
-  --accent-hover: #9D174D;
+  --accent: #C2410C;
+  --accent-hover: #9A3412;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -400,14 +400,6 @@ a:hover { color: var(--accent-hover); }
   border-bottom: 1px solid var(--border);
 }
 
-.navbar__switch-row {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-6) 0;
-}
-
 .navbar__main-row {
   display: flex;
   align-items: center;
@@ -453,24 +445,6 @@ a:hover { color: var(--accent-hover); }
 }
 .navbar__links a:hover { color: var(--text-primary); }
 .navbar__links a.active { color: var(--accent); }
-
-.app-switch-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  transition: color var(--transition), border-color var(--transition), background var(--transition);
-}
-.app-switch-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
-}
 
 /* Theme toggle */
 .theme-toggle {
@@ -559,9 +533,10 @@ html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 }
 .navbar--collapsed .navbar__links .navbar__dropdown-menu a { padding: var(--space-2); }
 
-/* The account menu: far right in every app (My account, Logout). */
-.navbar__account { flex-shrink: 0; margin-left: var(--space-6); }
-.navbar--collapsed .navbar__account { margin-left: var(--space-3); }
+/* Far right in every app: the theme toggle, the app launcher, the account menu (My account, Logout). */
+.navbar__tools { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-left: var(--space-6); }
+.navbar--collapsed .navbar__tools { margin-left: var(--space-3); }
+.navbar__account { flex-shrink: 0; margin-left: var(--space-2); }
 .navbar__account-trigger { gap: 6px; }
 .navbar__account-icon { width: 18px; height: 18px; flex-shrink: 0; }
 .navbar__account-name { overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
@@ -1154,7 +1129,6 @@ tr.scanner-detail td {
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .navbar__main-row { padding: var(--space-3) var(--space-4); }
-  .navbar__switch-row { padding: var(--space-2) var(--space-4) 0; }
   /* Phones: always collapsed (index.html's fit check) - a hamburger, not "Menu". */
   .navbar__toggle { padding: 4px 6px; border-color: transparent; background: none; }
   .navbar__toggle-bars { display: flex; }
@@ -1468,47 +1442,6 @@ input[type="range"] { accent-color: var(--accent-solid); }
    shade (darker in light mode, lighter in dark) keeps it at AA in both. */
 .scanner-tab.is-active .tab-badge { color: var(--accent-hover); }
 
-/* ---------- App-switch buttons: a dot in each app's own color; the
-   current app's button in its accent. ---------- */
-.app-switch-btn { gap: 6px; }
-.app-switch-btn::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--app-dot, var(--app-trading));
-}
-.app-switch-btn[data-app-target="reselling"]::before { background: var(--app-reselling); }
-.app-switch-btn[data-app-target="opportunities"]::before { background: var(--app-opportunities); }
-.app-switch-btn[data-app-target="admin"]::before { background: var(--app-admin); }
-.app-switch-btn[data-app-target="labs"]::before { background: var(--app-labs); }
-.app-switch-btn[data-app-target="meals"]::before { background: var(--app-meals); }
-/* Phones: the theme toggle and up to four short buttons stay on one line. */
-@media (max-width: 480px) {
-  /* Home + four apps + the theme toggle: tighter on a phone, and the row
-     scrolls sideways (from the left, never clipped) if it still can't fit. */
-  .navbar__switch-row { gap: 4px; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto;
-    scrollbar-width: none; padding-left: var(--space-3); padding-right: var(--space-3); }
-  .navbar__switch-row::-webkit-scrollbar { display: none; }
-  .navbar__switch-row > * { flex-shrink: 0; }
-  .app-switch-btn { padding: 4px 7px; gap: 4px; white-space: nowrap; }
-  .app-switch-btn::before { width: 6px; height: 6px; }
-}
-@media (max-width: 370px) {
-  .navbar__switch-row { gap: 3px; padding-left: var(--space-2); padding-right: var(--space-2); }
-  .app-switch-btn { padding: 3px 6px; gap: 3px; font-size: 0.6875rem; }
-  .app-switch-btn::before { width: 5px; height: 5px; }
-}
-.app-switch-btn.is-current {
-  /* The hover shade (darker in light mode, lighter in dark): the plain
-     accent on its own tint over the page glow is just under AA (4.4:1). */
-  color: var(--accent-hover);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 10px var(--accent-ring);
-}
-.app-switch-btn.is-current::before { box-shadow: 0 0 6px var(--accent-glow); }
 
 /* ---------- Accessibility fallbacks ---------- */
 @media (prefers-reduced-transparency: reduce) {
@@ -1625,30 +1558,91 @@ input[type="range"] { accent-color: var(--accent-solid); }
   background: var(--accent-soft); }
 
 /* ---------- App navigation (albright_labs: the app registry) ---------- */
-/* The header's "More" app menu - Home + 3 apps stay on the row, the rest drop down. */
-.app-switch-more { position: relative; }
-.app-switch-more__toggle { cursor: pointer; list-style: none; user-select: none; }
-.app-switch-more__toggle::-webkit-details-marker { display: none; }
-.app-switch-more__toggle::before { display: none; }
-.app-switch-more__menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
-  display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 120px;
-  padding: var(--space-2); background: var(--glass-bg-dialog); border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md, 10px); box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+/* The header's app launcher (index.html): a 3x3-dot button beside the theme
+   toggle opens a panel of app tiles - an icon square tinted with each app's own
+   color, its short label, one live line. Right-aligned under the button; a
+   full-width sheet under the header on phones. */
+.app-launcher { position: relative; }
+.app-launcher__button {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-secondary); cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
 }
-.app-switch-more:not([open]) .app-switch-more__menu { display: none; }
-/* Phones: the row keeps scrolling sideways when it can't fit, so the menu is
-   placed against the whole header instead (its containing block is .navbar,
-   outside the scrolling row, so the row doesn't clip it). */
-@media (max-width: 480px) {
-  .app-switch-more { position: static; }
-  .app-switch-more__menu { top: 44px; left: auto; right: var(--space-3); }
+.app-launcher__button:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.app-launcher__button svg { width: 15px; height: 15px; }
+.app-launcher--open .app-launcher__button { color: var(--accent-hover); border-color: var(--accent); background: var(--accent-soft); }
+.app-launcher__panel {
+  display: none; position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 330px;
+  max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-3);
+  background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-lg, 14px);
+  box-shadow: var(--shadow-lg);
 }
+.app-launcher--open .app-launcher__panel,
+html:not(.js) .app-launcher:hover .app-launcher__panel,
+html:not(.js) .app-launcher:focus-within .app-launcher__panel { display: block; }
+.app-launcher__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
+.app-launcher__tile {
+  --app-dot: var(--app-labs);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0;
+  padding: var(--space-3) var(--space-1) var(--space-2); border: 1px solid transparent; border-radius: var(--radius-md);
+  color: var(--text-primary); text-align: center; text-decoration: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+.app-launcher__tile:hover { background: var(--surface-hover); text-decoration: none; }
+.app-launcher__tile:focus-visible { outline: none; background: var(--surface-hover); box-shadow: var(--glow-ring); }
+.app-launcher__tile[data-app-target="trading"] { --app-dot: var(--app-trading); }
+.app-launcher__tile[data-app-target="reselling"] { --app-dot: var(--app-reselling); }
+.app-launcher__tile[data-app-target="opportunities"] { --app-dot: var(--app-opportunities); }
+.app-launcher__tile[data-app-target="meals"] { --app-dot: var(--app-meals); }
+.app-launcher__tile[data-app-target="admin"] { --app-dot: var(--app-admin); }
+.app-launcher__tile[data-app-target="labs"] { --app-dot: var(--app-labs); }
+.app-launcher__icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: 12px; color: var(--app-dot);
+  background: color-mix(in srgb, var(--app-dot) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-dot) 32%, transparent);
+}
+.app-launcher__icon svg { width: 22px; height: 22px; }
+.app-launcher__label { font-size: var(--text-sm); font-weight: 600; line-height: 1.2; }
+.app-launcher__line {
+  font-size: 0.6875rem; line-height: 1.3; color: var(--text-secondary); min-height: 2.6em; max-width: 100%;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+/* The app you're in: its tile in that app's accent (its line in full-strength text - the
+   secondary grey is just under AA on the accent tint). */
+.app-launcher__tile.is-current { background: var(--accent-soft); border-color: var(--accent); box-shadow: 0 0 10px var(--accent-ring); }
+.app-launcher__tile.is-current .app-launcher__label { color: var(--accent-hover); }
+.app-launcher__tile.is-current .app-launcher__line { color: var(--text-primary); }
+.app-launcher__customize {
+  display: block; margin-top: var(--space-2); padding: var(--space-2) var(--space-2) 0; border-top: 1px solid var(--border);
+  font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); text-align: center;
+}
+.app-launcher__customize:hover, .app-launcher__customize:focus-visible { color: var(--text-primary); }
+/* Phones: a full-width sheet under the header (placed against .navbar, not the button). */
+@media (max-width: 640px) {
+  .navbar__main-row { gap: var(--space-2); }
+  .theme-toggle, .app-launcher__button { width: 28px; height: 28px; }
+  .navbar__account-trigger .navbar__dropdown-caret { display: none; }
+  .app-launcher { position: static; }
+  .app-launcher__panel {
+    top: 100%; left: 0; right: 0; width: auto; max-width: none; border-radius: 0 0 var(--radius-lg, 14px) var(--radius-lg, 14px);
+    border-left: none; border-right: none; padding: var(--space-3) var(--space-4) var(--space-4);
+    max-height: calc(100vh - 80px); overflow-y: auto;
+  }
+  .app-launcher__tile { padding-top: var(--space-3); padding-bottom: var(--space-3); }
+}
+@media (prefers-reduced-motion: reduce) { .app-launcher__tile, .app-launcher__button { transition: none; } }
+/* A long brand on a small phone (index.html's fit check): the theme toggle, launcher and
+   account menu get a slim row of their own at the top right; brand and Menu below. */
+.navbar--stacked .navbar__main-row { flex-wrap: wrap; row-gap: var(--space-1); padding-top: var(--space-2); }
+.navbar--stacked .navbar__tools { order: -1; flex-basis: 100%; justify-content: flex-end; margin-left: 0; }
 /* The smallest phones: a little less space around the brand, Menu and account buttons. */
 @media (max-width: 370px) {
   .navbar__main-row { gap: var(--space-2); padding-left: var(--space-3); padding-right: var(--space-3); }
-  .navbar--collapsed .navbar__account { margin-left: 0; }
+  .navbar--collapsed .navbar__tools { margin-left: var(--space-2); }
+  .navbar__tools { gap: 6px; }
+  .navbar__account { margin-left: 2px; }
   .navbar__account-trigger { gap: 2px; }
 }
 
