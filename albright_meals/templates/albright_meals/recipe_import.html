@@ -1,0 +1,9 @@
+{% extends "index.html" %}
+{% block page_title %}Import a recipe · {% endblock %}
+{% block content %}
+{% comment %}The import preview as its own page - without JS, or when Save finds something to fix.{% endcomment %}
+<div class="container meals-page meals-narrow">
+    <a href="{% url 'albright_meals:recipes' %}" class="meals-back">&larr; Recipes</a>
+    {% include "albright_meals/_import_box.html" %}
+</div>
+{% endblock %}

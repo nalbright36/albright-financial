@@ -343,7 +343,8 @@ class AIExtraction(models.Model):
     there is one."""
     PURPOSES = [("extract", "Fact extraction"), ("email_split", "Email alert split"),
                 ("hn_filter", "HN comment filter"), ("walkthrough", "Walkthrough"),
-                ("resume", "Tailored resume"), ("proposal", "Proposal"), ("fit", "Fit score")]
+                ("resume", "Tailored resume"), ("proposal", "Proposal"), ("fit", "Fit score"),
+                ("recipe", "Meals: recipe import")]
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="extractions",
                                     null=True, blank=True)
     purpose = models.CharField(max_length=12, choices=PURPOSES, default="extract")

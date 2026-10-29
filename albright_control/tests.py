@@ -388,7 +388,7 @@ class AiUsageTests(AdminTestCase):
         self.assertEqual(usage["by_day"][0]["total"], Decimal("0.0470"))
         limits = [l["label"] for l in usage["limits"]]
         self.assertIn("Reseller AI reviews per day", limits)
-        self.assertIn("Opportunities AI calls per day", limits)
+        self.assertIn("Opportunities AI calls per day (Meals recipe imports count too)", limits)
         self.assertEqual(usage["limits"][1]["used"], 1)
         self.assertEqual(usage["limits"][2]["used"], 3)
 

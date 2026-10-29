@@ -185,6 +185,23 @@ POST meals/recipes                                    scope: meals:write
   "steps": [str (<=2000)] (<=100), "prep_minutes" / "cook_minutes" (0-2880), "servings" (1-100),
   "tags": [str (<=50)] (<=20), "source_url" / "image_url" (http(s), <=500)}.
   Returns 201 (created) or 200 (updated) {"id": int, "created": bool}.
+
+POST meals/recipes/import                             scope: meals:write
+  Import a recipe from a link. Only that one page is read (never anything it links to): its recipe data
+  (schema.org JSON-LD or microdata), or - if it has none - the AI reads the page's visible text, keeping only
+  what is on the page; those recipes are marked "needs review". A link that's already saved (tracking
+  parameters like utm_* and #fragments ignored) returns the saved recipe instead of a copy.
+  Body: {"url": http(s) URL (required, <=2000), "add_to_plan": {"date": "YYYY-MM-DD", "slot":
+  "breakfast"|"lunch"|"dinner"|"snack"} (optional), "add_to_groceries": bool (optional - adds the ingredients
+  not already on the list from this recipe, merged with unchecked items of the same name and unit)}.
+  Example: {"url": "https://www.example.com/recipes/chili", "add_to_plan": {"date": "2026-11-02",
+  "slot": "dinner"}, "add_to_groceries": true}
+  Returns 201 (new) or 200 (already saved) {"id": int, "title": str, "status": "created"|"already_saved"|
+  "needs_review", "url": the recipe's page, "plan": {...} (with add_to_plan), "groceries": {"added", "merged",
+  "already_listed"} (with add_to_groceries)}.
+  Errors ({"error": "..."}): 400 not a public http(s) page; 422 "No recipe found on that page." (or the page is
+  over 3 MB); 502 the page couldn't be loaded; 504 it took over 10 seconds; 503 no recipe data and the AI
+  reader is unavailable or over its daily limit.
 """
 
 

@@ -18,6 +18,7 @@ FEATURES = [
     ("walkthrough", "Walkthroughs"),
     ("proposal", "Proposals"),
     ("resume", "Tailored resumes"),
+    ("recipe", "Meals: recipe imports"),
 ]
 UNTRACKED = ["Reseller deep-dive photo checks (Anthropic) don't record their cost - not included."]
 
@@ -56,7 +57,8 @@ def month_usage(today=None):
         "limits": [
             {"label": "Monthly budget (shared by every AI feature)", "limit": f"${budget:.2f}", "used": f"${total:.2f}"},
             {"label": "Reseller AI reviews per day", "limit": cfg["daily_limit"], "used": today_reviews},
-            {"label": "Opportunities AI calls per day", "limit": crypto_config.get("ai_daily_limit"), "used": today_opps},
+            {"label": "Opportunities AI calls per day (Meals recipe imports count too)",
+             "limit": crypto_config.get("ai_daily_limit"), "used": today_opps},
         ],
         "model": cfg.get("model", ""), "untracked": UNTRACKED,
     }

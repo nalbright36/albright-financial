@@ -10,8 +10,10 @@ other app, users, or settings.
 """
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -385,3 +387,56 @@ def recipes_upsert(request, token):
 @csrf_exempt
 def recipes(request):
     return recipes_upsert(request) if request.method == "POST" else recipes_list(request)
+
+
+# Why an import failed (albright_meals.importer.RecipeImportError.code) -> the HTTP status.
+IMPORT_ERROR_STATUS = {"blocked": 400, "not_found": 422, "too_large": 422, "fetch": 502, "timeout": 504,
+                       "ai_limit": 503, "ai_unavailable": 503}
+
+
+@bot_endpoint("meals:write", methods=("POST",))
+def recipes_import(request, token):
+    """Imports a recipe from a link (albright_meals.importer) - or finds the one already saved from it -
+    and optionally plans it and adds its ingredients to the grocery list."""
+    from albright_meals import importer
+    from albright_meals.groceries import add_recipes
+    from albright_meals.plan import set_slot
+    models = _meals()
+    data = json_body(request)
+    url = _str(data, "url", importer.MAX_URL, required=True)
+    if not is_http_url(url):
+        raise ApiError(400, '"url" must be an http(s) URL.', "rejected: bad url")
+    spot = data.get("add_to_plan")
+    day = slot = None
+    if spot not in (None, False):
+        if not isinstance(spot, dict):
+            raise ApiError(400, '"add_to_plan" must be {"date": "YYYY-MM-DD", "slot": "dinner"}.',
+                           "rejected: bad add_to_plan")
+        day = _day(spot.get("date"), "add_to_plan.date")
+        if not spot.get("slot"):
+            raise ApiError(400, '"add_to_plan.slot" is required: breakfast, lunch, dinner or snack.',
+                           "rejected: missing add_to_plan.slot")
+        slot = _choice(spot, "slot", models.SLOTS, None)
+    to_groceries = data.get("add_to_groceries", False)
+    if not isinstance(to_groceries, bool):
+        raise ApiError(400, '"add_to_groceries" must be true or false.', "rejected: bad add_to_groceries")
+    host = (urlsplit(url).hostname or "")[:80]
+    try:
+        recipe, status = importer.import_url(url, token=token)
+    except importer.RecipeImportError as exc:
+        raise ApiError(IMPORT_ERROR_STATUS.get(exc.code, 422), exc.message,
+                       f"import from {host} failed: {exc.code}") from exc
+    result = {"id": recipe.pk, "title": recipe.title, "status": status,
+              "url": request.build_absolute_uri(reverse("albright_meals:recipe", args=[recipe.pk]))}
+    extras = []
+    if day:
+        entry, _created = set_slot(day, slot, recipe=recipe, token=token)
+        result["plan"] = _entry_json(entry)
+        extras.append(f"planned {day} {slot}")
+    if to_groceries:
+        added, merged, skipped = add_recipes([recipe], token=token, skip_listed=True)
+        result["groceries"] = {"added": added, "merged": merged, "already_listed": skipped}
+        extras.append(f"groceries +{added} ~{merged}")
+    return (result, 200 if status == "already_saved" else 201,
+            f"import from {host}: {status} recipe #{recipe.pk} {recipe.title[:60]}"
+            + (f" ({', '.join(extras)})" if extras else ""))

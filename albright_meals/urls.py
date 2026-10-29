@@ -23,8 +23,11 @@ urlpatterns = [
     path("ideas/<int:pk>/decline/", views.idea_decline, name="idea_decline"),
     path("recipes/", views.recipes, name="recipes"),
     path("recipes/new/", views.recipe_edit, name="recipe_add"),
+    path("recipes/import/", views.recipe_import, name="recipe_import"),
+    path("recipes/import/save/", views.recipe_import_save, name="recipe_import_save"),
     path("recipes/<int:pk>/", views.recipe, name="recipe"),
     path("recipes/<int:pk>/edit/", views.recipe_edit, name="recipe_edit"),
     path("recipes/<int:pk>/plan/", views.recipe_plan, name="recipe_plan"),
     path("recipes/<int:pk>/groceries/", views.recipe_groceries, name="recipe_groceries"),
+    path("recipes/<int:pk>/reimport/", views.recipe_reimport, name="recipe_reimport"),
 ]

@@ -36,4 +36,5 @@ api_urlpatterns = [
     path("meals/groceries/<int:item_id>", meals_api.grocery_update, name="meals_grocery_item"),
     path("meals/ideas", meals_api.ideas, name="meals_ideas"),
     path("meals/recipes", meals_api.recipes, name="meals_recipes"),
+    path("meals/recipes/import", meals_api.recipes_import, name="meals_recipes_import"),
 ]

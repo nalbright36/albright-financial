@@ -1,7 +1,9 @@
 """Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes.
 Everything is shared by everyone who can open Meals (Admin > Users -
 albright_labs.app_access 404s it for anyone else)."""
+import secrets
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -14,8 +16,9 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import groceries, plan
-from .forms import EntryForm, IdeaForm, MealsSettingsForm, PlanSlotForm, RecipeForm
+from . import groceries, importer, plan
+from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
+                    RecipeForm)
 from .models import SLOTS, GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe
 
 
@@ -207,7 +210,7 @@ def grocery_from_week(request):
     if not recipes:
         messages.error(request, "No planned meals with recipes this week.")
         return redirect("albright_meals:groceries")
-    added, merged = groceries.add_recipes(recipes, user=request.user)
+    added, merged, _skipped = groceries.add_recipes(recipes, user=request.user)
     messages.success(request, f"Added {added} item{'s' if added != 1 else ''} from {len(recipes)} meal"
                               f"{'s' if len(recipes) != 1 else ''}" + (f", {merged} combined with the list" if merged
                                                                        else "") + ".")
@@ -280,10 +283,18 @@ def recipes(request):
 @login_required
 def recipe(request, pk):
     obj = get_object_or_404(Recipe.objects.select_related("created_by"), pk=pk)
-    ingredients = [groceries.ingredient_parts(i) for i in obj.ingredients or []]
+    ingredients = []
+    for ingredient in obj.ingredients or []:
+        name, quantity, unit, note = groceries.ingredient_parts(ingredient)
+        original = ingredient.get("original", "") if isinstance(ingredient, dict) else ""
+        if name or original:
+            ingredients.append({"name": name, "quantity": groceries.format_quantity(quantity), "unit": unit,
+                                "note": note, "original": original})
+    source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
+    host = (urlsplit(source_link).hostname or "") if source_link else ""
     return render(request, "albright_meals/recipe.html", {
-        "recipe": obj, "ingredients": [{"name": n, "quantity": groceries.format_quantity(q), "unit": u, "note": note}
-                                       for n, q, u, note in ingredients if n],
+        "recipe": obj, "ingredients": ingredients, "step_groups": importer.step_groups(obj.steps),
+        "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()})})
 
 
@@ -318,8 +329,104 @@ def recipe_plan(request, pk):
 @login_required
 @require_POST
 def recipe_groceries(request, pk):
+    """Adds the recipe's ingredients - except any already on the list from this recipe (unchecked)."""
     obj = get_object_or_404(Recipe, pk=pk)
-    added, merged = groceries.add_recipes([obj], user=request.user)
-    messages.success(request, f"Added {added} item{'s' if added != 1 else ''} to the grocery list"
-                              + (f", {merged} combined with what was there" if merged else "") + ".")
+    added, merged, skipped = groceries.add_recipes([obj], user=request.user, skip_listed=True)
+    if not added and not merged and skipped:
+        messages.info(request, "Everything from this recipe is already on the grocery list.")
+    else:
+        messages.success(request, f"Added {added} item{'s' if added != 1 else ''} to the grocery list"
+                                  + (f", {merged} combined with what was there" if merged else "")
+                                  + (f" ({skipped} already on it from this recipe)" if skipped else "") + ".")
+    return redirect("albright_meals:recipe", pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# Import from link (Recipes) - importer.py does the reading
+# ---------------------------------------------------------------------------
+
+IMPORTS_SESSION_KEY = "meals_imports"
+MAX_PREVIEWS = 3          # previews kept in the session at once
+
+
+def _remember_import(request, data):
+    """Keeps what was read until Save (the preview form sends only what can be edited)."""
+    imports = dict(request.session.get(IMPORTS_SESSION_KEY) or {})
+    import_id = secrets.token_urlsafe(12)
+    imports[import_id] = data
+    request.session[IMPORTS_SESSION_KEY] = dict(list(imports.items())[-MAX_PREVIEWS:])
+    return import_id
+
+
+def _import_response(request, context):
+    """The preview (or the reason there isn't one): HTML for recipe_import.js, or a page without JS."""
+    if _wants_json(request):
+        html = render_to_string("albright_meals/_import_result.html", context, request=request)
+        return JsonResponse({"status": context["import_status"], "html": html})
+    return render(request, "albright_meals/recipe_import.html", context)
+
+
+@login_required
+@require_POST
+def recipe_import(request):
+    form = ImportLinkForm(request.POST)
+    context = {"import_url": (request.POST.get("url") or "")[:importer.MAX_URL]}
+    if not form.is_valid():
+        context.update(import_status="error", import_error="Paste a recipe's web link (https://...).")
+        return _import_response(request, context)
+    url = form.cleaned_data["url"]
+    try:
+        existing = importer.find_saved(url)
+        data = None
+        if not existing:
+            data = importer.read_page(url)
+            existing = importer.find_saved(data["source_url"], data["page_url"])
+    except importer.RecipeImportError as exc:
+        context.update(import_status="error", import_error=exc.message)
+        return _import_response(request, context)
+    if existing:
+        context.update(import_status="already_saved", import_existing=existing)
+    else:
+        context.update(import_status="needs_review" if data["needs_review"] else "preview", import_data=data,
+                       import_form=ImportPreviewForm.for_import(data, _remember_import(request, data)))
+    return _import_response(request, context)
+
+
+@login_required
+@require_POST
+def recipe_import_save(request):
+    form = ImportPreviewForm(request.POST)
+    imports = dict(request.session.get(IMPORTS_SESSION_KEY) or {})
+    import_id = request.POST.get("import_id") or ""
+    data = imports.get(import_id)
+    if data is None:
+        messages.error(request, "That preview has expired - import the link again.")
+        return redirect("albright_meals:recipes")
+    if not form.is_valid():
+        return render(request, "albright_meals/recipe_import.html", {
+            "import_status": "needs_review" if data["needs_review"] else "preview", "import_data": data,
+            "import_form": form, "import_url": data.get("page_url", "")})
+    existing = importer.find_saved(data["source_url"], data["page_url"])
+    if existing:
+        messages.info(request, f"Already saved: {existing.title}.")
+        return redirect("albright_meals:recipe", pk=existing.pk)
+    saved = importer.save_new({**data, **form.recipe_fields(data)}, user=request.user)
+    imports.pop(import_id, None)
+    request.session[IMPORTS_SESSION_KEY] = imports
+    messages.success(request, f"Saved {saved.title}." + (" It's marked \"Needs review\" - check it against the "
+                                                          "original." if saved.needs_review else ""))
+    return redirect("albright_meals:recipe", pk=saved.pk)
+
+
+@login_required
+@require_POST
+def recipe_reimport(request, pk):
+    obj = get_object_or_404(Recipe, pk=pk)
+    try:
+        importer.reimport(obj)
+    except importer.RecipeImportError as exc:
+        messages.error(request, f"Couldn't re-import: {exc.message} Nothing was changed.")
+    else:
+        messages.success(request, f"Re-imported {obj.title} from {obj.source_name or 'its source'}."
+                                  + (" It's marked \"Needs review\"." if obj.needs_review else ""))
     return redirect("albright_meals:recipe", pk=pk)

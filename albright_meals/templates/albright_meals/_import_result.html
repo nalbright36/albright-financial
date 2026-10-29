@@ -1,0 +1,36 @@
+{% comment %}The import box's answer (views.recipe_import): why there's no preview, the recipe it's already saved as, or the preview to fix and save.{% endcomment %}
+{% if import_status == "error" %}
+<p class="meals-import__message meals-import__message--error" role="alert" id="recipe-import-error">{{ import_error }}</p>
+{% elif import_status == "already_saved" %}
+<p class="meals-import__message" role="status" id="recipe-import-saved">Already saved: <a href="{% url 'albright_meals:recipe' import_existing.pk %}">{{ import_existing.title }}</a></p>
+{% else %}
+<form method="post" action="{% url 'albright_meals:recipe_import_save' %}" class="meals-form meals-import__preview" id="recipe-import-preview">{% csrf_token %}
+    {{ import_form.import_id }}
+    <h3 class="meals-import__heading" tabindex="-1" id="recipe-import-heading">Preview{% if import_data.needs_review %} <span class="badge warn meals-review-badge">Needs review</span>{% endif %}</h3>
+    {% if import_data.needs_review %}<p class="meals-hint">This page has no recipe data, so the AI read its text. Only lines found on the page are kept - check them against the original before saving.</p>{% endif %}
+    <p class="meals-source">From <a href="{{ import_data.source_url }}" target="_blank" rel="noopener noreferrer nofollow">{{ import_data.source_name|default:import_data.source_url }}</a>{% if import_data.author %} &middot; by {{ import_data.author }}{% endif %}</p>
+    {% for error in import_form.non_field_errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    <div class="field">
+        <label for="{{ import_form.title.id_for_label }}">Title</label>{{ import_form.title }}
+        {% for error in import_form.title.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    </div>
+    <div class="meals-import__numbers">
+        {% for field in import_form %}{% if field.name == "servings" or field.name == "prep_minutes" or field.name == "cook_minutes" or field.name == "total_time_minutes" %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+            {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}{% endfor %}
+    </div>
+    {% for field in import_form %}{% if field.name == "description" or field.name == "ingredients_text" or field.name == "steps_text" %}
+    <div class="field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.name == "description" %} (optional){% endif %}</label>{{ field }}
+        {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    </div>
+    {% endif %}{% endfor %}
+    <div class="meals-import__actions">
+        <button type="submit" class="btn btn-primary">Save recipe</button>
+        <a href="{% url 'albright_meals:recipes' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endif %}

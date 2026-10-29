@@ -1,0 +1,16 @@
+{% comment %}
+"Import from link" (Recipes): paste a link -> views.recipe_import reads that
+one page (importer.py) -> a preview to fix -> Save (recipe_import_save).
+static/meals/recipe_import.js shows the preview right here; without JS the
+same form opens it as its own page (recipe_import.html).
+{% endcomment %}
+<section class="card meals-import" id="recipe-import" aria-labelledby="recipe-import-title">
+    <h2 class="meals-section__title" id="recipe-import-title">Import from link</h2>
+    <form method="post" action="{% url 'albright_meals:recipe_import' %}" class="meals-import__form" id="recipe-import-form">{% csrf_token %}
+        <label for="recipe-import-url" class="visually-hidden">Recipe link</label>
+        <input type="url" name="url" id="recipe-import-url" class="ledger-input" placeholder="Paste a recipe's link (https://...)" required maxlength="2000" value="{{ import_url|default:'' }}" autocomplete="off">
+        <button type="submit" class="btn btn-primary" id="recipe-import-button">Import</button>
+    </form>
+    <p class="meals-hint">Reads that one page's recipe and credits the site. If the page has no recipe data, the AI reads its text instead - only what's on the page - and the recipe is marked "Needs review".</p>
+    <div id="recipe-import-result" class="meals-import__result" aria-live="polite">{% if import_status %}{% include "albright_meals/_import_result.html" %}{% endif %}</div>
+</section>

@@ -1,4 +1,5 @@
 {% extends "index.html" %}
+{% load cache_bust %}
 {% block page_title %}Recipes · {% endblock %}
 {% block content %}
 <div class="container meals-page">
@@ -9,6 +10,8 @@
         </div>
         <a href="{% url 'albright_meals:recipe_add' %}" class="btn btn-primary btn-sm">Add a recipe</a>
     </div>
+
+    {% include "albright_meals/_import_box.html" %}
 
     <form method="get" class="meals-search" role="search">
         <label for="recipe-q" class="visually-hidden">Search recipes</label>
@@ -26,7 +29,7 @@
     <ul class="meals-recipe-grid" id="recipe-list">
         {% for r in recipes %}
         <li><a href="{% url 'albright_meals:recipe' r.pk %}" class="card meals-recipe-card">
-            <strong class="meals-recipe-card__title">{{ r.title }}</strong>
+            <strong class="meals-recipe-card__title">{{ r.title }}{% if r.needs_review %} <span class="badge warn meals-review-badge">Needs review</span>{% endif %}</strong>
             {% if r.description %}<span class="meals-recipe-card__desc">{{ r.description|truncatechars:110 }}</span>{% endif %}
             <span class="meals-hint">{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
             {% if r.tags %}<span class="meals-tags meals-tags--small">{% for t in r.tags|slice:":4" %}<span class="meals-tag">{{ t }}</span>{% endfor %}</span>{% endif %}
@@ -36,4 +39,5 @@
         {% endfor %}
     </ul>
 </div>
+<script src="{% static_version 'meals/recipe_import.js' %}" defer></script>
 {% endblock %}

@@ -366,8 +366,8 @@ class HardLimitTests(BotApiTestCase):
                 self.assertEqual(pattern.callback.__module__, meals_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 17)   # incl. site-suggestions and ideas (Admin), 6 for Meals
-        self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 6)
+        self.assertEqual(len(api_urlpatterns), 18)   # incl. site-suggestions and ideas (Admin), 7 for Meals
+        self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 7)
 
     def test_no_forbidden_side_effects(self):
         from albright_reselling_app.models import LedgerEntry, LedgerSale

@@ -1751,4 +1751,24 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-section__title { margin: 0 0 var(--space-3); font-size: var(--text-lg, 1.125rem); }
 .meals-ingredients { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
 .meals-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); }
+.meals-steps + .meals-steps__heading, .meals-steps__heading + .meals-steps__heading { margin-top: var(--space-4); }
+.meals-steps__heading { margin: 0 0 var(--space-2); font-size: var(--text-md); color: var(--text-primary); }
+.meals-source { margin: 6px 0 0; font-size: var(--text-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.meals-review-badge { vertical-align: middle; font-size: 0.6875rem; }
+/* Recipes > Import from link */
+.meals-import { margin-bottom: var(--space-4); }
+.meals-import__form { display: flex; gap: var(--space-2); }
+.meals-import__form input { flex: 1; min-width: 0; min-height: 44px; }
+.meals-import__result:empty { display: none; }
+.meals-import__result { margin-top: var(--space-3); }
+.meals-import__message { margin: 0; font-size: var(--text-sm); }
+.meals-import__message--error { color: var(--loss); }
+.meals-import__heading { margin: 0 0 var(--space-2); font-size: var(--text-md); }
+.meals-import__heading:focus { outline: none; }
+.meals-import__preview { margin-top: 0; border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.meals-import__preview .meals-source { margin-bottom: var(--space-3); }
+#recipe-reimport .meals-hint { display: block; }
+.meals-import__numbers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--space-3); }
+@media (min-width: 640px) { .meals-import__numbers { grid-template-columns: repeat(4, 1fr); } }
+.meals-import__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 @media (prefers-reduced-motion: reduce) { .meals-recipe-card:hover { transform: none; } }

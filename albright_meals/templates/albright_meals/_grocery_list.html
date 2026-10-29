@@ -9,7 +9,7 @@
                     <span class="meals-item__box" aria-hidden="true"></span>
                     <span class="meals-item__text">
                         <span class="meals-item__name">{% if item.quantity is not None %}<span class="meals-item__qty">{{ item.quantity|qty }}{% if item.unit %} {{ item.unit }}{% endif %}</span> {% elif item.unit %}<span class="meals-item__qty">{{ item.unit }}</span> {% endif %}{{ item.name }}</span>
-                        {% if item.note or item.from_bot %}<span class="meals-item__note">{{ item.note }}{% if item.note and item.from_bot %} &middot; {% endif %}{% if item.from_bot %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>{% endif %}
+                        {% with from_recipes=item.recipes.all %}{% if item.note or item.from_bot or from_recipes %}<span class="meals-item__note">{{ item.note }}{% if item.note and from_recipes %} &middot; {% endif %}{% if from_recipes %}from {% for r in from_recipes %}{{ r.title }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if item.from_bot %}{% if item.note or from_recipes %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>{% endif %}{% endwith %}
                     </span>
                 </button>
             </form>

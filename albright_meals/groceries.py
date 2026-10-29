@@ -1,7 +1,8 @@
 """The shared grocery list's logic: reading a quick-add line ("2 lb chicken
 thighs"), guessing its aisle, and adding to the list - merged into an
 unchecked line for the same thing in the same unit ("1 onion" + "2 onions"
-= "3 onion"), never into one someone already checked off.
+= "3 onion"), never into one someone already checked off. Each line records
+every recipe its ingredients came from (GroceryItem.recipes).
 """
 import re
 from collections import OrderedDict
@@ -31,7 +32,8 @@ UNITS = {
     "bottle": "bottle", "bottles": "bottle", "stick": "stick", "sticks": "stick",
     "slice": "slice", "slices": "slice", "piece": "piece", "pieces": "piece",
 }
-FRACTIONS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4", "⅛": "1/8"}
+FRACTIONS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4", "⅛": "1/8", "⅜": "3/8", "⅝": "5/8",
+             "⅞": "7/8", "⅕": "1/5", "⅖": "2/5", "⅗": "3/5", "⅘": "4/5", "⅙": "1/6", "⅚": "5/6"}
 _NUMBER = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?|\.\d+)"
 _LEADING = re.compile(rf"^\s*({_NUMBER})\s*(?:x\s+)?(.*)$", re.I)
 
@@ -159,9 +161,11 @@ def format_quantity(quantity):
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
-def add_item(name, quantity=None, unit="", aisle=None, note="", user=None, token=None, from_recipe=None):
-    """Adds a line, or merges it into an unchecked line for the same thing and unit.
-    Returns (item, merged)."""
+def add_item(name, quantity=None, unit="", aisle=None, note="", user=None, token=None, from_recipe=None,
+             recipes=()):
+    """Adds a line, or merges it into an unchecked line for the same thing and unit; either way the
+    recipes it came from are recorded on the line. Returns (item, merged)."""
+    recipes = [r for r in (recipes or ([from_recipe] if from_recipe else [])) if r is not None]
     name = " ".join((name or "").split())[:MAX_NAME]
     unit = normalize_unit(unit)
     note = (note or "").strip()[:MAX_NOTE]
@@ -175,11 +179,15 @@ def add_item(name, quantity=None, unit="", aisle=None, note="", user=None, token
             if note and note.lower() not in existing.note.lower():
                 existing.note = f"{existing.note}; {note}"[:MAX_NOTE] if existing.note else note
             existing.save()
+            if recipes:
+                existing.recipes.add(*recipes)
             return existing, True
         item = GroceryItem.objects.create(
             name=name, quantity=quantity, unit=unit, aisle=aisle if aisle in AISLE_LABELS else guess_aisle(name),
             note=note, added_by=user if user and user.is_authenticated else None, from_bot=token is not None,
-            bot_token=token, from_recipe=from_recipe)
+            bot_token=token, from_recipe=from_recipe or (recipes[0] if len(recipes) == 1 else None))
+        if recipes:
+            item.recipes.set(recipes)
         return item, False
 
 
@@ -201,9 +209,15 @@ def ingredient_parts(ingredient):
     return name, quantity, normalize_unit(unit), str(ingredient.get("note") or "").strip()
 
 
-def add_recipes(recipes, user=None):
+def add_recipes(recipes, user=None, token=None, skip_listed=False):
     """Every ingredient of these recipes, duplicates combined first (same thing, same unit),
-    then merged into the list. Returns (lines added, lines merged)."""
+    then merged into the list. skip_listed: leave out an ingredient whose unchecked line already
+    came from one of these recipes (so pressing "Add ingredients" twice doesn't double it).
+    Returns (lines added, lines merged, ingredients skipped)."""
+    listed = set()
+    if skip_listed:
+        for name, unit, recipe_pk in GroceryItem.objects.filter(checked=False, recipes__in=[r.pk for r in recipes])                 .values_list("name", "unit", "recipes"):
+            listed.add((name_key(name), unit, recipe_pk))
     combined = OrderedDict()
     for recipe in recipes:
         for ingredient in recipe.ingredients or []:
@@ -221,18 +235,23 @@ def add_recipes(recipes, user=None):
             else:
                 combined[key] = {"name": name, "quantity": quantity, "unit": unit, "note": note,
                                  "recipe": recipe, "recipes": {recipe.pk}}
-    added = merged = 0
-    for row in combined.values():
+    added = merged = skipped = 0
+    by_pk = {r.pk: r for r in recipes}
+    for (key, unit), row in combined.items():
+        if any((key, unit, pk) in listed for pk in row["recipes"]):
+            skipped += 1
+            continue
         _item, was_merged = add_item(row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
-                                     from_recipe=row["recipe"] if len(row["recipes"]) == 1 else None)
+                                     token=token, recipes=[by_pk[pk] for pk in sorted(row["recipes"])])
         merged += was_merged
         added += not was_merged
-    return added, merged
+    return added, merged, skipped
 
 
 def grouped(items=None):
     """[(aisle key, label, [items, unchecked first then checked (most recently checked last)])], aisle order."""
-    items = list(items if items is not None else GroceryItem.objects.select_related("added_by", "checked_by"))
+    items = list(items if items is not None else GroceryItem.objects.select_related("added_by", "checked_by")
+                 .prefetch_related("recipes"))
     groups = []
     for key, label in AISLES:
         rows = [i for i in items if i.aisle == key]

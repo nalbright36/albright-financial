@@ -5,6 +5,10 @@ Meals app (Admin > Users) - there's no per-user copy.
 The Grok "Recipe Bot" writes here too, through the Bot API (meals:write).
 Rows it creates have from_bot set (and the token that wrote them, while it
 exists) and are labeled "Recipe Bot" on the site.
+
+Recipes can also be imported from a link (importer.py): the page's own
+recipe data, or - when it has none - the AI reading the page's text, which
+marks the recipe "needs review".
 """
 from django.conf import settings
 from django.db import models
@@ -44,16 +48,26 @@ def _user_fk(related_name):
 class Recipe(_Authored):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    # [{"name": "onion", "quantity": "1", "unit": "", "note": "diced"}, ...]
+    # [{"name": "onion", "quantity": "1", "unit": "", "note": "diced", "original": "1 onion, diced"}, ...]
+    # ("original" - the line exactly as written - when it came from a link or the recipe form)
     ingredients = models.JSONField(default=list, blank=True)
-    steps = models.JSONField(default=list, blank=True)          # ["Preheat the oven...", ...]
+    # ["Preheat the oven...", ...]; "## Sauce" starts a section headed "Sauce".
+    steps = models.JSONField(default=list, blank=True)
     prep_minutes = models.PositiveIntegerField(null=True, blank=True)
     cook_minutes = models.PositiveIntegerField(null=True, blank=True)
+    total_time_minutes = models.PositiveIntegerField(null=True, blank=True,
+                                                     help_text="As the source states it; else prep + cook.")
     servings = models.PositiveSmallIntegerField(null=True, blank=True)
     tags = models.JSONField(default=list, blank=True)           # ["quick", "chicken"]
     source_url = models.URLField(max_length=500, blank=True)
+    # source_url normalized (importer.normalize_url) - how a link that's already saved is recognized.
+    source_key = models.CharField(max_length=500, blank=True, db_index=True, editable=False)
+    source_name = models.CharField(max_length=120, blank=True)   # "Serious Eats" - the credit line
+    author = models.CharField(max_length=200, blank=True)
     image_url = models.URLField(max_length=500, blank=True)
     notes = models.TextField(blank=True)
+    needs_review = models.BooleanField(default=False, help_text="Read from the page's text by the AI - check it.")
+    imported_at = models.DateTimeField(null=True, blank=True)
     created_by = _user_fk("meal_recipes")
 
     class Meta:
@@ -62,10 +76,17 @@ class Recipe(_Authored):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        from .importer import normalize_url
+        self.source_key = normalize_url(self.source_url)[:500] if self.source_url else ""
+        if kwargs.get("update_fields") is not None and "source_url" in kwargs["update_fields"]:
+            kwargs["update_fields"] = {*kwargs["update_fields"], "source_key"}
+        super().save(*args, **kwargs)
+
     @property
     def total_minutes(self):
         total = (self.prep_minutes or 0) + (self.cook_minutes or 0)
-        return total or None
+        return self.total_time_minutes or total or None
 
 
 class MealPlanEntry(_Authored):
@@ -124,6 +145,8 @@ class GroceryItem(_Authored):
     checked_at = models.DateTimeField(null=True, blank=True)
     added_by = _user_fk("meal_grocery_items")
     from_recipe = models.ForeignKey(Recipe, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Every recipe this line's ingredients came from (merging adds to it).
+    recipes = models.ManyToManyField(Recipe, blank=True, related_name="grocery_items")
 
     class Meta:
         ordering = ["aisle", "checked", "checked_at", "name", "pk"]
