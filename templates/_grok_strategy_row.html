@@ -1,0 +1,22 @@
+{% load grok_bot_extras %}{% comment %}One row of the Grok Bot strategy comparison table (grok_bot.html). row: a strategy_attribution.bucket_report()/total_report() dict; link: its detail page (none for Total).{% endcomment %}
+<tr class="strategy-row{% if row.status == 'retired' %} is-retired{% endif %}" data-key="{{ row.key }}" data-name="{{ row.name|lower }}"
+    data-today="{{ row.today_pl }}" data-total="{{ row.total_pl }}" data-return="{{ row.return_pct|default_if_none:'' }}"
+    data-winrate="{{ row.stats.win_rate|default_if_none:'' }}" data-avgwin="{{ row.stats.avg_win|default_if_none:'' }}"
+    data-avgloss="{{ row.stats.avg_loss|default_if_none:'' }}" data-pf="{{ row.stats.profit_factor|default_if_none:'' }}"
+    data-trades="{{ row.stats.count }}" data-dd="{{ row.max_drawdown }}" data-open="{{ row.open_count }}" data-status="{{ row.status }}">
+    <th scope="row" class="strategy-row__name">
+        {% if link %}<a href="{{ link }}" class="strategy-chip" style="--strategy-color: {{ row.color }};"><span class="strategy-chip__dot" aria-hidden="true"></span>{{ row.name }}</a>
+        {% else %}<strong>{{ row.name }}</strong>{% endif %}
+    </th>
+    <td class="num" style="color: var(--{{ row.today_pl|pnl_class }});">{{ row.today_pl|signed_money }}</td>
+    <td class="num" style="color: var(--{{ row.total_pl|pnl_class }});">{{ row.total_pl|signed_money }}{% if 'before' in row.notes %}<sup title="Includes gains/losses from before this period (no price at the period's start)">*</sup>{% endif %}{% if 'price' in row.notes %}<sup title="Some open contracts have no current price, so their unrealized P&amp;L isn't included">&dagger;</sup>{% endif %}</td>
+    <td class="num">{{ row.return_pct|signed_pct }}</td>
+    <td class="num">{% if row.stats.win_rate is not None %}{{ row.stats.win_rate }}%{% else %}&mdash;{% endif %}</td>
+    <td class="num hide-mobile" style="color: var(--gain);">{% if row.stats.avg_win is not None %}{{ row.stats.avg_win|signed_money }}{% else %}&mdash;{% endif %}</td>
+    <td class="num hide-mobile" style="color: var(--loss);">{% if row.stats.avg_loss is not None %}{{ row.stats.avg_loss|signed_money }}{% else %}&mdash;{% endif %}</td>
+    <td class="num hide-mobile">{% if row.stats.profit_factor is not None %}{{ row.stats.profit_factor }}{% elif row.stats.gross_wins %}&infin;{% else %}&mdash;{% endif %}</td>
+    <td class="num">{{ row.stats.count }}</td>
+    <td class="num hide-mobile">{% if row.max_drawdown %}-${{ row.max_drawdown }}{% if row.max_drawdown_pct is not None %} <span class="strategy-row__sub">({{ row.max_drawdown_pct }}%)</span>{% endif %}{% else %}$0.00{% endif %}</td>
+    <td class="num">{{ row.open_count }}</td>
+    <td>{% if row.status %}<span class="badge {% if row.status == 'active' %}gain{% elif row.status == 'paused' %}warn{% else %}neutral{% endif %}">{{ row.status }}</span>{% endif %}</td>
+</tr>

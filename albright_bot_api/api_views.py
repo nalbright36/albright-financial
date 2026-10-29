@@ -69,8 +69,16 @@ GET  docs
   This text. Any valid token.
 
 POST trading/notes                                   scope: trading:notes
-  Body: {"date": "YYYY-MM-DD" (optional, default today), "title": str (required, <=200), "text": str (required)}
-  Shown on the owner's Grok Bot page under "Bot notes", newest first. Returns 201 {"id": int}.
+  Body: {"date": "YYYY-MM-DD" (optional, default today), "title": str (required, <=200), "text": str (required),
+  "strategy": str (optional - one of the owner's strategies, by name or by one of its prefixes, any capitalization)}
+  Shown on the owner's Grok Bot page under "Bot notes", newest first, and on that strategy's page when tagged.
+  Example: {"title": "Closed SPY spread", "text": "Took profit at 50%.", "strategy": "eng"}
+  Returns 201 {"id": int, "strategy": name or null}. An unknown strategy is a 400 listing the valid ones.
+
+GET  trading/strategies                               scope: trading:notes
+  The owner's bot strategies, so a bot can confirm its prefix: {"strategies": [{"name": str, "prefixes": [str],
+  "status": "active"|"paused"|"retired"}]}, in the owner's display order. An order counts toward a strategy when
+  its client_order_id starts with one of its prefixes (any capitalization; the longest matching prefix wins).
 
 GET  reseller/lots                                    scope: reseller:read
   Today's live auction lots worth a look: scanner candidates and "Check by hand" lots (low-confidence parses that
@@ -215,6 +223,21 @@ def docs(request, token):
 # Trading
 # ---------------------------------------------------------------------------
 
+def _owner_strategy(owner, value):
+    """The owner's BotStrategy named `value`, or else the one with `value` as a prefix (any capitalization)."""
+    from albright_trading_app.models import BotStrategy
+    if not isinstance(value, str) or not value.strip():
+        raise ApiError(400, '"strategy" must be a strategy name or prefix.', "rejected: bad strategy")
+    wanted = value.strip().casefold()
+    strategies = list(BotStrategy.objects.filter(user=owner))
+    match = next((s for s in strategies if s.name.casefold() == wanted), None) \
+        or next((s for s in strategies if wanted in [p.casefold() for p in s.prefixes]), None)
+    if match is None:
+        names = ", ".join(s.name for s in strategies) or "none yet"
+        raise ApiError(400, f'No strategy "{value.strip()[:80]}". Your strategies: {names}.', "rejected: unknown strategy")
+    return match
+
+
 @bot_endpoint("trading:notes", methods=("POST",))
 def trading_notes(request, token):
     data = json_body(request)
@@ -225,8 +248,19 @@ def trading_notes(request, token):
         note_date = date.fromisoformat(raw_date) if raw_date else timezone.localdate()
     except (TypeError, ValueError) as exc:
         raise ApiError(400, '"date" must be YYYY-MM-DD.', "rejected: bad date") from exc
-    note = TradingNote.objects.create(owner=token.owner, token=token, date=note_date, title=title, text=text)
-    return {"id": note.pk}, 201, f"trading note: {title[:80]}"
+    strategy = _owner_strategy(token.owner, data["strategy"]) if data.get("strategy") is not None else None
+    note = TradingNote.objects.create(owner=token.owner, token=token, date=note_date, title=title, text=text,
+                                      strategy=strategy)
+    return ({"id": note.pk, "strategy": strategy.name if strategy else None}, 201,
+            f"trading note: {title[:80]}" + (f" [{strategy.name[:40]}]" if strategy else ""))
+
+
+@bot_endpoint("trading:notes")
+def trading_strategies(request, token):
+    from albright_trading_app.models import BotStrategy
+    rows = [{"name": s.name, "prefixes": list(s.prefixes), "status": s.status}
+            for s in BotStrategy.objects.filter(user=token.owner)]
+    return {"strategies": rows}, 200, f"listed {len(rows)} strategies"
 
 
 # ---------------------------------------------------------------------------

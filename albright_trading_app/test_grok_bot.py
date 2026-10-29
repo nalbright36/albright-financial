@@ -1,10 +1,11 @@
 """The Grok Bot page (read-only monitor of the Alpaca paper account an
 external bot trades in). Alpaca is mocked at the TradingClient class - no
 test ever reaches the real API. Covers: the page rendering from mocked
-data, OCC symbol parsing, realized P&L / win-rate math, the "Bot order ID
-prefix" filter on and off, the view never touching an order-submission or
-cancel method, the 60-second cache, and API errors / missing or live
-credentials handled with a message instead of a broken page."""
+data, OCC symbol parsing, realized P&L / win-rate math, orders and fills
+attributed to bot strategies by client order ID prefix (more in
+test_strategies.py), the view never touching an order-submission or cancel
+method, the 60-second cache, and API errors / missing or live credentials
+handled with a message instead of a broken page."""
 import inspect
 import re
 from datetime import date, timedelta
@@ -19,9 +20,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_trading_app import grok_bot
-from albright_trading_app.grok_bot import (ReadOnlyAlpaca, closed_trades, describe_contract, filter_fills,
-                                           normalize_fill, order_ids_to_client_ids, parse_occ, trade_stats)
-from albright_trading_app.models import AlpacaCredentials, GrokBotSettings
+from albright_trading_app.grok_bot import (ReadOnlyAlpaca, closed_trades, describe_contract, normalize_fill,
+                                           order_ids_to_client_ids, parse_occ, trade_stats)
+from albright_trading_app.models import AlpacaCredentials, BotStrategy
 
 TRADING_CLIENT = "alpaca.trading.client.TradingClient"
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -149,19 +150,26 @@ class RealizedPnlTests(TestCase):
     def test_no_trades(self):
         self.assertEqual(trade_stats([])["win_rate"], None)
 
+    def test_fees_are_subtracted_when_present(self):
+        opening = dict(fill(CALL, "buy", 2, "2.00", 30), fee="1.30")
+        closing = dict(fill(CALL, "sell", 2, "3.50", 20), commission="0.70")
+        [t] = self.trades(opening, closing)
+        self.assertEqual(t.pnl, Decimal("298.00"))     # 300 - 1.30 - 0.70
+        self.assertEqual(normalize_fill(fill(CALL, "buy", 1, "1", 5))["fee"], Decimal("0"))
 
-class PrefixFilterTests(TestCase):
+
+class OrderIdTests(TestCase):
     def test_legs_take_their_parents_client_order_id(self):
         ids = order_ids_to_client_ids(fake_client().get_orders())
         self.assertEqual((ids["bot-1"], ids["leg-b"], ids["mine-1"]), ("grok-123", "grok-124", "manual-9"))
 
-    def test_filter_on_and_off(self):
-        fills = [normalize_fill(f) for f in fake_client().get()]
-        ids = order_ids_to_client_ids(fake_client().get_orders())
-        self.assertEqual({f["symbol"] for f in filter_fills(fills, "grok-", ids)}, {CALL, PUT})
-        self.assertEqual(len(filter_fills(fills, "", ids)), 6)
-        unknown = normalize_fill(fill("XYZ", "buy", 1, "1", 5, "not-in-history"))
-        self.assertEqual(filter_fills([unknown], "grok-", ids), [])
+    def test_case_insensitive_startswith(self):
+        for client_id in ("eng-test-open-1", "ENG-test-open-1", "Eng-x", "eng"):
+            self.assertTrue(grok_bot.matches_prefix(client_id, "eng"), client_id)
+            self.assertTrue(grok_bot.matches_prefix(client_id, "ENG"), client_id)
+        for client_id in ("x-eng-1", "en-g", "", None, "631380d2-5b41"):
+            self.assertFalse(grok_bot.matches_prefix(client_id, "eng"), client_id)
+        self.assertTrue(grok_bot.matches_prefix("anything", ""))
 
 
 @mock.patch(HOME_OUTLOOK, return_value=None)
@@ -181,8 +189,8 @@ class GrokBotPageTests(TestCase):
     def get(self, **params):
         return self.client.get(reverse("grok_bot"), params)
 
-    def set_prefix(self, prefix):
-        GrokBotSettings.objects.update_or_create(user=self.user, defaults={"order_id_prefix": prefix})
+    def add_strategy(self, name="grok", prefixes=("grok-",)):
+        return BotStrategy.objects.create(user=self.user, name=name, prefixes=list(prefixes))
 
     def test_page_renders_from_mocked_data(self, _outlook):
         response = self.get()
@@ -197,46 +205,34 @@ class GrokBotPageTests(TestCase):
         self.assertContains(response, "multi-leg")
         self.assertContains(response, "grok-124")
         self.assertContains(response, "lightweight-charts@4.1.3")
-        self.assertEqual(response.context["chart_json"],
-                         '[{"time": 1760000000, "value": 100000.0}, {"time": 1760086400, "value": 103000.0}, '
-                         '{"time": 1760172800, "value": 105250.5}]')
+        self.assertRegex(response.content.decode(), r'<script src="/static/js/grok_bot\.js\?v=\d+" defer>')
+        self.assertEqual(response.context["account_points"],
+                         [{"time": 1760000000, "value": 100000.0}, {"time": 1760086400, "value": 103000.0},
+                          {"time": 1760172800, "value": 105250.5}])
+        self.assertContains(response, '<script id="grok-equity" type="application/json">')
         self.client_class.assert_called_once_with(api_key="PKTEST", secret_key="secret-test", paper=True)
 
-    def test_no_prefix_shows_whole_account_with_note(self, _outlook):
+    def test_without_strategies_everything_is_unattributed(self, _outlook):
         response = self.get()
-        data = response.context["data"]
-        self.assertFalse(data["bot_only"])
-        self.assertEqual(len(data["orders"]), 4)
-        self.assertEqual(data["stats"]["count"], 3)
-        self.assertContains(response, "this includes all trades in this account")
-        self.assertNotContains(response, 'id="scope-bot"')
+        report = response.context["data"]["report"]
+        self.assertEqual(report["rows"], [])
+        self.assertEqual(report["unattributed"]["stats"]["count"], 3)
+        self.assertEqual(report["total"]["stats"]["count"], 3)
+        self.assertEqual(len(response.context["data"]["orders"]), 4)
+        self.assertContains(response, "No strategies yet")
+        self.assertContains(response, '<details class="strategy-add" open>')
 
-    def test_prefix_filters_orders_fills_and_stats(self, _outlook):
-        self.set_prefix("grok-")
+    def test_a_strategy_takes_its_orders_fills_and_trades(self, _outlook):
+        grok = self.add_strategy()
         data = self.get().context["data"]
-        self.assertTrue(data["bot_only"])
-        self.assertEqual([o["client_order_id"] for o in data["orders"]], ["grok-123", "grok-124", "grok-125"])
-        self.assertEqual(sorted(t.pnl for t in data["trades"]), [Decimal("-50.00"), Decimal("300.00")])
-        self.assertEqual((data["stats"]["count"], data["stats"]["win_rate"]), (2, Decimal("50.0")))
-
-    def test_whole_account_toggle_with_a_prefix(self, _outlook):
-        self.set_prefix("grok-")
-        response = self.get(scope="account")
-        data = response.context["data"]
-        self.assertFalse(data["bot_only"])
-        self.assertEqual(len(data["orders"]), 4)
-        self.assertEqual(data["stats"]["count"], 3)
-        self.assertContains(response, 'class="scanner-tab is-active" id="scope-account"')
-
-    def test_saving_the_prefix(self, _outlook):
-        response = self.client.post(reverse("grok_bot"), {"order_id_prefix": "grok-"})
-        self.assertRedirects(response, reverse("grok_bot"))
-        self.assertEqual(GrokBotSettings.objects.get(user=self.user).order_id_prefix, "grok-")
-        self.client.post(reverse("grok_bot"), {"order_id_prefix": ""})
-        self.assertEqual(GrokBotSettings.objects.get(user=self.user).order_id_prefix, "")
-        bad = self.client.post(reverse("grok_bot"), {"order_id_prefix": "grok <script>"})
-        self.assertEqual(bad.status_code, 200)
-        self.assertContains(bad, "Use letters, numbers")
+        row, other = data["report"]["rows"][0], data["report"]["unattributed"]
+        self.assertEqual(sorted(t.pnl for t in row["trades"]), [Decimal("-50.00"), Decimal("300.00")])
+        self.assertEqual((row["stats"]["count"], row["stats"]["win_rate"]), (2, Decimal("50.0")))
+        self.assertEqual([t.pnl for t in other["trades"]], [Decimal("100")])
+        self.assertEqual({o["client_order_id"]: o["strategy"] for o in data["orders"]},
+                         {"grok-123": str(grok.pk), "grok-124": str(grok.pk), "grok-125": str(grok.pk),
+                          "manual-9": "unattributed"})
+        self.assertEqual(data["report"]["total"]["total_pl"], Decimal("350.00"))
 
     def test_period_toggles_request_the_right_history(self, _outlook):
         self.get(period="1Y")
@@ -254,23 +250,43 @@ class GrokBotPageTests(TestCase):
     def test_closed_trades_limited_to_the_period(self, _outlook):
         old = [fill("OLD", "buy", 1, "10", 60 * 24 * 20), fill("OLD", "sell", 1, "12", 60 * 24 * 10)]
         self.alpaca.get.return_value = self.alpaca.get.return_value + old
-        self.assertEqual(self.get(period="1W").context["data"]["stats"]["count"], 3)
+        self.assertEqual(self.get(period="1W").context["data"]["report"]["total"]["stats"]["count"], 3)
         cache.clear()
-        self.assertEqual(self.get(period="1M").context["data"]["stats"]["count"], 4)
+        self.assertEqual(self.get(period="1M").context["data"]["report"]["total"]["stats"]["count"], 4)
 
     def test_responses_are_cached_for_60_seconds(self, _outlook):
         self.get()
-        self.get()
+        self.get(period="all")
         self.assertEqual(self.alpaca.get_account.call_count, 1)
-        self.assertEqual(self.alpaca.get_orders.call_count, 1)
+        self.assertEqual(self.alpaca.get_orders.call_count, 1)     # one order history for every period
         self.assertEqual(grok_bot.CACHE_SECONDS, 60)
 
+    def test_orders_are_read_back_to_the_start_page_by_page(self, _outlook):
+        page = [order(f"o{i}", f"eng-{i}", symbol="AAPL") for i in range(500)]
+        for i, o in enumerate(page):
+            o.submitted_at = NOW - timedelta(minutes=i)
+        self.alpaca.get_orders.side_effect = [page, fake_client().get_orders()]
+        self.add_strategy("eng", ["eng"])
+        data = self.get(period="1M").context["data"]
+        calls = [c.args[0] for c in self.alpaca.get_orders.call_args_list]
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0].after)                                   # the whole history, any period
+        self.assertIsNone(calls[0].until)
+        self.assertEqual(calls[1].until, NOW - timedelta(minutes=499))      # oldest order of page 1
+        self.assertEqual(data["orders_scanned"], 504)
+        eng = [o for o in data["orders"] if o["client_order_id"].startswith("eng-")]
+        self.assertEqual(len(eng), 50)                                      # 50 recent per strategy
+
     def test_view_never_calls_an_order_method(self, _outlook):
-        self.set_prefix("grok-")
-        for params in ({}, {"scope": "account"}, {"period": "all"}):
+        grok = self.add_strategy()
+        for params in ({}, {"period": "all"}, {"period": "1W"}):
             cache.clear()
             self.get(**params)
-        self.client.post(reverse("grok_bot"), {"order_id_prefix": "grok-"})
+            self.client.get(reverse("grok_bot_strategy", args=[grok.pk]), params)
+            self.client.get(reverse("grok_bot_strategy", args=["unattributed"]), params)
+        self.client.post(reverse("grok_bot_strategy_add"), {"name": "x", "prefixes_text": "x-", "color": "#F97316",
+                                                            "status": "active"})
+        self.client.post(reverse("grok_bot_strategy_status", args=[grok.pk]), {"status": "paused"})
         for name in WRITE_METHODS:
             getattr(self.alpaca, name).assert_not_called()
         called = {c[0].split(".")[0] for c in self.alpaca.method_calls}
@@ -283,9 +299,12 @@ class GrokBotPageTests(TestCase):
         public = {n for n in dir(wrapper) if not n.startswith("_")}
         self.assertEqual(public, {"account", "positions", "orders", "portfolio_history", "fill_activities",
                                   "price_at", "FILL_ACTIVITIES_PATH"})
-        source = inspect.getsource(grok_bot)
-        for name in WRITE_METHODS[:7]:
-            self.assertNotRegex(source, rf"\.{name}\(")
+        from albright_trading_app import grok_bot_views, strategy_attribution
+        from albright_trading_app.management.commands import snapshot_strategies
+        for module in (grok_bot, grok_bot_views, strategy_attribution, snapshot_strategies):
+            source = inspect.getsource(module)
+            for name in WRITE_METHODS[:7]:
+                self.assertNotRegex(source, rf"\.{name}\(", module.__name__)
 
     def test_api_errors_show_a_message_and_keep_the_rest(self, _outlook):
         self.alpaca.get_account.side_effect = RuntimeError("boom")
@@ -294,6 +313,7 @@ class GrokBotPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Couldn&#x27;t load account from Alpaca right now.")
         self.assertContains(response, "Couldn&#x27;t load orders from Alpaca right now.")
+        self.assertContains(response, "Strategy results need the order list")
         self.assertContains(response, "Orders couldn't be loaded.")
         self.assertContains(response, describe_contract(CALL))  # positions still shown
         self.assertNotContains(response, "boom")
@@ -304,7 +324,8 @@ class GrokBotPageTests(TestCase):
         response = self.get()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["data"]["errors"]), 5)
-        self.assertContains(response, "No equity history for this period.")
+        self.assertContains(response, "Strategy results couldn't be loaded.")
+        self.assertContains(response, 'id="strategies"')                 # the manager still works
 
     def test_missing_credentials(self, _outlook):
         AlpacaCredentials.objects.filter(user=self.user).delete()
@@ -312,6 +333,7 @@ class GrokBotPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="grok-not-connected"')
         self.assertContains(response, reverse("connect_alpaca_account"))
+        self.assertContains(response, 'id="strategies"')
         self.client_class.assert_not_called()
 
     def test_unreadable_credentials(self, _outlook):
@@ -329,6 +351,7 @@ class GrokBotPageTests(TestCase):
     def test_login_required(self, _outlook):
         self.client.logout()
         self.assertEqual(self.get().status_code, 302)
+        self.assertEqual(self.client.get(reverse("grok_bot_strategy", args=["unattributed"])).status_code, 302)
 
     def test_nav_item_in_the_trading_app_only(self, _outlook):
         link = f'<a href="{reverse("grok_bot")}">Grok Bot</a>'
@@ -379,311 +402,3 @@ def eng_client():
                         market_value="1900", unrealized_pl="-100", unrealized_plpc="-0.05"),
     ]
     return client
-
-
-class PrefixMatchingTests(TestCase):
-    def test_case_insensitive_startswith(self):
-        for client_id in ("eng-test-open-1", "ENG-test-open-1", "Eng-x", "eng"):
-            self.assertTrue(grok_bot.matches_prefix(client_id, "eng"), client_id)
-            self.assertTrue(grok_bot.matches_prefix(client_id, "ENG"), client_id)
-        for client_id in ("x-eng-1", "en-g", "", None, "631380d2-5b41"):
-            self.assertFalse(grok_bot.matches_prefix(client_id, "eng"), client_id)
-        self.assertTrue(grok_bot.matches_prefix("anything", ""))
-
-    def test_filled_symbols_from_multi_leg_parents(self):
-        rows = [grok_bot._order_row(o) for o in eng_client().get_orders()]
-        bot = [r for r in rows if grok_bot.matches_prefix(r["client_order_id"], "eng")]
-        self.assertEqual(grok_bot.filled_symbols(bot), {SHORT_PUT, LONG_PUT})
-        canceled_only = [r for r in bot if r["status"] == "canceled"]
-        self.assertEqual(grok_bot.filled_symbols(canceled_only), set())
-
-
-@mock.patch(HOME_OUTLOOK, return_value=None)
-class EngPrefixPageTests(TestCase):
-    def setUp(self):
-        cache.clear()
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
-        self.client.force_login(self.user)
-        creds = AlpacaCredentials(user=self.user, is_paper=True)
-        creds.set_credentials("PKTEST", "secret-test")
-        creds.save()
-        self.alpaca = eng_client()
-        patcher = mock.patch(TRADING_CLIENT, return_value=self.alpaca)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def get(self, **params):
-        return self.client.get(reverse("grok_bot"), params)
-
-    def save_prefix(self, prefix):
-        return self.client.post(reverse("grok_bot"), {"order_id_prefix": prefix})
-
-    def test_prefix_persists_and_bot_only_is_the_default(self, _outlook):
-        self.assertRedirects(self.save_prefix("eng"), reverse("grok_bot"))
-        self.assertEqual(GrokBotSettings.objects.get(user=self.user).order_id_prefix, "eng")
-        response = self.get()
-        self.assertEqual(response.context["prefix"], "eng")
-        self.assertTrue(response.context["data"]["bot_only"])
-        self.assertContains(response, 'class="scanner-tab is-active" id="scope-bot"')
-
-    def test_multi_leg_orders_match_on_the_parent_and_keep_their_legs(self, _outlook):
-        self.save_prefix("eng")
-        orders = self.get().context["data"]["orders"]
-        self.assertEqual([o["client_order_id"] for o in orders],
-                         ["eng-test-close-20261021104523-2-b444f8", "eng-test-open-20261021104523-1-b71165",
-                          "ENG-test-open-20261021104523-2-849506"])  # case-insensitive; "x-eng-..." excluded
-        self.assertEqual([leg["symbol"] for leg in orders[0]["legs"]], [SHORT_PUT, LONG_PUT])
-        content = self.get().content.decode()
-        self.assertIn(describe_contract(LONG_PUT), content)
-        self.assertNotIn("631380d2-5b41", content)
-
-    def test_uppercase_prefix_matches_too(self, _outlook):
-        self.save_prefix("ENG")
-        self.assertEqual(len(self.get().context["data"]["orders"]), 3)
-
-    def test_fills_are_filtered_through_the_order_id_map(self, _outlook):
-        self.save_prefix("eng")
-        data = self.get().context["data"]
-        self.assertEqual(sorted((t.symbol, t.pnl) for t in data["trades"]),
-                         [(LONG_PUT, Decimal("-3.00")), (SHORT_PUT, Decimal("17.00"))])
-        self.assertEqual(data["stats"]["count"], 2)
-        whole = self.get(scope="account").context["data"]
-        self.assertIn("NKE", {t.symbol for t in whole["trades"]})
-        self.assertEqual(whole["stats"]["count"], 3)
-
-    def test_positions_marked_bot_or_other(self, _outlook):
-        self.save_prefix("eng")
-        response = self.get()
-        owners = {p["symbol"]: p["owner"] for p in response.context["data"]["positions"]}
-        self.assertEqual(owners, {SHORT_PUT: "bot", "AAPL": "other"})
-        self.assertContains(response, '<span class="badge gain">Bot</span>')
-        self.assertContains(response, '<span class="badge neutral">Other</span>')
-        self.assertContains(response, "<th>Bot?</th>")
-        # Same marking under Whole account; no column at all without a prefix.
-        self.assertEqual({p["owner"] for p in self.get(scope="account").context["data"]["positions"]}, {"bot", "other"})
-        self.save_prefix("")
-        self.assertNotContains(self.get(), "<th>Bot?</th>")
-
-    def test_cache_is_cleared_when_the_prefix_changes(self, _outlook):
-        self.save_prefix("eng")
-        self.get()
-        self.get()
-        self.assertEqual(self.alpaca.get_account.call_count, 1)    # cached
-        self.save_prefix("eng")                                     # unchanged: cache kept
-        self.get()
-        self.assertEqual(self.alpaca.get_account.call_count, 1)
-        self.save_prefix("grok-")                                   # changed: cleared
-        self.assertIsNone(cache.get(f"grok_bot:{self.user.pk}:account"))
-        self.assertIsNone(cache.get(f"grok_bot:{self.user.pk}:orders:1M"))
-        self.get()
-        self.assertEqual(self.alpaca.get_account.call_count, 2)
-
-    def test_no_match_message_instead_of_everything(self, _outlook):
-        self.save_prefix("zzz")
-        response = self.get()
-        data = response.context["data"]
-        self.assertTrue(data["no_match"])
-        self.assertEqual((data["orders"], data["trades"]), ([], []))
-        self.assertContains(response, "No orders start with ‘zzz’ in the last 5 orders")
-        self.assertNotContains(response, "eng-test-close")
-        self.assertFalse(self.get().context["data"]["orders"] is None)
-        self.save_prefix("eng")
-        self.assertNotContains(self.get(), 'id="grok-no-match"')
-
-    def test_orders_are_paginated_back_to_the_period(self, _outlook):
-        page = [order(f"o{i}", f"eng-{i}", symbol="AAPL") for i in range(500)]
-        for i, o in enumerate(page):
-            o.submitted_at = NOW - timedelta(minutes=i)
-        self.alpaca.get_orders.side_effect = [page, eng_client().get_orders()]
-        self.save_prefix("eng")
-        data = self.get(period="1M").context["data"]
-        calls = [c.args[0] for c in self.alpaca.get_orders.call_args_list]
-        self.assertEqual(len(calls), 2)
-        self.assertLess(calls[0].after, NOW - timedelta(days=30))           # period start minus the lookback
-        self.assertIsNone(calls[0].until)
-        self.assertEqual(calls[1].until, NOW - timedelta(minutes=499))      # oldest order of page 1
-        self.assertEqual(data["orders_scanned"], 505)
-        self.assertEqual(len(data["orders"]), 50)                          # recent list still capped at 50
-
-
-# ---------------------------------------------------------------------------
-# Today's P&L and Total P&L follow the Bot only / Whole account toggle
-# ---------------------------------------------------------------------------
-
-OPTION_DATA_CLIENT = "alpaca.data.historical.option.OptionHistoricalDataClient"
-STOCK_DATA_CLIENT = "alpaca.data.historical.stock.StockHistoricalDataClient"
-
-
-def today_at(minutes):
-    """A time today (local), `minutes` after midnight - so "today" never depends on when the test runs."""
-    midnight = timezone.make_aware(timezone.datetime.combine(timezone.localdate(), timezone.datetime.min.time()))
-    return min(midnight + timedelta(minutes=minutes), timezone.now())
-
-
-def position(symbol, qty, current, unrealized, intraday, cost_basis, avg_entry="1"):
-    return {"symbol": symbol, "qty": Decimal(qty), "current_price": Decimal(current),
-            "unrealized_pl": Decimal(unrealized), "unrealized_intraday_pl": Decimal(intraday),
-            "cost_basis": Decimal(cost_basis), "avg_entry": Decimal(avg_entry)}
-
-
-class BotPnlMathTests(TestCase):
-    def realizations(self):
-        fills = [
-            {**normalize_fill(fill(PUT, "sell", 1, "2.17", 0)), "time": today_at(0) - timedelta(days=2)},
-            {**normalize_fill(fill(PUT, "buy", 1, "2.00", 0)), "time": today_at(5)},        # +17 today (x100)
-            {**normalize_fill(fill("AAPL", "buy", 10, "100", 0)), "time": today_at(0) - timedelta(days=3)},
-            {**normalize_fill(fill("AAPL", "sell", 10, "99", 0)), "time": today_at(0) - timedelta(days=1)},  # -10, not today
-        ]
-        return grok_bot.match_fills(fills)[2]
-
-    def test_today_is_realized_today_plus_intraday_unrealized(self):
-        realizations = self.realizations()
-        self.assertEqual([(r.symbol, r.pnl, r.cost_basis) for r in realizations],
-                         [("AAPL", Decimal("-10"), Decimal("1000")), (PUT, Decimal("17.00"), Decimal("217.00"))])
-        bot_positions = [position(CALL, "2", "4.00", "180", "40", "620")]
-        today = grok_bot.bot_today_pl(realizations, bot_positions)
-        self.assertEqual((today["realized"], today["unrealized"], today["value"]),
-                         (Decimal("17.00"), Decimal("40"), Decimal("57.00")))
-        # % against open cost basis (620) + today's closed lots' cost (217)
-        self.assertEqual(today["pct"].quantize(Decimal("0.01")), Decimal("6.81"))
-
-    def test_today_pct_is_none_without_cost_basis(self):
-        today = grok_bot.bot_today_pl([], [])
-        self.assertEqual((today["value"], today["pct"]), (Decimal("0.00"), None))
-
-    def test_total_counts_only_the_change_since_the_period_start_when_the_price_is_known(self):
-        start = timezone.now() - timedelta(days=30)
-        trades = [SimpleNamespace(pnl=Decimal("300"))]
-        new = position(CALL, "1", "4.00", "50", "0", "350")                  # opened in the period
-        old = position(PUT, "2", "2.00", "120", "0", "280")                  # opened before it
-        old_stock = position("AAPL", "-10", "190", "100", "0", "-2000")      # short stock, before it
-        open_since = {CALL: start + timedelta(days=1), PUT: start - timedelta(days=5),
-                      "AAPL": start - timedelta(days=9)}
-        prices = {PUT: Decimal("1.50"), "AAPL": Decimal("185")}
-        total = grok_bot.bot_total_pl(trades, [new, old, old_stock], open_since, start, prices.get)
-        # 300 + 50 + (2.00 - 1.50) x 2 x 100 + (190 - 185) x -10 x 1
-        self.assertEqual((total["value"], total["note"]), (Decimal("400.00"), False))
-
-    def test_total_without_a_period_start_price_uses_full_unrealized_and_notes_it(self):
-        start = timezone.now() - timedelta(days=30)
-        old = position(PUT, "2", "2.00", "120", "0", "280")
-        total = grok_bot.bot_total_pl([SimpleNamespace(pnl=Decimal("300"))], [old], {PUT: start - timedelta(days=5)},
-                                      start, lambda symbol: None)
-        self.assertEqual((total["value"], total["note"]), (Decimal("420.00"), True))
-
-    def test_all_period_uses_full_unrealized(self):
-        old = position(PUT, "2", "2.00", "120", "0", "280")
-        total = grok_bot.bot_total_pl([], [old], {}, None, lambda symbol: self.fail("no price needed"))
-        self.assertEqual((total["value"], total["note"]), (Decimal("120.00"), False))
-
-
-@mock.patch(HOME_OUTLOOK, return_value=None)
-class BotPnlTileTests(TestCase):
-    """The page, with data shaped like the real account: the bot's put spread
-    opened and closed today (by leg id), plus a short 717P it still holds
-    (marked Bot) that isn't in the fills - so it's treated as opened before
-    the period."""
-
-    def setUp(self):
-        cache.clear()
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
-        self.client.force_login(self.user)
-        creds = AlpacaCredentials(user=self.user, is_paper=True)
-        creds.set_credentials("PKTEST", "secret-test")
-        creds.save()
-        GrokBotSettings.objects.create(user=self.user, order_id_prefix="eng")
-        self.alpaca = eng_client()
-        times = {60: today_at(1), 30: today_at(2), 90: today_at(0), 20: today_at(3)}
-        for f in self.alpaca.get.return_value:
-            minutes = round((NOW - timezone.datetime.fromisoformat(f["transaction_time"])).total_seconds() / 60)
-            f["transaction_time"] = times[minutes].isoformat()
-        self.alpaca.get_all_positions.return_value = [
-            SimpleNamespace(symbol=SHORT_PUT, qty="-1", side="short", avg_entry_price="2.17", current_price="2.00",
-                            market_value="-200", unrealized_pl="17", unrealized_plpc="0.078",
-                            unrealized_intraday_pl="5", cost_basis="-217"),
-            SimpleNamespace(symbol="AAPL", qty="10", side="long", avg_entry_price="200", current_price="190",
-                            market_value="1900", unrealized_pl="-100", unrealized_plpc="-0.05",
-                            unrealized_intraday_pl="-30", cost_basis="2000"),
-        ]
-        patcher = mock.patch(TRADING_CLIENT, return_value=self.alpaca)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.option_data = mock.MagicMock()
-        self.option_data.get_option_bars.return_value = SimpleNamespace(data={SHORT_PUT: [
-            SimpleNamespace(timestamp=NOW - timedelta(days=33), close=2.40),
-            SimpleNamespace(timestamp=NOW - timedelta(days=31), close=2.50)]})
-        data_patcher = mock.patch(OPTION_DATA_CLIENT, return_value=self.option_data)
-        self.option_data_class = data_patcher.start()
-        self.addCleanup(data_patcher.stop)
-
-    def get(self, **params):
-        return self.client.get(reverse("grok_bot"), params)
-
-    def test_bot_today(self, _outlook):
-        response = self.get()
-        today = response.context["data"]["tiles"]["today"]
-        # realized today: 717P short 2.17 -> 2.00 = +17, 716P long 2.14 -> 2.11 = -3 (both x100); + intraday 5 (bot only)
-        self.assertEqual((today["realized"], today["unrealized"], today["value"]),
-                         (Decimal("14.00"), Decimal("5"), Decimal("19.00")))
-        # cost basis: open 717P 217 + today's closed lots 217 + 214
-        self.assertEqual(today["pct"].quantize(Decimal("0.01")), Decimal("2.93"))
-        self.assertContains(response, "+$19.00")
-        self.assertContains(response, 'id="tile-today-note">+2.93% &middot; bot only</div>')
-
-    def test_bot_total_with_a_period_start_price(self, _outlook):
-        response = self.get(period="1M")
-        total = response.context["data"]["tiles"]["total"]
-        # closed in period 17 - 3 = 14; held 717P since before the period: (2.00 - 2.50) x -1 x 100 = +50
-        self.assertEqual((total["value"], total["note"]), (Decimal("64.00"), False))
-        request = self.option_data.get_option_bars.call_args.args[0]
-        self.assertEqual(request.symbol_or_symbols, SHORT_PUT)
-        self.option_data_class.assert_called_once_with(api_key="PKTEST", secret_key="secret-test")
-        self.assertContains(response, 'id="tile-total-note">bot only</div>')
-        self.assertNotContains(response, "includes gains/losses from before this period")
-
-    def test_bot_total_without_a_period_start_price(self, _outlook):
-        self.option_data.get_option_bars.return_value = SimpleNamespace(data={})
-        response = self.get(period="1M")
-        total = response.context["data"]["tiles"]["total"]
-        self.assertEqual((total["value"], total["note"]), (Decimal("31.00"), True))   # 14 + full unrealized 17
-        self.assertContains(response, "includes gains/losses from before this period")
-
-    def test_price_lookup_failure_is_treated_as_no_price(self, _outlook):
-        self.option_data.get_option_bars.side_effect = RuntimeError("no data subscription")
-        response = self.get(period="1M")
-        self.assertEqual(response.context["data"]["tiles"]["total"]["value"], Decimal("31.00"))
-        self.assertEqual(response.context["data"]["errors"], {})
-
-    def test_all_period_needs_no_price(self, _outlook):
-        total = self.get(period="all").context["data"]["tiles"]["total"]
-        self.assertEqual((total["value"], total["note"]), (Decimal("31.00"), False))
-        self.option_data.get_option_bars.assert_not_called()
-
-    def test_whole_account_values_unchanged(self, _outlook):
-        response = self.get(scope="account")
-        tiles = response.context["data"]["tiles"]
-        self.assertEqual(tiles["scope"], "whole account")
-        self.assertEqual((tiles["today"]["value"], tiles["total"]["value"]), (Decimal("1250.50"), Decimal("5250.5")))
-        self.assertContains(response, "+$1,250.50")
-        self.assertContains(response, "+$5,250.50")
-        self.assertContains(response, 'id="tile-today-note">+1.20% &middot; whole account</div>')
-        self.assertContains(response, 'id="tile-total-note">+5.25% &middot; whole account</div>')
-        self.option_data.get_option_bars.assert_not_called()
-
-    def test_toggle_switches_both_tiles(self, _outlook):
-        bot = self.get().context["data"]["tiles"]
-        whole = self.get(scope="account").context["data"]["tiles"]
-        self.assertEqual((bot["scope"], whole["scope"]), ("bot only", "whole account"))
-        self.assertNotEqual(bot["today"]["value"], whole["today"]["value"])
-        self.assertNotEqual(bot["total"]["value"], whole["total"]["value"])
-
-    def test_no_prefix_means_whole_account(self, _outlook):
-        GrokBotSettings.objects.filter(user=self.user).update(order_id_prefix="")
-        self.assertEqual(self.get().context["data"]["tiles"]["scope"], "whole account")
-
-    def test_bot_tiles_show_a_dash_when_fills_fail(self, _outlook):
-        self.alpaca.get.side_effect = RuntimeError("down")
-        response = self.get()
-        self.assertIsNone(response.context["data"]["tiles"]["today"])
-        self.assertContains(response, 'id="tile-today">&mdash;</span>')
-        self.assertContains(response, 'id="tile-today-note">bot only</div>')

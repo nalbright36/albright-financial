@@ -1,0 +1,39 @@
+{% comment %}Grok Bot > Strategies (grok_bot.html): the user's bot strategies - add, edit, pause/retire, reorder - and warnings for ambiguous prefixes. strategies, warnings, strategy_form from grok_bot_views._render_page().{% endcomment %}
+<section class="card" style="margin-top: 24px;" id="strategies" aria-labelledby="strategies-title">
+    <div class="card__header"><h2 class="card__label" id="strategies-title" style="margin: 0;">Manage strategies</h2>
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">An order belongs to the strategy whose prefix its client order ID starts with (any capitalization).</span></div>
+    {% for warning in warnings %}<p class="grok-warning" role="alert">{{ warning }}</p>{% endfor %}
+    {% if strategies %}
+    <ul class="strategy-list" id="strategy-list">
+        {% for s in strategies %}
+        <li class="strategy-list__row{% if s.status == 'retired' %} is-retired{% endif %}" data-strategy="{{ s.pk }}">
+            <div class="strategy-list__main">
+                <a href="{% url 'grok_bot_strategy' s.pk %}" class="strategy-chip" style="--strategy-color: {{ s.color }};"><span class="strategy-chip__dot" aria-hidden="true"></span>{{ s.name }}</a>
+                <span class="badge {% if s.status == 'active' %}gain{% elif s.status == 'paused' %}warn{% else %}neutral{% endif %}">{{ s.get_status_display }}</span>
+                <span class="strategy-list__meta">Prefix{{ s.prefixes|length|pluralize:"es" }}: {% for p in s.prefixes %}<code>{{ p }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% if s.started_at %} &middot; started {{ s.started_at|date:"M j, Y" }}{% endif %}{% if s.allocated_capital %} &middot; ${{ s.allocated_capital|floatformat:0 }} allocated{% endif %}</span>
+                {% if s.notes %}<p class="strategy-list__notes">{{ s.notes }}</p>{% endif %}
+            </div>
+            <div class="strategy-list__actions">
+                <form method="post" action="{% url 'grok_bot_strategy_move' s.pk %}">{% csrf_token %}
+                    <button type="submit" name="direction" value="up" class="btn btn-secondary btn-sm" aria-label="Move {{ s.name }} up"{% if forloop.first %} disabled{% endif %}>&uarr;</button>
+                    <button type="submit" name="direction" value="down" class="btn btn-secondary btn-sm" aria-label="Move {{ s.name }} down"{% if forloop.last %} disabled{% endif %}>&darr;</button>
+                </form>
+                <a href="{% url 'grok_bot_strategy_edit' s.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                <form method="post" action="{% url 'grok_bot_strategy_status' s.pk %}">{% csrf_token %}
+                    {% if s.status == 'active' %}<button type="submit" name="status" value="paused" class="btn btn-secondary btn-sm">Pause</button>
+                    {% else %}<button type="submit" name="status" value="active" class="btn btn-secondary btn-sm">{% if s.status == 'retired' %}Reactivate{% else %}Resume{% endif %}</button>{% endif %}
+                    {% if s.status != 'retired' %}<button type="submit" name="status" value="retired" class="btn btn-secondary btn-sm" data-confirm="Retire {{ s.name }}? Its past orders stay attributed to it.">Retire</button>{% endif %}
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p style="color: var(--text-secondary); font-size: 0.875rem;">No strategies yet. Add one for each bot, with the prefix its client order IDs start with.</p>
+    {% endif %}
+
+    <details class="strategy-add"{% if strategy_form.errors or not strategies %} open{% endif %}>
+        <summary class="btn btn-secondary btn-sm">Add a strategy</summary>
+        {% include "_grok_strategy_fields.html" with form=strategy_form %}
+    </details>
+</section>

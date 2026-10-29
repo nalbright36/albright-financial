@@ -15,7 +15,8 @@ from django.db import models
 from django.utils import timezone
 
 SCOPES = [   # (scope, one-line description of what it allows)
-    ("trading:notes", "Post notes to the Grok Bot page (Trading)."),
+    ("trading:notes", "Post notes to the Grok Bot page (Trading), tagged with a strategy if you like; list the "
+                      "strategies."),
     ("reseller:read", "Read today's live auction lots and your unsold inventory."),
     ("reseller:suggest", "Leave notes on lots and pending price/listing suggestions on inventory items."),
     ("opportunities:read", "Read opportunities found in the last 7 days."),
@@ -109,8 +110,11 @@ class _BotWrite(models.Model):
 
 
 class TradingNote(_BotWrite):
-    """POST trading/notes - shown on the Grok Bot page under "Bot notes"."""
+    """POST trading/notes - shown on the Grok Bot page under "Bot notes", and on its strategy's page when
+    the bot tagged it with one."""
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bot_trading_notes")
+    strategy = models.ForeignKey("albright_trading_app.BotStrategy", on_delete=models.SET_NULL, null=True,
+                                 blank=True, related_name="bot_notes")
     date = models.DateField()
     title = models.CharField(max_length=200)
     text = models.TextField()

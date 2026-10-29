@@ -1,0 +1,18 @@
+{% load grok_bot_extras %}{% comment %}Closed trades (grok_bot.html, grok_bot_strategy.html). trades: ClosedTrade objects (.strategy = its key); names: {key: StrategyRef}; show_strategy: the Strategy column.{% endcomment %}
+<div class="table-scroll">
+<table class="holdings" id="trades-table">
+    <thead><tr><th>Closed</th>{% if show_strategy %}<th>Strategy</th>{% endif %}<th>Contract</th><th>Direction</th><th class="num">Qty</th><th class="num">Realized P&amp;L</th></tr></thead>
+    <tbody>
+    {% for t in trades %}
+    <tr data-strategies="{{ t.strategy }}">
+        <td>{{ t.closed_at|date:"M j, g:i A" }}</td>
+        {% if show_strategy %}<td>{% with ref=names|get_item:t.strategy %}<span class="strategy-chip" style="--strategy-color: {{ ref.color }};"><span class="strategy-chip__dot" aria-hidden="true"></span>{{ ref.name }}</span>{% endwith %}</td>{% endif %}
+        <td><span class="symbol">{{ t.symbol }}</span>{% if t.description != t.symbol %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ t.description }}</div>{% endif %}</td>
+        <td>{{ t.direction }}{% if t.expired %} <span class="badge neutral" title="Still open at expiration with no closing fill - counted as expiring worthless">expired</span>{% endif %}</td>
+        <td class="num">{{ t.quantity.normalize }}</td>
+        <td class="num"><span class="badge {{ t.pnl|pnl_class }}">{{ t.pnl|signed_money }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>

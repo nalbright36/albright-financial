@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 from django.contrib.auth.models import User
 
 from .crypto_utils import get_fernet
@@ -141,17 +142,70 @@ class AlpacaCredentials(models.Model):
     def __str__(self):
         return f"Alpaca credentials for {self.user.username}"
 
-class GrokBotSettings(models.Model):
-    """The Grok Bot page's one setting: the client_order_id prefix the
-    external bot puts on its orders (e.g. "grok-"), used to show the bot's
-    orders, fills and closed trades apart from the rest of the account.
-    Not a credential - the page uses the AlpacaCredentials above."""
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-                                related_name="grok_bot_settings")
-    order_id_prefix = models.CharField(max_length=48, blank=True)
+BOT_STRATEGY_COLORS = [
+    ("#3B82F6", "Blue"), ("#F97316", "Orange"), ("#10B981", "Green"), ("#A855F7", "Purple"),
+    ("#EF4444", "Red"), ("#14B8A6", "Teal"), ("#EAB308", "Yellow"), ("#EC4899", "Pink"),
+]
+
+
+class BotStrategy(models.Model):
+    """One bot strategy trading in the Grok Bot page's Alpaca paper account
+    (several share it). Its orders are the ones whose client_order_id starts
+    with one of its prefixes (any capitalization); see strategy_attribution.py.
+    Not to be confused with Strategy below - this app's own trading strategies.
+    Nothing here trades: the page only reads the account."""
+    STATUSES = [("active", "Active"), ("paused", "Paused"), ("retired", "Retired")]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bot_strategies")
+    name = models.CharField(max_length=80)
+    prefixes = models.JSONField(default=list, help_text='client_order_id prefixes, e.g. ["eng"]')
+    color = models.CharField(max_length=7, choices=BOT_STRATEGY_COLORS, default=BOT_STRATEGY_COLORS[0][0])
+    status = models.CharField(max_length=8, choices=STATUSES, default="active")
+    started_at = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    allocated_capital = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                            help_text="For return % and drawdown %. Optional.")
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["display_order", "pk"]
+        constraints = [models.UniqueConstraint(Lower("name"), "user",
+                                               name="bot_strategy_unique_name_per_user")]
 
     def __str__(self):
-        return f"Grok Bot settings for {self.user.username}"
+        return self.name
+
+
+class StrategyDailySnapshot(models.Model):
+    """One strategy's standing at the end of a day (manage.py snapshot_strategies) -
+    its own equity curve, since Alpaca's portfolio history is account-wide only.
+    strategy=None is the "Unattributed (manual/other)" bucket. Backfilled rows
+    (rebuilt from past fills) have no unrealized P&L."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    strategy = models.ForeignKey(BotStrategy, on_delete=models.CASCADE, null=True, blank=True,
+                                 related_name="snapshots")
+    date = models.DateField(db_index=True)
+    realized_pnl = models.DecimalField(max_digits=14, decimal_places=2, help_text="Realized P&L to date")
+    unrealized_pnl = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    open_positions = models.PositiveIntegerField(default=0)
+    trades_closed = models.PositiveIntegerField(default=0, help_text="Trades closed that day")
+    backfilled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["strategy", "date"], condition=models.Q(strategy__isnull=False),
+                                    name="snapshot_one_per_strategy_day"),
+            models.UniqueConstraint(fields=["user", "date"], condition=models.Q(strategy__isnull=True),
+                                    name="snapshot_one_unattributed_per_user_day"),
+        ]
+
+    @property
+    def total_pnl(self):
+        return self.realized_pnl + (self.unrealized_pnl or 0)
 
 
 POSITION_SIZING_CHOICES = [

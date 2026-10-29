@@ -17,6 +17,7 @@
             <div style="flex: 1; min-width: 0;">
                 <div style="display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap;">
                     <span class="badge neutral">Grok</span>
+                    {% if note.strategy %}<span class="strategy-chip" style="--strategy-color: {{ note.strategy.color }};"><span class="strategy-chip__dot" aria-hidden="true"></span>{{ note.strategy.name }}</span>{% endif %}
                     <strong>{{ note.title }}</strong>
                     <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ note.date|date:"M j, Y" }}{% if note.token %} &middot; {{ note.token.name }}{% endif %}</span>
                 </div>
@@ -28,6 +29,6 @@
         {% endfor %}
     </form>
     {% else %}
-    <p style="margin: 0; color: var(--text-secondary); font-size: 0.875rem;">No notes yet. The bot can post them with the <code>trading:notes</code> scope.</p>
+    <p style="margin: 0; color: var(--text-secondary); font-size: 0.875rem;">{% if strategy %}No notes tagged with this strategy yet. The bot can tag a note with <code>"strategy"</code> when it posts it.{% else %}No notes yet. The bot can post them with the <code>trading:notes</code> scope.{% endif %}</p>
     {% endif %}
 </div>

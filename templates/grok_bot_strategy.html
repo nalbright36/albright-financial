@@ -1,0 +1,123 @@
+{% extends "index.html" %}
+{% load humanize grok_bot_extras cache_bust %}
+
+{% block page_title %}{{ name }} · Grok Bot · {% endblock %}
+
+{% block content %}
+{% comment %}
+One bot strategy (or Unattributed) on its own (grok_bot_views.grok_bot_strategy):
+its tiles, its own cumulative P&L, the open positions its fills hold, its recent
+orders and closed trades, and the bot notes tagged with it. READ-ONLY.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <a href="{% url 'grok_bot' %}?period={{ period }}" style="font-size: 0.875rem;">&larr; Grok Bot</a>
+    <div class="card__header" style="margin: 12px 0 8px; align-items: flex-start; flex-wrap: wrap; gap: var(--space-2);">
+        <div>
+            <h1 style="margin: 0;" class="strategy-title"><span class="strategy-chip__dot strategy-title__dot" style="--strategy-color: {{ color }};" aria-hidden="true"></span>{{ name }}</h1>
+            <p style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;" id="strategy-meta">
+                {% if strategy %}
+                    <span class="badge {% if strategy.status == 'active' %}gain{% elif strategy.status == 'paused' %}warn{% else %}neutral{% endif %}">{{ strategy.get_status_display }}</span>
+                    Prefix{{ strategy.prefixes|length|pluralize:"es" }}: {% for p in strategy.prefixes %}<code>{{ p }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+                    {% if strategy.started_at %} &middot; started {{ strategy.started_at|date:"M j, Y" }}{% endif %}
+                    {% if strategy.allocated_capital %} &middot; ${{ strategy.allocated_capital|floatformat:2|intcomma }} allocated{% endif %}
+                    &middot; <a href="{% url 'grok_bot_strategy_edit' strategy.pk %}">Edit</a>
+                {% else %}
+                    Orders whose client order ID matches no strategy's prefix - placed by hand or by another tool - and fills whose order wasn't in the history read.
+                {% endif %}
+            </p>
+            {% if strategy.notes %}<p style="margin: 8px 0 0; white-space: pre-wrap; font-size: 0.875rem;">{{ strategy.notes }}</p>{% endif %}
+        </div>
+        <div style="display: flex; gap: var(--space-1);" id="period-toggle">
+            {% for k, label in periods %}
+            <a href="?period={{ k }}" class="btn btn-secondary btn-timeframe{% if k == period %} active{% endif %}"{% if k == period %} aria-current="true"{% endif %}>{{ label }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if not_connected %}
+        <div class="card" id="grok-not-connected" style="margin-top: 20px;">
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">Connect your Alpaca paper account to see this strategy's results.</p>
+            <a href="{% url 'connect_alpaca_account' %}" class="btn btn-primary">Connect Alpaca Account</a>
+        </div>
+    {% elif error %}
+        <div class="card" id="grok-error" style="border-color: var(--loss); margin-top: 20px;"><p style="color: var(--loss); margin: 0;">{{ error }}</p></div>
+    {% else %}
+        {% for n, message in data.errors.items %}
+        <div class="card grok-section-error" style="border-color: var(--loss); margin: 12px 0; padding: var(--space-3) var(--space-4);">
+            <p style="color: var(--loss); margin: 0; font-size: 0.875rem;">{{ message }}</p>
+        </div>
+        {% endfor %}
+
+        {% if row %}
+        <div class="grid grid-4" style="margin: 16px 0 24px;" id="strategy-tiles">
+            <div class="card"><div class="card__header"><span class="card__label">Today's P&amp;L</span></div>
+                <span class="ledger-stat__value num" id="tile-today" style="color: var(--{{ row.today_pl|pnl_class }});">{{ row.today_pl|signed_money }}</span>
+                <div class="grok-tile__note">realized today + intraday change of its open contracts</div></div>
+            <div class="card"><div class="card__header"><span class="card__label">Total P&amp;L ({{ period|upper }})</span></div>
+                <span class="ledger-stat__value num" id="tile-total" style="color: var(--{{ row.total_pl|pnl_class }});">{{ row.total_pl|signed_money }}</span>
+                <div class="grok-tile__note">{% if row.return_pct is not None %}{{ row.return_pct|signed_pct }} return &middot; {% endif %}realized {{ row.realized_to_date|signed_money }} to date &middot; unrealized {{ row.unrealized|signed_money }}</div>
+                {% if 'before' in row.notes %}<div class="grok-tile__note">includes gains/losses from before this period</div>{% endif %}</div>
+            <div class="card"><div class="card__header"><span class="card__label">Win rate ({{ period|upper }})</span></div>
+                <span class="ledger-stat__value num" id="tile-winrate">{% if row.stats.win_rate is not None %}{{ row.stats.win_rate }}%{% else %}&mdash;{% endif %}</span>
+                <div class="grok-tile__note">{{ row.stats.wins }} of {{ row.stats.count }} closed trade{{ row.stats.count|pluralize }} &middot; profit factor {% if row.stats.profit_factor is not None %}{{ row.stats.profit_factor }}{% elif row.stats.gross_wins %}&infin;{% else %}&mdash;{% endif %}</div></div>
+            <div class="card"><div class="card__header"><span class="card__label">Max drawdown ({{ period|upper }})</span></div>
+                <span class="ledger-stat__value num" id="tile-drawdown">{% if row.max_drawdown %}-${{ row.max_drawdown|intcomma }}{% else %}$0.00{% endif %}</span>
+                <div class="grok-tile__note">{% if row.max_drawdown_pct is not None %}{{ row.max_drawdown_pct }}% of allocated capital at the peak &middot; {% endif %}avg win {{ row.stats.avg_win|signed_money }} &middot; avg loss {{ row.stats.avg_loss|signed_money }}</div></div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card__header"><span class="card__label">Cumulative P&amp;L ({{ period|upper }})</span></div>
+            <div id="grok-chart" style="min-height: 300px;"></div>
+        </div>
+
+        <h2 class="card__label" style="margin: 0 0 8px;">Open positions <span class="tab-badge">{{ row.open_count }}</span></h2>
+        <div class="card" style="padding: 0; margin-bottom: 24px;" id="strategy-positions">
+            {% if row.open_positions %}
+            <div class="table-scroll">
+            <table class="holdings">
+                <thead><tr><th>Symbol</th><th>Contract</th><th class="num">Qty</th><th class="num">Avg cost</th><th class="num">Current</th><th class="num">Unrealized P&amp;L</th><th class="num">DTE</th></tr></thead>
+                <tbody>
+                {% for p in row.open_positions %}
+                <tr>
+                    <td class="symbol">{{ p.symbol }}</td>
+                    <td>{% if p.description %}{{ p.description }}{% else %}<span style="color: var(--text-secondary);">Stock</span>{% endif %}
+                        {% if p.shared_with %}<div class="grok-row-note">shared contract - also held by {{ p.shared_with|join:", " }}; this is only {{ name }}'s quantity and cost</div>{% endif %}</td>
+                    <td class="num">{{ p.qty.normalize }}</td>
+                    <td class="num">${{ p.avg_price|floatformat:2|intcomma }}</td>
+                    <td class="num">{% if p.current_price is not None %}${{ p.current_price|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num">{% if p.unrealized_pl is not None %}<span class="badge {{ p.unrealized_pl|pnl_class }}">{{ p.unrealized_pl|signed_money }}</span>{% else %}<span title="Not in the account's positions - no current price">&mdash;</span>{% endif %}</td>
+                    <td class="num">{% if p.dte is not None %}{{ p.dte }}{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}<p style="color: var(--text-secondary); padding: var(--space-5); margin: 0;">No open positions from this strategy's fills.</p>{% endif %}
+        </div>
+
+        <h2 class="card__label" style="margin: 0 0 8px;">Closed trades ({{ period|upper }}) <span class="tab-badge">{{ row.stats.count }}</span></h2>
+        <div class="card" style="margin-bottom: 24px;{% if row.trades %} padding: 0;{% endif %}" id="strategy-trades">
+            {% if row.trades %}{% include "_grok_trades_table.html" with trades=row.trades names=data.names show_strategy=False %}
+            {% else %}<p style="color: var(--text-secondary); margin: 0;">No closed trades in this period.</p>{% endif %}
+        </div>
+        {% elif data.report is None %}
+        <p style="color: var(--text-secondary);">This strategy's results couldn't be loaded.</p>
+        {% endif %}
+
+        <h2 class="card__label" style="margin: 0 0 8px;">Recent orders</h2>
+        <div class="card" style="padding: 0;" id="strategy-orders">
+            {% if orders %}{% include "_grok_orders_table.html" with orders=orders names=data.names show_strategy=False %}
+            {% elif orders is None %}<p style="color: var(--text-secondary); padding: var(--space-5); margin: 0;">Orders couldn't be loaded.</p>
+            {% else %}<p style="color: var(--text-secondary); padding: var(--space-5); margin: 0;">No orders{% if strategy %} with {{ strategy.prefixes|length|pluralize:"this prefix,these prefixes" }}{% endif %} yet.</p>{% endif %}
+        </div>
+    {% endif %}
+
+    {% load bot_api %}{% bot_trading_notes request.user note_filter %}
+</div>
+
+{% if row %}
+{{ series|json_script:"grok-series" }}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="{% static_version 'js/grok_bot.js' %}" defer></script>
+{% endif %}
+{% endblock %}

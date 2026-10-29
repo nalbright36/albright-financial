@@ -1,0 +1,22 @@
+{% comment %}The add/edit strategy form (BotStrategyForm) - Grok Bot > Manage strategies, and the edit page.{% endcomment %}
+<form method="post" action="{% if form.instance.pk %}{% url 'grok_bot_strategy_edit' form.instance.pk %}{% else %}{% url 'grok_bot_strategy_add' %}{% endif %}" class="strategy-form" id="{% if form.instance.pk %}strategy-edit-form{% else %}strategy-add-form{% endif %}">
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+    <div class="strategy-form__grid">
+        <div class="field"><label for="{{ form.name.id_for_label }}">Name</label>{{ form.name }}{% for e in form.name.errors %}<p class="field-error">{{ e }}</p>{% endfor %}</div>
+        <div class="field"><label for="{{ form.prefixes_text.id_for_label }}">{{ form.prefixes_text.label }}</label>{{ form.prefixes_text }}
+            <small class="grok-footnote" style="padding: 0;">{{ form.prefixes_text.help_text }}</small>{% for e in form.prefixes_text.errors %}<p class="field-error">{{ e }}</p>{% endfor %}</div>
+        <div class="field"><label for="{{ form.status.id_for_label }}">Status</label>{{ form.status }}</div>
+        <div class="field"><label for="{{ form.started_at.id_for_label }}">{{ form.started_at.label }} (optional)</label>{{ form.started_at }}{% for e in form.started_at.errors %}<p class="field-error">{{ e }}</p>{% endfor %}</div>
+        <div class="field"><label for="{{ form.allocated_capital.id_for_label }}">{{ form.allocated_capital.label }} (optional)</label>{{ form.allocated_capital }}
+            <small class="grok-footnote" style="padding: 0;">For return % and drawdown %.</small>{% for e in form.allocated_capital.errors %}<p class="field-error">{{ e }}</p>{% endfor %}</div>
+    </div>
+    <fieldset class="strategy-colors">
+        <legend>Color</legend>
+        {% for choice in form.color %}
+        <label class="strategy-colors__choice" style="--strategy-color: {{ choice.data.value }};">{{ choice.tag }}<span class="strategy-colors__swatch" aria-hidden="true"></span><span class="visually-hidden">{{ choice.choice_label }}</span></label>
+        {% endfor %}
+    </fieldset>
+    <div class="field"><label for="{{ form.notes.id_for_label }}">{{ form.notes.label }} (optional)</label>{{ form.notes }}</div>
+    <button type="submit" class="btn btn-primary btn-sm">{% if form.instance.pk %}Save strategy{% else %}Add strategy{% endif %}</button>
+</form>

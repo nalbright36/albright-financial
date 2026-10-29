@@ -18,6 +18,7 @@ urlpatterns = [
 api_urlpatterns = [
     path("docs", api_views.docs, name="docs"),
     path("trading/notes", api_views.trading_notes, name="trading_notes"),
+    path("trading/strategies", api_views.trading_strategies, name="trading_strategies"),
     path("reseller/lots", api_views.reseller_lots, name="reseller_lots"),
     path("reseller/lots/<int:lot_id>/notes", api_views.reseller_lot_note, name="reseller_lot_note"),
     path("reseller/inventory", api_views.reseller_inventory, name="reseller_inventory"),

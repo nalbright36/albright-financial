@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import grok_bot_views, views
 
 urlpatterns = [
     path('trading/', views.trading_home, name='trading_home'),
@@ -27,7 +27,12 @@ urlpatterns = [
     path('registration/', views.registration, name='registration'),
     path('registrationsuccess/', views.registrationsuccess, name='registrationsuccess'),
     path('trading_account/', views.trading_account, name='trading_account'),
-    path("grok-bot/", views.grok_bot, name="grok_bot"),
+    path("grok-bot/", grok_bot_views.grok_bot, name="grok_bot"),
+    path("grok-bot/strategies/add/", grok_bot_views.grok_bot_strategy_add, name="grok_bot_strategy_add"),
+    path("grok-bot/strategies/<int:pk>/edit/", grok_bot_views.grok_bot_strategy_edit, name="grok_bot_strategy_edit"),
+    path("grok-bot/strategies/<int:pk>/status/", grok_bot_views.grok_bot_strategy_status, name="grok_bot_strategy_status"),
+    path("grok-bot/strategies/<int:pk>/move/", grok_bot_views.grok_bot_strategy_move, name="grok_bot_strategy_move"),
+    path("grok-bot/strategies/<str:key>/", grok_bot_views.grok_bot_strategy, name="grok_bot_strategy"),
     path('market_scanner/', views.market_scanner, name='market_scanner'),
     path("stock/<str:symbol>/", views.stock_detail, name="stock_detail"),
     path("stock/<str:symbol>/bars/", views.stock_bars_api, name="stock_bars_api"),

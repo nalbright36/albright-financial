@@ -8,21 +8,23 @@ activities) and nothing else - the underlying TradingClient isn't
 reachable from the outside. tests/test_grok_bot.py checks the view never
 touches an order-submission or cancel method.
 
+Several bot strategies trade in the one account, told apart by their
+client_order_id prefix (BotStrategy rows); strategy_attribution.py says
+which strategy each order, fill and dollar of P&L belongs to.
+
 Pure helpers (no I/O, easy to test):
   - match_fills(): fills -> closed trades, when each still-open position
-    was opened, and the P&L each fill realized (for "today")
-  - bot_today_pl() / bot_total_pl(): the Today's / Total P&L tiles in
-    "Bot only" mode
+    was opened, and the P&L each fill realized (FIFO, via
+    strategy_attribution.FifoLedger)
   - parse_occ(): "AAPL250117C00190000" -> underlying, expiration, call/put, strike
   - closed_trades(): fills -> realized P&L per closed position (FIFO lots,
     long or short; a position "closes" when it returns to flat)
   - trade_stats(): win rate, average win/loss, count, total
-  - filter_orders() / filter_fills(): the "Bot order ID prefix" filter
+  - order_ids_to_client_ids(): every order and leg id -> its (parent's) client order ID
 """
 import logging
 import re
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
@@ -35,10 +37,9 @@ CACHE_SECONDS = 60
 RECENT_ORDERS = 50
 ORDER_HISTORY_LIMIT = 500        # Alpaca's maximum per request
 MAX_ORDER_PAGES = 20             # up to 10,000 orders back to the period's start
-# Orders are fetched this far before the period's start too, so a bot trade
-# opened before the period and closed in it still has its opening fill
-# attributed (options the bot holds rarely run longer than this).
-ORDER_LOOKBACK = timedelta(days=60)
+# Every order back to the account's start is fetched (and cached) whatever
+# the period, so each strategy's FIFO has its opening fills - an open
+# attributed to no one would make its close look like a new short.
 FILL_PAGE_SIZE = 100
 MAX_FILL_PAGES = 50              # up to 5,000 fills - the whole history for most paper bots
 OPTION_MULTIPLIER = 100
@@ -142,7 +143,7 @@ def days_to_expiration(symbol, today=None):
 
 
 # ---------------------------------------------------------------------------
-# Prefix filtering ("Bot only" vs "Whole account")
+# Client order IDs
 # ---------------------------------------------------------------------------
 
 def matches_prefix(client_order_id, prefix):
@@ -163,19 +164,6 @@ def order_ids_to_client_ids(orders):
     return mapping
 
 
-def filter_orders(orders, prefix):
-    return [o for o in orders if matches_prefix(_get(o, "client_order_id"), prefix)]
-
-
-def filter_fills(fills, prefix, client_ids):
-    """Fills whose order (or parent multi-leg order) has the prefix. A fill
-    whose order isn't in client_ids (older than the order history fetched)
-    can't be attributed, so it's left out when filtering."""
-    if not prefix:
-        return list(fills)
-    return [f for f in fills if matches_prefix(client_ids.get(str(f["order_id"])), prefix)]
-
-
 # ---------------------------------------------------------------------------
 # Realized P&L from fills
 # ---------------------------------------------------------------------------
@@ -188,6 +176,8 @@ class ClosedTrade:
     direction: str          # "long" or "short"
     quantity: Decimal       # largest position size held
     pnl: Decimal = Decimal("0")
+    expired: bool = False   # closed at $0 by expiring (no closing fill)
+    strategy: str = ""      # the strategy key it belongs to (set by the page)
 
     @property
     def description(self):
@@ -198,14 +188,9 @@ class ClosedTrade:
         return self.pnl > 0
 
 
-@dataclass
-class _Book:
-    lots: deque = field(default_factory=deque)   # [signed qty, price]
-    trade: ClosedTrade = None
-
-
 def normalize_fill(activity):
-    """A FILL activity (raw dict or model) -> {id, order_id, symbol, side, qty, price, time}."""
+    """A FILL activity (raw dict or model) -> {id, order_id, symbol, side, qty, price, time, fee}.
+    Alpaca's FILL activities usually carry no fee; one is used when present ("fee" or "commission")."""
     side = _enum(_get(activity, "side"))
     return {
         "id": str(_get(activity, "id") or ""),
@@ -215,6 +200,7 @@ def normalize_fill(activity):
         "qty": abs(_dec(_get(activity, "qty"), Decimal("0"))),
         "price": _dec(_get(activity, "price"), Decimal("0")),
         "time": _dt(_get(activity, "transaction_time")),
+        "fee": abs(_dec(_get(activity, "fee"), None) or _dec(_get(activity, "commission"), Decimal("0"))),
     }
 
 
@@ -236,93 +222,18 @@ def match_fills(fills):
     """Returns (closed trades, {symbol: when its still-open position was
     opened}, [Realization per reducing fill]).
 
-    Match fills first-in-first-out per symbol, longs and shorts alike
-    (an options bot often sells to open). Every reduction of a position
-    realizes (exit - entry) x qty x multiplier, reversed for a short. A
-    "closed trade" is one round trip from flat back to flat; its P&L is
-    everything realized along the way (scale-ins and partial exits
-    included). A fill that flips the position closes the trade and opens a
-    new one with the remainder. Positions still open aren't closed trades."""
-    books = defaultdict(_Book)
-    done, realizations = [], []
-    earliest = datetime.min.replace(tzinfo=dt_timezone.utc)
-    for fill in sorted(fills, key=lambda f: (f["time"] or earliest, f["id"])):
-        if fill["qty"] <= 0 or not fill["symbol"]:
-            continue
-        book = books[fill["symbol"]]
-        mult = multiplier(fill["symbol"])
-        remaining = fill["qty"] if fill["side"] == "buy" else -fill["qty"]
-        realized = cost = Decimal("0")
-        # Reduce lots in the opposite direction first.
-        while remaining and book.lots and (book.lots[0][0] > 0) != (remaining > 0):
-            lot = book.lots[0]
-            direction = 1 if lot[0] > 0 else -1
-            matched = min(abs(lot[0]), abs(remaining))
-            part = (fill["price"] - lot[1]) * matched * mult * direction
-            book.trade.pnl += part
-            realized += part
-            cost += abs(lot[1]) * matched * mult
-            lot[0] -= matched * direction
-            remaining += matched * direction
-            if lot[0] == 0:
-                book.lots.popleft()
-            if not book.lots:
-                book.trade.closed_at = fill["time"]
-                done.append(book.trade)
-                book.trade = None
-        if cost:
-            realizations.append(Realization(fill["time"], fill["symbol"], realized, cost))
-        if remaining:
-            if book.trade is None:
-                book.trade = ClosedTrade(symbol=fill["symbol"], opened_at=fill["time"], closed_at=None,
-                                         direction="long" if remaining > 0 else "short", quantity=Decimal("0"))
-            book.lots.append([remaining, fill["price"]])
-            book.trade.quantity = max(book.trade.quantity, abs(sum(lot[0] for lot in book.lots)))
-    open_since = {symbol: book.trade.opened_at for symbol, book in books.items() if book.lots and book.trade}
-    return done, open_since, realizations
-
-
-# ---------------------------------------------------------------------------
-# Bot-only Today's P&L and Total P&L
-# ---------------------------------------------------------------------------
-
-def bot_today_pl(realizations, bot_positions, today=None):
-    """Realized P&L from the bot's fills today (local time) + the intraday
-    unrealized P&L of its open positions (Alpaca's unrealized_intraday_pl,
-    which already includes the x100 for options). % is against the open
-    positions' cost basis plus today's closed lots' cost basis; None if 0."""
-    today = today or timezone.localdate()
-    todays = [r for r in realizations if r.time and timezone.localtime(r.time).date() == today]
-    realized = sum((r.pnl for r in todays), Decimal("0"))
-    unrealized = sum((p["unrealized_intraday_pl"] or Decimal("0") for p in bot_positions), Decimal("0"))
-    basis = (sum((abs(p["cost_basis"] or 0) for p in bot_positions), Decimal("0"))
-             + sum((r.cost_basis for r in todays), Decimal("0")))
-    value = realized + unrealized
-    return {"value": value.quantize(Decimal("0.01")), "realized": realized, "unrealized": unrealized,
-            "pct": (value / basis * 100) if basis else None}
-
-
-def bot_total_pl(trades_in_period, bot_positions, open_since, start, price_at):
-    """Realized P&L of the bot's trades closed in the period + the current
-    unrealized P&L of its open positions. A position opened before the
-    period counts only its change since the period's start - (current -
-    price at start) x qty x multiplier - when price_at(symbol) has that
-    price; otherwise its full unrealized P&L, flagged in "note"."""
-    realized = sum((t.pnl for t in trades_in_period), Decimal("0"))
-    unrealized, note = Decimal("0"), False
-    for p in bot_positions:
-        opened = open_since.get(p["symbol"])
-        if start is None or (opened is not None and opened >= start):
-            unrealized += p["unrealized_pl"] or Decimal("0")
-            continue
-        start_price = price_at(p["symbol"])
-        if start_price is not None and p["current_price"] is not None:
-            unrealized += (p["current_price"] - start_price) * p["qty"] * multiplier(p["symbol"])
-        else:
-            unrealized += p["unrealized_pl"] or Decimal("0")
-            note = True
-    return {"value": (realized + unrealized).quantize(Decimal("0.01")), "realized": realized,
-            "unrealized": unrealized, "note": note}
+    Fills are matched first-in-first-out per symbol, longs and shorts alike
+    (an options bot often sells to open) - strategy_attribution.FifoLedger.
+    Every reduction of a position realizes (exit - entry) x qty x
+    multiplier, reversed for a short. A "closed trade" is one round trip
+    from flat back to flat; its P&L is everything realized along the way
+    (scale-ins and partial exits included). A fill that flips the position
+    closes the trade and opens a new one with the remainder. Positions still
+    open aren't closed trades."""
+    from .strategy_attribution import ledger_from
+    ledger = ledger_from(fills)
+    open_since = {symbol: trade.opened_at for symbol, trade in ledger.open_trades.items()}
+    return ledger.trades, open_since, ledger.realizations
 
 
 def trade_stats(trades):
@@ -428,8 +339,8 @@ def _cache_key(user_id, key):
 
 
 def clear_cache(user_id):
-    """Drops every cached Alpaca response for this user (called when the prefix changes)."""
-    keys = ["account", "positions", "fills"] + [f"{what}:{p}" for p in PERIODS for what in ("history", "orders")]
+    """Drops every cached Alpaca response for this user."""
+    keys = ["account", "positions", "fills", "orders:all"] + [f"history:{p}" for p in PERIODS]
     cache.delete_many([_cache_key(user_id, k) for k in keys])
 
 
@@ -471,6 +382,7 @@ def _positions_data(api, today=None):
             "unrealized_pl": _dec(p.unrealized_pl, Decimal("0")),
             "unrealized_pl_pct": _dec(p.unrealized_plpc, Decimal("0")) * 100,
             "unrealized_intraday_pl": _dec(_get(p, "unrealized_intraday_pl")),
+            "lastday_price": _dec(_get(p, "lastday_price")),
             "cost_basis": _dec(_get(p, "cost_basis")),
             "dte": days_to_expiration(symbol, today),
         })
@@ -501,19 +413,6 @@ def _order_row(o):
         "filled_avg_price": _dec(_get(o, "filled_avg_price")),
         "client_order_id": _get(o, "client_order_id") or "",
     }
-
-
-def filled_symbols(order_rows):
-    """Symbols the given orders actually traded: a filled simple order's
-    symbol, and each filled leg of a multi-leg order (or every leg, if the
-    parent is filled)."""
-    symbols = set()
-    for row in order_rows:
-        if row["is_multi_leg"]:
-            symbols.update(leg["symbol"] for leg in row["legs"] if leg["symbol"] and (leg["filled"] or row["filled"]))
-        elif row["filled"] and row["symbols"][0]:
-            symbols.add(row["symbols"][0])
-    return symbols
 
 
 def _orders_data(api, after=None):
@@ -565,11 +464,14 @@ def _history_data(api, period, account_created):
     return {"points": points, "total_pl": total, "total_pl_pct": _dec(pl_pct[-1]) * 100 if pl_pct else None}
 
 
-def build_dashboard(credentials, user_id, period=DEFAULT_PERIOD, prefix="", scope="bot", today=None, now=None):
-    """Everything the page shows. Each section is fetched (and cached)
-    separately, so one failing call leaves the others on the page; its
-    message lands in data["errors"]. Raises GrokBotError when nothing can
+def build_dashboard(credentials, user_id, strategies=(), period=DEFAULT_PERIOD, today=None, now=None):
+    """Everything the page shows, with every order, fill, trade and open
+    position attributed to a strategy (strategy_attribution). `strategies`:
+    StrategyRefs in display order. Each Alpaca section is fetched (and
+    cached) separately, so one failing call leaves the others on the page;
+    its message lands in data["errors"]. Raises GrokBotError when nothing can
     be fetched at all (live account, unreadable credentials)."""
+    from . import strategy_attribution as sa
     if not credentials.is_paper:
         raise GrokBotError("Your saved Alpaca account is a live account. The Grok Bot page only reads paper "
                            "accounts - connect your paper account's keys to use it.")
@@ -580,8 +482,10 @@ def build_dashboard(credentials, user_id, period=DEFAULT_PERIOD, prefix="", scop
         raise GrokBotError("Couldn't read your saved Alpaca credentials - try reconnecting your account.") from exc
 
     period = period if period in PERIODS else DEFAULT_PERIOD
-    bot_only = bool(prefix) and scope != "account"
-    data = {"errors": {}, "period": period, "bot_only": bot_only, "prefix": prefix}
+    today = today or timezone.localdate()
+    refs = list(strategies)
+    names = {ref.key: ref for ref in refs + [sa.UNATTRIBUTED_REF]}
+    data = {"errors": {}, "period": period, "strategies": refs, "names": names}
 
     def section(name, key, fetch):
         try:
@@ -596,42 +500,54 @@ def build_dashboard(credentials, user_id, period=DEFAULT_PERIOD, prefix="", scop
     data["history"] = section("portfolio history", f"history:{period}", lambda: _history_data(api, period, created))
     data["positions"] = section("positions", "positions", lambda: _positions_data(api, today))
     start = period_start(period, now)
-    orders_after = start - ORDER_LOOKBACK if start else None
-    orders = section("orders", f"orders:{period}", lambda: _orders_data(api, after=orders_after))
+    orders = section("orders", "orders:all", lambda: _orders_data(api))
     fills = section("fills", "fills", lambda: _fills_data(api))
 
     data["orders"] = data["orders_truncated"] = data["orders_scanned"] = None
-    data["no_match"] = False
     if orders is not None:
-        bot_rows = [r for r in orders["rows"] if matches_prefix(r["client_order_id"], prefix)] if prefix else []
-        rows = bot_rows if bot_only else orders["rows"]
-        data["orders"] = rows[:RECENT_ORDERS]
+        per_bucket = {}
+        for row in orders["rows"]:                       # newest first
+            row["strategy"] = sa.match_strategy(row["client_order_id"], refs)
+            per_bucket.setdefault(row["strategy"], []).append(row)
+        # The most recent RECENT_ORDERS of each strategy, so filtering by one still shows its own.
+        data["orders"] = sorted((r for rows in per_bucket.values() for r in rows[:RECENT_ORDERS]),
+                                key=lambda r: r["time"] or datetime.min.replace(tzinfo=dt_timezone.utc), reverse=True)
         data["orders_truncated"] = orders["truncated"]
         data["orders_scanned"] = len(orders["rows"])
-        data["no_match"] = bool(prefix) and not bot_rows
-        if prefix and data["positions"] is not None:
-            # Positions carry no order IDs: "bot" means the bot's filled orders traded this symbol.
-            bot_symbols = filled_symbols(bot_rows)
-            for position in data["positions"]:
-                position["owner"] = "bot" if position["symbol"] in bot_symbols else "other"
+        data["unmatched_strategies"] = [ref for ref in refs if ref.key not in per_bucket]
 
-    data["trades"] = data["stats"] = data["fills_truncated"] = None
-    matched = None
-    if fills is not None:
-        client_ids = orders["client_ids"] if orders else {}
-        if bot_only and orders is None:
-            data["errors"]["closed trades"] = "Closed trades need the order list to tell which fills are the bot's."
-        else:
-            fill_rows = filter_fills(fills["fills"], prefix if bot_only else "", client_ids)
-            matched = match_fills(fill_rows)
-            trades = [t for t in matched[0] if start is None or t.closed_at >= start]
-            trades.sort(key=lambda t: t.closed_at, reverse=True)
-            data["trades"] = trades
-            data["stats"] = trade_stats(trades)
-            data["fills_truncated"] = fills["truncated"]
+    data["report"] = data["trades"] = data["fills_truncated"] = None
+    if fills is not None and orders is None:
+        data["errors"]["strategies"] = "Strategy results need the order list to tell whose fills are whose."
+    elif fills is not None:
+        buckets = sa.split_fills(fills["fills"], sa.order_strategies(orders["client_ids"], refs))
+        account_positions = {p["symbol"]: p for p in data["positions"] or []}
+        lookup = lambda symbol: (lambda v: None if v in (None, "none") else v)(  # noqa: E731
+            _price_at_start(api, user_id, symbol, start))
+        rows = [sa.bucket_report(ref, buckets.get(ref.key, []), account_positions, start, today, lookup)
+                for ref in refs + [sa.UNATTRIBUTED_REF]]
+        sa.mark_shared(rows)
+        data["report"] = {"rows": rows[:-1], "unattributed": rows[-1], "total": sa.total_report(rows),
+                          "by_key": {row["key"]: row for row in rows}}
+        trades = []
+        for row in rows:
+            for trade in row["trades"]:
+                trade.strategy = row["key"]
+                trades.append(trade)
+        data["trades"] = sorted(trades, key=lambda t: t.closed_at, reverse=True)
+        data["fills_truncated"] = fills["truncated"]
+        holders = sa.position_holders(rows)
+        for position in data["positions"] or []:
+            held = holders.get(position["symbol"], [])
+            position["holders"] = [{"key": row["key"], "name": row["name"], "color": row["color"], "qty": qty}
+                                   for row, qty in held]
+            position["strategies"] = " ".join(h["key"] for h in position["holders"]) or sa.UNATTRIBUTED
+            position["shared"] = len(held) > 1
+            # What the account holds that no bucket's fills explain (e.g. a fill older than the history read).
+            position["unaccounted"] = abs(position["qty"]) * (-1 if position["side"] == "short" else 1) \
+                - sum((qty for _row, qty in held), Decimal("0"))
 
-    data["tiles"] = _tiles(data, bot_only, matched, start, today,
-                           lambda symbol: _price_at_start(api, user_id, symbol, start))
+    data["tiles"] = _account_tiles(data)
     return data
 
 
@@ -645,28 +561,12 @@ def _price_at_start(api, user_id, symbol, start):
         return None
 
 
-def _tiles(data, bot_only, matched, start, today, price_at):
-    """Today's P&L and Total P&L, each labelled "bot only" or "whole
-    account". Whole account: equity vs last equity, and the portfolio
-    history's P&L. Bot only: bot_today_pl() / bot_total_pl() - None
-    when the orders, fills or positions they need didn't load."""
-    if not bot_only:
-        account, history = data["account"], data["history"]
-        return {
-            "scope": "whole account",
-            "today": {"value": account["day_pl"], "pct": account["day_pl_pct"]} if account else None,
-            "total": ({"value": history["total_pl"], "pct": history["total_pl_pct"], "note": False}
-                      if history and history["total_pl"] is not None else None),
-        }
-    if matched is None or data["positions"] is None:
-        return {"scope": "bot only", "today": None, "total": None}
-    _closed, open_since, realizations = matched
-    bot_positions = [p for p in data["positions"] if p.get("owner") == "bot"]
-    lookup = lambda symbol: (lambda v: None if v in (None, "none") else v)(price_at(symbol))  # noqa: E731
+def _account_tiles(data):
+    """The whole account's Today's P&L (equity vs last equity) and Total P&L (the portfolio history's)."""
+    account, history = data["account"], data["history"]
     return {
-        "scope": "bot only",
-        "today": bot_today_pl(realizations, bot_positions, today),
-        "total": {**bot_total_pl(data["trades"], bot_positions, open_since, start, lookup), "pct": None},
+        "scope": "whole account",
+        "today": {"value": account["day_pl"], "pct": account["day_pl_pct"]} if account else None,
+        "total": ({"value": history["total_pl"], "pct": history["total_pl_pct"]}
+                  if history and history["total_pl"] is not None else None),
     }
-
-

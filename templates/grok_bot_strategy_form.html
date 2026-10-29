@@ -1,0 +1,11 @@
+{% extends "index.html" %}
+{% block page_title %}Edit {{ strategy.name }} · Grok Bot · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 760px;">
+    <a href="{% url 'grok_bot' %}#strategies" style="font-size: 0.875rem;">&larr; Grok Bot</a>
+    <h1 style="margin: 12px 0 4px;">Edit {{ strategy.name }}</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary); font-size: 0.875rem;">Changing the prefixes re-attributes this strategy's orders right away; run <code>snapshot_strategies --rebuild</code> to redo its saved daily history too.</p>
+    {% for warning in warnings %}<p class="grok-warning" role="alert">{{ warning }}</p>{% endfor %}
+    <div class="card">{% include "_grok_strategy_fields.html" with form=form %}</div>
+</div>
+{% endblock %}

@@ -13,10 +13,17 @@ TRADING_NOTES_SHOWN = 20
 
 
 @register.inclusion_tag("albright_bot_api/_trading_notes.html", takes_context=True)
-def bot_trading_notes(context, user):
-    notes = TradingNote.objects.filter(owner=user).order_by("-date", "-created_at", "-pk")[:TRADING_NOTES_SHOWN] \
-        if getattr(user, "is_authenticated", False) else []
-    return {"notes": notes, "csrf_token": context.get("csrf_token")}
+def bot_trading_notes(context, user, strategy=None):
+    """All the user's notes (strategy=None), one strategy's (a BotStrategy), or the untagged ones ("untagged")."""
+    if not getattr(user, "is_authenticated", False):
+        return {"notes": [], "csrf_token": context.get("csrf_token"), "strategy": strategy}
+    notes = TradingNote.objects.filter(owner=user).select_related("strategy", "token")
+    if strategy == "untagged":
+        notes = notes.filter(strategy=None)
+    elif strategy is not None:
+        notes = notes.filter(strategy=strategy)
+    notes = notes.order_by("-date", "-created_at", "-pk")[:TRADING_NOTES_SHOWN]
+    return {"notes": notes, "csrf_token": context.get("csrf_token"), "strategy": strategy}
 
 
 @register.inclusion_tag("albright_bot_api/_lot_notes.html")

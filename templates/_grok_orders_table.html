@@ -1,0 +1,31 @@
+{% load grok_bot_extras %}{% comment %}Recent orders (grok_bot.html, grok_bot_strategy.html). orders: grok_bot._order_row() dicts with "strategy"; names: {key: StrategyRef}; show_strategy: the Strategy column.{% endcomment %}
+<div class="table-scroll">
+<table class="holdings" id="orders-table">
+    <thead><tr>
+        <th>Time</th>{% if show_strategy %}<th>Strategy</th>{% endif %}<th>Symbol(s)</th><th>Side</th><th class="num">Qty</th><th>Type</th>
+        <th class="num">Limit</th><th>Status</th><th class="num">Filled at</th><th class="hide-mobile">Client order ID</th>
+    </tr></thead>
+    <tbody>
+    {% for o in orders %}
+    <tr data-strategies="{{ o.strategy }}">
+        <td>{{ o.time|date:"M j, g:i A" }}</td>
+        {% if show_strategy %}<td>{% with ref=names|get_item:o.strategy %}<span class="strategy-chip" style="--strategy-color: {{ ref.color }};"><span class="strategy-chip__dot" aria-hidden="true"></span>{{ ref.name }}</span>{% endwith %}</td>{% endif %}
+        <td>
+            {% if o.is_multi_leg %}
+                {% for leg in o.legs %}<div style="font-size: 0.8125rem;"><span class="symbol">{{ leg.symbol }}</span> <span style="color: var(--text-secondary);">{{ leg.side }}{% if leg.ratio %} ×{{ leg.ratio }}{% endif %} &middot; {{ leg.description }}</span></div>{% endfor %}
+            {% else %}
+                <span class="symbol">{{ o.symbols.0 }}</span>{% if o.description %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ o.description }}</div>{% endif %}
+            {% endif %}
+        </td>
+        <td>{{ o.side }}</td>
+        <td class="num">{% if o.qty is not None %}{{ o.qty.normalize }}{% else %}&mdash;{% endif %}</td>
+        <td>{{ o.type }}</td>
+        <td class="num">{% if o.limit_price is not None %}${{ o.limit_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+        <td><span class="badge {% if o.status == 'filled' %}gain{% elif o.status == 'canceled' or o.status == 'rejected' or o.status == 'expired' %}loss{% else %}neutral{% endif %}">{{ o.status }}</span></td>
+        <td class="num">{% if o.filled_avg_price is not None %}${{ o.filled_avg_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+        <td class="hide-mobile" style="font-size: 0.75rem; overflow-wrap: anywhere;">{{ o.client_order_id }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>

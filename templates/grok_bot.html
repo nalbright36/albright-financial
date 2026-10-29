@@ -1,16 +1,24 @@
 {% extends "index.html" %}
-{% load humanize %}
+{% load humanize grok_bot_extras cache_bust %}
 
 {% block page_title %}Grok Bot · {% endblock %}
 
 {% block content %}
+{% comment %}
+Grok Bot (albright_trading_app.grok_bot_views.grok_bot): READ-ONLY view of the
+Alpaca paper account several bot strategies trade in, each told apart by its
+client_order_id prefix (strategy_attribution.py). Whole-account tiles, the
+strategy comparison table, each strategy's cumulative P&L, the Strategies
+manager, and Open positions / Recent orders / Closed trades with a strategy
+filter. static/js/grok_bot.js: tabs, the filter, table sorting, the chart.
+{% endcomment %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
 
     <div class="card__header" style="margin-bottom: 8px; align-items: flex-start;">
         <div>
             <h1 style="margin: 0;">Grok Bot</h1>
             <p style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;">
-                Read-only view of your Alpaca paper account, where Grok trades options. Nothing here places, changes or cancels orders.
+                Read-only view of your Alpaca paper account, where your bot strategies trade options - each measured separately by its client order ID prefix. Nothing here places, changes or cancels orders.
             </p>
         </div>
         <span class="badge neutral">Paper Account</span>
@@ -31,137 +39,165 @@
         </div>
 
     {% else %}
-        <!-- Prefix setting + Bot only / Whole account -->
-        <div class="card" style="margin: 20px 0;" id="grok-scope">
-            <form method="post" style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end;">
-                {% csrf_token %}
-                <div class="field" style="margin: 0; min-width: 220px;">
-                    <label for="{{ prefix_form.order_id_prefix.id_for_label }}">{{ prefix_form.order_id_prefix.label }}</label>
-                    {{ prefix_form.order_id_prefix }}
-                    {% for e in prefix_form.order_id_prefix.errors %}<span style="color: var(--loss); font-size: 0.75rem;">{{ e }}</span>{% endfor %}
-                </div>
-                <button type="submit" class="btn btn-secondary btn-sm">Save</button>
-                {% if prefix %}
-                <nav class="scanner-tabs" aria-label="Scope" style="margin: 0 0 0 auto;">
-                    <a href="?period={{ period }}&amp;scope=bot" class="scanner-tab{% if data.bot_only %} is-active{% endif %}" id="scope-bot">Bot only</a>
-                    <a href="?period={{ period }}&amp;scope=account" class="scanner-tab{% if not data.bot_only %} is-active{% endif %}" id="scope-account">Whole account</a>
-                </nav>
-                {% endif %}
-            </form>
-            <p style="margin: 10px 0 0; font-size: 0.8125rem; color: var(--text-secondary);" id="scope-note">
-                {% if not prefix %}
-                    Showing the whole account - this includes all trades in this account, not just the bot's. Set the prefix Grok puts on its client order IDs to separate them.
-                {% elif data.bot_only %}
-                    Orders, fills and closed trades: only orders whose client order ID starts with “{{ prefix }}” (any capitalization). Equity and the equity curve are always the whole account; Today&#39;s and Total P&amp;L are the bot&#39;s; open positions are marked Bot or Other.
-                {% else %}
-                    Showing the whole account - all trades, including ones not placed by the bot.
-                {% endif %}
-            </p>
-        </div>
-
-        {% if data.no_match %}
-        <div class="card" id="grok-no-match" style="border-color: var(--warn); margin-bottom: 12px; padding: var(--space-3) var(--space-4);">
-            <p style="margin: 0; font-size: 0.875rem; color: var(--warn);">No orders start with ‘{{ prefix }}’ in the last {{ data.orders_scanned }} order{{ data.orders_scanned|pluralize }}{% if data.bot_only %} - so Recent orders and Closed trades are empty, not showing the whole account{% endif %}. Check the prefix against the Client order ID column under Whole account.</p>
-        </div>
-        {% endif %}
-
         {% for name, message in data.errors.items %}
-        <div class="card grok-section-error" style="border-color: var(--loss); margin-bottom: 12px; padding: var(--space-3) var(--space-4);">
+        <div class="card grok-section-error" style="border-color: var(--loss); margin: 12px 0; padding: var(--space-3) var(--space-4);">
             <p style="color: var(--loss); margin: 0; font-size: 0.875rem;">{{ message }}</p>
         </div>
         {% endfor %}
 
-        <!-- Summary tiles -->
-        <div class="grid grid-4" style="margin-bottom: 24px;" id="grok-tiles">
+        <!-- Whole-account tiles -->
+        <div class="grid grid-4" style="margin: 20px 0 24px;" id="grok-tiles">
             <div class="card">
                 <div class="card__header"><span class="card__label">Equity</span></div>
                 {% if data.account %}
                 <span class="ledger-stat__value num" id="tile-equity">${{ data.account.equity|floatformat:2|intcomma }}</span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">Cash ${{ data.account.cash|floatformat:2|intcomma }} &middot; Buying power ${{ data.account.buying_power|floatformat:2|intcomma }}</div>
+                <div class="grok-tile__note">Cash ${{ data.account.cash|floatformat:2|intcomma }} &middot; Buying power ${{ data.account.buying_power|floatformat:2|intcomma }}</div>
                 {% else %}<span class="ledger-stat__value num">&mdash;</span>{% endif %}
             </div>
             <div class="card">
                 <div class="card__header"><span class="card__label">Today's P&amp;L</span></div>
                 {% with t=data.tiles.today %}
-                {% if t %}
-                <span class="ledger-stat__value num" id="tile-today" style="color: var(--{% if t.value >= 0 %}gain{% else %}loss{% endif %});">
-                    {% if t.value >= 0 %}+{% endif %}${{ t.value|floatformat:2|intcomma }}
-                </span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-today-note">{% if t.pct is not None %}{% if t.pct >= 0 %}+{% endif %}{{ t.pct|floatformat:2 }}%{% else %}-{% endif %} &middot; {{ data.tiles.scope }}</div>
-                {% else %}<span class="ledger-stat__value num" id="tile-today">&mdash;</span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-today-note">{{ data.tiles.scope }}</div>{% endif %}
+                <span class="ledger-stat__value num" id="tile-today"{% if t %} style="color: var(--{{ t.value|pnl_class }});"{% endif %}>{% if t %}{{ t.value|signed_money }}{% else %}&mdash;{% endif %}</span>
+                <div class="grok-tile__note" id="tile-today-note">{% if t and t.pct is not None %}{{ t.pct|signed_pct }} &middot; {% endif %}whole account</div>
                 {% endwith %}
             </div>
             <div class="card">
                 <div class="card__header"><span class="card__label">Total P&amp;L ({{ period|upper }})</span></div>
                 {% with t=data.tiles.total %}
-                {% if t %}
-                <span class="ledger-stat__value num" id="tile-total" style="color: var(--{% if t.value >= 0 %}gain{% else %}loss{% endif %});">
-                    {% if t.value >= 0 %}+{% endif %}${{ t.value|floatformat:2|intcomma }}
-                </span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-total-note">{% if t.pct is not None %}{% if t.pct >= 0 %}+{% endif %}{{ t.pct|floatformat:2 }}% &middot; {% endif %}{{ data.tiles.scope }}</div>
-                {% if t.note %}<div style="margin-top: 2px; font-size: 0.6875rem; color: var(--text-tertiary);" id="tile-total-before">includes gains/losses from before this period</div>{% endif %}
-                {% else %}<span class="ledger-stat__value num" id="tile-total">&mdash;</span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);" id="tile-total-note">{{ data.tiles.scope }}</div>{% endif %}
+                <span class="ledger-stat__value num" id="tile-total"{% if t %} style="color: var(--{{ t.value|pnl_class }});"{% endif %}>{% if t %}{{ t.value|signed_money }}{% else %}&mdash;{% endif %}</span>
+                <div class="grok-tile__note" id="tile-total-note">{% if t and t.pct is not None %}{{ t.pct|signed_pct }} &middot; {% endif %}whole account</div>
                 {% endwith %}
             </div>
             <div class="card">
                 <div class="card__header"><span class="card__label">Win rate ({{ period|upper }})</span></div>
-                {% if data.stats and data.stats.win_rate is not None %}
-                <span class="ledger-stat__value num" id="tile-winrate">{{ data.stats.win_rate }}%</span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ data.stats.wins }} of {{ data.stats.count }} closed trade{{ data.stats.count|pluralize }}{% if data.bot_only %} (bot){% endif %}</div>
+                {% with s=data.report.total.stats %}
+                {% if s and s.win_rate is not None %}
+                <span class="ledger-stat__value num" id="tile-winrate">{{ s.win_rate }}%</span>
+                <div class="grok-tile__note">{{ s.wins }} of {{ s.count }} closed trade{{ s.count|pluralize }}, every strategy</div>
                 {% else %}<span class="ledger-stat__value num" id="tile-winrate">&mdash;</span>
-                <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">No closed trades in this period</div>{% endif %}
+                <div class="grok-tile__note">No closed trades in this period</div>{% endif %}
+                {% endwith %}
             </div>
         </div>
 
-        <!-- Equity curve -->
-        <div class="card" style="margin-bottom: 24px;">
-            <div class="card__header">
-                <span class="card__label">Equity</span>
+        <!-- Strategy comparison -->
+        <div class="card" style="margin-bottom: 24px; padding: 0;" id="strategy-comparison">
+            <div class="card__header" style="padding: var(--space-4) var(--space-4) 0; flex-wrap: wrap; gap: var(--space-2);">
+                <span class="card__label">Strategies &middot; {{ period|upper }}</span>
                 <div style="display: flex; gap: var(--space-1);" id="period-toggle">
                     {% for key, label in periods %}
-                    <a href="?period={{ key }}&amp;scope={{ scope }}" class="btn btn-secondary btn-timeframe{% if key == period %} active{% endif %}"{% if key == period %} aria-current="true"{% endif %}>{{ label }}</a>
+                    <a href="?period={{ key }}" class="btn btn-secondary btn-timeframe{% if key == period %} active{% endif %}"{% if key == period %} aria-current="true"{% endif %}>{{ label }}</a>
                     {% endfor %}
                 </div>
             </div>
-            <div id="equity-chart" style="min-height: 320px;"></div>
+            {% for warning in warnings %}<p class="grok-warning" role="note">{{ warning }}</p>{% endfor %}
+            {% if data.report %}
+            <div class="table-scroll">
+            <table class="holdings strategy-table" id="strategy-table">
+                <thead><tr>
+                    <th scope="col" data-sort-key="name">Strategy</th>
+                    <th scope="col" class="num" data-sort-key="today">Today</th>
+                    <th scope="col" class="num" data-sort-key="total">Total P&amp;L</th>
+                    <th scope="col" class="num" data-sort-key="return">Return</th>
+                    <th scope="col" class="num" data-sort-key="winrate">Win rate</th>
+                    <th scope="col" class="num hide-mobile" data-sort-key="avgwin">Avg win</th>
+                    <th scope="col" class="num hide-mobile" data-sort-key="avgloss">Avg loss</th>
+                    <th scope="col" class="num hide-mobile" data-sort-key="pf">Profit factor</th>
+                    <th scope="col" class="num" data-sort-key="trades">Trades</th>
+                    <th scope="col" class="num hide-mobile" data-sort-key="dd">Max drawdown</th>
+                    <th scope="col" class="num" data-sort-key="open">Open</th>
+                    <th scope="col" data-sort-key="status">Status</th>
+                </tr></thead>
+                <tbody>
+                {% for row in data.report.rows %}{% url 'grok_bot_strategy' row.key as link %}{% include "_grok_strategy_row.html" with row=row link=link|add:"?period="|add:period %}{% empty %}
+                <tr><td colspan="12" style="color: var(--text-secondary);">No strategies yet - add one below with the prefix its client order IDs start with.</td></tr>
+                {% endfor %}
+                </tbody>
+                <tfoot>
+                {% url 'grok_bot_strategy' unattributed_key as link %}{% include "_grok_strategy_row.html" with row=data.report.unattributed link=link|add:"?period="|add:period %}
+                {% include "_grok_strategy_row.html" with row=data.report.total link="" %}
+                </tfoot>
+            </table>
+            </div>
+            <p class="grok-footnote">
+                Realized P&amp;L from each strategy's own fills (first-in-first-out per contract, options &times;100, fees when Alpaca sends them) plus the unrealized P&amp;L of what its fills still hold. A multi-leg order's legs belong to their parent order's strategy. Return % and drawdown % need allocated capital. Profit factor = gross wins &divide; gross losses. Click a column to sort.
+                {% if 'before' in data.report.total.notes %}<br>* includes gains/losses from before this period (no price at the period's start).{% endif %}
+                {% if 'price' in data.report.total.notes %}<br>&dagger; some open contracts have no current price, so their unrealized P&amp;L isn't counted.{% endif %}
+                {% if data.fills_truncated %}<br>Only the most recent 5,000 fills were read, so older history may be missing.{% endif %}
+                {% if data.orders_truncated %}<br>Only the most recent 10,000 orders were read; fills of older orders count as Unattributed.{% endif %}
+            </p>
+            {% elif data.report is None %}
+            <p style="color: var(--text-secondary); padding: var(--space-4);">Strategy results couldn't be loaded.</p>
+            {% endif %}
         </div>
 
-        <!-- Tabs -->
-        <nav class="scanner-tabs" id="grok-tabs" role="tablist">
-            <a href="#positions" class="scanner-tab is-active" data-tab="positions" role="tab">Open positions <span class="tab-badge">{{ data.positions|length }}</span></a>
-            <a href="#orders" class="scanner-tab" data-tab="orders" role="tab">Recent orders <span class="tab-badge">{{ data.orders|length }}</span></a>
-            <a href="#trades" class="scanner-tab" data-tab="trades" role="tab">Closed trades <span class="tab-badge">{{ data.trades|length }}</span></a>
-        </nav>
+        <!-- Cumulative P&L by strategy (or the account's equity) -->
+        <div class="card" style="margin-bottom: 24px;" id="grok-chart-card">
+            <div class="card__header" style="flex-wrap: wrap; gap: var(--space-2);">
+                <nav class="scanner-tabs" aria-label="Chart" style="margin: 0;" id="chart-toggle">
+                    <button type="button" class="scanner-tab is-active" data-chart="strategies" aria-pressed="true">Cumulative P&amp;L by strategy</button>
+                    <button type="button" class="scanner-tab" data-chart="equity" aria-pressed="false">Account equity</button>
+                </nav>
+                <div style="display: flex; gap: var(--space-1);">
+                    {% for key, label in periods %}
+                    <a href="?period={{ key }}" class="btn btn-secondary btn-timeframe{% if key == period %} active{% endif %}"{% if key == period %} aria-current="true"{% endif %}>{{ label }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            <ul class="chart-legend" id="chart-legend" aria-label="Strategies on the chart"></ul>
+            <div id="grok-chart" style="min-height: 320px;"></div>
+            <p class="grok-footnote" style="padding: 0;">Each strategy's P&amp;L since the period's start, per day: its daily snapshot (<code>manage.py snapshot_strategies</code>) where there is one, otherwise realized P&amp;L rebuilt from its fills; today is live.</p>
+        </div>
 
-        <!-- Open positions -->
+        <!-- Tabs, filtered by strategy -->
+        <div class="grok-tabs-bar">
+            <nav class="scanner-tabs" id="grok-tabs" role="tablist">
+                <a href="#positions" class="scanner-tab is-active" data-tab="positions" role="tab">Open positions <span class="tab-badge" data-count="positions">{{ data.positions|length }}</span></a>
+                <a href="#orders" class="scanner-tab" data-tab="orders" role="tab">Recent orders <span class="tab-badge" data-count="orders">{{ data.orders|length }}</span></a>
+                <a href="#trades" class="scanner-tab" data-tab="trades" role="tab">Closed trades <span class="tab-badge" data-count="trades">{{ data.trades|length }}</span></a>
+            </nav>
+            <div class="field grok-filter">
+                <label for="strategy-filter">Strategy</label>
+                <select id="strategy-filter" class="ledger-input">
+                    <option value="">All strategies</option>
+                    {% for s in strategies %}<option value="{{ s.pk }}"{% if filter == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                    <option value="{{ unattributed_key }}"{% if filter == unattributed_key %} selected{% endif %}>Unattributed (manual/other)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Open positions (the account's; who holds them by their fills) -->
         <div class="card grok-panel" id="panel-positions" data-panel="positions" style="padding: 0;">
             {% if data.positions %}
             <div class="table-scroll">
             <table class="holdings" id="positions-table">
                 <thead><tr>
-                    <th>Symbol</th><th>Contract</th>{% if prefix %}<th>Bot?</th>{% endif %}<th class="num">Qty</th><th class="num">Avg entry</th>
+                    <th>Symbol</th><th>Contract</th><th>Strategy</th><th class="num">Qty</th><th class="num">Avg entry</th>
                     <th class="num">Current</th><th class="num hide-mobile">Market value</th>
                     <th class="num">Unrealized P&amp;L</th><th class="num">DTE</th>
                 </tr></thead>
                 <tbody>
                 {% for p in data.positions %}
-                <tr>
+                <tr data-strategies="{{ p.strategies|default:unattributed_key }}">
                     <td class="symbol">{{ p.symbol }}</td>
                     <td>{% if p.description %}{{ p.description }}{% else %}<span style="color: var(--text-secondary);">Stock</span>{% endif %}</td>
-                    {% if prefix %}<td>{% if p.owner == "bot" %}<span class="badge gain">Bot</span>{% elif p.owner == "other" %}<span class="badge neutral">Other</span>{% else %}&mdash;{% endif %}</td>{% endif %}
+                    <td>
+                        {% for h in p.holders %}<span class="strategy-chip" style="--strategy-color: {{ h.color }};"><span class="strategy-chip__dot" aria-hidden="true"></span>{{ h.name }}{% if p.shared %} &times;{{ h.qty.normalize }}{% endif %}</span> {% empty %}<span class="strategy-chip" style="--strategy-color: var(--text-tertiary);"><span class="strategy-chip__dot" aria-hidden="true"></span>Unattributed</span>{% endfor %}
+                        {% if p.shared %}<div class="grok-row-note">shared contract - each strategy keeps its own quantity and cost</div>{% endif %}
+                        {% if p.unaccounted and p.holders %}<div class="grok-row-note">{{ p.unaccounted.normalize }} not explained by the fills read</div>{% endif %}
+                    </td>
                     <td class="num">{{ p.qty.normalize }}</td>
                     <td class="num">${{ p.avg_entry|floatformat:2|intcomma }}</td>
                     <td class="num">{% if p.current_price is not None %}${{ p.current_price|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</td>
                     <td class="num hide-mobile">{% if p.market_value is not None %}${{ p.market_value|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</td>
-                    <td class="num"><span class="badge {% if p.unrealized_pl >= 0 %}gain{% else %}loss{% endif %}">{% if p.unrealized_pl >= 0 %}+{% endif %}${{ p.unrealized_pl|floatformat:2|intcomma }} ({% if p.unrealized_pl_pct >= 0 %}+{% endif %}{{ p.unrealized_pl_pct|floatformat:2 }}%)</span></td>
+                    <td class="num"><span class="badge {{ p.unrealized_pl|pnl_class }}">{{ p.unrealized_pl|signed_money }} ({{ p.unrealized_pl_pct|signed_pct }})</span></td>
                     <td class="num">{% if p.dte is not None %}{{ p.dte }}{% else %}&mdash;{% endif %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
             </div>
+            <p class="grok-empty" hidden>No open positions for this strategy.</p>
             {% elif data.positions is None %}
             <p style="color: var(--text-secondary); padding: var(--space-5);">Positions couldn't be loaded.</p>
             {% else %}
@@ -172,72 +208,24 @@
         <!-- Recent orders -->
         <div class="card grok-panel" id="panel-orders" data-panel="orders" style="padding: 0;" hidden>
             {% if data.orders %}
-            <div class="table-scroll">
-            <table class="holdings" id="orders-table">
-                <thead><tr>
-                    <th>Time</th><th>Symbol(s)</th><th>Side</th><th class="num">Qty</th><th>Type</th>
-                    <th class="num">Limit</th><th>Status</th><th class="num">Filled at</th><th class="hide-mobile">Client order ID</th>
-                </tr></thead>
-                <tbody>
-                {% for o in data.orders %}
-                <tr>
-                    <td>{{ o.time|date:"M j, g:i A" }}</td>
-                    <td>
-                        {% if o.is_multi_leg %}
-                            {% for leg in o.legs %}<div style="font-size: 0.8125rem;"><span class="symbol">{{ leg.symbol }}</span> <span style="color: var(--text-secondary);">{{ leg.side }}{% if leg.ratio %} ×{{ leg.ratio }}{% endif %} &middot; {{ leg.description }}</span></div>{% endfor %}
-                        {% else %}
-                            <span class="symbol">{{ o.symbols.0 }}</span>{% if o.description %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ o.description }}</div>{% endif %}
-                        {% endif %}
-                    </td>
-                    <td>{{ o.side }}</td>
-                    <td class="num">{% if o.qty is not None %}{{ o.qty.normalize }}{% else %}&mdash;{% endif %}</td>
-                    <td>{{ o.type }}</td>
-                    <td class="num">{% if o.limit_price is not None %}${{ o.limit_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
-                    <td><span class="badge {% if o.status == 'filled' %}gain{% elif o.status == 'canceled' or o.status == 'rejected' or o.status == 'expired' %}loss{% else %}neutral{% endif %}">{{ o.status }}</span></td>
-                    <td class="num">{% if o.filled_avg_price is not None %}${{ o.filled_avg_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
-                    <td class="hide-mobile" style="font-size: 0.75rem; overflow-wrap: anywhere;">{{ o.client_order_id }}</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            </div>
+            {% include "_grok_orders_table.html" with orders=data.orders names=data.names show_strategy=True %}
+            <p class="grok-empty" hidden>No recent orders for this strategy.</p>
             {% elif data.orders is None %}
             <p style="color: var(--text-secondary); padding: var(--space-5);">Orders couldn't be loaded.</p>
             {% else %}
-            <p style="color: var(--text-secondary); padding: var(--space-5);">No orders{% if data.bot_only %} with this prefix{% endif %} yet.</p>
+            <p style="color: var(--text-secondary); padding: var(--space-5);">No orders yet.</p>
             {% endif %}
         </div>
 
         <!-- Closed trades -->
         <div class="card grok-panel" id="panel-trades" data-panel="trades" hidden>
-            {% if data.stats %}
-            <div class="grid grid-4" style="gap: var(--space-4); margin-bottom: 16px;" id="trade-stats">
-                <div><div class="row-count">Trades</div><span class="num">{{ data.stats.count }}</span></div>
-                <div><div class="row-count">Win rate</div><span class="num">{% if data.stats.win_rate is not None %}{{ data.stats.win_rate }}%{% else %}&mdash;{% endif %}</span></div>
-                <div><div class="row-count">Average win</div><span class="num" style="color: var(--gain);">{% if data.stats.avg_win is not None %}+${{ data.stats.avg_win|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</span></div>
-                <div><div class="row-count">Average loss</div><span class="num" style="color: var(--loss);">{% if data.stats.avg_loss is not None %}-${{ data.stats.avg_loss|cut:"-"|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</span></div>
-            </div>
+            {% if data.trades is not None %}
             <p style="margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-secondary);">
-                Realized P&amp;L from fills, matched first-in-first-out per contract; a trade is one round trip from flat back to flat, closed in the selected period ({{ period|upper }}). Total: <span class="num" style="color: var(--{% if data.stats.total >= 0 %}gain{% else %}loss{% endif %});">{% if data.stats.total >= 0 %}+{% endif %}${{ data.stats.total|floatformat:2|intcomma }}</span>.
-                {% if data.fills_truncated %}Only the most recent 5,000 fills were read, so older trades may be missing.{% endif %}
+                Round trips (flat back to flat) closed in the selected period ({{ period|upper }}), each in its own strategy's first-in-first-out book. Totals per strategy are in the table above.
             </p>
             {% if data.trades %}
-            <div class="table-scroll">
-            <table class="holdings" id="trades-table">
-                <thead><tr><th>Closed</th><th>Contract</th><th>Direction</th><th class="num">Qty</th><th class="num">Realized P&amp;L</th></tr></thead>
-                <tbody>
-                {% for t in data.trades %}
-                <tr>
-                    <td>{{ t.closed_at|date:"M j, g:i A" }}</td>
-                    <td><span class="symbol">{{ t.symbol }}</span>{% if t.description != t.symbol %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ t.description }}</div>{% endif %}</td>
-                    <td>{{ t.direction }}</td>
-                    <td class="num">{{ t.quantity.normalize }}</td>
-                    <td class="num"><span class="badge {% if t.pnl > 0 %}gain{% elif t.pnl < 0 %}loss{% else %}neutral{% endif %}">{% if t.pnl >= 0 %}+{% endif %}${{ t.pnl|floatformat:2|intcomma }}</span></td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            </div>
+            {% include "_grok_trades_table.html" with trades=data.trades names=data.names show_strategy=True %}
+            <p class="grok-empty" hidden>No closed trades for this strategy in this period.</p>
             {% else %}
             <p style="color: var(--text-secondary); margin: 0;">No closed trades in this period.</p>
             {% endif %}
@@ -246,66 +234,16 @@
             {% endif %}
         </div>
     {% endif %}
+
+    {% include "_grok_strategies_manage.html" %}
+
     {% load bot_api %}{% bot_trading_notes request.user %}
 </div>
 
 {% if data %}
+{{ series|json_script:"grok-series" }}
+{{ account_points|json_script:"grok-equity" }}
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<script>
-(function () {
-    // Tabs: show one panel at a time; the hash keeps the tab on reload.
-    var tabs = document.querySelectorAll('#grok-tabs .scanner-tab');
-    var panels = document.querySelectorAll('.grok-panel');
-    function show(name) {
-        tabs.forEach(function (t) {
-            var active = t.dataset.tab === name;
-            t.classList.toggle('is-active', active);
-            t.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-        panels.forEach(function (p) { p.hidden = p.dataset.panel !== name; });
-    }
-    tabs.forEach(function (t) {
-        t.addEventListener('click', function (e) {
-            e.preventDefault();
-            show(t.dataset.tab);
-            history.replaceState(null, '', '#' + t.dataset.tab);
-        });
-    });
-    var initial = (location.hash || '').slice(1);
-    if (['positions', 'orders', 'trades'].indexOf(initial) !== -1) show(initial);
-
-    // Equity curve (same charting as the stock page).
-    var points = {{ chart_json|safe }};
-    var container = document.getElementById('equity-chart');
-    if (!container) return;
-    if (!points.length || typeof LightweightCharts === 'undefined') {
-        container.innerHTML = '<p style="color: var(--text-secondary); padding: 16px 0;">No equity history for this period.</p>';
-        return;
-    }
-    function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-    function lineColor() { return points[points.length - 1].value >= points[0].value ? cssVar('--gain') : cssVar('--loss'); }
-    var chart = LightweightCharts.createChart(container, {
-        layout: { background: { color: 'transparent' }, textColor: cssVar('--chart-text') },
-        grid: { vertLines: { color: cssVar('--chart-grid') }, horzLines: { color: cssVar('--chart-grid') } },
-        rightPriceScale: { borderColor: cssVar('--chart-grid') },
-        timeScale: { borderColor: cssVar('--chart-grid'), timeVisible: true },
-        width: container.clientWidth,
-        height: 320,
-    });
-    var series = chart.addLineSeries({ color: lineColor(), lineWidth: 2 });
-    series.setData(points);
-    chart.timeScale().fitContent();
-    window.addEventListener('resize', function () { chart.applyOptions({ width: container.clientWidth }); });
-    document.addEventListener('themechange', function () {
-        chart.applyOptions({
-            layout: { textColor: cssVar('--chart-text') },
-            grid: { vertLines: { color: cssVar('--chart-grid') }, horzLines: { color: cssVar('--chart-grid') } },
-            rightPriceScale: { borderColor: cssVar('--chart-grid') },
-            timeScale: { borderColor: cssVar('--chart-grid') },
-        });
-        series.applyOptions({ color: lineColor() });
-    });
-})();
-</script>
 {% endif %}
+<script src="{% static_version 'js/grok_bot.js' %}" defer></script>
 {% endblock %}
