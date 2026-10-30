@@ -6,6 +6,7 @@ mode's queue, the empty state, the nav/overview New counts, the suggestion
 status migration, and superuser-only access."""
 import importlib
 import json
+import re
 from datetime import timedelta
 
 from django.apps import apps as django_apps
@@ -106,30 +107,66 @@ class TabsTests(ReviewListTestCase):
     def test_rows_show_the_summary_and_the_details(self):
         idea = self.items["ideas"]["Newest new"]
         Idea.objects.filter(pk=idea.pk).update(impact="high", effort="small", priority="urgent", source="grok",
-                                               links=["https://example.com/spec"], my_notes="My take")
+                                               links=["https://example.com/spec"], my_notes="My take",
+                                               tags=["ui"], description="Intro\n- first\n- second <b>")
         response = self.page("ideas")
         content = response.content.decode()
         row = content.split(f'id="idea-{idea.pk}"', 1)[1].split("</article>", 1)[0]
         self.assertIn('<span class="rl-row__title">Idea Newest new</span>', row)
-        self.assertIn("urgent priority", row)
-        self.assertIn("high impact &middot; small effort", row)
-        self.assertIn("<span>Grok</span>", row)
+        self.assertIn('<span class="rl-row__time" title="', row)
         self.assertIn("8h ago", row)
-        self.assertIn('<span class="rl-row__preview">About Newest new</span>', row)
-        self.assertIn('<pre class="crypto-source-text">m</pre>', row)              # original message
+        badges = row.split('<span class="rl-row__badges">', 1)[1].split('<span class="rl-row__preview">', 1)[0]
+        for badge in ("Whole site", "urgent priority", "high impact", "small effort", "Grok", "#ui"):
+            self.assertIn(f">{badge}</span>", badges)
+        self.assertIn('<span class="rl-row__preview">Intro\n- first\n- second &lt;b&gt;</span>', row)
+        # Expanded: the description's "- " lines as a real list (escaped), the original message, links, notes.
+        self.assertIn('<div class="rl-row__text"><p>Intro</p><ul><li>first</li><li>second &lt;b&gt;</li></ul></div>', row)
+        self.assertIn('<pre class="crypto-source-text">m</pre>', row)
         self.assertIn("https://example.com/spec", row)
         self.assertIn(">My take</textarea>", row)
         for action in ("Copy as Claude Code prompt", "Merge duplicates", ">Delete</button>"):
             self.assertIn(action, row)
-        # Quick buttons for the other statuses; the current one is hidden.
-        self.assertIn('value="considering" class="btn btn-secondary btn-sm">Considering', row)
-        self.assertIn('value="new" class="btn btn-secondary btn-sm" hidden>New', row)
 
         suggestion = self.items["suggestions"]["Newest new"]
         row = self.page("suggestions").content.decode().split(f'id="suggestion-{suggestion.pk}"', 1)[1].split("</article>", 1)[0]
         self.assertIn("Move to Ideas", row)
         self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), row)
         self.assertNotIn("Merge duplicates", row)
+
+    def test_row_structure_on_both_pages(self):
+        """Card row: one reset <button> holding title + time, the badges and the preview; then the status buttons."""
+        for kind in PAGES:
+            with self.subTest(kind=kind):
+                obj = self.items[kind]["Middle new"]
+                content = self.page(kind).content.decode()
+                row = content.split(f'data-id="{obj.pk}"', 1)[1].split("</article>", 1)[0]
+                toggle = row.split('<button type="button" class="rl-row__toggle"', 1)[1].split("</button>", 1)[0]
+                self.assertIn(f'aria-controls="rl-body-{obj.pk}"', toggle)
+                self.assertLess(toggle.index('class="rl-row__line"'), toggle.index('class="rl-row__badges"'))
+                self.assertLess(toggle.index('class="rl-row__badges"'), toggle.index('class="rl-row__preview"'))
+                self.assertIn(f'<span class="rl-row__title">{obj.title}</span>', toggle)
+                self.assertIn(f'<div class="rl-row__body" id="rl-body-{obj.pk}" hidden>', row)
+                self.assertIn('class="card rl-row"', content)
+                self.assertIn('class="scanner-controls rl-filters"', content)
+                self.assertIn('id="rl-filters-submit"', content)          # no-JS fallback (hidden by the JS)
+
+    def test_status_buttons_exclude_the_current_status_and_no_menu(self):
+        for kind in PAGES:
+            for name, status in (("Middle new", "new"), ("A plan", "planned"), ("Shipped", "done")):
+                with self.subTest(kind=kind, status=status):
+                    obj = self.items[kind][name]
+                    content = self.page(kind, status=status).content.decode()
+                    row = content.split(f'data-id="{obj.pk}"', 1)[1].split("</article>", 1)[0]
+                    form = row.split("data-status-form", 1)[1].split("</form>", 1)[0]
+                    shown = [label for _value, label in
+                             re.findall(r'value="(\w+)" class="btn btn-secondary btn-sm[^"]*">([^<]+)</button>', form)]
+                    expected = [label for key, label in STATUSES if key not in ("new", status)]
+                    self.assertEqual(shown, expected)
+                    self.assertNotIn('value="new"', form)
+                    self.assertIn('rl-status--declined', form)
+                    self.assertNotIn("rl-more", content)
+                    self.assertNotIn("&middot;&middot;&middot;", content)
+                    self.assertNotIn("<details class=\"rl-more", content)
 
     def test_empty_new_tab(self):
         Idea.objects.filter(status="new").update(status="planned")

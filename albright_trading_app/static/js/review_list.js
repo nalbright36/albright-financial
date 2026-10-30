@@ -2,7 +2,7 @@
  * Admin > Ideas and Admin > Bot suggestions (albright_control/review_list.html).
  * One script for both pages. Vanilla JS, no libraries.
  *
- * The list: a row expands in place when its header is clicked. Its quick
+ * The list: a row expands in place when its title or preview is clicked. Its
  * status buttons save without a reload - the row leaves the current tab at
  * once, the tab counts and the Admin nav's New badges update, and a toast
  * offers "Undo" for a few seconds. Notes save in place too.
@@ -44,6 +44,26 @@
             return r.json().catch(function () { return {}; }).then(function (data) { return {ok: r.ok, data: data}; });
         });
     }
+
+    // Plain text as paragraphs, with runs of "- " / "* " lines as a list (templatetags/review_list_tags.rich_text).
+    function richText(target, text) {
+        target.textContent = "";
+        var block = null, kind = null;
+        String(text || "").replace(/\r\n/g, "\n").split("\n").forEach(function (line) {
+            var bullet = line.match(/^\s*[-*]\s+(.*)$/);
+            var lineKind = bullet ? "ul" : line.trim() ? "p" : null;
+            if (!lineKind) { block = kind = null; return; }
+            if (lineKind !== kind) {
+                block = target.appendChild(document.createElement(lineKind));
+                kind = lineKind;
+            } else if (kind === "p") {
+                block.appendChild(document.createElement("br"));
+            }
+            if (bullet) block.appendChild(el("li", "", bullet[1]));
+            else block.appendChild(document.createTextNode(line));
+        });
+    }
+
     function el(tag, className, text) {
         var node = document.createElement(tag);
         if (className) node.className = className;
@@ -189,6 +209,7 @@
             var body = byId(toggle.getAttribute("aria-controls"));
             body.hidden = !body.hidden;
             toggle.setAttribute("aria-expanded", body.hidden ? "false" : "true");
+            toggle.closest(".rl-row").classList.toggle("is-open", !body.hidden);
             return;
         }
         var copy = event.target.closest(".js-rl-copy");
@@ -205,8 +226,6 @@
             event.preventDefault();
             var row = form.closest(".rl-row");
             var id = row.dataset.id, previous = row.dataset.status, status = event.submitter.value;
-            var menu = form.querySelector("details[open]");
-            if (menu) menu.open = false;
             if (status === previous) return;
             changeStatus(id, row.dataset.statusUrl, status, previous).then(function (data) {
                 toast("Moved to " + data.label, function () { changeStatus(id, row.dataset.statusUrl, previous, status, true); });
@@ -218,6 +237,14 @@
             saveNotes(notesRow.dataset.id, notesRow.dataset.notesUrl, value, form.querySelector("[data-notes-status]"));
         }
     });
+
+    // Filters apply as soon as one changes (search: on Enter or leaving the box); the Filter button
+    // stays in the page only for no-JS use.
+    var filters = byId("rl-filters");
+    if (filters) {
+        byId("rl-filters-submit").classList.add("visually-hidden");
+        filters.addEventListener("change", function () { filters.submit(); });
+    }
 
     function saveNotes(id, url, value, statusEl) {
         if (statusEl) statusEl.textContent = "Saving…";
@@ -307,7 +334,7 @@
         }
         setText("rv-meta", "Created " + item.created + " · " + item.created_full +
                 (item.duplicate_of ? " · possible duplicate of #" + item.duplicate_of : ""));
-        setText("rv-desc", item.description || "(no description)");
+        richText(byId("rv-desc"), item.description || "(no description)");
         byId("rv-original-box").hidden = !item.original_message;
         setText("rv-original", item.original_message);
 

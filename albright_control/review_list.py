@@ -32,7 +32,8 @@ SHORTCUTS = [
     (["U"], "Undo", "undo"),
     (["?"], "Help", "help"),
 ]
-QUICK_STATUSES = ("considering", "planned", "declined")      # buttons on every row; the rest are in its menu
+# Every row's status buttons (its current status hidden). New isn't one - Undo puts a row back.
+ROW_STATUSES = [(key, label) for key, label in STATUSES if key != "new"]
 SOURCES = {"grok": "Grok", "manual": "Manual", "moved_from_suggestion": "Grok"}
 PRIORITY_RANK = {"low": 0, "medium": 1, "high": 2, "urgent": 3}
 RANK = {"impact": {"low": 0, "medium": 1, "high": 2}, "effort": {"small": 0, "medium": 1, "large": 2}}

@@ -1,5 +1,5 @@
 {% extends "index.html" %}
-{% load cache_bust %}
+{% load cache_bust review_list_tags %}
 {% block page_title %}{{ kind.title }} · {% endblock %}
 {% block content %}
 {% comment %}
@@ -27,9 +27,9 @@ review queue come from the same row dicts; static/js/review_list.js runs both.
             {% for tab in tabs %}<a href="{{ tab.url }}" class="scanner-tab{% if tab.key == status %} is-active{% endif %}" data-tab="{{ tab.key }}"{% if tab.key == status %} aria-current="page"{% endif %}>{{ tab.label }} <span class="tab-badge" data-count="{{ tab.key }}">{{ tab.count }}</span></a>{% endfor %}
         </nav>
 
-        <form method="get" class="scanner-controls" id="rl-filters" style="margin-bottom: 16px;">
+        <form method="get" class="scanner-controls rl-filters" id="rl-filters">
             <input type="hidden" name="status" value="{{ status }}">
-            <input type="search" name="q" value="{{ values.q }}" placeholder="Search {{ kind.plural }}..." aria-label="Search">
+            <input type="search" name="q" value="{{ values.q }}" placeholder="Search {{ kind.plural }}..." aria-label="Search" class="rl-filters__search">
             {% for f in filters %}
             <select name="{{ f.name }}" aria-label="{{ f.name|capfirst }}">
                 <option value="">All {{ f.label }}</option>
@@ -39,7 +39,8 @@ review queue come from the same row dicts; static/js/review_list.js runs both.
             <select name="sort" aria-label="Sort">
                 {% for value, label in kind.sorts %}<option value="{% if value != 'newest' %}{{ value }}{% endif %}"{% if values.sort == value or not values.sort and value == 'newest' %} selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
-            <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+            {# A no-JS fallback: review_list.js applies the filters on change and hides this button. #}
+            <button type="submit" class="btn btn-secondary btn-sm" id="rl-filters-submit">Filter</button>
             {% if filtered %}<a href="?status={{ status }}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
         </form>
 
@@ -47,40 +48,35 @@ review queue come from the same row dicts; static/js/review_list.js runs both.
         {% for r in rows %}
         <article class="card rl-row" id="{{ kind.noun }}-{{ r.id }}" data-id="{{ r.id }}" data-status="{{ r.status }}"
                  data-status-url="{{ r.urls.status }}" data-notes-url="{{ r.urls.notes }}">
-            <div class="rl-row__head">
-                <button type="button" class="rl-row__toggle" aria-expanded="false" aria-controls="rl-body-{{ r.id }}">
+            <button type="button" class="rl-row__toggle" aria-expanded="false" aria-controls="rl-body-{{ r.id }}">
+                <span class="rl-row__line">
                     <span class="rl-row__title">{{ r.title }}</span>
-                    <span class="rl-row__meta">
-                        {% if status == "all" %}<span class="badge {% if r.status == 'new' %}warn{% elif r.status == 'done' %}gain{% else %}neutral{% endif %}" data-row-status>{{ r.status_label }}</span>{% endif %}
-                        <span>{{ r.app }}</span>
-                        <span class="badge {% if r.priority == 'urgent' %}loss{% elif r.priority == 'high' %}warn{% else %}neutral{% endif %}">{{ r.priority_label|lower }} priority</span>
-                        {% if r.impact_label %}<span>{{ r.impact_label|lower }} impact &middot; {{ r.effort_label|lower }} effort</span>{% endif %}
-                        <span>{{ r.source }}</span>
-                        <span title="{{ r.created_full }}">{{ r.created }}</span>
-                        {% if r.duplicate_of %}<span style="color: var(--warn);">possible duplicate of #{{ r.duplicate_of }}</span>{% endif %}
-                    </span>
-                    <span class="rl-row__preview">{{ r.description|default:"(no description)" }}</span>
-                </button>
-                <form method="post" action="{{ r.urls.status }}" class="rl-row__actions" data-status-form>{% csrf_token %}
-                    <input type="hidden" name="next" value="{{ next }}">
-                    {% for key, label in statuses %}{% if key in quick_statuses %}<button type="submit" name="status" value="{{ key }}" class="btn btn-secondary btn-sm"{% if key == r.status %} hidden{% endif %}>{{ label }}</button>{% endif %}{% endfor %}
-                    <details class="rl-more">
-                        <summary class="btn btn-secondary btn-sm" aria-label="More statuses" title="More statuses">&middot;&middot;&middot;</summary>
-                        <div class="rl-more__menu">
-                            {% for key, label in statuses %}{% if key not in quick_statuses %}<button type="submit" name="status" value="{{ key }}" class="btn btn-secondary btn-sm"{% if key == r.status %} hidden{% endif %}>{{ label }}</button>{% endif %}{% endfor %}
-                        </div>
-                    </details>
-                </form>
-            </div>
+                    <span class="rl-row__time" title="{{ r.created_full }}">{{ r.created }}</span>
+                </span>
+                <span class="rl-row__badges">
+                    {% if status == "all" %}<span class="badge {% if r.status == 'new' %}warn{% elif r.status == 'done' %}gain{% else %}neutral{% endif %}" data-row-status>{{ r.status_label }}</span>{% endif %}
+                    <span class="badge neutral">{{ r.app }}</span>
+                    <span class="badge {% if r.priority == 'urgent' %}loss{% elif r.priority == 'high' %}warn{% else %}neutral{% endif %}">{{ r.priority_label|lower }} priority</span>
+                    {% if r.impact_label %}<span class="badge neutral">{{ r.impact_label|lower }} impact</span><span class="badge neutral">{{ r.effort_label|lower }} effort</span>{% endif %}
+                    <span class="badge neutral">{{ r.source }}</span>
+                    {% for t in r.tags %}<span class="badge neutral">#{{ t }}</span>{% endfor %}
+                    {% if r.duplicate_of %}<span class="badge warn">possible duplicate of #{{ r.duplicate_of }}</span>{% endif %}
+                </span>
+                <span class="rl-row__preview">{{ r.description|default:"(no description)" }}</span>
+            </button>
+
+            <form method="post" action="{{ r.urls.status }}" class="rl-row__actions" data-status-form aria-label="Change status">{% csrf_token %}
+                <input type="hidden" name="next" value="{{ next }}">
+                {% for key, label in row_statuses %}<button type="submit" name="status" value="{{ key }}" class="btn btn-secondary btn-sm{% if key == 'declined' %} rl-status--declined{% endif %}"{% if key == r.status %} hidden{% endif %}>{{ label }}</button>{% endfor %}
+            </form>
 
             <div class="rl-row__body" id="rl-body-{{ r.id }}" hidden>
-                {% if r.category or r.tags or r.area %}<div class="rl-row__tags">
+                {% if r.category or r.area %}<div class="rl-row__badges">
                     {% if r.category %}<span class="badge neutral">{{ r.category }}</span>{% endif %}
                     {% if r.area %}<span class="badge neutral">{{ r.area }}</span>{% endif %}
-                    {% for t in r.tags %}<span class="badge neutral">{{ t }}</span>{% endfor %}
                 </div>{% endif %}
                 <div class="row-count">Description</div>
-                <p class="rl-row__text">{{ r.description|default:"(none)" }}</p>
+                <div class="rl-row__text">{{ r.description|rich_text|default:"(none)" }}</div>
                 {% if kind.key == "ideas" %}
                 <div class="row-count">Original message</div>
                 <pre class="crypto-source-text">{{ r.original_message|default:"(none)" }}</pre>
@@ -166,7 +162,7 @@ review queue come from the same row dicts; static/js/review_list.js runs both.
                         <h2 class="review-card__title" id="rv-title"></h2>
                         <div class="review-progress" id="rv-meta"></div>
                     </div>
-                    <div class="review-desc"><div class="row-count">Description</div><p id="rv-desc"></p></div>
+                    <div class="review-desc"><div class="row-count">Description</div><div id="rv-desc" class="rl-row__text"></div></div>
                     <div class="review-desc" id="rv-original-box" hidden><div class="row-count">Original message</div><p id="rv-original"></p></div>
                     <div class="review-desc" id="rv-links-box" hidden><div class="row-count">Links</div><ul id="rv-links" class="rl-row__links"></ul></div>
                     <div class="review-desc" id="rv-notes-box" hidden>
