@@ -155,12 +155,15 @@ class SiteSuggestion(_BotWrite):
     (/control/suggestions/). I set the status and add my own notes."""
     APPS = [("trade", "Trading"), ("resell", "Reselling"), ("opps", "Opportunities"), ("all", "Whole site")]
     PRIORITIES = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
-    STATUSES = [("new", "New"), ("accepted", "Accepted"), ("declined", "Declined"), ("done", "Done")]
+    # The same statuses as Admin > Ideas (albright_control.models.Idea.STATUSES) - migration 0004
+    # moved the old ones over (accepted -> planned).
+    STATUSES = [("new", "New"), ("considering", "Considering"), ("planned", "Planned"),
+                ("in_progress", "In progress"), ("done", "Done"), ("declined", "Declined")]
     app = models.CharField(max_length=6, choices=APPS)
     area = models.CharField(max_length=100, blank=True)
     title = models.CharField(max_length=200)
     description = models.TextField()
     priority = models.CharField(max_length=6, choices=PRIORITIES, default="medium")
-    status = models.CharField(max_length=8, choices=STATUSES, default="new")
+    status = models.CharField(max_length=11, choices=STATUSES, default="new", db_index=True)
     my_notes = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,0 +1,234 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}{{ kind.title }} · {% endblock %}
+{% block content %}
+{% comment %}
+Admin > Ideas and Admin > Bot suggestions - one template for both
+(review_list.py / review_list_views.py). Status tabs (New is always the
+default), filters within the tab, rows that expand in place with quick
+status buttons, and the daily review mode on the New tab, which reuses the
+reseller review queue's card, legend and help overlay CSS. The rows and the
+review queue come from the same row dicts; static/js/review_list.js runs both.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1100px;" id="review-list"
+     data-kind="{{ kind.key }}" data-status="{{ status }}"
+     data-nav-ideas="{% url 'albright_control:ideas' %}" data-nav-suggestions="{% url 'albright_control:suggestions' %}">
+    <div class="card__header" style="margin-bottom: 6px;">
+        <h1 style="margin: 0;">{{ kind.title }}</h1>
+        <span style="display: inline-flex; gap: var(--space-2); flex-wrap: wrap;">
+            {% if status == "new" and queue %}<button type="button" class="btn btn-primary" id="rl-start-review">Start review</button>{% endif %}
+            {% if kind.key == "ideas" %}<a href="{% url 'albright_control:idea_add' %}" class="btn {% if status == 'new' and queue %}btn-secondary{% else %}btn-primary{% endif %}">Add idea</a>{% endif %}
+        </span>
+    </div>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">{{ kind.intro }}</p>
+
+    <div id="rl-list-view">
+        <nav class="scanner-tabs" id="rl-tabs" aria-label="Status" style="margin-bottom: 8px;">
+            {% for tab in tabs %}<a href="{{ tab.url }}" class="scanner-tab{% if tab.key == status %} is-active{% endif %}" data-tab="{{ tab.key }}"{% if tab.key == status %} aria-current="page"{% endif %}>{{ tab.label }} <span class="tab-badge" data-count="{{ tab.key }}">{{ tab.count }}</span></a>{% endfor %}
+        </nav>
+
+        <form method="get" class="scanner-controls" id="rl-filters" style="margin-bottom: 16px;">
+            <input type="hidden" name="status" value="{{ status }}">
+            <input type="search" name="q" value="{{ values.q }}" placeholder="Search {{ kind.plural }}..." aria-label="Search">
+            {% for f in filters %}
+            <select name="{{ f.name }}" aria-label="{{ f.name|capfirst }}">
+                <option value="">All {{ f.label }}</option>
+                {% for value, label in f.choices %}<option value="{{ value }}"{% if f.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            {% endfor %}
+            <select name="sort" aria-label="Sort">
+                {% for value, label in kind.sorts %}<option value="{% if value != 'newest' %}{{ value }}{% endif %}"{% if values.sort == value or not values.sort and value == 'newest' %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+            {% if filtered %}<a href="?status={{ status }}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
+        </form>
+
+        <div id="rl-rows">
+        {% for r in rows %}
+        <article class="card rl-row" id="{{ kind.noun }}-{{ r.id }}" data-id="{{ r.id }}" data-status="{{ r.status }}"
+                 data-status-url="{{ r.urls.status }}" data-notes-url="{{ r.urls.notes }}">
+            <div class="rl-row__head">
+                <button type="button" class="rl-row__toggle" aria-expanded="false" aria-controls="rl-body-{{ r.id }}">
+                    <span class="rl-row__title">{{ r.title }}</span>
+                    <span class="rl-row__meta">
+                        {% if status == "all" %}<span class="badge {% if r.status == 'new' %}warn{% elif r.status == 'done' %}gain{% else %}neutral{% endif %}" data-row-status>{{ r.status_label }}</span>{% endif %}
+                        <span>{{ r.app }}</span>
+                        <span class="badge {% if r.priority == 'urgent' %}loss{% elif r.priority == 'high' %}warn{% else %}neutral{% endif %}">{{ r.priority_label|lower }} priority</span>
+                        {% if r.impact_label %}<span>{{ r.impact_label|lower }} impact &middot; {{ r.effort_label|lower }} effort</span>{% endif %}
+                        <span>{{ r.source }}</span>
+                        <span title="{{ r.created_full }}">{{ r.created }}</span>
+                        {% if r.duplicate_of %}<span style="color: var(--warn);">possible duplicate of #{{ r.duplicate_of }}</span>{% endif %}
+                    </span>
+                    <span class="rl-row__preview">{{ r.description|default:"(no description)" }}</span>
+                </button>
+                <form method="post" action="{{ r.urls.status }}" class="rl-row__actions" data-status-form>{% csrf_token %}
+                    <input type="hidden" name="next" value="{{ next }}">
+                    {% for key, label in statuses %}{% if key in quick_statuses %}<button type="submit" name="status" value="{{ key }}" class="btn btn-secondary btn-sm"{% if key == r.status %} hidden{% endif %}>{{ label }}</button>{% endif %}{% endfor %}
+                    <details class="rl-more">
+                        <summary class="btn btn-secondary btn-sm" aria-label="More statuses" title="More statuses">&middot;&middot;&middot;</summary>
+                        <div class="rl-more__menu">
+                            {% for key, label in statuses %}{% if key not in quick_statuses %}<button type="submit" name="status" value="{{ key }}" class="btn btn-secondary btn-sm"{% if key == r.status %} hidden{% endif %}>{{ label }}</button>{% endif %}{% endfor %}
+                        </div>
+                    </details>
+                </form>
+            </div>
+
+            <div class="rl-row__body" id="rl-body-{{ r.id }}" hidden>
+                {% if r.category or r.tags or r.area %}<div class="rl-row__tags">
+                    {% if r.category %}<span class="badge neutral">{{ r.category }}</span>{% endif %}
+                    {% if r.area %}<span class="badge neutral">{{ r.area }}</span>{% endif %}
+                    {% for t in r.tags %}<span class="badge neutral">{{ t }}</span>{% endfor %}
+                </div>{% endif %}
+                <div class="row-count">Description</div>
+                <p class="rl-row__text">{{ r.description|default:"(none)" }}</p>
+                {% if kind.key == "ideas" %}
+                <div class="row-count">Original message</div>
+                <pre class="crypto-source-text">{{ r.original_message|default:"(none)" }}</pre>
+                {% endif %}
+                {% if r.links %}
+                <div class="row-count">Links</div>
+                <ul class="rl-row__links">{% for link in r.links %}<li>{% if link.href %}<a href="{{ link.href }}" class="crypto-link{% if not link.verified %} crypto-link--unverified{% endif %}"{% if link.verified %} target="_blank" rel="noopener noreferrer"{% else %} title="Not on your verified list - you'll see a warning first"{% endif %}>{{ link.text }}{% if not link.verified %} <span class="badge warn">unverified</span>{% endif %}</a>{% else %}<span class="crypto-nolink">{{ link.text }}</span>{% endif %}</li>{% endfor %}</ul>
+                {% endif %}
+
+                <form method="post" action="{{ r.urls.notes }}" class="rl-row__notes" data-notes-form>{% csrf_token %}
+                    <input type="hidden" name="next" value="{{ next }}">
+                    <label for="rl-notes-{{ r.id }}" class="row-count">My notes</label>
+                    <textarea name="my_notes" id="rl-notes-{{ r.id }}" class="ledger-input" rows="3" maxlength="5000">{{ r.notes }}</textarea>
+                    <div style="display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-2);">
+                        <button type="submit" class="btn btn-secondary btn-sm">Save notes</button>
+                        <span class="rl-row__saved" data-notes-status aria-live="polite"></span>
+                    </div>
+                </form>
+
+                <details class="rl-row__prompt"><summary>Preview the Claude Code prompt</summary>
+                    <pre class="crypto-source-text" id="prompt-{{ kind.noun }}-{{ r.id }}">{{ r.prompt }}</pre></details>
+
+                <div class="rl-row__tools">
+                    <button type="button" class="btn btn-primary btn-sm js-rl-copy" data-copy-target="prompt-{{ kind.noun }}-{{ r.id }}">Copy as Claude Code prompt</button>
+                    {% if kind.key == "ideas" %}
+                    <a href="{{ r.urls.detail }}" class="btn btn-secondary btn-sm">Edit</a>
+                    {% if r.duplicate_of %}
+                    <form method="post" action="{{ r.urls.detail }}" data-confirm="Merge this idea into #{{ r.duplicate_of }}? Both original messages are kept; this idea is then removed.">{% csrf_token %}
+                        <input type="hidden" name="action" value="merge"><input type="hidden" name="into" value="{{ r.duplicate_of }}">
+                        <button type="submit" class="btn btn-secondary btn-sm">Merge into #{{ r.duplicate_of }}</button></form>
+                    {% endif %}
+                    <form method="post" action="{{ r.urls.detail }}" class="rl-row__merge" data-confirm="Merge this idea into the one you picked? Both original messages are kept; this idea is then removed.">{% csrf_token %}
+                        <input type="hidden" name="action" value="merge">
+                        <input type="text" name="into" list="merge-targets" inputmode="numeric" class="ledger-input" placeholder="Idea #" aria-label="Merge into idea number" required>
+                        <button type="submit" class="btn btn-secondary btn-sm">Merge duplicates</button></form>
+                    <form method="post" action="{{ r.urls.detail }}" data-confirm="Delete idea #{{ r.id }}? This can't be undone.">{% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="btn btn-secondary btn-sm">Delete</button></form>
+                    {% else %}
+                    <form method="post" action="{{ r.urls.move }}" data-confirm="Move this suggestion to Ideas? It leaves the inbox and becomes a new idea.">{% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-sm">Move to Ideas</button></form>
+                    <form method="post" action="{{ r.urls.delete }}" data-confirm="Delete this suggestion? This can't be undone.">{% csrf_token %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                        <button type="submit" class="btn btn-secondary btn-sm">Delete</button></form>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+        </div>
+
+        <p class="rl-count" id="rl-count"{% if not rows %} hidden{% endif %}><span data-total>{{ total }}</span> {{ kind.noun }}{{ total|pluralize }}{% if status != "all" %} in {{ status_label }}{% endif %}{% if total > rows|length %} - showing the first {{ rows|length }}{% endif %}.</p>
+
+        <section class="card" id="rl-empty"{% if rows %} hidden{% endif %}>
+            {% if status == "new" and not filtered %}
+            <h2 style="margin: 0 0 6px; font-size: 1.125rem;">All caught up - nothing new to review.</h2>
+            {% elif filtered %}
+            <p style="margin: 0 0 6px;">Nothing in {{ status_label }} matches these filters.</p>
+            {% else %}
+            <p style="margin: 0 0 6px;">Nothing in {{ status_label }}.</p>
+            {% endif %}
+            <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);" id="rl-empty-links">See
+                {% for tab in tabs %}{% if tab.key != status %}<a href="{{ tab.url }}">{{ tab.label }}</a>{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}.</p>
+        </section>
+    </div>
+
+    {% if status == "new" and queue %}
+    {{ queue|json_script:"rl-queue" }}
+    <section id="rl-review" hidden aria-label="Daily review">
+        <div class="card__header" style="margin-bottom: 16px;">
+            <h2 style="margin: 0; font-size: 1.125rem;">Daily review &middot; New {{ kind.plural }}, oldest first</h2>
+            <span style="display: inline-flex; align-items: center; gap: var(--space-3);">
+                <span id="rv-progress" class="review-progress num" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary btn-sm" id="rv-exit">Back to the list</button>
+            </span>
+        </div>
+        <div class="review-layout" id="review-layout">
+            <div class="review-main">
+                <section class="card review-card" id="rv-card" aria-live="polite">
+                    <div id="rv-status" class="review-status" hidden></div>
+                    <div class="review-card__info">
+                        <div class="review-card__badges" id="rv-badges"></div>
+                        <h2 class="review-card__title" id="rv-title"></h2>
+                        <div class="review-progress" id="rv-meta"></div>
+                    </div>
+                    <div class="review-desc"><div class="row-count">Description</div><p id="rv-desc"></p></div>
+                    <div class="review-desc" id="rv-original-box" hidden><div class="row-count">Original message</div><p id="rv-original"></p></div>
+                    <div class="review-desc" id="rv-links-box" hidden><div class="row-count">Links</div><ul id="rv-links" class="rl-row__links"></ul></div>
+                    <div class="review-desc" id="rv-notes-box" hidden>
+                        <label for="rv-notes" class="row-count">My notes</label>
+                        <textarea id="rv-notes" class="ledger-input" rows="3" maxlength="5000"></textarea>
+                        <div style="display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-2);">
+                            <button type="button" class="btn btn-secondary btn-sm" id="rv-notes-save">Save note</button>
+                            <span class="rl-row__saved" id="rv-notes-status" aria-live="polite">Ctrl+Enter saves &middot; Esc goes back to the keys</span>
+                        </div>
+                    </div>
+                    <div class="review-actions" id="rv-actions">
+                        {% for keys, label, action in shortcuts %}{% if action != "help" %}
+                        <button type="button" class="btn btn-secondary review-action" data-action="{{ action }}">
+                            <span class="review-action__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% endfor %}</span>
+                            <span>{{ label }}</span>
+                        </button>
+                        {% endif %}{% endfor %}
+                    </div>
+                </section>
+
+                <section class="card review-done" id="rv-done" hidden>
+                    <h2 id="rv-done-title">All caught up</h2>
+                    <p id="rv-done-text" style="color: var(--text-secondary);"></p>
+                    <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+                        <button type="button" class="btn btn-secondary" id="rv-review-skipped" hidden>Review skipped</button>
+                        <button type="button" class="btn btn-primary" id="rv-done-exit">Back to the list</button>
+                    </div>
+                </section>
+            </div>
+
+            <aside class="card review-legend" id="rv-legend" aria-label="Keyboard shortcuts">
+                <div class="card__header"><span class="card__label">Shortcuts</span></div>
+                <ul class="review-legend__list">
+                    {% for keys, label, action in shortcuts %}
+                    <li data-legend="{{ action }}">
+                        <span class="review-legend__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% if not forloop.last %}<span class="review-legend__or">/</span>{% endif %}{% endfor %}</span>
+                        <span>{{ label }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </aside>
+        </div>
+
+        <div class="review-help" id="rv-help" hidden role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+            <div class="card review-help__panel">
+                <div class="card__header">
+                    <span class="card__label">Keyboard shortcuts</span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="rv-help-close" aria-label="Close help">&#10005;</button>
+                </div>
+                <ul class="review-legend__list">
+                    {% for keys, label, action in shortcuts %}
+                    <li><span class="review-legend__keys">{% for key in keys %}<kbd class="kbd">{{ key }}</kbd>{% if not forloop.last %}<span class="review-legend__or">/</span>{% endif %}{% endfor %}</span><span>{{ label }}</span></li>
+                    {% endfor %}
+                    <li><span class="review-legend__keys"><kbd class="kbd">Esc</kbd></span><span>Close this help, or leave the note box</span></li>
+                </ul>
+                <p style="margin: 12px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Each status saves and moves to the next {{ kind.noun }}. Shortcuts pause while you're typing a note.</p>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if merge_targets %}<datalist id="merge-targets">{% for t in merge_targets %}<option value="{{ t.pk }}">#{{ t.pk }} {{ t.title|truncatechars:60 }}</option>{% endfor %}</datalist>{% endif %}
+</div>
+<script src="{% static_version 'js/review_list.js' %}" defer></script>
+{% endblock %}

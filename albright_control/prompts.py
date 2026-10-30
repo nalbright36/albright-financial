@@ -1,4 +1,4 @@
-"""'Copy as Claude Code prompt' for an accepted site suggestion."""
+"""'Copy as Claude Code prompt' for a Bot suggestion."""
 
 APP_CONTEXT = {
     "trade": "The Trading app (albright_trading_app).",

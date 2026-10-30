@@ -44,7 +44,7 @@ class AdminTestCase(TestCase):
 
 class AccessTests(AdminTestCase):
     def all_urls(self):
-        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "update_suggestion": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
+        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "suggestion_status": [1], "suggestion_notes": [1], "suggestion_delete": [1], "idea_status": [1], "idea_notes": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
         return [(p.name, reverse(f"albright_control:{p.name}", args=args.get(p.name, []))) for p in control_urls]
 
     def test_every_admin_page_is_404_for_non_superusers(self):
@@ -203,24 +203,21 @@ class SiteSuggestionTests(AdminTestCase):
         self.assertNotContains(filtered, "Show time left in red")
 
         s = SiteSuggestion.objects.get(app="resell")
-        self.assertNotContains(page, "Copy as Claude Code prompt")   # only accepted ones
-        self.client.post(reverse("albright_control:update_suggestion", args=[s.pk]),
-                         {f"s{s.pk}-status": "accepted", f"s{s.pk}-my_notes": "Use the existing warn color."})
+        self.assertContains(page, f'data-copy-target="prompt-suggestion-{s.pk}">Copy as Claude Code prompt</button>')
+        self.client.post(reverse("albright_control:suggestion_status", args=[s.pk]), {"status": "planned"})
+        self.client.post(reverse("albright_control:suggestion_notes", args=[s.pk]),
+                         {"my_notes": "Use the existing warn color."})
         s.refresh_from_db()
-        self.assertEqual((s.status, s.my_notes), ("accepted", "Use the existing warn color."))
-        self.assertEqual(AuditEntry.objects.get().action, "suggestion_status")
-        accepted = self.client.get(reverse("albright_control:suggestions"), {"status": "accepted"})
-        self.assertContains(accepted, f'data-copy-target="prompt-{s.pk}">Copy as Claude Code prompt</button>')
-        self.assertNotContains(accepted, "Opps idea")
-        # Notes-only change: no audit entry for status.
-        self.client.post(reverse("albright_control:update_suggestion", args=[s.pk]),
-                         {f"s{s.pk}-status": "accepted", f"s{s.pk}-my_notes": "changed"})
-        self.assertEqual(AuditEntry.objects.count(), 1)
+        self.assertEqual((s.status, s.my_notes), ("planned", "Use the existing warn color."))
+        self.assertEqual(AuditEntry.objects.get().action, "suggestion_status")   # notes aren't audited
+        planned = self.client.get(reverse("albright_control:suggestions"), {"status": "planned"})
+        self.assertContains(planned, "Show time left in red")
+        self.assertNotContains(planned, "Opps idea")
 
     def test_prompt_copy_format(self):
         s = SiteSuggestion.objects.create(app="resell", area="Watchlist page", title="Red countdown",
                                           description="Color the countdown red under 10 minutes.", priority="high",
-                                          status="accepted", my_notes="Use --loss.")
+                                          status="planned", my_notes="Use --loss.")
         prompt = claude_code_prompt(s)
         self.assertEqual(prompt, "Red countdown\n\n"
                                  "App: The Reselling app (albright_reselling_app).\n"

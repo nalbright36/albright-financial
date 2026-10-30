@@ -147,7 +147,8 @@ class IdeasPageTests(TestCase):
                            description="Make the header fit phones")
 
     def titles(self, **params):
-        return [i.title for i in self.client.get(reverse("albright_control:ideas"), params).context["ideas"]]
+        params.setdefault("status", "all")
+        return [r["title"] for r in self.client.get(reverse("albright_control:ideas"), params).context["rows"]]
 
     def test_filters_and_search(self):
         self.assertEqual(self.titles(app="resell"), ["Quick big win"])
@@ -156,19 +157,16 @@ class IdeasPageTests(TestCase):
         self.assertEqual(self.titles(status="done"), ["Already shipped"])
         self.assertEqual(sorted(self.titles(tag="ui")), ["Medium thing", "Quick big win"])
         self.assertEqual(self.titles(q="phones"), ["Medium thing"])
+        self.assertEqual(self.titles(status="new", tag="ui"), ["Medium thing", "Quick big win"])  # within the tab
 
-    def test_sortable_columns(self):
-        self.assertEqual(self.titles(sort="title", dir="asc")[0], "Already shipped")
-        self.assertEqual(self.titles(sort="priority", dir="desc")[0], "Big project")    # urgent first, by rank
-        self.assertEqual(self.titles(sort="effort", dir="asc")[-1], "Big project")      # large last
-        page = self.client.get(reverse("albright_control:ideas"), {"sort": "impact", "dir": "desc"}).content.decode()
-        self.assertIn('class="sorted-desc"', page)
+    def test_sorts(self):
+        self.assertEqual(self.titles()[0], "Medium thing")                        # newest first by default
+        self.assertEqual(self.titles(sort="oldest")[0], "Quick big win")
+        self.assertEqual(self.titles(sort="priority")[0], "Big project")         # urgent first, by rank
 
     def test_quick_wins_order(self):
-        quick = self.titles(view="quick")
-        self.assertEqual(quick[0], "Quick big win")             # high impact + small effort first
-        self.assertNotIn("Already shipped", quick)              # open ideas only
-        self.assertEqual(quick, ["Quick big win", "Big project", "Medium thing", "Tiny polish"])
+        quick = self.titles(status="new", sort="quick")
+        self.assertEqual(quick, ["Quick big win", "Big project", "Medium thing"])   # high impact + small effort first
 
     def test_add_manual_idea_and_duplicate_hint(self):
         response = self.client.post(reverse("albright_control:idea_add"), {

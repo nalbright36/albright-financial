@@ -1,7 +1,7 @@
 """Admin area (/control/) - superuser-only; everyone else gets 404.
-Manages things that affect all three apps: the Bot API, the bot's site
-suggestions, system health, integrations, AI usage, data/backups, and the
-audit log of what was done here."""
+Manages things that affect all three apps: the Bot API, system health, integrations, AI usage, data/backups, and the
+audit log of what was done here. Ideas and Bot suggestions are in
+review_list_views.py."""
 from django import forms
 from django.contrib import messages
 from django.http import HttpResponse
@@ -14,7 +14,6 @@ from albright_bot_api.models import SCOPES, BotRequestLog, BotToken, SiteSuggest
 from . import ai_usage, data, integrations, jobs
 from .access import audit, superuser_required
 from .models import AuditEntry, Idea, IntegrationCheck
-from .prompts import claude_code_prompt
 
 ACTIVITY_LIMIT = 300
 AUDIT_LIMIT = 300
@@ -40,12 +39,6 @@ class TokenForm(forms.Form):
         return ""
 
 
-class SuggestionForm(forms.Form):
-    status = forms.ChoiceField(choices=SiteSuggestion.STATUSES, widget=forms.Select(attrs={"class": "ledger-input"}))
-    my_notes = forms.CharField(required=False, max_length=5000,
-                               widget=forms.Textarea(attrs={"class": "ledger-input", "rows": 3}))
-
-
 # ---------------------------------------------------------------------------
 # Overview
 # ---------------------------------------------------------------------------
@@ -60,6 +53,7 @@ def overview(request):
         "status_counts": status_counts, "problems": [r for r in health if r["status"] in ("late", "failing")],
         "integrations": integ, "usage": usage,
         "new_suggestions": SiteSuggestion.objects.filter(status="new").count(),
+        "suggestion_counts": {key: SiteSuggestion.objects.filter(status=key).count() for key in ("planned", "in_progress")},
         "idea_counts": {key: Idea.objects.filter(status=key).count() for key in ("new", "planned", "in_progress")},
         "active_tokens": BotToken.objects.filter(revoked_at=None).count(),
         "recent_audit": AuditEntry.objects.select_related("user")[:5],
@@ -154,47 +148,6 @@ def bot_activity(request):
     return render(request, "albright_control/bot_activity.html", {
         "logs": logs[:ACTIVITY_LIMIT], "tokens": BotToken.objects.all(), "selected": selected, "limit": ACTIVITY_LIMIT,
     })
-
-
-# ---------------------------------------------------------------------------
-# Bot suggestions inbox
-# ---------------------------------------------------------------------------
-
-@superuser_required
-def suggestions(request):
-    items = SiteSuggestion.objects.select_related("token")
-    app = request.GET.get("app", "")
-    status = request.GET.get("status", "")
-    if app in dict(SiteSuggestion.APPS):
-        items = items.filter(app=app)
-    if status in dict(SiteSuggestion.STATUSES):
-        items = items.filter(status=status)
-    rows = [{"s": s, "form": SuggestionForm(initial={"status": s.status, "my_notes": s.my_notes}, prefix=f"s{s.pk}"),
-             "prompt": claude_code_prompt(s) if s.status == "accepted" else ""} for s in items]
-    return render(request, "albright_control/suggestions.html", {
-        "rows": rows, "apps": SiteSuggestion.APPS, "statuses": SiteSuggestion.STATUSES, "app": app, "status": status,
-        "status_tabs": [(key, label, SiteSuggestion.objects.filter(status=key).count())
-                        for key, label in SiteSuggestion.STATUSES],
-    })
-
-
-@superuser_required
-@require_POST
-def update_suggestion(request, pk):
-    suggestion = get_object_or_404(SiteSuggestion, pk=pk)
-    form = SuggestionForm(request.POST, prefix=f"s{pk}")
-    if form.is_valid():
-        old_status = suggestion.status
-        suggestion.status = form.cleaned_data["status"]
-        suggestion.my_notes = form.cleaned_data["my_notes"]
-        suggestion.save(update_fields=["status", "my_notes", "updated_at"])
-        if old_status != suggestion.status:
-            audit(request, "suggestion_status", f'#{pk} "{suggestion.title[:80]}": {old_status} -> {suggestion.status}')
-        messages.success(request, "Saved.")
-    else:
-        messages.error(request, "Couldn't save that suggestion.")
-    return redirect(reverse("albright_control:suggestions") + (f"?{request.GET.urlencode()}" if request.GET else "")
-                    + f"#suggestion-{pk}")
 
 
 # ---------------------------------------------------------------------------

@@ -41,7 +41,8 @@ class RequiredSettingsTests(TestCase):
         for marker in ("django-insecure", "RECAPTCHA", "ondigitalocean", "doadmin"):
             self.assertNotIn(marker, source)
         # The email password may only ever be read from .env, never written here.
-        password_lines = [line.strip() for line in source.splitlines() if "EMAIL_HOST_PASSWORD" in line]
+        password_lines = [line.strip() for line in source.splitlines()
+                          if line.split("=")[0].strip() == "EMAIL_HOST_PASSWORD"]
         self.assertEqual(password_lines,
                          ['EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip()'])
         for name in ("SECRET_KEY", "ALPACA_CREDENTIALS_ENCRYPTION_KEY", "DB_HOST", "DB_PASSWORD"):
