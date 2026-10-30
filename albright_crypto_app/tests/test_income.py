@@ -24,6 +24,7 @@ from albright_crypto_app.skills import skill_match
 from albright_crypto_app.tests.test_collectors import GET, NO_SLEEP, _resp
 from albright_crypto_app.tests.test_extraction import fake_client
 from albright_crypto_app.tests.test_pipeline import make
+from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "jobs.example.com"], "budget_usd": 0,
        "alert_min_ev_per_hour": 15, "alert_min_confidence": "medium"}
@@ -73,7 +74,7 @@ class SkillMatchTests(TestCase):
     def test_changing_my_skills_updates_matches(self):
         opp = freelance("React job", ["React", "TypeScript"])
         self.assertEqual(opp.skill_match, 0)
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         response = self.client.post(reverse("albright_crypto_app:profile"), {
             "skills": "Python\nReact", "target_roles": "", "years_experience": "", "industries": "", "location": "",
             "work_history": "", "projects": "", "education": "", "certifications": "", "links": "",
@@ -86,7 +87,7 @@ class SkillMatchTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class TypeSeparationTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         self.crypto = make(title="Crypto bounty", reward_usd=Decimal("200"), reward_type="bounty",
                            hours_estimate=Decimal("4"), evidence="explicit", evidence_quote="Bounty: $200 in USDC")
         self.income = freelance("Django contract", ["Python", "Django"])
@@ -195,7 +196,7 @@ class RefundableDepositTests(TestCase):
         self.assertEqual(opp.safety_reasons.count(REFUNDABLE_DEPOSIT_REASON), 1)
         self.assertIn(opp, list(Opportunity.objects.filter(excluded=False, opportunity_type="income")))
 
-        user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(user)
         detail = self.client.get(reverse("albright_crypto_app:opportunity", args=[opp.pk]))
         self.assertContains(detail, "requires a refundable deposit")
@@ -343,7 +344,7 @@ class IncomeSourceTests(TestCase):
         self.assertEqual([i.title for i in items], ["VBA dev"])
 
     def test_add_income_source_on_settings_page(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         response = self.client.post(reverse("albright_crypto_app:settings"), {
             "action": "add_source", "source-name": "Remote jobs feed", "source-kind": "rss_income",
             "source-url": "https://jobs.example.com/remote.rss", "source-notes": "Terms: feed may be polled hourly"})
@@ -368,7 +369,7 @@ class IncomeSourceTests(TestCase):
         self.assertTrue(source.runnable)
 
     def test_add_source_rejects_non_web_urls(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         response = self.client.post(reverse("albright_crypto_app:settings"), {
             "action": "add_source", "source-name": "Bad", "source-kind": "api_income", "source-url": "ftp://x.example/a"})
         self.assertEqual(response.status_code, 200)
@@ -416,7 +417,7 @@ class IncomeAlertTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class IncomeDetailAndEditTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         self.opp = freelance("Django contract", ["Python", "React"])
 
     def test_detail_shows_income_facts(self):

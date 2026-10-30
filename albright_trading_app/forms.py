@@ -5,13 +5,6 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.forms.widgets import PasswordInput, TextInput
 from django.forms import ModelForm
 
-class UserForm(forms.ModelForm):
-    password = forms.CharField(widget=forms.PasswordInput())
-
-    class Meta():
-        model = User
-        fields = ('username','email','password')
-
 class LoginForm(AuthenticationForm):
 
     username = forms.CharField(widget=TextInput())

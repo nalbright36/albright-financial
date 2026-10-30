@@ -19,6 +19,7 @@ from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_conte
 from albright_reselling_app.scanner_models import (
     AIReview, AlertSent, BidWatch, LotEvaluation, ScanRun, SourcedLot, SpotPrice,
 )
+from albright_labs.testing import with_apps
 
 
 # These fixtures predate RESELLING_SCANNER["REVIEW"] (small headroom, lots
@@ -664,7 +665,7 @@ class DashboardViewTests(TestCase):
     """Integration-level: hits the actual dashboard view/template."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_dashboard_loads_with_no_scanner_data(self):
@@ -895,7 +896,7 @@ class RangeFilterTests(TestCase):
     a formatted "$12.50" there would silently break every comparison."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_range_filter_inputs_render(self):
@@ -983,7 +984,7 @@ class LedgerTilesDashboardTests(TestCase):
     old research-pipeline summary (Lots Scanned / Flagged 60+ / etc)."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_old_tiles_no_longer_render(self):

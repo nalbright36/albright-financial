@@ -11,6 +11,7 @@ max drawdown; options closed at $0 after expiring; the snapshot command and
 its backfill; the migration of the old "eng" setting into a strategy; bot
 notes tagged with a strategy and GET trading/strategies; the Strategies
 manager; and read-only (no order method is ever called)."""
+from albright_labs.testing import with_apps
 import importlib
 import json
 from datetime import timedelta
@@ -255,7 +256,7 @@ class PageBase(TestCase):
         outlook = mock.patch(HOME_OUTLOOK, return_value=None)
         outlook.start()
         self.addCleanup(outlook.stop)
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(self.user)
         creds = AlpacaCredentials(user=self.user, is_paper=True)
         creds.set_credentials("PKTEST", "secret-test")
@@ -334,7 +335,7 @@ class StrategyPageTests(PageBase):
         self.assertContains(unattributed, "Unattributed (manual/other)")
 
     def test_detail_page_is_only_for_your_strategies(self):
-        other = User.objects.create_user(username="other", password="pw-not-real-12345")
+        other = with_apps(User.objects.create_user(username="other", password="pw-not-real-12345"))
         theirs = BotStrategy.objects.create(user=other, name="theirs", prefixes=["t"])
         self.assertEqual(self.client.get(reverse("grok_bot_strategy", args=[theirs.pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse("grok_bot_strategy", args=["nope"])).status_code, 404)
@@ -408,7 +409,7 @@ class StrategyManagerTests(PageBase):
         self.assertEqual([s.name for s in BotStrategy.objects.filter(user=self.user)], ["eng", "Intraday"])
 
     def test_cannot_touch_someone_elses(self):
-        other = User.objects.create_user(username="other", password="pw-not-real-12345")
+        other = with_apps(User.objects.create_user(username="other", password="pw-not-real-12345"))
         theirs = BotStrategy.objects.create(user=other, name="theirs", prefixes=["t"])
         for name in ("grok_bot_strategy_edit", "grok_bot_strategy_status", "grok_bot_strategy_move"):
             self.assertEqual(self.client.post(reverse(name, args=[theirs.pk]), {"status": "retired"}).status_code, 404)
@@ -494,7 +495,7 @@ class SnapshotCommandTests(PageBase):
 @override_settings(BOT_API_REQUIRE_HTTPS=False)
 class BotApiStrategyTests(TestCase):
     def setUp(self):
-        self.owner = User.objects.create_user(username="nate", password="pw-not-real-12345")
+        self.owner = with_apps(User.objects.create_user(username="nate", password="pw-not-real-12345"))
         self.eng = BotStrategy.objects.create(user=self.owner, name="Engulfing", prefixes=["eng"], display_order=0)
         BotStrategy.objects.create(user=self.owner, name="Intraday", prefixes=["intra", "INTRA2"], status="paused",
                                    display_order=1)
@@ -567,8 +568,8 @@ class PrefixMigrationTests(TestCase):
         return SimpleNamespace(get_model=lambda app, name: models[name])
 
     def test_eng_prefix_becomes_a_strategy_named_eng(self):
-        user = User.objects.create_user("nate", password="x")
-        blank = User.objects.create_user("sam", password="x")
+        user = with_apps(User.objects.create_user("nate", password="x"))
+        blank = with_apps(User.objects.create_user("sam", password="x"))
         old = _OldSettings([{"user_id": user.pk, "order_id_prefix": "eng"}, {"user_id": blank.pk, "order_id_prefix": ""}])
         self.migration.prefix_to_strategy(self.apps(old), None)
         strategies = list(BotStrategy.objects.values("user_id", "name", "prefixes", "status", "display_order"))
@@ -576,13 +577,13 @@ class PrefixMigrationTests(TestCase):
                                        "display_order": 0}])
 
     def test_existing_strategies_are_left_alone(self):
-        user = User.objects.create_user("nate", password="x")
+        user = with_apps(User.objects.create_user("nate", password="x"))
         BotStrategy.objects.create(user=user, name="Mine", prefixes=["mine"])
         self.migration.prefix_to_strategy(self.apps(_OldSettings([{"user_id": user.pk, "order_id_prefix": "eng"}])), None)
         self.assertEqual(list(BotStrategy.objects.values_list("name", flat=True)), ["Mine"])
 
     def test_going_back_restores_the_first_prefix(self):
-        user = User.objects.create_user("nate", password="x")
+        user = with_apps(User.objects.create_user("nate", password="x"))
         BotStrategy.objects.create(user=user, name="eng", prefixes=["eng", "eng2"], display_order=0)
         BotStrategy.objects.create(user=user, name="intra", prefixes=["intra"], display_order=1)
         old = _OldSettings([])

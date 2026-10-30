@@ -17,6 +17,7 @@ from django.utils import timezone
 from albright_bot_api.models import BotToken, SiteSuggestion
 from albright_control import nav
 from albright_control.models import Idea, JobRun
+from albright_labs.testing import with_apps
 
 PASSWORD = "pw-not-real-12345"
 OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -127,7 +128,7 @@ class AdminGroupTests(Base):
 
 class AccountMenuTests(Base):
     def test_every_app_has_the_account_menu_with_my_account_and_logout(self):
-        regular = User.objects.create_user(username="pat", password=PASSWORD)
+        regular = with_apps(User.objects.create_user(username="pat", password=PASSWORD))
         for user in (self.admin, regular):
             self.client.force_login(user)
             urls = [reverse("labs:hub"), reverse("trading_home"), reverse("albright_reselling_app:dashboard"),
@@ -147,12 +148,12 @@ class AccountMenuTests(Base):
                     # Far right: after the app's links.
                     self.assertGreater(content.index('id="account-menu"'), content.index('id="navbar-links"'))
 
-    def test_visitors_get_login_and_register_instead(self):
+    def test_visitors_get_login_only(self):
         self.client.logout()
         content = self.page(reverse("user_login"))
         self.assertNotIn('id="account-menu"', content)
         links = content.split('id="navbar-links"', 1)[1].split("</div>", 1)[0]
-        self.assertEqual(hrefs(links), [(reverse("user_login"), "Login"), (reverse("registration"), "Register")])
+        self.assertEqual(hrefs(links), [(reverse("user_login"), "Login")])        # accounts are invite-only
 
 
 class SharedHeaderRuleTests(Base):

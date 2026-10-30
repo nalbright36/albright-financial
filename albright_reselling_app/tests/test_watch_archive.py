@@ -23,6 +23,7 @@ from albright_reselling_app.scanner.bid_watch import (
 from albright_reselling_app.scanner.dashboard import _watched_lot_ids, watchlist_nav_summary
 from albright_reselling_app.scanner.watch_archive import archive_summary, archived_watches, summarize
 from albright_reselling_app.scanner_models import AlertSent, BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 D = Decimal
 
@@ -56,7 +57,7 @@ def _archived(external_id, compare_max, final_price, outcome, compare_source="ma
 
 class LoggedInTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
 
@@ -424,7 +425,7 @@ class PruneTests(TestCase):
     def test_hard_deleted_get_no_protection(self):
         lot = self._stale_closed_lot("prune-hard")
         BidWatch.objects.create(lot=lot, status="watching")
-        user = User.objects.create_user(username="pruner", password="pw-not-real-12345")
+        user = with_apps(User.objects.create_user(username="pruner", password="pw-not-real-12345"))
         self.client.force_login(user)
         self.client.post(reverse("albright_reselling_app:delete_watch", args=[lot.pk]))
 

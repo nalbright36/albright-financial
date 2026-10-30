@@ -8,6 +8,7 @@ import re
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from albright_labs.testing import with_apps
 
 TAB_RE = re.compile(r'<a href="#(\w+)" class="scanner-tab( is-active)?" data-tab="\1">([^<]+)</a>')
 
@@ -23,7 +24,7 @@ def _panel_hidden(content, name):
 
 class CalculatorTabOrderTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def assert_melt_first_and_default(self, content):

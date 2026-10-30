@@ -17,6 +17,7 @@ from albright_reselling_app.scanner.simple_calc import (
     break_even_price, buy_cost, ebay_profit, junk_silver_value, melt_value, price_for_profit,
 )
 from albright_reselling_app.scanner_models import SourcedLot, SpotPrice
+from albright_labs.testing import with_apps
 
 
 def _calc_data(content):
@@ -31,7 +32,7 @@ def _calc_data(content):
 
 class CalculateApiBuyTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_buy_tab_matches_simple_calc_buy_cost(self):
@@ -87,7 +88,7 @@ class CalculateApiBuyTests(TestCase):
 
 class CalculateApiEbayTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_ebay_tab_matches_simple_calc_ebay_profit(self):
@@ -156,7 +157,7 @@ class CalculateApiEbayTests(TestCase):
 
 class SourcePresetsTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_page_embeds_source_defaults_from_settings(self):
@@ -177,7 +178,7 @@ class SourcePresetsTests(TestCase):
 
 class LedgerPickTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_holding_and_partially_sold_items_included_with_buy_side_cost(self):
@@ -202,7 +203,7 @@ class LedgerPickTests(TestCase):
         self.assertNotIn("Written Off Item", by_label)
 
     def test_only_own_entries_included(self):
-        other = User.objects.create_user(username="other", password="pw-not-real-12345")
+        other = with_apps(User.objects.create_user(username="other", password="pw-not-real-12345"))
         LedgerEntry.objects.create(owner=other, item="Someone Else's Item", cost=Decimal("10.00"), status="holding")
 
         response = self.client.get(reverse("albright_reselling_app:calculator"))
@@ -212,7 +213,7 @@ class LedgerPickTests(TestCase):
 
 class LotPrefillTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_lot_prefills_bid_and_source_defaults(self):
@@ -238,7 +239,7 @@ class LotPrefillTests(TestCase):
 
 class NoJsPostFallbackTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_requires_login(self):
@@ -276,7 +277,7 @@ class NoJsPostFallbackTests(TestCase):
 
 class CalculateApiMeltTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def _post(self, **fields):
@@ -337,7 +338,7 @@ class CalculateApiMeltTests(TestCase):
 
 class MeltSpotPrefillTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_page_embeds_latest_spot_price_and_date(self):
@@ -391,7 +392,7 @@ class MeltSpotPrefillTests(TestCase):
 
 class MeltNoJsPostTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_melt_tab_post_renders_result(self):
@@ -419,7 +420,7 @@ class CalculatorNavAndUrlTests(TestCase):
     keep working."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_old_calculator_url_still_resolves(self):

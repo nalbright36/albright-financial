@@ -14,7 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from albright_trading_proj.middleware import LAST_APP_COOKIE
-from albright_labs.testing import launcher_links
+from albright_labs.testing import launcher_links, with_apps
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 
@@ -22,7 +22,7 @@ HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 @mock.patch(HOME_OUTLOOK, return_value=None)
 class OpportunitiesNavTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def switch_buttons(self, url):
         return launcher_links(self.client.get(url).content.decode())
@@ -77,7 +77,7 @@ class OpportunitiesNavTests(TestCase):
 
     def last_used_app(self):
         from albright_labs.models import UserPreference
-        UserPreference.objects.create(user=User.objects.get(username="tester"), landing="last_app")
+        UserPreference.objects.update_or_create(user=User.objects.get(username="tester"), defaults={"landing": "last_app"})
 
     def test_visiting_sets_cookie_and_root_returns_there(self, _outlook):
         self.last_used_app()   # "/" follows the cookie only with the "Last used app" landing setting
@@ -119,7 +119,7 @@ class OpportunitiesNavTests(TestCase):
 
 class OldPageRedirectTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def test_old_crypto_and_income_pages_go_to_the_inbox(self):
         inbox, hidden = reverse("albright_crypto_app:inbox"), reverse("albright_crypto_app:hidden")
@@ -154,6 +154,6 @@ class LegacyRedirectTests(TestCase):
                 self.assertEqual(response["Location"], reverse("albright_crypto_app:earnings") + "?export=csv")
 
     def test_old_prefix_old_type_page_ends_in_the_inbox(self):
-        self.client.force_login(User.objects.create_user(username="tester2", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester2", password="pw-not-real-12345")))
         response = self.client.get("/crypto/income/", follow=True)
         self.assertEqual(response.redirect_chain[-1][0], reverse("albright_crypto_app:inbox"))

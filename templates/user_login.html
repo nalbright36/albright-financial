@@ -8,6 +8,7 @@
 
         <form action="{% url 'user_login' %}" method="post">
             {% csrf_token %}
+            {% if login_form.errors %}<p class="field-error" id="login-error">That username and password didn't match. Please try again.</p>{% endif %}
             {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
             <div class="field">
@@ -23,9 +24,9 @@
             <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;">Login</button>
         </form>
 
-        <div style="display: flex; justify-content: space-between; margin-top: 18px; font-size: 0.8125rem;">
-            <a href="{% url 'password_reset' %}" style="color: var(--text-secondary);">Reset Password</a>
-            <a href="{% url 'registration' %}" style="color: var(--text-secondary);">Create an Account</a>
+        <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 18px; font-size: 0.8125rem;">
+            <a href="{% url 'password_reset' %}" style="color: var(--text-secondary);" id="forgot-password">Forgot password?</a>
+            <span style="color: var(--text-secondary);">Accounts are by invite only.</span>
         </div>
     </div>
 

@@ -21,6 +21,7 @@ from albright_reselling_app.scanner.adapters.hibid import HiBidAdapter
 from albright_reselling_app.scanner.alerts import run_alerts
 from albright_reselling_app.scanner.pipeline import _buyer_premium_pct, _inbound_shipping, _sales_tax_pct
 from albright_reselling_app.scanner_models import AlertSent, CalibrationOverride, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 SPOT = {"silver": 30.0, "gold": 2500.0}
 
@@ -211,7 +212,7 @@ class WinLotHibidPremiumTests(TestCase):
     bid used, not the source's flat default."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_prefilled_premium_uses_per_lot_rate(self):

@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner_models import BidWatch, LotDismissal, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 
 def _lot(external_id, end_in=timedelta(hours=3), source="shopgoodwill", image=True, raw=None, **extra):
@@ -47,7 +48,7 @@ def _first_cell(table, lot_pk=None):
 
 class ThumbnailAssertions(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def assert_thumb(self, cell, image_url):

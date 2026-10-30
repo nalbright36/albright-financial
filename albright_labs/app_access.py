@@ -94,6 +94,20 @@ def grant(pref, keys):
     return added
 
 
+def new_user_preference(user, keys):
+    """A new account's saved preference with exactly these apps (Admin > Users "Add a user", an
+    invite's sign-up). Someone given one app with pages lands on its first page, not Home."""
+    from .models import UserPreference
+    pref = UserPreference(user=user)
+    pref.allowed_apps = []
+    grant(pref, keys)
+    only = apps_registry.BY_KEY[pref.allowed_apps[0]] if len(pref.allowed_apps) == 1 else None
+    if only and only.pages:
+        pref.landing, pref.landing_page = "page", only.pages[0][0]
+    pref.save()
+    return pref
+
+
 def app_for_request(request):
     """The registry app the resolved view belongs to, or None (Home, public pages, the Bot API)."""
     match = getattr(request, "resolver_match", None)

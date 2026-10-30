@@ -1,0 +1,9 @@
+{% extends "emails/_base.html" %}
+{% block body %}
+<p style="margin:0 0 12px;">Hi{% if name %} {{ name }}{% endif %},</p>
+<p style="margin:0 0 12px;"><strong>{{ inviter }}</strong> invited you to make an account on Albright Labs{% if apps %} with access to <strong>{{ apps }}</strong>{% endif %}.</p>
+<p style="margin:0;">Use the button below to choose your username and password.</p>
+{% endblock %}
+{% block after %}
+<p style="margin:20px 0 0; font-size:13px; color:#475569;">The link is for {{ email }} only and works once. It expires <strong>{{ expires }}</strong>. If you weren't expecting this, you can ignore this email.</p>
+{% endblock %}

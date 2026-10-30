@@ -19,7 +19,7 @@
                 <td style="font-size: 0.75rem;">{% if i.last_check %}{{ i.last_check.checked_at|date:"M j, g:i A" }} - {% if i.last_check.ok %}passed{% else %}failed{% endif %}{% else %}&mdash;{% endif %}</td>
                 <td>{% if i.test and i.configured %}
                     <form method="post" action="{% url 'albright_control:test_integration' i.key %}" style="margin: 0;">{% csrf_token %}
-                        <button type="submit" class="btn btn-secondary btn-sm">{% if i.key == 'telegram' %}Send test message{% else %}Check connection{% endif %}</button></form>
+                        <button type="submit" class="btn btn-secondary btn-sm">{% if i.key == 'telegram' %}Send test message{% elif i.key == 'email' %}Send test email to me{% else %}Check connection{% endif %}</button></form>
                     {% endif %}</td>
             </tr>
             {% endfor %}

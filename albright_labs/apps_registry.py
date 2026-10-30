@@ -28,7 +28,7 @@ class App:
     tile: str = ""            # the function in albright_labs.tiles for Home's live number
     pages: tuple = ()         # ((key, label, URL name), ...) - "Where I land" options
     superuser_only: bool = False
-    # Pages in its namespace that stay open to anyone (sign in, register).
+    # Pages in its namespace that stay open to anyone (sign in, password reset).
     ungated_url_names: frozenset = field(default_factory=frozenset)
 
 
@@ -42,10 +42,10 @@ APPS = (
                ("trade:grok_bot", "Grok Bot", "grok_bot"),
                ("trade:scanner", "Market Scanner", "market_scanner"),
                ("trade:strategies", "Strategies", "strategies")),
-        # The trading URLconf (no namespace) also holds the site's sign-in pages, and
+        # The trading URLconf (no namespace) also holds the site's sign-in pages (no public
+        # registration - accounts are invite-only, albright_labs.invites), and
         # the old /crypto/ prefixes' redirect (the Opportunities check applies where it lands).
-        ungated_url_names=frozenset({"user_login", "user_logout", "registration", "registrationsuccess",
-                                     "opportunities_legacy_redirect", "password_reset", "password_reset_done",
+        ungated_url_names=frozenset({"user_login", "user_logout", "opportunities_legacy_redirect", "password_reset", "password_reset_done",
                                      "password_reset_confirm", "password_reset_complete"})),
     App(key="resell", label="Reselling", short_label="Resell", brand="Albright Reselling", accent="reselling",
         color="#60A5FA", landing_url_name="albright_reselling_app:dashboard", namespaces=("albright_reselling_app",),

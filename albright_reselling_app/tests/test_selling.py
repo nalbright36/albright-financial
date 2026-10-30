@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from albright_reselling_app import ledger_metrics, selling
 from albright_reselling_app.models import LedgerEntry, LedgerSale
+from albright_labs.testing import with_apps
 
 
 def _make_entry(owner, item="Test Item", cost="10.00", status="holding", purchase_date=None, **extra):
@@ -40,7 +41,7 @@ def _make_sale(entry, sale_price="20.00", sale_date=None, shipped_at=None):
 
 class BoardColumnsTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_unlisted_holding_entry_is_to_list(self):
         entry = _make_entry(self.user, status="holding")
@@ -127,7 +128,7 @@ class BoardColumnsTests(TestCase):
 
 class MarkListedFlowTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_get_renders_form(self):
@@ -165,7 +166,7 @@ class MarkListedFlowTests(TestCase):
         self.assertEqual(entry.list_price, Decimal("30.00"))
 
     def test_other_users_entry_is_not_accessible(self):
-        other = User.objects.create_user(username="other", password="pw-not-real-12345")
+        other = with_apps(User.objects.create_user(username="other", password="pw-not-real-12345"))
         entry = _make_entry(other, status="holding")
 
         response = self.client.get(reverse("albright_reselling_app:ledger_mark_listed", args=[entry.pk]))
@@ -175,7 +176,7 @@ class MarkListedFlowTests(TestCase):
 
 class RecordSaleNoShippingTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_no_shipping_needed_sets_shipped_at_immediately(self):
@@ -219,7 +220,7 @@ class RecordSaleNoShippingTests(TestCase):
 
 class MarkShippedFlowTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_marks_every_unshipped_sale_shipped(self):
@@ -246,7 +247,7 @@ class MarkShippedFlowTests(TestCase):
 
 class MarkdownStatusTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_not_listed_within_7_days_not_flagged(self):
         entry = _make_entry(self.user, purchase_date=timezone.localdate() - timedelta(days=3))
@@ -311,7 +312,7 @@ class MarkdownStatusTests(TestCase):
 
 class MarkdownActionViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_done_records_last_markdown_step_and_clears_it_from_due(self):
@@ -357,7 +358,7 @@ class MarkdownActionViewTests(TestCase):
 
 class SharedAgingParityTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_dashboard_tile_markdown_count_matches_selling_due_flag(self):
         _make_entry(self.user, item="Due", listed_at=timezone.localdate() - timedelta(days=14))
@@ -403,7 +404,7 @@ GOAL_CFG = {"items": 2, "recover_usd": 100, "start_date": "2020-01-01"}
 
 class SellGoalProgressTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     @mock.patch.dict(settings.RESELLING_SCANNER, {"SELL_GOAL": GOAL_CFG})
     def test_counts_sales_from_both_ledgers(self):
@@ -450,7 +451,7 @@ class SellGoalProgressTests(TestCase):
 
 class TodaySectionsTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_empty_state_shows_nothing_urgent(self):
@@ -512,7 +513,7 @@ class TodaySectionsTests(TestCase):
 
 class NavAndLandingTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_today_no_longer_in_reseller_nav(self):

@@ -13,6 +13,7 @@ from albright_bot_api.models import SCOPES, BotToken, SiteSuggestion
 from albright_control.ideas import claude_code_prompt, find_duplicate, similarity
 from albright_control.models import AuditEntry, Idea
 from albright_control.prompts import CLOSING
+from albright_labs.testing import with_apps
 
 PASSWORD = "pw-not-real-12345"
 MESSAGE = "hey grok - I want the watchlist to beep when a lot I'm watching drops under my max in the last 10 min"
@@ -259,7 +260,7 @@ class IdeasPageTests(TestCase):
                                   '<span class="badge warn navbar__badge">3</span></a>')   # Bot group, 3 new
 
     def test_non_superusers_get_404(self):
-        regular = User.objects.create_user(username="regular", password=PASSWORD)
+        regular = with_apps(User.objects.create_user(username="regular", password=PASSWORD))
         client = Client()
         client.force_login(regular)
         for url in (reverse("albright_control:ideas"), reverse("albright_control:idea_add"),

@@ -21,6 +21,7 @@ from albright_control import jobs
 from albright_control.models import AuditEntry, IntegrationCheck, JobRun
 from albright_control.prompts import CLOSING, claude_code_prompt
 from albright_control.urls import urlpatterns as control_urls
+from albright_labs.testing import with_apps
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 PASSWORD = "pw-not-real-12345"
@@ -33,7 +34,7 @@ SECRETS = {"OPENAI_API_KEY": "sk-OPENAISECRET123", "TELEGRAM_BOT_TOKEN": "123:TE
 class AdminTestCase(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser(username="boss", password=PASSWORD, email="")
-        self.user = User.objects.create_user(username="regular", password=PASSWORD)
+        self.user = with_apps(User.objects.create_user(username="regular", password=PASSWORD))
         self.client.force_login(self.admin)
 
 
@@ -52,7 +53,7 @@ class AccessTests(AdminTestCase):
             if who == "regular":
                 client.force_login(self.user)
             elif who == "staff":
-                staff = User.objects.create_user(username="staffer", password=PASSWORD, is_staff=True)
+                staff = with_apps(User.objects.create_user(username="staffer", password=PASSWORD, is_staff=True))
                 client.force_login(staff)
             for name, url in self.all_urls():
                 with self.subTest(who=who, page=name):
@@ -322,7 +323,7 @@ class IntegrationTests(AdminTestCase):
         statuses = {r["key"]: r["status"] for r in response.context["rows"]}
         self.assertEqual(statuses["telegram"], "configured")
         self.assertEqual(statuses["ebay"], "configured")
-        self.assertEqual(set(statuses), {"openai", "telegram", "goldapi", "alpaca", "gmail", "github", "ebay"})
+        self.assertEqual(set(statuses), {"openai", "telegram", "goldapi", "alpaca", "gmail", "github", "ebay", "email"})
 
     def test_missing_and_failing(self):
         with mock.patch.dict("os.environ", {}, clear=False):

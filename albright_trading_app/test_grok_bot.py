@@ -23,6 +23,7 @@ from albright_trading_app import grok_bot
 from albright_trading_app.grok_bot import (ReadOnlyAlpaca, closed_trades, describe_contract, normalize_fill,
                                            order_ids_to_client_ids, parse_occ, trade_stats)
 from albright_trading_app.models import AlpacaCredentials, BotStrategy
+from albright_labs.testing import with_apps
 
 TRADING_CLIENT = "alpaca.trading.client.TradingClient"
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -176,7 +177,7 @@ class OrderIdTests(TestCase):
 class GrokBotPageTests(TestCase):
     def setUp(self):
         cache.clear()
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(self.user)
         creds = AlpacaCredentials(user=self.user, is_paper=True)
         creds.set_credentials("PKTEST", "secret-test")

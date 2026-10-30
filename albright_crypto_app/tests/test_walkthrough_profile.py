@@ -19,6 +19,7 @@ from albright_crypto_app.models import (AIExtraction, ApplicationDraft, MyProfil
 from albright_crypto_app.pipeline import manual_source, rescore
 from albright_crypto_app.tests.test_extraction import fake_client
 from albright_crypto_app.tests.test_pipeline import make
+from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "jobs.example.com"], "budget_usd": 0}
 GH_GET = "albright_crypto_app.walkthrough.requests.get"
@@ -165,7 +166,7 @@ class GitHubWalkthroughTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class WalkthroughPageTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         self.opp = github_opp()
 
     def post(self, data, plan=GITHUB_PLAN):
@@ -271,7 +272,7 @@ def income_opp():
 @override_settings(CRYPTO=CFG)
 class ProfileDraftTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         self.assertEqual(self.client.post(reverse("albright_crypto_app:profile"), PROFILE_POST).status_code, 302)
         self.profile = MyProfile.load()
         self.opp = income_opp()
@@ -407,7 +408,7 @@ class ProfileDraftTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class PaidTaskTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def test_track_a_paid_task_by_hand(self):
         with mock.patch("albright_crypto_app.pipeline.extract", side_effect=RuntimeError("no AI in this test")):

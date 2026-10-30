@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from albright_trading_app.forms import UserForm, LoginForm, InvestorProfileForm
+from albright_trading_app.forms import LoginForm, InvestorProfileForm
 from django.urls import reverse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -23,6 +23,7 @@ import datetime as dt
 from dateutil import tz
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from albright_labs import ratelimit
 from time import strftime, localtime
 import base64
 import ast
@@ -1835,6 +1836,9 @@ def user_login(request):
 
     if request.method == 'POST':
 
+        # Failed sign-ins are rate limited per IP (albright_labs.ratelimit).
+        if ratelimit.blocked(request, "login"):
+            return ratelimit.too_many(request, "login")
         login_form = LoginForm(request, data=request.POST)
         next_url = request.POST.get('next', '')
 
@@ -1847,6 +1851,7 @@ def user_login(request):
 
             if user is not None:
 
+                ratelimit.clear(request, "login")
                 auth.login(request, user)
 
                 # Honor an explicit ?next= (e.g. @login_required bouncing
@@ -1858,6 +1863,7 @@ def user_login(request):
                 ):
                     return redirect(next_url)
                 return redirect('labs:root')
+        ratelimit.hit(request, "login")
     context = {'login_form': login_form, 'next': next_url}
 
     return render(request,'user_login.html', context)
@@ -1867,35 +1873,7 @@ def user_logout(request):
     logout(request)
     return HttpResponseRedirect(reverse('user_login'))
 
-def registration(request):
-
-    registered = False
-
-    if request.method == "POST":
-        user_form = UserForm(data=request.POST)
-
-        if user_form.is_valid():
-
-            user = user_form.save()
-            user.set_password(user.password)
-            user.save()
-
-            registered = True
-
-            return redirect('/registrationsuccess')
-
-        else:
-            print(user_form.errors)
-
-    else:
-        user_form = UserForm()
-
-    context = {'user_form': user_form,}
-
-    return render(request, 'registration.html', context=context)
-
-def registrationsuccess(request):
-    return render(request,'registrationsuccess.html')
+# There's no public registration: accounts are invite-only (albright_labs.invites).
 
 
 @login_required

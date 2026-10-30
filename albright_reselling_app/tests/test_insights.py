@@ -17,6 +17,7 @@ from albright_reselling_app import insights_views  # noqa: F401 - imported for c
 from albright_reselling_app.models import LedgerEntry
 from albright_reselling_app.scanner import insights, pipeline
 from albright_reselling_app.scanner_models import AIReview, CalibrationOverride, CalibrationSuggestion, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 SPOT = {"silver": 30.0, "gold": 2500.0}
 
@@ -282,7 +283,7 @@ class CalibrationSuggestionBuildingTests(TestCase):
         self.assertEqual(len([c for c in created if c.key == "RESALE_MULTIPLIERS.silver_eagle"]), 1)
 
     def test_ledger_sales_produce_suggestions(self):
-        owner = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        owner = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         for i in range(6):
             lot = SourcedLot.objects.create(
                 source="shopgoodwill", external_id=f"ledger-se-{i}", url=f"https://example.com/ledger-se-{i}",
@@ -301,7 +302,7 @@ class CalibrationSuggestionBuildingTests(TestCase):
         self.assertEqual(matches[0].sample_size, 6)
 
     def test_manual_ledger_entries_without_scanner_lot_are_skipped(self):
-        owner = User.objects.create_user(username="tester2", password="pw-not-real-12345")
+        owner = with_apps(User.objects.create_user(username="tester2", password="pw-not-real-12345"))
         for i in range(6):
             LedgerEntry.objects.create(
                 owner=owner, item=f"Hand entry {i}", cost=Decimal("10.00"), sold_for=Decimal("24.00"),
@@ -343,7 +344,7 @@ class CalibrateCommandTests(TestCase):
 
 class ApplyDismissUndoViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_apply_creates_override_and_marks_applied(self):
@@ -436,7 +437,7 @@ class AIReviewAccuracyTests(TestCase):
     def test_ledger_sale_outcome_preferred_over_lot_final_price(self):
         """Ledger win is more authoritative than the auction's own close -
         used instead of lot.final_price when both exist."""
-        owner = User.objects.create_user(username="tester3", password="pw-not-real-12345")
+        owner = with_apps(User.objects.create_user(username="tester3", password="pw-not-real-12345"))
         review = self._make_review("acc-6", resale_low="20.00", resale_high="30.00", final_price="40.00")
         LedgerEntry.objects.create(
             owner=owner, item="Won It", cost=Decimal("10.00"), sold_for=Decimal("25.00"),
@@ -449,7 +450,7 @@ class AIReviewAccuracyTests(TestCase):
         self.assertEqual(stats["coins"]["pct_in_range"], 100.0)
 
     def test_written_off_ledger_entry_ignored_falls_back_to_lot_final_price(self):
-        owner = User.objects.create_user(username="tester4", password="pw-not-real-12345")
+        owner = with_apps(User.objects.create_user(username="tester4", password="pw-not-real-12345"))
         review = self._make_review("acc-7", resale_low="20.00", resale_high="30.00", final_price="25.00")
         LedgerEntry.objects.create(
             owner=owner, item="Written Off", cost=Decimal("10.00"), status="written_off",

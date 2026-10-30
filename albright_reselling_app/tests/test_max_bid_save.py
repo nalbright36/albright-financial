@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner_models import AIReview, BidWatch, LotEvaluation, LotUserEstimate, SourcedLot
+from albright_labs.testing import with_apps
 
 AJAX = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
 
@@ -30,7 +31,7 @@ def _lot(external_id, current_price="10.00", scanner_max="30.00"):
 
 class MaxBidSaveTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def save(self, lot, value, **kwargs):

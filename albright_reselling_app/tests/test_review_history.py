@@ -14,6 +14,7 @@ from django.utils import timezone
 from albright_reselling_app.scanner.review_history import CSV_HEADERS, filtered_reviews, filters_from_params, \
     summary_stats
 from albright_reselling_app.scanner_models import AIReview, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 
 def _make_lot(external_id, source="shopgoodwill", title=None, is_closed=False, final_price=None, end_time=None):
@@ -167,7 +168,7 @@ class SummaryStatsTests(TestCase):
 
 class ReviewHistoryViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_requires_login(self):
         response = self.client.get(reverse("albright_reselling_app:ai_review_history"))

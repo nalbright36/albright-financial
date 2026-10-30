@@ -96,17 +96,15 @@ class MealsOnlyAccountTests(Base):
         sam = self.create_wife()
         with override_settings(EMAIL_CONFIGURED=False):
             page = self.client.post(reverse("albright_control:users"), {"action": "setup_link", "user_id": sam.pk})
-        self.assertContains(page, "this site can&#x27;t send email")
-        link = re.search(r'id="setup-link-value"[^>]*|value="(http[^"]+)"', page.content.decode())
-        url = re.search(r'value="(http://testserver/reset/[^"]+)" id="setup-link-value"|'
-                        r'readonly value="(http://testserver/reset/[^"]+)"', page.content.decode())
-        self.assertTrue(link and url)
+        self.assertContains(page, "Not emailed: Email isn&#x27;t set up")
+        url = re.search(r'readonly value="(https://natealbright36\.pythonanywhere\.com/reset/[^"]+)"', page.content.decode())
+        self.assertTrue(url)
         self.assertEqual(len(mail.outbox), 0)
-        self.set_password_from(url.group(1) or url.group(2), sam)
+        self.set_password_from(url.group(1), sam)
 
     def set_password_from(self, link, user):
         self.client.logout()
-        path = link.replace("http://testserver", "")
+        path = link.replace("https://natealbright36.pythonanywhere.com", "")
         form_page = self.client.get(path, follow=True)                 # Django swaps the token for a session
         self.assertContains(form_page, 'id="set-password-form"')
         done = self.client.post(form_page.redirect_chain[-1][0] if form_page.redirect_chain else path,
@@ -120,10 +118,11 @@ class MealsOnlyAccountTests(Base):
     def test_setup_link_emailed_when_email_is_configured(self):
         sam = self.create_wife()
         response = self.client.post(reverse("albright_control:users"), {"action": "setup_link", "user_id": sam.pk})
-        self.assertRedirects(response, reverse("albright_control:users"), fetch_redirect_response=False)
+        self.assertContains(response, "Emailed to sam@example.com")                 # and the link is shown too
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["sam@example.com"])
-        link = re.search(r"(http://testserver/reset/\S+)", mail.outbox[0].body).group(1)
+        link = re.search(r"(https://natealbright36\.pythonanywhere\.com/reset/\S+)", mail.outbox[0].body).group(1)
+        self.assertContains(response, link)
         self.set_password_from(link, sam)
 
     def test_setup_link_is_superuser_only(self):

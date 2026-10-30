@@ -19,7 +19,7 @@ from django.urls import reverse
 
 from . import apps_registry, launcher, tiles
 from .models import UserPreference
-from .testing import current_tiles, launcher_links, launcher_tiles
+from .testing import current_tiles, launcher_links, launcher_tiles, with_apps
 
 PASSWORD = "pw-not-real-12345"
 OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -35,7 +35,7 @@ class Base(TestCase):
         outlook = mock.patch(OUTLOOK, return_value=None)
         outlook.start()
         self.addCleanup(outlook.stop)
-        self.user = User.objects.create_user(username="pat", password=PASSWORD)
+        self.user = with_apps(User.objects.create_user(username="pat", password=PASSWORD))
         self.client.force_login(self.user)
 
     def set_pref(self, **fields):
@@ -181,7 +181,7 @@ class LauncherLinesTests(Base):
             self.get()
             self.get()
             self.assertEqual(calls, [self.user.pk])
-            other = User.objects.create_user(username="sam", password=PASSWORD)
+            other = with_apps(User.objects.create_user(username="sam", password=PASSWORD))
             self.client.force_login(other)
             self.get()
             self.assertEqual(calls, [self.user.pk, other.pk])

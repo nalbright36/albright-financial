@@ -14,6 +14,7 @@ from django.utils import timezone
 from albright_reselling_app import ledger_metrics
 from albright_reselling_app.models import LedgerEntry, LedgerSale
 from albright_reselling_app.scanner_models import AIReview, BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 
 def _make_lot(external_id, source="shopgoodwill", title="Morgan Silver Dollar", current_price="10.00",
@@ -59,7 +60,7 @@ class LegacyProfitUnchangedTests(TestCase):
     it always did, even though those properties were extended."""
 
     def setUp(self):
-        self.owner = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.owner = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_unsold_legacy_row_profit_unchanged(self):
         entry = LedgerEntry.objects.create(
@@ -91,7 +92,7 @@ class LegacyProfitUnchangedTests(TestCase):
 
 class WinLotFlowTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_prefill_uses_scanner_expected_sale_when_no_review(self):
@@ -235,7 +236,7 @@ class WinLotFlowTests(TestCase):
 
 class RecordSaleTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_recording_sale_promotes_holding_to_partially_sold(self):
@@ -279,7 +280,7 @@ class RecordSaleTests(TestCase):
 
 class SetStatusTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_mark_sold_out(self):
@@ -313,7 +314,7 @@ class SetStatusTests(TestCase):
 
 class SplitLegacyTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_valid_split_zeroes_legacy_and_fills_new_fields(self):
@@ -346,7 +347,7 @@ class SplitLegacyTests(TestCase):
 
 class MetricsTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_roi_pct(self):
         entry = _make_entry(self.user, cost="50.00", sold_for="75.00", status="sold_out")
@@ -436,7 +437,7 @@ class MetricsTests(TestCase):
 
 class AgingTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_no_suggestion_before_14_days(self):
         entry = _make_entry(self.user, purchase_date=timezone.localdate() - timedelta(days=10))
@@ -472,7 +473,7 @@ class AgingTests(TestCase):
 
 class ScorecardMetricsTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_grouping_by_category_and_source(self):
         _make_entry(
@@ -575,7 +576,7 @@ class ScorecardMetricsTests(TestCase):
 
 class RealizedSummaryTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_bought_and_sold_and_unsold_counts(self):
         now = timezone.now()
@@ -624,7 +625,7 @@ class DashboardTilesTests(TestCase):
     partially-sold item, per the feature's explicit test requirement."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_empty_state(self):
         tiles = ledger_metrics.dashboard_tiles(self.user)
@@ -777,7 +778,7 @@ class LedgerSummaryTilesTests(TestCase):
     two can't drift apart for the same owner."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_empty_state_shows_zero_not_an_error(self):
         tiles = ledger_metrics.ledger_summary_tiles(self.user)
@@ -879,7 +880,7 @@ class NetCashFlowTests(TestCase):
     the P&L tile which only counts sold-out/written-off outcomes."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_empty_state(self):
         result = ledger_metrics.net_cash_flow(self.user)
@@ -1024,7 +1025,7 @@ class LedgerPageRedesignTests(TestCase):
     for legacy (pre-split) rows."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_readonly_view_shows_full_name_and_formatted_values(self):

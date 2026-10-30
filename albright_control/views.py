@@ -218,7 +218,7 @@ def test_integration(request, key):
     if test is None:
         messages.error(request, "There's no test for that integration.")
         return redirect("albright_control:integrations")
-    ok, message = test()
+    ok, message = test(request.user)
     IntegrationCheck.objects.create(integration=key, ok=ok, message=message[:300])
     audit(request, "integration_test", f"{key}: {'passed' if ok else 'failed'} - {message}")
     (messages.success if ok else messages.error)(request, message)

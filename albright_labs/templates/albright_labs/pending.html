@@ -1,0 +1,11 @@
+{% extends "index.html" %}
+{% block page_title %}Welcome · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 480px;">
+    <div class="card" id="access-pending">
+        <div class="card__header"><span class="card__label">Welcome{% if user.first_name %}, {{ user.first_name }}{% endif %}</span></div>
+        <p style="margin: 0 0 16px;">Your account is set up. You'll see apps here once access is granted.</p>
+        <a href="{% url 'user_logout' %}" class="btn btn-secondary btn-sm" id="pending-logout">Logout</a>
+    </div>
+</div>
+{% endblock %}

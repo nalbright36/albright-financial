@@ -19,6 +19,7 @@ from albright_reselling_app.review_views import SHORTCUTS
 from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_context
 from albright_reselling_app.scanner.review_queue import review_queue, why_its_here
 from albright_reselling_app.scanner_models import AIReview, BidWatch, LotDismissal, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 AI_REVIEW_LOT = "albright_reselling_app.review_views.review_lot"
 
@@ -61,7 +62,7 @@ def _eval(category="coins", flags=None, lead_reason=""):
 
 class LoggedInTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def dashboard(self):

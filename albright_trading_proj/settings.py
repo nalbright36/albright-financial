@@ -155,17 +155,27 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Outgoing email (optional) - only for password setup/reset links. With no
-# EMAIL_HOST in .env, email is "not configured": Admin > Users shows the setup
-# link for you to send yourself, and the public "Reset password" page says to
-# ask the site's owner instead of trying to send.
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "").strip()
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587") or 587)
+# Outgoing email: Gmail SMTP, for invites and password setup/reset links
+# (albright_labs.emails). EMAIL_HOST_USER (the Gmail address), EMAIL_HOST_PASSWORD
+# (a Gmail app password) and DEFAULT_FROM_EMAIL come from .env and aren't required:
+# without them the site runs as usual, email is "not configured" (Admin > Integrations),
+# and every link is shown in Admin to pass on by hand instead.
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 15
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "").strip()
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip()
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1").strip() != "0"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "").strip() or EMAIL_HOST_USER or "webmaster@localhost"
-EMAIL_CONFIGURED = bool(EMAIL_HOST)
+# Local work only (DEBUG on): EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend in
+# .env prints emails to the runserver console instead of sending them. Ignored with DEBUG off.
+if DEBUG and os.environ.get("EMAIL_BACKEND", "").strip():
+    EMAIL_BACKEND = os.environ["EMAIL_BACKEND"].strip()
+EMAIL_CONFIGURED = bool(EMAIL_HOST_USER and EMAIL_HOST_PASSWORD) or EMAIL_BACKEND != "django.core.mail.backends.smtp.EmailBackend"
+# Links in emails and in Admin (invites, password setup/reset) always use the site's real
+# address, never the host a request happened to arrive on (e.g. 127.0.0.1 while testing).
+SITE_URL = os.environ.get("SITE_URL", "").strip().rstrip("/") or "https://natealbright36.pythonanywhere.com"
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24 * 3   # setup/reset links work for 3 days
 
 

@@ -18,6 +18,7 @@ from django.utils import timezone
 from albright_crypto_app.alerts import digest_lines, send_deadline_reminders, send_new_opportunity_alerts
 from albright_crypto_app.models import Earning, Opportunity, TimeLog
 from albright_crypto_app.tests.test_pipeline import make
+from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "etherscan.io"], "budget_usd": 0,
        "alert_min_ev_per_hour": 15, "alert_min_confidence": "medium"}
@@ -31,7 +32,7 @@ def render_link(url, label=""):
 @override_settings(CRYPTO=CFG)
 class LinkTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def test_allowlisted_links_open_directly(self):
         html = render_link("https://github.com/acme/x/issues/1")
@@ -79,7 +80,7 @@ class LinkTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class EarningsTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         self.opp = make(title="Paid bounty")
         today = timezone.localdate()
         Earning.objects.create(opportunity=self.opp, date=today, amount=Decimal("200"), currency="USDC",

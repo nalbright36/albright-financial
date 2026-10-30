@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner_models import AIReview, LotEvaluation, LotFeedback, SourcedLot
+from albright_labs.testing import with_apps
 
 
 def _make_lot(external_id, end_time=None, title="Lot of 8 Nintendo 64 Games"):
@@ -23,7 +24,7 @@ def _make_lot(external_id, end_time=None, title="Lot of 8 Nintendo 64 Games"):
 
 class LotFeedbackFormViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_get_shows_form(self):
@@ -101,7 +102,7 @@ class LotFeedbackFormViewTests(TestCase):
 
 class ResolveLotFeedbackTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_resolve_marks_resolved(self):
@@ -138,7 +139,7 @@ class ResolveLotFeedbackTests(TestCase):
 
 class ExportLotFeedbackTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_export_includes_title_description_and_note_per_open_report(self):

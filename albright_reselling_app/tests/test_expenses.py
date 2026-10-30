@@ -23,6 +23,7 @@ from albright_reselling_app.management.commands.import_personal_ledger import (
     _find_existing_sale, _plan_selling_sheet,
 )
 from albright_reselling_app.models import LedgerEntry, LedgerExpense, LedgerSale
+from albright_labs.testing import with_apps
 
 
 def _make_entry(owner, item="Test Item", cost="0.00", status="holding", ledger_type="resale", **extra):
@@ -46,7 +47,7 @@ def _make_expense(owner, description="Supplies Item", amount="10.00", date_=None
 
 class LedgerExpenseModelTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_default_category_is_supplies(self):
         expense = LedgerExpense.objects.create(owner=self.user, description="Tape", amount=Decimal("5.00"))
@@ -67,7 +68,7 @@ class LedgerExpenseModelTests(TestCase):
 
 class OverviewExpensesTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_tiles_revenue_item_costs_expenses_net(self):
@@ -146,7 +147,7 @@ class OverviewExpensesTests(TestCase):
 
 class ExpensesTabTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_expense_appears_only_on_expenses_tab_and_overview(self):
@@ -237,7 +238,7 @@ class ExpensesTabTests(TestCase):
 
 class ResellingMetricsUnaffectedByExpensesTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_dashboard_tiles_unaffected(self):
         today = timezone.localdate()
@@ -336,7 +337,7 @@ class PlanSellingSheetUnitTests(TestCase):
     small ad-hoc fixtures (not the full 15-row dataset) are enough."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def _ws(self, rows):
         wb = openpyxl.Workbook()
@@ -409,7 +410,7 @@ class ImportCommandFullRunTests(TestCase):
     to, with simplified item names."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.path = _build_workbook_file(REAL_SELLING_ROWS, REAL_EXPENSE_ROWS)
 
     def tearDown(self):
@@ -559,7 +560,7 @@ class ImportCommandFullRunTests(TestCase):
             call_command("import_personal_ledger", "/no/such/file.xlsx", stdout=StringIO())
 
     def test_explicit_owner_argument(self):
-        other = User.objects.create_user(username="other", password="pw-not-real-12345")
+        other = with_apps(User.objects.create_user(username="other", password="pw-not-real-12345"))
         call_command("import_personal_ledger", self.path, owner="other", stdout=StringIO())
 
         self.assertEqual(LedgerEntry.objects.filter(owner=other, ledger_type="personal").count(), 15)

@@ -27,6 +27,7 @@ from albright_reselling_app.scanner.simple_calc import EBAY_PRESETS, buy_cost, e
 from albright_reselling_app.scanner_models import (
     AIReview, BidWatch, LotEvaluation, LotUserEstimate, SourcedLot,
 )
+from albright_labs.testing import with_apps
 
 TELEGRAM_POST = "albright_reselling_app.scanner.alerts.requests.post"
 CREDS = {"TELEGRAM_BOT_TOKEN": "test-token", "TELEGRAM_CHAT_ID": "12345"}
@@ -71,7 +72,7 @@ def _make_estimate(lot, resale_estimate="100.00", my_max_bid="42.29"):
 
 class LoggedInTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def post_json(self, url, data):

@@ -12,6 +12,7 @@ from django.urls import reverse
 from albright_resume import ai, chat
 from albright_resume.admin_urls import urlpatterns as admin_urls
 from albright_resume.models import AICall, AIDraft, Project, QuestionLog, ResumeSettings, Skill, WorkExperience
+from albright_labs.testing import with_apps
 
 PASSWORD = "pw-not-real-12345"
 CHAT = reverse("albright_resume:chat")
@@ -203,7 +204,7 @@ class ProviderTests(TestCase):
 
 class AdminTests(Base):
     def test_admin_pages_404_for_non_superusers_and_200_for_superuser(self):
-        regular = User.objects.create_user(username="reg", password=PASSWORD)
+        regular = with_apps(User.objects.create_user(username="reg", password=PASSWORD))
         project = Project.objects.create(title="P")
         draft = AIDraft.objects.create()
         from albright_resume.models import ChatConversation

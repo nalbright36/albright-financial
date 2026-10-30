@@ -20,6 +20,7 @@ from django.utils import timezone
 from albright_reselling_app import calculator_views
 from albright_reselling_app.review_views import POSITIONS_SESSION_KEY, resolve_scope
 from albright_reselling_app.scanner_models import BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 D = Decimal
 CFG = {**settings.RESELLING_SCANNER, "CANDIDATE_WINDOW_HOURS": 24,
@@ -49,7 +50,7 @@ def lead(ext, hours):
 @override_settings(RESELLING_SCANNER=CFG)
 class QueueConsistencyTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
         self.soon = [candidate(f"soon{i}", 2 + i) for i in range(3)]
         self.later = [candidate(f"later{i}", 30 + i) for i in range(2)]

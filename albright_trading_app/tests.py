@@ -14,13 +14,14 @@ from django.urls import resolve, reverse
 
 from albright_labs.models import UserPreference
 from albright_trading_proj.middleware import LAST_APP_COOKIE, LastAppMiddleware
+from albright_labs.testing import with_apps
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 
 
 class LastAppCookieTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_visiting_a_reseller_page_sets_cookie_to_reseller(self):
@@ -106,7 +107,7 @@ class LastAppCookieTests(TestCase):
 
 class RootRedirectTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester2", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester2", password="pw-not-real-12345"))
         self.client.login(username="tester2", password="pw-not-real-12345")
 
     def test_default_landing_is_home_whatever_the_cookie_says(self):
@@ -118,14 +119,14 @@ class RootRedirectTests(TestCase):
         self.assertTemplateUsed(response, "albright_labs/hub.html")
 
     def test_last_used_app_setting_follows_the_cookie(self):
-        UserPreference.objects.create(user=self.user, landing="last_app")
+        UserPreference.objects.update_or_create(user=self.user, defaults={"landing": "last_app"})
         self.client.cookies[LAST_APP_COOKIE] = "reseller"
 
         self.assertRedirects(self.client.get("/"), reverse("albright_reselling_app:dashboard"))
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_last_used_app_trading_goes_to_the_trading_landing(self, mock_outlook):
-        UserPreference.objects.create(user=self.user, landing="last_app")
+        UserPreference.objects.update_or_create(user=self.user, defaults={"landing": "last_app"})
         self.client.cookies[LAST_APP_COOKIE] = "trading"
 
         self.assertRedirects(self.client.get("/"), reverse("trading_home"))
@@ -144,10 +145,10 @@ class RootRedirectTests(TestCase):
 
 class LoginRedirectTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester3", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester3", password="pw-not-real-12345"))
 
     def test_login_with_no_next_goes_to_the_landing_setting(self):
-        UserPreference.objects.create(user=self.user, landing="last_app")
+        UserPreference.objects.update_or_create(user=self.user, defaults={"landing": "last_app"})
         self.client.cookies[LAST_APP_COOKIE] = "reseller"
 
         response = self.client.post(
@@ -195,7 +196,7 @@ class AppSwitchTests(TestCase):
     remembered app and so used to bounce "Trading" back to the reseller."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="switcher", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="switcher", password="pw-not-real-12345"))
         self.client.login(username="switcher", password="pw-not-real-12345")
 
     def nav(self, response):
@@ -253,7 +254,7 @@ class AppSwitchTests(TestCase):
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_root_follows_the_remembered_app_with_last_used_app(self, mock_outlook):
-        UserPreference.objects.create(user=self.user, landing="last_app")
+        UserPreference.objects.update_or_create(user=self.user, defaults={"landing": "last_app"})
         self.client.get(reverse("albright_reselling_app:dashboard"))  # remembers "reseller"
         self.assertRedirects(self.client.get("/"), reverse("albright_reselling_app:dashboard"))
 

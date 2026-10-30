@@ -3,6 +3,7 @@ HTTPS), every endpoint's data and writes, suggestions pending until I
 accept, the hard limits (no endpoint can bid, change max bids, touch the
 watchlist or ledger entries, change prices, submit applications, trade, or
 read credentials/profile), escaping, and the activity log."""
+from albright_labs.testing import with_apps
 import json
 from datetime import timedelta
 from decimal import Decimal
@@ -30,7 +31,7 @@ def url(name, *args):
 @override_settings(BOT_API_REQUIRE_HTTPS=False, CRYPTO={**settings.CRYPTO, "allowlist": ["github.com"]})
 class BotApiTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="owner", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="owner", password="pw-not-real-12345"))
         self.token, self.raw = BotToken.issue(self.user, "Grok bot", ALL)
         self.api = Client()
 
@@ -54,7 +55,7 @@ class BotApiTestCase(TestCase):
         self.listed = tl._make_entry(self.user, item="Morgan dollar", cost="22.00", status="holding",
                                      listed_at=timezone.localdate() - timedelta(days=20), list_price=Decimal("45.00"))
         self.sold = tl._make_entry(self.user, item="Sold one", status="sold_out")
-        self.other_user = User.objects.create_user(username="other", password="pw-not-real-12345")
+        self.other_user = with_apps(User.objects.create_user(username="other", password="pw-not-real-12345"))
         self.others = tl._make_entry(self.other_user, item="Not mine")
 
     def opportunity_data(self):

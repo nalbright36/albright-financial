@@ -8,11 +8,12 @@ never touched - only the nav markup moved)."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from albright_labs.testing import with_apps
 
 
 class NavStructureTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_top_level_nav_is_dashboard_ledger_calculator_tools(self):

@@ -1,0 +1,14 @@
+{% autoescape off %}Hi{% if name %} {{ name }}{% endif %},
+
+{{ inviter }} invited you to make an account on Albright Labs{% if apps %} with access to {{ apps }}{% endif %}.
+
+Choose your username and password here:
+
+{{ link }}
+
+The link is for {{ email }} only and works once. It expires {{ expires }}.
+
+If you weren't expecting this, you can ignore this email.
+
+- Albright Labs
+{{ site_url }}{% endautoescape %}

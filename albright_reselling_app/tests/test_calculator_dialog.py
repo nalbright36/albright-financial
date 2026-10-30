@@ -22,6 +22,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_reselling_app.scanner_models import BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 
 # These fixtures predate RESELLING_SCANNER["REVIEW"] (small headroom, lots
@@ -56,7 +57,7 @@ def _make_lead(lot, category="games", lead_reason="n64: bulk lot", expected_sale
 
 class DialogMarkupTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_dialog_renders_once_on_dashboard(self):
@@ -133,7 +134,7 @@ class DialogMarkupTests(TestCase):
 @override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class CalcButtonPrefillDataTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def _assert_is_plain_button(self, content, lot_pk):
@@ -240,7 +241,7 @@ class FullCalculatorPageStillWorksTests(TestCase):
     still work end to end through the new shared plumbing."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_calculators_page_renders_all_three_tabs(self):

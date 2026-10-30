@@ -18,6 +18,7 @@ from django.utils import timezone
 from albright_reselling_app.review_views import POSITIONS_SESSION_KEY
 from albright_reselling_app.scanner.review_queue import review_queue, valuation_summary
 from albright_reselling_app.scanner_models import BidWatch, LotDismissal, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 D = Decimal
 
@@ -181,7 +182,7 @@ class ValuationSummaryTests(TestCase):
 @override_settings(RESELLING_SCANNER=_cfg())
 class ScopePageTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
         self.soon = [_candidate("page-soon-1", 2), _candidate("page-soon-2", 3), _candidate("page-soon-3", 4)]
         self.later = [_candidate("page-later-1", 30), _candidate("page-later-2", 40)]

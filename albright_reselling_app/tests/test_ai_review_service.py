@@ -24,6 +24,7 @@ from django.utils import timezone
 from albright_reselling_app.scanner.ai_review import ReviewResult
 from albright_reselling_app.scanner.ai_review_service import ProviderUnavailable, ReviewLimitExceeded, review_lot
 from albright_reselling_app.scanner_models import AIReview, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 OPENAI_CLIENT = "openai.OpenAI"
 ANTHROPIC_CLIENT = "anthropic.Anthropic"
@@ -238,7 +239,7 @@ class ProviderSelectionTests(TestCase):
 
 class RequestReviewViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_requires_login(self):
         lot = _make_lot()
@@ -311,7 +312,7 @@ class RequestReviewViewTests(TestCase):
 
 class ReviewDetailViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_renders_comps_and_notes(self):

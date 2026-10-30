@@ -23,6 +23,7 @@ from django.utils import timezone
 from albright_reselling_app.scanner.adapters.base import RawLot, SourceBlocked
 from albright_reselling_app.scanner.bid_watch import RESOLVE_GIVE_UP_AFTER, default_max_bid, resolve_watches
 from albright_reselling_app.scanner_models import AIReview, BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 SEND_TELEGRAM = "albright_reselling_app.scanner.bid_watch.send_telegram"
 SEARCH_CLOSED = "albright_reselling_app.scanner.adapters.shopgoodwill.ShopGoodwillAdapter.search_closed"
@@ -73,7 +74,7 @@ class DefaultMaxBidTests(TestCase):
 
 class ToggleWatchViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_adds_lot_with_no_max_bid(self):
@@ -136,7 +137,7 @@ class WatchlistSectionViewTests(TestCase):
     a full page - see _watchlist_section.html."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_renders_watched_lot(self):
@@ -171,7 +172,7 @@ class WatchlistSectionViewTests(TestCase):
 
 class WatchLotViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_get_prefills_from_scanner_max_bid(self):

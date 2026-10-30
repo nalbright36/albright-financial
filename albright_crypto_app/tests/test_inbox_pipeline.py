@@ -27,6 +27,7 @@ from albright_crypto_app.my_profile import RESUME_PREFILL, check_text, prefill_p
 from albright_crypto_app.pipeline import (add_manual, extract_and_score, rescore, store, sync_default_income_sources)
 from albright_crypto_app.collectors.base import RawOpportunity
 from albright_crypto_app.tests.test_extraction import fake_client
+from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "jobs.example.com"], "budget_usd": 0, "ai_daily_limit": 30}
 TELEGRAM = "albright_crypto_app.alerts.send_telegram"
@@ -101,7 +102,7 @@ class ProfilePrefillTests(TestCase):
         self.assertEqual(prefill_profile(profile), [])        # running again changes nothing
 
     def test_profile_page_prefill_button_and_new_fields_are_editable(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         self.client.post(reverse("albright_crypto_app:profile"), {"action": "prefill"})
         page = self.client.get(reverse("albright_crypto_app:profile")).content.decode()
         self.assertIn("Business Systems Analyst", page)
@@ -240,7 +241,7 @@ class FilterTests(TestCase):
         self.assertEqual(rescore(bounty).hidden_reason, "work type: Bounty (switched off in Filters)")
 
     def test_hidden_page_shows_reasons_and_blocked_items(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         nurse = job("Registered Nurse")
         uk = job("Data Analyst UK", location="UK only")
         scam = job("Easy money", text="Send us your seed phrase to get paid. Telegram only.")
@@ -257,7 +258,7 @@ class FilterTests(TestCase):
         self.assertIn(f'Hidden (3)</a>', inbox)
 
     def test_show_in_inbox_overrides_filters_but_never_the_safety_block(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         nurse = job("Registered Nurse")
         scam = job("Easy money", text="Send us your seed phrase to get paid.")
         self.client.post(reverse("albright_crypto_app:show_in_inbox", args=[nurse.pk]))
@@ -269,7 +270,7 @@ class FilterTests(TestCase):
         self.assertEqual(rescore(nurse).hidden_reason, "")
 
     def test_saving_filters_resorts_the_inbox(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         analyst = job("Tableau Developer")
         self.assertEqual(analyst.hidden_reason, "")
         form = {**config.FILTER_DEFAULTS, "negative_keywords": "nurse\ntableau", "work_types": ["full_time", "contract"]}
@@ -308,7 +309,7 @@ class FitTests(ProfileMixin, TestCase):
         sent = client.responses.create.call_args.kwargs
         self.assertIn("TARGET ROLES: Data Analyst; Business Intelligence Analyst/Developer", sent["input"])
         self.assertIn("Remote (US)", sent["input"])
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         page = self.client.get(reverse("albright_crypto_app:inbox")).content.decode()
         data = json.loads(page.split('<script id="inbox-data" type="application/json">')[1].split("</script>")[0])
         self.assertEqual(data[0]["matched_skills"], ["SQL", "Python", "Power BI"])
@@ -403,7 +404,7 @@ class FitTests(ProfileMixin, TestCase):
 class InboxTests(ProfileMixin, TestCase):
     def setUp(self):
         super().setUp()
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def queue(self, **params):
         page = self.client.get(reverse("albright_crypto_app:inbox"), params).content.decode()
@@ -553,7 +554,7 @@ class InboxTests(ProfileMixin, TestCase):
 @override_settings(CRYPTO=CFG)
 class PipelineBoardTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def move(self, opp, stage, reason=""):
         return self.client.post(reverse("albright_crypto_app:pipeline_move", args=[opp.pk]),
@@ -697,7 +698,7 @@ class CleanupTests(TestCase):
         self.assertEqual(second.duplicate_of, first)
         self.assertEqual(first.other_links, [{"source": "Job feed", "url": "https://jobs.example.com/acme",
                                               "opportunity": second.pk}])
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         page = self.client.get(reverse("albright_crypto_app:opportunity", args=[first.pk])).content.decode()
         self.assertIn("Also posted on", page)
 
@@ -755,7 +756,7 @@ class CleanupTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class EarningsByTypeTests(TestCase):
     def test_hours_and_rate_by_type(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         contract = job("Contract Django build")
         bounty = job("Docs bounty", reward_type="bounty")
         Earning.objects.create(opportunity=contract, amount=Decimal("600"), currency="USD",

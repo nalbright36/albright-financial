@@ -17,6 +17,7 @@ from albright_crypto_app.core.scoring import score
 from albright_crypto_app.models import Opportunity, Source, TaskStep
 from albright_crypto_app.pipeline import add_manual, extract_and_score, rescore, sync_sources
 from albright_crypto_app.tests.test_extraction import GOOD, TEXT, fake_client
+from albright_labs.testing import with_apps
 
 ALLOW = ["github.com"]
 
@@ -69,7 +70,7 @@ class PipelineTests(TestCase):
     def test_rescore_on_edit(self):
         opp = make()
         self.assertEqual(opp.confidence, "low")
-        user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(user)
 
         response = self.client.post(reverse("albright_crypto_app:opportunity", args=[opp.pk]), {
@@ -84,7 +85,7 @@ class PipelineTests(TestCase):
 
     def test_edit_rejects_a_quote_not_in_the_text(self):
         opp = make()
-        user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(user)
 
         response = self.client.post(reverse("albright_crypto_app:opportunity", args=[opp.pk]), {
@@ -122,7 +123,7 @@ class PipelineTests(TestCase):
 @override_settings(CRYPTO={**settings.CRYPTO, "allowlist": ALLOW, "budget_usd": 0})
 class RoutingTests(TestCase):
     def setUp(self):
-        user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(user)
         self.slow = make(title="Slow bounty", reward_usd=Decimal("100"), reward_type="bounty",
                          hours_estimate=Decimal("10"), evidence="explicit",

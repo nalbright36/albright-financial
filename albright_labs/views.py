@@ -6,7 +6,10 @@
   "/home/"   - Home: a tile per app, each with one live number fetched
                separately (tile below), and the "where I land" and
                "show in my navigation" settings.
+               Someone who can't open any app yet (a new account) sees only
+               "access pending" there.
   "/home/account/" - My account (linked from the header): the same settings.
+  "/join/<token>/" - an invite's sign-up page (invite_views).
   /control/labs/ - Admin > Home page: the landing page's editable text.
 """
 import logging
@@ -94,6 +97,9 @@ def _back(request, default):
 @login_required
 def hub(request):
     pref = app_access.preference(request)
+    if not app_access.allowed_keys(request.user, pref):
+        # A new account before any app is granted: nothing to show but that.
+        return render(request, "albright_labs/pending.html")
     cards = [{"key": app.key, "label": app.short_label, "description": app.description, "accent": app.accent,
               "color": app.color, "url_name": app.landing_url_name, "tile": bool(app.tile)}
              for app in (apps_registry.BY_KEY[key] for key in app_access.nav_keys(request.user, pref))]

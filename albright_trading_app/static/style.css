@@ -1610,8 +1610,8 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .users-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .users-actions form { margin: 0; }
 .users-setup-link { margin-bottom: 16px; border-color: var(--accent); }
-.users-setup-link__row { display: flex; gap: 8px; }
-.users-setup-link__row input { flex: 1; min-width: 0; font-family: var(--font-mono, monospace); font-size: 0.8125rem; }
+.users-setup-link__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.users-setup-link__row input { flex: 1 1 220px; min-width: 0; font-family: var(--font-mono, monospace); font-size: 0.8125rem; }
 
 /* ---------- Albright Meals (albright_meals) - phone first ---------- */
 .meals-page { padding-top: var(--space-6); padding-bottom: var(--space-12, 48px); }

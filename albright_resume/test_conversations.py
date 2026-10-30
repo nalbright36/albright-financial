@@ -20,6 +20,7 @@ from albright_control.models import JobRun
 from albright_resume import chat, conversations
 from albright_resume.models import ChatConversation, ChatMessage
 from albright_resume.tests import CHAT, PAGE, PASSWORD, Base, fake_result
+from albright_labs.testing import with_apps
 
 UA_IPHONE = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
              "Version/18.0 Mobile/15E148 Safari/604.1 UniqueBuild/8812-XYZ")
@@ -243,7 +244,7 @@ class AdminPageTests(ConversationBase):
                      reverse("albright_resume_admin:conversations_csv")]
 
     def test_superuser_only_404_otherwise(self):
-        regular = User.objects.create_user(username="someone", password=PASSWORD)
+        regular = with_apps(User.objects.create_user(username="someone", password=PASSWORD))
         for client_user in (None, regular):
             client = self.client_class()
             if client_user:

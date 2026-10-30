@@ -15,6 +15,7 @@ from django.utils import timezone
 from albright_reselling_app import ledger_metrics
 from albright_reselling_app.calculator_views import _ledger_pick_items
 from albright_reselling_app.models import LedgerEntry, LedgerSale
+from albright_labs.testing import with_apps
 
 
 def _make_entry(owner, item="Test Item", cost="0.00", status="holding", ledger_type="resale",
@@ -29,7 +30,7 @@ def _make_entry(owner, item="Test Item", cost="0.00", status="holding", ledger_t
 
 class LedgerTypeDefaultTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_new_entry_defaults_to_resale(self):
         entry = LedgerEntry.objects.create(owner=self.user, item="Plain Entry")
@@ -50,7 +51,7 @@ class ExcludePersonalFromResellingMetricsTests(TestCase):
     dashboard tiles, Scorecard, aging/markdown counts."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_dashboard_tiles_exclude_personal_inventory_and_profit(self):
         _make_entry(self.user, item="Resale Holding", cost="50.00", status="holding")
@@ -137,7 +138,7 @@ class ExcludePersonalFromResellingMetricsTests(TestCase):
 
 class PersonalItemsTabTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_personal_items_context_tiles(self):
@@ -203,7 +204,7 @@ class PersonalItemsTabTests(TestCase):
 
 class OverviewTabTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_totals_add_up_across_both_ledgers(self):
@@ -268,7 +269,7 @@ class OverviewTabTests(TestCase):
 
 class LedgerTabUrlTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_legacy_ledger_url_redirects_to_resale(self):
@@ -314,7 +315,7 @@ class LedgerTabUrlTests(TestCase):
 
 class BidCalculatorPersonalItemsTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_pick_from_ledger_includes_personal_items_at_zero_cost(self):
         _make_entry(self.user, item="Old Guitar", status="holding", ledger_type="personal")

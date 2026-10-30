@@ -18,6 +18,7 @@ from albright_crypto_app.models import GmailConnection
 from albright_trading_app.crypto_utils import get_fernet, primary_fernet
 from albright_trading_app.models import AlpacaCredentials
 from albright_trading_proj import settings as project_settings
+from albright_labs.testing import with_apps
 
 OLD, NEW, OTHER = (Fernet.generate_key().decode() for _ in range(3))
 SECRET = "sk-not-real-alpaca-secret-123"
@@ -81,7 +82,7 @@ class MultiFernetTests(TestCase):
 class RotateEncryptionKeyTests(TestCase):
     def setUp(self):
         with keys(OLD):
-            self.creds = AlpacaCredentials(user=User.objects.create_user(username="trader", password="pw-not-real-1"),
+            self.creds = AlpacaCredentials(user=with_apps(User.objects.create_user(username="trader", password="pw-not-real-1")),
                                            is_paper=True)
             self.creds.set_credentials("PKNOTREAL123", SECRET)
             self.creds.save()

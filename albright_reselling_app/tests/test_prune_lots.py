@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from albright_reselling_app.models import LedgerEntry
 from albright_reselling_app.scanner_models import AIReview, BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 
 def _make_lot(external_id, source="shopgoodwill", last_seen_days_ago=0, end_time_days_ago=None, is_closed=False):
@@ -139,7 +140,7 @@ class ProtectionRuleTests(TestCase):
     def test_lot_with_ledger_entry_never_deleted(self):
         lot = _make_lot("protected-ledger", last_seen_days_ago=31)
         _evaluate(lot, category="none")
-        user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         LedgerEntry.objects.create(owner=user, item="Won It", cost=Decimal("10.00"), scanner_lot=lot)
 
         _run()

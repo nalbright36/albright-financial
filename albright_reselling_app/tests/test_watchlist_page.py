@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from albright_reselling_app.scanner.dashboard import watchlist_nav_summary
 from albright_reselling_app.scanner_models import BidWatch, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 
 def _make_lot(external_id, current_price="10.00", end_in=timedelta(hours=5), final_price=None, source="shopgoodwill"):
@@ -51,7 +52,7 @@ def _row_html(content, table_id, lot):
 
 class LoggedInTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def get(self, name):

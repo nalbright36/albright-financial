@@ -21,6 +21,7 @@ from django.urls import reverse
 from albright_crypto_app import forms as crypto_forms
 from albright_crypto_app.guards import find_secret, reject_secrets
 from albright_crypto_app.models import Opportunity, Source, TimeLog
+from albright_labs.testing import with_apps
 
 APP_DIR = Path(apps.get_app_config("albright_crypto_app").path)
 APP_JS = Path(settings.BASE_DIR) / "albright_trading_app" / "static" / "js" / "crypto.js"
@@ -111,7 +112,7 @@ class NoSecretStorageTests(TestCase):
             TimeLog(opportunity=opp, minutes=5, note="private key 0x" + "c" * 64).full_clean()
 
     def test_manual_add_form_refuses_a_pasted_secret(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         response = self.client.post(reverse("albright_crypto_app:add"), {
             "url": "https://github.com/a", "title": "x",
             "text": "My seed phrase: " + " ".join(["apple"] * 12)})

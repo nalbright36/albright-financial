@@ -18,6 +18,7 @@ from albright_reselling_app import selling
 from albright_reselling_app.scanner.alerts import run_alerts
 from albright_reselling_app.scanner.dashboard import get_scanner_dashboard_context
 from albright_reselling_app.scanner_models import BidWatch, LotDismissal, LotEvaluation, SourcedLot
+from albright_labs.testing import with_apps
 
 TELEGRAM_POST = "albright_reselling_app.scanner.alerts.requests.post"
 CREDS = {"TELEGRAM_BOT_TOKEN": "test-token", "TELEGRAM_CHAT_ID": "12345"}
@@ -211,7 +212,7 @@ class DashboardDismissalFilteringTests(TestCase):
 
 class TodayPageDismissalTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
 
     def test_dismissed_candidate_excluded_from_today_candidates(self):
         lot = _make_lot("dsm-today-1", timezone.now() + timedelta(hours=3))
@@ -317,7 +318,7 @@ class AlertDismissalTests(TestCase):
 
 class DismissViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_dismiss_creates_record_with_current_headroom(self):
@@ -397,7 +398,7 @@ class DismissViewTests(TestCase):
 @override_settings(RESELLING_SCANNER=PERMISSIVE_REVIEW)
 class DashboardTemplateDismissalTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="tester", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.login(username="tester", password="pw-not-real-12345")
 
     def test_dismiss_button_present_on_candidates_check_by_hand_and_leads(self):

@@ -17,7 +17,7 @@ from albright_control.models import AuditEntry
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import apps_registry
-from .testing import current_tiles, launcher_tiles
+from .testing import current_tiles, launcher_tiles, with_apps
 from .models import UserPreference
 from .tests import OUTLOOK, resume_site
 
@@ -34,7 +34,7 @@ class Base(TestCase):
         self.outlook = mock.patch(OUTLOOK, return_value=None)
         self.outlook.start()
         self.addCleanup(self.outlook.stop)
-        self.user = User.objects.create_user(username="pat", password=PASSWORD)
+        self.user = with_apps(User.objects.create_user(username="pat", password=PASSWORD))
         self.client.force_login(self.user)
 
     def set_pref(self, **fields):
@@ -66,6 +66,7 @@ class RegistryTests(Base):
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
+        self.set_pref(allowed_apps=apps_registry.grantable_keys())      # granted, as Admin > Users would
 
     def test_header_tiles_and_landing_options_come_from_the_registry(self):
         hub = self.page(reverse("labs:hub"))
@@ -136,7 +137,7 @@ class AccessTests(Base):
                     reverse("user_logout")):
             with self.subTest(url=url):
                 self.assertNotEqual(self.client.get(url).status_code, 404)
-        full = User.objects.create_user(username="full", password=PASSWORD)
+        full = with_apps(User.objects.create_user(username="full", password=PASSWORD))
         docs = reverse("bot_api_v1:docs")
         restricted_status = self.client.get(docs).status_code
         self.client.force_login(full)
@@ -155,7 +156,8 @@ class AccessTests(Base):
         self.set_pref(allowed_apps=[])
         hub = self.page(reverse("labs:hub"))
         self.assertNotIn('id="app-launcher"', hub)
-        self.assertIn("You don't have access to any apps yet", hub)
+        self.assertIn('id="access-pending"', hub)
+        self.assertIn("Your account is set up. You'll see apps here once access is granted.", hub)
         self.assertEqual(self.client.get(reverse("albright_reselling_app:dashboard")).status_code, 404)
 
 
@@ -369,7 +371,8 @@ class AdminUsersTests(Base):
 class ExistingUsersTests(Base):
     def test_existing_users_see_what_they_saw(self):
         """A preference saved before Meals existed: the same three apps, in the old order - Meals isn't
-        granted by itself. A user with no row gets every grantable app."""
+        granted by itself. A new user with no row gets no apps (access pending)."""
+        UserPreference.objects.filter(user=self.user).delete()
         UserPreference.objects.create(user=self.user, allowed_apps=["trade", "resell", "opps"],
                                       visible_apps=["trade", "resell", "opps", "admin"],
                                       app_order=["trade", "resell", "opps", "admin"])
@@ -378,13 +381,15 @@ class ExistingUsersTests(Base):
         self.assertEqual(self.client.get(reverse("albright_meals:week")).status_code, 404)
         fresh = User.objects.create_user(username="fresh", password=PASSWORD)
         self.client.force_login(fresh)
-        self.assertEqual([label for _, label in buttons(self.page(reverse("labs:hub")))],
-                         ["Home", "Trade", "Resell", "Opps", "Meals"])
+        hub = self.page(reverse("labs:hub"))
+        self.assertIn('id="access-pending"', hub)
+        self.assertEqual([label for _, label in buttons(hub)], [])
 
     def test_a_new_app_shows_for_someone_who_arranged_their_nav_before_it_existed(self):
         """Granting it (or being a superuser) is enough - it isn't hidden just because their saved order predates it."""
         self.user.is_superuser = True
         self.user.save()
+        UserPreference.objects.filter(user=self.user).delete()
         UserPreference.objects.create(user=self.user, visible_apps=["trade", "opps", "admin"],
                                       app_order=["opps", "trade", "resell", "admin"])
         labels = [label for _, label in buttons(self.page(reverse("labs:hub")))]

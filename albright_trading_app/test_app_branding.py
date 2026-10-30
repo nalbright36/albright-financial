@@ -11,7 +11,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import resolve, reverse
 
 from albright_trading_app.context_processors import current_app
-from albright_labs.testing import current_tiles, launcher_panel, launcher_tiles
+from albright_labs.testing import current_tiles, launcher_panel, launcher_tiles, with_apps
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 STYLE = Path(__file__).resolve().parent / "static" / "style.css"
@@ -36,7 +36,7 @@ class ContextProcessorTests(TestCase):
             reverse("albright_crypto_app:pipeline"): "opportunities",
             reverse("albright_crypto_app:profile"): "opportunities",
             reverse("user_login"): "trading",          # outside the three apps -> trading
-            reverse("registration"): "trading",
+            reverse("password_reset"): "trading",
         }
         for url, app in cases.items():
             with self.subTest(url=url):
@@ -66,7 +66,7 @@ class HeaderTests(TestCase):
     }
 
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="brand", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="brand", password="pw-not-real-12345")))
 
     def page(self, name):
         return self.client.get(reverse(name)).content.decode()

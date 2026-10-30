@@ -19,7 +19,7 @@ from albright_resume.models import Project, ResumeSettings
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import tiles
-from .testing import current_tiles, launcher_links, launcher_tiles
+from .testing import current_tiles, launcher_links, launcher_tiles, with_apps
 from .checks import static_files_collected
 from .models import LandingSettings, UserPreference
 
@@ -99,7 +99,7 @@ class PublicLandingTests(TestCase):
 
 class HomeTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="nate", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="nate", password="pw-not-real-12345"))
         self.client.force_login(self.user)
 
     def test_signed_in_root_shows_home_tiles(self):
@@ -165,7 +165,7 @@ class HomeTests(TestCase):
 
 class LandingPreferenceTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="nate", password="pw-not-real-12345")
+        self.user = with_apps(User.objects.create_user(username="nate", password="pw-not-real-12345"))
 
     def prefer(self, landing, page=""):
         UserPreference.objects.update_or_create(user=self.user, defaults={"landing": landing, "landing_page": page})
@@ -236,7 +236,7 @@ class LandingPreferenceTests(TestCase):
 
 class HeaderTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="nate", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="nate", password="pw-not-real-12345")))
 
     def content(self, url):
         with mock.patch(OUTLOOK, return_value=None):

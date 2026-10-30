@@ -20,6 +20,7 @@ from albright_crypto_app.models import AIExtraction, GmailConnection, Opportunit
 from albright_crypto_app.pipeline import scan_sources
 from albright_crypto_app.tests.test_collectors import GET, NO_SLEEP, _resp
 from albright_crypto_app.tests.test_extraction import fake_client
+from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com"], "budget_usd": 0}
 GMAIL_GET = "albright_crypto_app.gmail.requests.get"
@@ -196,7 +197,7 @@ class EmailAlertTests(TestCase):
 @override_settings(CRYPTO=CFG, **GOOGLE)
 class GmailOAuthTests(TestCase):
     def setUp(self):
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def test_connect_requests_gmail_readonly_scope_only(self):
         response = self.client.post(reverse("albright_crypto_app:gmail_connect"))
@@ -389,7 +390,7 @@ class NewJobBoardTests(TestCase):
     def setUp(self):
         NO_SLEEP.start()
         self.addCleanup(NO_SLEEP.stop)
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
 
     def scan(self, kind, payload, **options):
         from albright_crypto_app.collectors.job_boards import endpoint_url

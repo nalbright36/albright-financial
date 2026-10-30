@@ -1,0 +1,31 @@
+{% extends "index.html" %}
+{% block page_title %}Create your account · {% endblock %}
+{% block content %}
+<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
+    <div class="card">
+        <div class="card__header"><span class="card__label">Create your account</span></div>
+        {% if signed_in %}
+        <p style="margin: 0;" id="signup-signed-in">You're signed in as <strong>{{ user.get_username }}</strong>. <a href="{% url 'user_logout' %}">Log out</a>, then open the invite link again to make a new account.</p>
+        {% else %}
+        <p style="margin: 0 0 12px; font-size: 0.875rem; color: var(--text-secondary);">{% if invite.name %}Welcome, {{ invite.name }}. {% endif %}Choose a username and password. The invite works once and expires {{ invite.expires_at|date:"M j, g:i A" }}.</p>
+        <form method="post" id="signup-form" novalidate>{% csrf_token %}
+            {% if form.non_field_errors %}<p class="field-error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+            <div class="field">
+                <label for="signup-email">Email</label>
+                <input type="email" id="signup-email" class="ledger-input" value="{{ invite.email }}" readonly disabled aria-describedby="signup-email-help">
+                <small style="color: var(--text-secondary);" id="signup-email-help">From your invite - it can't be changed.</small>
+            </div>
+            {% for field in form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<small style="color: var(--text-secondary);" class="signup-help">{{ field.help_text|safe }}</small>{% endif %}
+                {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;">Create account</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

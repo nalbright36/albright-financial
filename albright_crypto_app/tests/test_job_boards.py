@@ -22,6 +22,7 @@ from albright_crypto_app.models import Opportunity, Source
 from albright_crypto_app.pipeline import extract_and_score, scan_sources
 from albright_crypto_app.tests.test_collectors import GET, NO_SLEEP, _resp
 from albright_crypto_app.tests.test_extraction import fake_client
+from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com"], "budget_usd": 0}
 TELEGRAM = "albright_crypto_app.alerts.send_telegram"
@@ -174,7 +175,7 @@ class AttributionAndKeepInAppTests(TestCase):
     def setUp(self):
         NO_SLEEP.start()
         self.addCleanup(NO_SLEEP.stop)
-        self.client.force_login(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         source("remotive")
         source("remoteok")
         responses = lambda url, **kw: _resp(json_data=REMOTEOK if "remoteok" in url else REMOTIVE)  # noqa: E731

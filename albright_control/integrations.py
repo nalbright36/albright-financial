@@ -1,8 +1,9 @@
 """Integration status for the Admin area: Configured / Missing / Failing.
 Only ever reports WHETHER a key or token is set - never its value, not
 even a prefix. Test buttons exist only where a test is cheap and safe
-(Telegram test message, Gmail profile check); there's deliberately no spot
-price test, since goldapi's monthly quota is tiny."""
+(Telegram test message, Gmail profile check, a test email to yourself);
+there's deliberately no spot price test, since goldapi's monthly quota is
+tiny. Each test takes the superuser who pressed it."""
 import os
 from datetime import timedelta
 
@@ -57,6 +58,10 @@ def integration_rows():
          "configured": _env("GITHUB_TOKEN"), "setting": "GITHUB_TOKEN"},
         {"key": "ebay", "name": "eBay", "used_for": "Reseller sold-price lookups",
          "configured": _env("EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET"), "setting": "EBAY_CLIENT_ID, EBAY_CLIENT_SECRET"},
+        {"key": "email", "name": "Email", "used_for": "Invites and password setup/reset links (Gmail SMTP)",
+         "configured": settings.EMAIL_CONFIGURED, "test": True,
+         "setting": "EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL",
+         "note": "" if settings.EMAIL_CONFIGURED else "Without it, invite and password links are shown in Admin to send yourself."},
     ]
     for row in rows:
         check = _latest_check(row["key"])
@@ -68,13 +73,13 @@ def integration_rows():
     return rows
 
 
-def test_telegram():
+def test_telegram(user=None):
     from albright_reselling_app.scanner.alerts import send_telegram
     ok = send_telegram("<b>Albright Admin</b>\nTest message from the Integrations page.")
     return ok, "Test message sent." if ok else "Telegram didn't accept the message (token, chat ID or network)."
 
 
-def test_gmail():
+def test_gmail(user=None):
     from albright_crypto_app.gmail import GmailError, GmailReader
     from albright_crypto_app.models import GmailConnection
     connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
@@ -89,4 +94,11 @@ def test_gmail():
     return True, "Gmail answered (read-only profile check)."
 
 
-TESTS = {"telegram": test_telegram, "gmail": test_gmail}
+def test_email(user=None):
+    from albright_labs import emails
+    if not (user and user.email):
+        return False, "Your account has no email address to send the test to."
+    return emails.send("test", user.email, {})
+
+
+TESTS = {"telegram": test_telegram, "gmail": test_gmail, "email": test_email}
