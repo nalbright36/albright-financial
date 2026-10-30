@@ -13,6 +13,7 @@ from django.utils import timezone
 from albright_bot_api.models import SiteSuggestion
 
 from . import ideas, prompts
+from .templatetags.review_list_tags import rich_text
 from .models import Idea
 
 STATUSES = Idea.STATUSES                     # SiteSuggestion.STATUSES is the same list (tests check)
@@ -36,6 +37,9 @@ SHORTCUTS = [
 ROW_STATUSES = [(key, label) for key, label in STATUSES if key != "new"]
 SOURCES = {"grok": "Grok", "manual": "Manual", "moved_from_suggestion": "Grok"}
 PRIORITY_RANK = {"low": 0, "medium": 1, "high": 2, "urgent": 3}
+PRIORITY_BADGE = {"urgent": "b-red", "high": "b-hi", "medium": "b-med"}     # inbox.css badge colors; low is plain
+# The inbox's key hints on the status buttons (review_list.js handles them for the selected item).
+STATUS_KEYS = {"considering": "C", "planned": "P", "in_progress": "I", "declined": "X"}
 RANK = {"impact": {"low": 0, "medium": 1, "high": 2}, "effort": {"small": 0, "medium": 1, "large": 2}}
 
 
@@ -131,8 +135,10 @@ class Kind:
         return {
             "id": obj.pk, "title": obj.title, "status": obj.status, "status_label": obj.get_status_display(),
             "app": obj.get_app_display(), "priority": obj.priority, "priority_label": obj.get_priority_display(),
+            "priority_class": PRIORITY_BADGE.get(obj.priority, ""),
             "created": ago(obj.created_at, now), "created_full": _full_date(obj.created_at),
-            "description": obj.description, "notes": obj.my_notes, "urls": self.urls(obj),
+            "description": obj.description, "description_html": rich_text(obj.description), "notes": obj.my_notes,
+            "urls": self.urls(obj),
         }
 
 

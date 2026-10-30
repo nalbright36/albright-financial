@@ -73,7 +73,8 @@ class TabsTests(ReviewListTestCase):
                 response = self.page(kind)                   # ...then open the page plainly
                 self.assertEqual(response.context["status"], "new")
                 self.assertEqual(sorted(r["status"] for r in response.context["rows"]), ["new"] * 3)
-                self.assertContains(response, 'class="scanner-tab is-active" data-tab="new" aria-current="page"')
+                self.assertContains(response, 'class="ib-tab is-on" data-tab="new" aria-current="page"')
+                self.assertEqual(response.content.decode().count("ib-tab is-on"), 1)
 
     def test_status_param_picks_the_tab(self):
         prefix = {"ideas": "Idea", "suggestions": "Suggestion"}
@@ -93,8 +94,8 @@ class TabsTests(ReviewListTestCase):
                 self.assertEqual(counts, {"new": 3, "considering": 1, "planned": 1, "in_progress": 0, "done": 1,
                                           "declined": 0, "all": 6})
                 self.assertEqual([tab["key"] for tab in response.context["tabs"]], [k for k, _l in TABS])
-                self.assertContains(response, '<span class="tab-badge" data-count="new">3</span>')
-                self.assertContains(response, '<span class="tab-badge" data-count="all">6</span>')
+                self.assertContains(response, '<span class="ib-count" data-count="new">3</span>')
+                self.assertContains(response, '<span class="ib-count" data-count="all">6</span>')
 
     def test_tabs_keep_the_filters(self):
         response = self.page("ideas", q="Plan", app="all")
@@ -104,69 +105,78 @@ class TabsTests(ReviewListTestCase):
         self.assertEqual(self.titles("ideas", status="planned", q="plan"), ["Idea A plan"])
         self.assertEqual(self.titles("ideas", q="plan"), [])                     # filters apply within the tab
 
+    def detail(self, content, pk):
+        return content.split(f'<section class="ib-detail" id="rl-detail-{pk}"', 1)[1].split("</section>", 1)[0]
+
+    def item(self, content, pk):
+        return content.split(f'aria-controls="rl-detail-{pk}"', 1)[1].split("</button>", 1)[0]
+
     def test_rows_show_the_summary_and_the_details(self):
         idea = self.items["ideas"]["Newest new"]
         Idea.objects.filter(pk=idea.pk).update(impact="high", effort="small", priority="urgent", source="grok",
                                                links=["https://example.com/spec"], my_notes="My take",
-                                               tags=["ui"], description="Intro\n- first\n- second <b>")
-        response = self.page("ideas")
-        content = response.content.decode()
-        row = content.split(f'id="idea-{idea.pk}"', 1)[1].split("</article>", 1)[0]
-        self.assertIn('<span class="rl-row__title">Idea Newest new</span>', row)
-        self.assertIn('<span class="rl-row__time" title="', row)
-        self.assertIn("8h ago", row)
-        badges = row.split('<span class="rl-row__badges">', 1)[1].split('<span class="rl-row__preview">', 1)[0]
-        for badge in ("Whole site", "urgent priority", "high impact", "small effort", "Grok", "#ui"):
-            self.assertIn(f">{badge}</span>", badges)
-        self.assertIn('<span class="rl-row__preview">Intro\n- first\n- second &lt;b&gt;</span>', row)
-        # Expanded: the description's "- " lines as a real list (escaped), the original message, links, notes.
-        self.assertIn('<div class="rl-row__text"><p>Intro</p><ul><li>first</li><li>second &lt;b&gt;</li></ul></div>', row)
-        self.assertIn('<pre class="crypto-source-text">m</pre>', row)
-        self.assertIn("https://example.com/spec", row)
-        self.assertIn(">My take</textarea>", row)
-        for action in ("Copy as Claude Code prompt", "Merge duplicates", ">Delete</button>"):
-            self.assertIn(action, row)
+                                               tags=["ui"], description="Intro\n- first\n- second <b>\n(1) one\n(2) two")
+        content = self.page("ideas").content.decode()
+        item = self.item(content, idea.pk)
+        self.assertIn('<span class="ib-title">Idea Newest new</span>', item)
+        self.assertIn('<span class="ib-badge b-red">Urgent</span><span class="ib-time">8h ago</span>', item)
+        detail = self.detail(content, idea.pk)
+        self.assertIn("<h3>Idea Newest new</h3>", detail)
+        for badge in ('b-app">Whole site', 'b-red">Urgent priority', '">High impact', '">Small effort', '">Grok', '">#ui'):
+            self.assertIn(badge + "</span>", detail)
+        # Line breaks, "- " lines and "(1)" numbering as real lists - escaped.
+        self.assertIn('<div class="ib-text"><p>Intro</p><ul><li>first</li><li>second &lt;b&gt;</li></ul>'
+                      '<ol><li>one</li><li>two</li></ol></div>', detail)
+        self.assertIn('<pre class="ib-pre">m</pre>', detail)
+        self.assertIn("https://example.com/spec", detail)
+        self.assertIn(">My take</textarea>", detail)
+        for action in ("Copy as Claude Code prompt", "Merge duplicates", ">Delete</button>", ">Edit</a>"):
+            self.assertIn(action, detail)
 
         suggestion = self.items["suggestions"]["Newest new"]
-        row = self.page("suggestions").content.decode().split(f'id="suggestion-{suggestion.pk}"', 1)[1].split("</article>", 1)[0]
-        self.assertIn("Move to Ideas", row)
-        self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), row)
-        self.assertNotIn("Merge duplicates", row)
+        detail = self.detail(self.page("suggestions").content.decode(), suggestion.pk)
+        self.assertIn("Move to Ideas", detail)
+        self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), detail)
+        self.assertNotIn("Merge duplicates", detail)
 
-    def test_row_structure_on_both_pages(self):
-        """Card row: one reset <button> holding title + time, the badges and the preview; then the status buttons."""
+    def test_inbox_structure_on_both_pages(self):
+        """Option C: tabs, filters, then the split - items on the left, one detail per item on the right,
+        the first selected and shown, the rest hidden until picked."""
         for kind in PAGES:
             with self.subTest(kind=kind):
-                obj = self.items[kind]["Middle new"]
-                content = self.page(kind).content.decode()
-                row = content.split(f'data-id="{obj.pk}"', 1)[1].split("</article>", 1)[0]
-                toggle = row.split('<button type="button" class="rl-row__toggle"', 1)[1].split("</button>", 1)[0]
-                self.assertIn(f'aria-controls="rl-body-{obj.pk}"', toggle)
-                self.assertLess(toggle.index('class="rl-row__line"'), toggle.index('class="rl-row__badges"'))
-                self.assertLess(toggle.index('class="rl-row__badges"'), toggle.index('class="rl-row__preview"'))
-                self.assertIn(f'<span class="rl-row__title">{obj.title}</span>', toggle)
-                self.assertIn(f'<div class="rl-row__body" id="rl-body-{obj.pk}" hidden>', row)
-                self.assertIn('class="card rl-row"', content)
-                self.assertIn('class="scanner-controls rl-filters"', content)
-                self.assertIn('id="rl-filters-submit"', content)          # no-JS fallback (hidden by the JS)
+                response = self.page(kind)
+                content, rows = response.content.decode(), response.context["rows"]
+                self.assertIn('class="container ib"', content)
+                order = [content.index(marker) for marker in
+                         ('class="ib-tabs"', 'class="ib-filters"', 'class="ib-split"', 'class="ib-side"', 'class="ib-details"')]
+                self.assertEqual(order, sorted(order))
+                self.assertEqual(content.count('<button type="button" class="ib-item rl-row'), 3)
+                first, second = rows[0], rows[1]
+                self.assertIn(f'class="ib-item rl-row sel" id="{response.context["kind"].noun}-{first["id"]}"', content)
+                self.assertIn(f'id="rl-detail-{first["id"]}" data-id="{first["id"]}" aria-label="{first["title"]}">', content)
+                self.assertIn(f'id="rl-detail-{second["id"]}" data-id="{second["id"]}" aria-label="{second["title"]}" hidden>', content)
+                self.assertIn('class="ib-input"', content)
+                self.assertEqual(content.count('class="ib-select"'), len(response.context["filters"]) + 1)
+                self.assertIn('class="ib-sbtn ib-nojs" id="rl-filters-submit"', content)   # no-JS fallback
+                self.assertIn("albright_control/inbox.css", content)
 
     def test_status_buttons_exclude_the_current_status_and_no_menu(self):
+        keys = {"Considering": "C", "Planned": "P", "In progress": "I", "Declined": "X"}
         for kind in PAGES:
             for name, status in (("Middle new", "new"), ("A plan", "planned"), ("Shipped", "done")):
                 with self.subTest(kind=kind, status=status):
                     obj = self.items[kind][name]
                     content = self.page(kind, status=status).content.decode()
-                    row = content.split(f'data-id="{obj.pk}"', 1)[1].split("</article>", 1)[0]
-                    form = row.split("data-status-form", 1)[1].split("</form>", 1)[0]
-                    shown = [label for _value, label in
-                             re.findall(r'value="(\w+)" class="btn btn-secondary btn-sm[^"]*">([^<]+)</button>', form)]
+                    form = self.detail(content, obj.pk).split("data-status-form", 1)[1].split("</form>", 1)[0]
+                    shown = re.findall(r'value="\w+" class="ib-sbtn[^"]*">([^<]+)(?:<span class="ib-kbd">(\w)</span>)?</button>', form)
                     expected = [label for key, label in STATUSES if key not in ("new", status)]
-                    self.assertEqual(shown, expected)
+                    self.assertEqual([label for label, _key in shown], expected)
+                    self.assertEqual({label: key for label, key in shown if key}, {k: v for k, v in keys.items() if k in expected})
                     self.assertNotIn('value="new"', form)
-                    self.assertIn('rl-status--declined', form)
-                    self.assertNotIn("rl-more", content)
+                    self.assertIn('class="ib-sbtn decline"', form)
                     self.assertNotIn("&middot;&middot;&middot;", content)
-                    self.assertNotIn("<details class=\"rl-more", content)
+                    self.assertNotIn("rl-more", content)
+                    self.assertNotIn("…</summary>", content)
 
     def test_empty_new_tab(self):
         Idea.objects.filter(status="new").update(status="planned")

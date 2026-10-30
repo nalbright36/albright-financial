@@ -16,7 +16,8 @@ from django.views.decorators.http import require_POST
 from albright_bot_api.models import SiteSuggestion
 
 from .access import audit, superuser_required
-from .review_list import DEFAULT_TAB, KINDS, LIST_LIMIT, ROW_STATUSES, SHORTCUTS, STATUSES, TABS, new_counts
+from .review_list import (DEFAULT_TAB, KINDS, LIST_LIMIT, ROW_STATUSES, SHORTCUTS, STATUS_KEYS, STATUSES, TABS,
+                          new_counts)
 
 STATUS_LABELS = dict(STATUSES)
 TEXT_LIMIT = 5000
@@ -65,7 +66,7 @@ def list_page(request, kind):
                      "choices": [(t, t) for t in k.tags()] if name == "tag" else choices}
                     for name, label, choices in k.filters],
         "values": values, "filtered": any(values[name] for name in values if name != "sort"),
-        "row_statuses": ROW_STATUSES, "shortcuts": SHORTCUTS, "queue": queue,
+        "row_statuses": [(key, label, STATUS_KEYS.get(key, "")) for key, label in ROW_STATUSES], "shortcuts": SHORTCUTS, "queue": queue,
         "merge_targets": (k.model.objects.exclude(status__in=("done", "declined")).only("pk", "title")[:LIST_LIMIT]
                           if kind == "ideas" else []),
         "next": request.get_full_path(),

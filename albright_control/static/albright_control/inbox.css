@@ -1,0 +1,179 @@
+/*
+ * Admin > Ideas and Admin > Bot suggestions: the inbox (list + detail) -
+ * Option C of docs/design/ideas_layout_options.html, with the mockup's
+ * colors mapped onto the site's theme variables (so light and dark both
+ * follow the site toggle). Markup: albright_control/review_list.html;
+ * behavior: static/js/review_list.js. Loaded by templates/index.html on
+ * Admin pages only.
+ *
+ * Every <button>, <input>, <select> and <textarea> inside .ib is reset here -
+ * nothing falls back to browser-default styling. The resets are wrapped in
+ * :where() (no specificity), so the site's .btn and this file's classes
+ * always win over them.
+ */
+.ib {
+  /* The mockup's tokens -> the site's. */
+  --ib-card: var(--glass-bg-solid, var(--surface));
+  --ib-line: var(--border);
+  --ib-ink: var(--text-primary);
+  --ib-muted: var(--text-secondary);
+  --ib-hover: var(--surface-hover);
+  --ib-accent: var(--accent);
+  --ib-accent-soft: var(--accent-soft);
+  --ib-hi: var(--warn);
+  --ib-hi-soft: var(--warn-bg);
+  --ib-med: var(--text-primary);
+  --ib-med-soft: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  --ib-low: var(--text-secondary);
+  --ib-low-soft: color-mix(in srgb, var(--text-tertiary) 14%, transparent);
+  --ib-red: var(--red);
+  --ib-red-soft: var(--red-bg);
+  color: var(--ib-ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.ib *, .ib *::before, .ib *::after { box-sizing: border-box; }
+
+/* ---------- Resets: no browser-default controls ---------- */
+:where(.ib) :where(button, input, select, textarea) {
+  -webkit-appearance: none; appearance: none; margin: 0; padding: 0; font: inherit; color: inherit;
+  background: none; border: 0; border-radius: 0; box-shadow: none; text-align: inherit;
+}
+:where(.ib) :where(button) { cursor: pointer; }
+.ib input[type="search"]::-webkit-search-decoration,
+.ib input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+.ib [hidden] { display: none !important; }
+
+/* ---------- Tabs ---------- */
+.ib-tabs {
+  display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px;
+  border-bottom: 1px solid var(--ib-line); font-size: 14px; color: var(--ib-muted);
+}
+.ib-tab { padding: 0 2px 10px; color: inherit; text-decoration: none; border-bottom: 2px solid transparent; }
+.ib-tab:hover { color: var(--ib-ink); }
+.ib-tab.is-on { color: var(--ib-ink); border-bottom-color: var(--ib-accent); }
+.ib-count { font-size: 12px; background: var(--ib-accent-soft); border-radius: 999px; padding: 1px 7px; margin-left: 5px; }
+
+/* ---------- Filters ---------- */
+.ib-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.ib .ib-input, .ib .ib-select {
+  font-size: 14px; color: var(--ib-ink); background: var(--ib-card);
+  border: 1px solid var(--ib-line); border-radius: 9px; padding: 8px 11px; min-height: 38px;
+}
+.ib .ib-input { flex: 1 1 220px; min-width: 0; }
+.ib .ib-input::placeholder { color: var(--ib-muted); opacity: 1; }
+.ib .ib-select { flex: 0 0 150px; min-width: 0; padding-right: 30px; cursor: pointer; }
+.ib .ib-select {
+  /* The arrow, drawn in the theme's muted color. */
+  background-image: linear-gradient(45deg, transparent 50%, var(--ib-muted) 50%),
+                    linear-gradient(135deg, var(--ib-muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.ib-select option { background: var(--surface); color: var(--text-primary); }
+.ib .ib-input:focus, .ib .ib-select:focus, .ib .ib-textarea:focus {
+  outline: none; border-color: var(--ib-accent); box-shadow: 0 0 0 3px var(--accent-ring);
+}
+html.js .ib-nojs { display: none; }     /* the Filter button: filters apply on change with JS */
+
+/* ---------- Badges, meta, time ---------- */
+.ib-badge {
+  display: inline-flex; align-items: center; font-size: 12px; font-weight: 500; border-radius: 999px;
+  padding: 2px 9px; background: var(--ib-low-soft); color: var(--ib-low); white-space: nowrap;
+}
+.ib-badge.b-hi { background: var(--ib-hi-soft); color: var(--ib-hi); }
+.ib-badge.b-med { background: var(--ib-med-soft); color: var(--ib-med); }
+.ib-badge.b-app { background: var(--ib-accent-soft); color: var(--ib-ink); }
+.ib-badge.b-red { background: var(--ib-red-soft); color: var(--ib-red); }
+.ib-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ib-time { font-size: 12px; color: var(--ib-muted); white-space: nowrap; }
+.ib-title { display: block; font-weight: 600; font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+
+/* ---------- Buttons ---------- */
+.ib .ib-sbtn {
+  display: inline-flex; align-items: center; font-size: 13px; color: var(--ib-ink); background: transparent;
+  border: 1px solid var(--ib-line); border-radius: 8px; padding: 5px 10px; white-space: nowrap; text-decoration: none;
+}
+.ib .ib-sbtn:hover { background: var(--ib-hover); }
+.ib .ib-sbtn.decline { color: var(--ib-red); border-color: color-mix(in srgb, var(--ib-red) 35%, var(--ib-line)); }
+.ib .ib-sbtn.primary { background: var(--ib-accent-soft); }
+.ib-sbtn:focus-visible, .ib-item:focus-visible, .ib-tab:focus-visible { outline: 2px solid var(--ib-accent); outline-offset: 2px; }
+.ib-kbd {
+  font-size: 11px; border: 1px solid var(--ib-line); border-radius: 5px; padding: 0 5px;
+  color: var(--ib-muted); margin-left: 4px; font-family: inherit;
+}
+.ib-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 0; }
+
+/* ---------- Split view ---------- */
+.ib-split { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; min-height: 420px; align-items: start; }
+.ib-side {
+  background: var(--ib-card); border: 1px solid var(--ib-line); border-radius: 12px; overflow: hidden;
+  /* A real inbox can hold hundreds - the list scrolls on its own, beside the detail. */
+  max-height: calc(100vh - 120px); overflow-y: auto; position: sticky; top: 16px;
+}
+.ib .ib-item {
+  display: block; width: 100%; padding: 12px 14px; border-bottom: 1px solid var(--ib-line); text-align: left;
+}
+.ib .ib-item:last-child { border-bottom: 0; }
+.ib .ib-item:hover { background: var(--ib-hover); }
+.ib .ib-item.sel { background: var(--ib-accent-soft); box-shadow: inset 3px 0 0 var(--ib-accent); }
+.ib-item .ib-title { font-size: 14px; }
+.ib-item .ib-meta { margin-top: 4px; }
+
+.ib-detail {
+  background: var(--ib-card); border: 1px solid var(--ib-line); border-radius: 12px; padding: 20px;
+  display: flex; flex-direction: column; gap: 14px; min-height: 420px; min-width: 0;
+}
+.ib-detail h3 { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.ib-detail .ib-meta.ib-head-meta { margin-top: 8px; }
+.ib-text { font-size: 14px; overflow-wrap: anywhere; }
+.ib-text p { margin: 0 0 8px; color: var(--ib-ink); }      /* the site's p is muted - the mockup's body text isn't */
+.ib-text p:last-child { margin-bottom: 0; }
+.ib-detail ul, .ib-detail ol { margin: 0 0 8px; padding-left: 20px; color: var(--ib-ink); font-size: 14px; }
+.ib-detail li { margin: 4px 0; }
+.ib-label { font-size: 12px; font-weight: 600; color: var(--ib-muted); margin-bottom: 4px; }
+.ib-pre {
+  margin: 0; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px;
+  font-family: var(--font-mono, ui-monospace, monospace); color: var(--ib-ink);
+  background: var(--ib-hover); border: 1px solid var(--ib-line); border-radius: 9px; max-height: 320px; overflow-y: auto;
+}
+.ib-links { margin: 0; }
+.ib-links a { color: var(--ib-accent); overflow-wrap: anywhere; }
+.ib .ib-textarea {
+  display: block; width: 100%; min-height: 76px; resize: vertical; font-size: 14px; color: var(--ib-ink);
+  background: var(--ib-card); border: 1px solid var(--ib-line); border-radius: 9px; padding: 8px 11px;
+}
+.ib-notes { margin: 0; }
+.ib-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ib-row form { display: flex; gap: 6px; margin: 0; }
+.ib-notes .ib-row { margin-top: 6px; }
+.ib-saved { font-size: 12px; color: var(--ib-muted); }
+.ib .ib-merge-input { width: 96px; min-height: 0; padding: 4px 9px; font-size: 13px; border-radius: 8px; }
+.ib-detail .ib-bar {
+  margin-top: auto; padding-top: 14px; border-top: 1px solid var(--ib-line);
+  display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center;
+}
+
+/* ---------- Empty state, count ---------- */
+.ib-empty { background: var(--ib-card); border: 1px solid var(--ib-line); border-radius: 12px; padding: 20px; }
+.ib-empty h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+.ib-empty p { margin: 0; color: var(--ib-muted); font-size: 14px; }
+.ib-empty a, .ib-count-line a { color: var(--ib-accent); }
+.ib-count-line { margin: 10px 0 0; font-size: 12px; color: var(--ib-muted); }
+
+/* ---------- Undo toast (inside the site's toast container) ---------- */
+.ib-toast { align-items: center; }
+.ib-toast__undo {
+  -webkit-appearance: none; appearance: none; padding: 0; background: none; border: 0;
+  color: var(--accent); font: inherit; font-weight: 600; cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  /* Phones: the detail opens below the list. */
+  .ib-split { grid-template-columns: 1fr; }
+  .ib-side { position: static; max-height: none; }
+  .ib .ib-select { flex: 1 1 140px; }
+  .ib-detail { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .ib * { transition: none !important; } }

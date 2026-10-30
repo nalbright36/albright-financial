@@ -2,10 +2,12 @@
  * Admin > Ideas and Admin > Bot suggestions (albright_control/review_list.html).
  * One script for both pages. Vanilla JS, no libraries.
  *
- * The list: a row expands in place when its title or preview is clicked. Its
- * status buttons save without a reload - the row leaves the current tab at
- * once, the tab counts and the Admin nav's New badges update, and a toast
- * offers "Undo" for a few seconds. Notes save in place too.
+ * The inbox (Option C of docs/design/ideas_layout_options.html): clicking a
+ * title on the left shows its details on the right (below it on a phone).
+ * The detail's status buttons - or C / P / I / X for the selected item - save
+ * without a reload: the item leaves the current tab at once, the next one is
+ * selected, the tab counts and the Admin nav's New badges update, and a
+ * toast offers "Undo" for a few seconds. Notes save in place too.
  *
  * Daily review (the New tab's "Start review"): New items one at a time,
  * oldest first, with the reseller review queue's card, legend and help
@@ -14,7 +16,8 @@
  *   N add a note    Y copy as Claude Code prompt
  *   →/Space skip    ← back      U undo          ? help
  *
- * Without JS the status buttons and note forms post normally and the page reloads.
+ * Without JS the first item's details show, and the status buttons, notes and
+ * filters post or submit normally (the page reloads).
  */
 (function () {
     "use strict";
@@ -27,6 +30,7 @@
     root.querySelectorAll("#rl-tabs [data-tab]").forEach(function (tab) {
         LABELS[tab.dataset.tab] = tab.firstChild.textContent.trim();
     });
+    var KEY_STATUSES = {c: "considering", p: "planned", i: "in_progress", x: "declined"};
 
     function byId(id) { return document.getElementById(id); }
     function csrfToken() {
@@ -44,26 +48,6 @@
             return r.json().catch(function () { return {}; }).then(function (data) { return {ok: r.ok, data: data}; });
         });
     }
-
-    // Plain text as paragraphs, with runs of "- " / "* " lines as a list (templatetags/review_list_tags.rich_text).
-    function richText(target, text) {
-        target.textContent = "";
-        var block = null, kind = null;
-        String(text || "").replace(/\r\n/g, "\n").split("\n").forEach(function (line) {
-            var bullet = line.match(/^\s*[-*]\s+(.*)$/);
-            var lineKind = bullet ? "ul" : line.trim() ? "p" : null;
-            if (!lineKind) { block = kind = null; return; }
-            if (lineKind !== kind) {
-                block = target.appendChild(document.createElement(lineKind));
-                kind = lineKind;
-            } else if (kind === "p") {
-                block.appendChild(document.createElement("br"));
-            }
-            if (bullet) block.appendChild(el("li", "", bullet[1]));
-            else block.appendChild(document.createTextNode(line));
-        });
-    }
-
     function el(tag, className, text) {
         var node = document.createElement(tag);
         if (className) node.className = className;
@@ -78,6 +62,9 @@
             button.textContent = "Copied";
             setTimeout(function () { button.textContent = label; }, 1500);
         });
+    }
+    function isTyping(target) {
+        return target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
     }
 
     // ---------- Counts: the tabs and the Admin nav's New badges ----------
@@ -135,11 +122,11 @@
             container.setAttribute("aria-live", "polite");
             document.body.appendChild(container);
         }
-        var item = el("div", "toast toast--success rl-toast");
+        var item = el("div", "toast toast--success ib-toast");
         item.appendChild(el("span", "", message));
         if (onUndo) {
             item.appendChild(el("span", "", "·"));
-            var undo = el("button", "rl-toast__undo", "Undo");
+            var undo = el("button", "ib-toast__undo", "Undo");
             undo.type = "button";
             undo.addEventListener("click", function () { item.remove(); onUndo(); });
             item.appendChild(undo);
@@ -149,12 +136,39 @@
         return item;
     }
 
-    // ---------- Rows ----------
-    function rowFor(id) { return root.querySelector('.rl-row[data-id="' + id + '"]'); }
-    function visibleRows() { return root.querySelectorAll(".rl-row:not([hidden])").length; }
+    // ---------- The inbox: items on the left, the selected one's detail on the right ----------
+    function rowFor(id) { return root.querySelector('.ib-item[data-id="' + id + '"]'); }
+    function detailFor(id) { return byId("rl-detail-" + id); }
+    function items() { return Array.prototype.slice.call(root.querySelectorAll(".ib-item")); }
+    function visibleItems() { return items().filter(function (item) { return !item.hidden; }); }
+    function selectedItem() { return root.querySelector(".ib-item.sel:not([hidden])"); }
+
+    function select(item, reveal) {
+        items().forEach(function (other) {
+            var on = other === item;
+            other.classList.toggle("sel", on);
+            other.setAttribute("aria-pressed", on ? "true" : "false");
+            var detail = detailFor(other.dataset.id);
+            if (detail) detail.hidden = !on;
+        });
+        // On a phone the detail is below the list - bring it into view when picked.
+        if (item && reveal && window.matchMedia("(max-width: 760px)").matches) {
+            detailFor(item.dataset.id).scrollIntoView({behavior: "smooth", block: "start"});
+        }
+    }
+
+    // The first status button still showing is the suggested one (the mockup's "primary").
+    function markPrimary(detail) {
+        var first = true;
+        detail.querySelectorAll("[data-status-form] button[name=status]").forEach(function (b) {
+            b.classList.toggle("primary", !b.hidden && first);
+            if (!b.hidden) first = false;
+        });
+    }
 
     function refreshEmpty() {
-        var count = visibleRows();
+        var count = visibleItems().length;
+        byId("rl-split").hidden = count === 0;
         byId("rl-empty").hidden = count > 0;
         byId("rl-count").hidden = count === 0;
         var start = byId("rl-start-review");
@@ -166,29 +180,37 @@
         if (total) total.textContent = Math.max(0, (parseInt(total.textContent, 10) || 0) + delta);
     }
 
-    // Shows a row as having this status: on a status tab it leaves (or comes back); on All its badge changes.
+    // Shows an item as having this status: on a status tab it leaves (the next one is selected) or comes
+    // back; on All its status badges change.
     function showRowStatus(id, status) {
-        var row = rowFor(id);
-        if (!row) return;
-        var wasIn = !row.hidden;
-        row.dataset.status = status;
-        row.querySelectorAll("[data-status-form] button[name=status]").forEach(function (b) {
+        var item = rowFor(id), detail = detailFor(id);
+        if (!item) return;
+        var wasIn = !item.hidden;
+        item.dataset.status = status;
+        detail.querySelectorAll("[data-status-form] button[name=status]").forEach(function (b) {
             b.hidden = b.value === status;
         });
-        var badge = row.querySelector("[data-row-status]");
-        if (badge) {
-            badge.textContent = LABELS[status] || status;
-            badge.className = "badge " + (status === "new" ? "warn" : status === "done" ? "gain" : "neutral");
-        }
+        markPrimary(detail);
+        [item, detail].forEach(function (node) {
+            var badge = node.querySelector("[data-row-status]");
+            if (badge) badge.textContent = LABELS[status] || status;
+        });
         if (TAB !== "all") {
-            row.hidden = status !== TAB;
-            if (wasIn !== !row.hidden) adjustTotal(row.hidden ? -1 : 1);
+            var list = visibleItems(), at = list.indexOf(item);
+            item.hidden = status !== TAB;
+            if (wasIn !== !item.hidden) adjustTotal(item.hidden ? -1 : 1);
+            if (item.hidden && item.classList.contains("sel")) {
+                select(list[at + 1] || list[at - 1] || null);
+            } else if (!item.hidden && !selectedItem()) {
+                select(item);
+            }
+            if (item.hidden) detail.hidden = true;
         }
         refreshEmpty();
     }
 
-    // The one place a status changes - quick buttons, review mode and every Undo. Shown at once,
-    // saved in the background, put back if the save fails.
+    // The one place a status changes - the detail's buttons, its keys, review mode and every Undo.
+    // Shown at once, saved in the background, put back if the save fails.
     function changeStatus(id, url, status, previous, isUndo) {
         showRowStatus(id, status);
         return post(url, {status: status, undo: !!isUndo}).then(function (res) {
@@ -203,15 +225,18 @@
         });
     }
 
+    function moveTo(id, status) {
+        var item = rowFor(id);
+        var previous = item.dataset.status, url = item.dataset.statusUrl;
+        if (status === previous) return;
+        changeStatus(id, url, status, previous).then(function (data) {
+            toast("Moved to " + data.label, function () { changeStatus(id, url, previous, status, true).catch(function () {}); });
+        }).catch(function () {});
+    }
+
     root.addEventListener("click", function (event) {
-        var toggle = event.target.closest(".rl-row__toggle");
-        if (toggle) {
-            var body = byId(toggle.getAttribute("aria-controls"));
-            body.hidden = !body.hidden;
-            toggle.setAttribute("aria-expanded", body.hidden ? "false" : "true");
-            toggle.closest(".rl-row").classList.toggle("is-open", !body.hidden);
-            return;
-        }
+        var item = event.target.closest(".ib-item");
+        if (item) { select(item, true); return; }
         var copy = event.target.closest(".js-rl-copy");
         if (copy) {
             var source = byId(copy.dataset.copyTarget);
@@ -224,35 +249,40 @@
         if (!window.fetch) return;
         if (form.matches("[data-status-form]") && event.submitter && event.submitter.name === "status") {
             event.preventDefault();
-            var row = form.closest(".rl-row");
-            var id = row.dataset.id, previous = row.dataset.status, status = event.submitter.value;
-            if (status === previous) return;
-            changeStatus(id, row.dataset.statusUrl, status, previous).then(function (data) {
-                toast("Moved to " + data.label, function () { changeStatus(id, row.dataset.statusUrl, previous, status, true); });
-            }).catch(function () {});
+            moveTo(form.closest(".ib-detail").dataset.id, event.submitter.value);
         } else if (form.matches("[data-notes-form]")) {
             event.preventDefault();
-            var notesRow = form.closest(".rl-row");
-            var value = form.elements.my_notes.value;
-            saveNotes(notesRow.dataset.id, notesRow.dataset.notesUrl, value, form.querySelector("[data-notes-status]"));
+            var id = form.closest(".ib-detail").dataset.id;
+            saveNotes(id, rowFor(id).dataset.notesUrl, form.elements.my_notes.value, form.querySelector("[data-notes-status]"));
         }
     });
 
-    // Filters apply as soon as one changes (search: on Enter or leaving the box); the Filter button
-    // stays in the page only for no-JS use.
+    // C / P / I / X - the key hints on the detail's buttons - for the selected item (not while reviewing,
+    // which has its own keys, or while typing).
+    document.addEventListener("keydown", function (event) {
+        if (reviewing || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;
+        if (byId("rl-list-view").hidden) return;
+        var status = KEY_STATUSES[event.key.length === 1 ? event.key.toLowerCase() : ""];
+        var item = selectedItem();
+        if (!status || !item || item.dataset.status === status) return;
+        event.preventDefault();
+        moveTo(item.dataset.id, status);
+    });
+
+    // Filters apply as soon as one changes (search: on Enter or leaving the box); the Filter button is
+    // only for no-JS use (inbox.css hides it when JS runs).
     var filters = byId("rl-filters");
-    if (filters) {
-        byId("rl-filters-submit").classList.add("visually-hidden");
-        filters.addEventListener("change", function () { filters.submit(); });
-    }
+    if (filters) filters.addEventListener("change", function () { filters.submit(); });
+
+    root.querySelectorAll(".ib-detail").forEach(markPrimary);
 
     function saveNotes(id, url, value, statusEl) {
         if (statusEl) statusEl.textContent = "Saving…";
         return post(url, {my_notes: value}).then(function (res) {
             if (statusEl) statusEl.textContent = res.ok ? "Saved" : (res.data.error || "Couldn't save");
             if (!res.ok) return false;
-            var row = rowFor(id);
-            if (row) row.querySelector("textarea[name=my_notes]").value = value;
+            var detail = detailFor(id);
+            if (detail) detail.querySelector("textarea[name=my_notes]").value = value;
             QUEUE.forEach(function (item) { if (String(item.id) === String(id)) item.notes = value; });
             return true;
         }).catch(function () {
@@ -334,7 +364,8 @@
         }
         setText("rv-meta", "Created " + item.created + " · " + item.created_full +
                 (item.duplicate_of ? " · possible duplicate of #" + item.duplicate_of : ""));
-        richText(byId("rv-desc"), item.description || "(no description)");
+        // description_html is review_list_tags.rich_text's output - escaped on the server.
+        byId("rv-desc").innerHTML = item.description_html || "<p>(no description)</p>";
         byId("rv-original-box").hidden = !item.original_message;
         setText("rv-original", item.original_message);
 
@@ -458,10 +489,6 @@
     };
     var KEYS = {c: "considering", p: "planned", i: "in_progress", x: "declined", n: "note", y: "copy",
                 ArrowRight: "skip", " ": "skip", ArrowLeft: "back", u: "undo", "?": "help"};
-
-    function isTyping(target) {
-        return target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
-    }
 
     document.addEventListener("keydown", function (event) {
         if (!reviewing || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;

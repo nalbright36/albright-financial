@@ -7,6 +7,7 @@
         {# Versioned by each file's last change (cache_bust) - a new deploy is never served an old cached copy. #}
         <link rel="stylesheet" href="{% static_version 'style.css' %}">
         <link rel="stylesheet" href="{% static_version 'labs/launcher.css' %}">
+        {% if in_admin_area %}<link rel="stylesheet" href="{% static_version 'albright_control/inbox.css' %}">{% endif %}
         <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Trading" }}</title>
         <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
         <script>

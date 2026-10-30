@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Albright Admin – Ideas &amp; Suggestions layout options</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f3f4f6; --card:#ffffff; --card2:#f8f9fb; --line:#e2e5ea; --ink:#111827; --muted:#6b7280; --hover:#f1f3f6;
+  --accent:#64748b; --accent-soft:rgba(100,116,139,.14);
+  --hi:#b45309; --hi-soft:#fef3c7; --med:#475569; --med-soft:#e2e8f0; --low:#6b7280; --low-soft:#f3f4f6;
+  --red:#dc2626; --red-soft:#fee2e2; --green:#059669; --green-soft:#d1fae5;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0d10; --card:rgba(18,21,26,.78); --card2:#151920; --line:rgba(255,255,255,.08); --ink:#e6e8eb; --muted:#8b93a1; --hover:rgba(255,255,255,.04);
+    --accent:#94a3b8; --accent-soft:rgba(148,163,184,.14);
+    --hi:#fbbf24; --hi-soft:rgba(251,191,36,.14); --med:#cbd5e1; --med-soft:rgba(203,213,225,.10); --low:#8b93a1; --low-soft:rgba(139,147,161,.10);
+    --red:#f87171; --red-soft:rgba(248,113,113,.12); --green:#34d399; --green-soft:rgba(52,211,153,.12);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0d10; --card:rgba(18,21,26,.78); --card2:#151920; --line:rgba(255,255,255,.08); --ink:#e6e8eb; --muted:#8b93a1; --hover:rgba(255,255,255,.04);
+  --accent:#94a3b8; --accent-soft:rgba(148,163,184,.14);
+  --hi:#fbbf24; --hi-soft:rgba(251,191,36,.14); --med:#cbd5e1; --med-soft:rgba(203,213,225,.10); --low:#8b93a1; --low-soft:rgba(139,147,161,.10);
+  --red:#f87171; --red-soft:rgba(248,113,113,.12); --green:#34d399; --green-soft:rgba(52,211,153,.12);
+  color-scheme:dark;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 20px 80px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+h1{font-size:22px;margin:0;font-weight:600}
+.intro{color:var(--muted);margin:4px 0 26px}
+.toggle{font:inherit;font-size:14px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+.opt{margin-bottom:48px}
+.opt h2{font-size:18px;margin:0 0 4px;font-weight:600}
+.opt > p{margin:0 0 14px;color:var(--muted);font-size:14px}
+.frame{border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--card2)}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin-bottom:14px;font-size:14px;color:var(--muted);flex-wrap:wrap}
+.tabs span{padding:0 2px 10px}
+.tabs .on{color:var(--ink);border-bottom:2px solid var(--accent)}
+.count{font-size:12px;background:var(--accent-soft);border-radius:999px;padding:1px 7px;margin-left:5px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.input,.select{font:inherit;font-size:14px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 11px;min-height:38px}
+.input{flex:1 1 220px}
+.select{flex:0 0 150px}
+.badge{display:inline-flex;align-items:center;font-size:12px;font-weight:500;border-radius:999px;padding:2px 9px;background:var(--low-soft);color:var(--low);white-space:nowrap}
+.b-hi{background:var(--hi-soft);color:var(--hi)} .b-med{background:var(--med-soft);color:var(--med)}
+.b-app{background:var(--accent-soft);color:var(--ink)}
+.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.time{font-size:12px;color:var(--muted);white-space:nowrap}
+.title{font-weight:600;font-size:15px;margin:0}
+.preview{color:var(--muted);font-size:14px;margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.sbtn{font:inherit;font-size:13px;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
+.sbtn:hover{background:var(--hover)}
+.sbtn.decline{color:var(--red);border-color:color-mix(in srgb,var(--red) 35%,var(--line))}
+.sbtn.primary{background:var(--accent-soft)}
+.sbtn:focus-visible,.toggle:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* A: compact list */
+.a .list{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.a .row{padding:14px 16px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;cursor:pointer}
+.a .row:last-child{border-bottom:0}
+.a .row:hover{background:var(--hover)}
+.a .row .actions{grid-column:1/-1;opacity:.0;height:0;overflow:hidden;transition:opacity .15s}
+.a .row:hover .actions,.a .row:focus-within .actions{opacity:1;height:auto;margin-top:6px}
+@media (hover:none){.a .row .actions{opacity:1;height:auto;margin-top:6px}}
+
+/* B: cards */
+.b .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.b .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.b .card .preview{-webkit-line-clamp:3;margin:0}
+.b .foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.b .head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+
+/* C: split view */
+.c .split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:12px;min-height:420px}
+.c .side{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.c .item{padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.c .item:last-child{border-bottom:0}
+.c .item:hover{background:var(--hover)}
+.c .item.sel{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.c .item .title{font-size:14px}
+.c .detail{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.c .detail h3{margin:0;font-size:18px}
+.c .detail ul{margin:0;padding-left:20px;color:var(--ink);font-size:14px}
+.c .detail li{margin:4px 0}
+.c .detail .bar{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.kbd{font-size:11px;border:1px solid var(--line);border-radius:5px;padding:0 5px;color:var(--muted);margin-left:4px}
+@media (max-width:760px){.c .split{grid-template-columns:1fr}.select{flex:1 1 140px}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Ideas &amp; Bot suggestions: layout options</h1>
+    <button class="toggle" id="themeBtn">Switch to light mode</button>
+  </div>
+  <p class="intro">Same content in each, using your real suggestions. Use the button to see each option in light and dark mode.</p>
+
+  <!-- Option A -->
+  <section class="opt a">
+    <h2>Option A: Compact list</h2>
+    <p>One clean row per item: title, badges, and a 2-line preview. Status buttons appear when you hover a row (always shown on phones). Fits the most items on screen.</p>
+    <div class="frame">
+      <div class="tabs"><span class="on">New<span class="count">6</span></span><span>Considering<span class="count">0</span></span><span>Planned<span class="count">6</span></span><span>In progress<span class="count">0</span></span><span>Done<span class="count">0</span></span><span>Declined<span class="count">20</span></span></div>
+      <div class="filters"><input class="input" placeholder="Search suggestions…"><select class="select"><option>All apps</option></select><select class="select"><option>All priorities</option></select><select class="select"><option>Newest first</option></select></div>
+      <div class="list">
+        <div class="row" tabindex="0">
+          <div><p class="title">Smallest paid test of your resume-chatbot service idea</p>
+            <div class="meta" style="margin-top:6px"><span class="badge b-app">Whole site</span><span class="badge b-med">Medium priority</span><span class="badge">Grok</span></div>
+            <p class="preview">Ideas #6 and #7 are still at "new". What shipped this week makes a cheap test possible: invites, sign-up approval, rate limiting and outgoing email, on top of the working /resume/ chatbot with cost tracking…</p></div>
+          <span class="time">2h ago</span>
+          <div class="actions"><button class="sbtn">Considering</button><button class="sbtn">Planned</button><button class="sbtn">In progress</button><button class="sbtn">Done</button><button class="sbtn decline">Declined</button></div>
+        </div>
+        <div class="row" tabindex="0">
+          <div><p class="title">Risk limits per bot strategy: auto-pause and alert</p>
+            <div class="meta" style="margin-top:6px"><span class="badge b-app">Trading</span><span class="badge b-hi">High priority</span><span class="badge">Grok</span></div>
+            <p class="preview">The new strategies feature already works out each strategy's realized P&amp;L, max drawdown and profit factor. Add a loss or drawdown limit per strategy that pauses it and sends an alert…</p></div>
+          <span class="time">2h ago</span>
+          <div class="actions"><button class="sbtn">Considering</button><button class="sbtn">Planned</button><button class="sbtn">In progress</button><button class="sbtn">Done</button><button class="sbtn decline">Declined</button></div>
+        </div>
+        <div class="row" tabindex="0">
+          <div><p class="title">Restaurant, travel and vacation planner</p>
+            <div class="meta" style="margin-top:6px"><span class="badge b-app">Whole site</span><span class="badge b-med">Medium priority</span><span class="badge">Grok</span></div>
+            <p class="preview">A places list with a status (want to try, tried, favorite), a trip planner with itinerary and packing list, and bots adding places from a link…</p></div>
+          <span class="time">11h ago</span>
+          <div class="actions"><button class="sbtn">Considering</button><button class="sbtn">Planned</button><button class="sbtn">In progress</button><button class="sbtn">Done</button><button class="sbtn decline">Declined</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Option B -->
+  <section class="opt b">
+    <h2>Option B: Cards</h2>
+    <p>Each item is a card with its status buttons always visible along the bottom. Easy to scan and very tappable on a phone.</p>
+    <div class="frame">
+      <div class="tabs"><span class="on">New<span class="count">6</span></span><span>Considering<span class="count">0</span></span><span>Planned<span class="count">6</span></span><span>Declined<span class="count">20</span></span></div>
+      <div class="grid">
+        <article class="card">
+          <div class="head"><p class="title">Smallest paid test of your resume-chatbot service idea</p><span class="time">2h ago</span></div>
+          <div class="meta"><span class="badge b-app">Whole site</span><span class="badge b-med">Medium</span><span class="badge">Grok</span></div>
+          <p class="preview">Ideas #6 and #7 are still at "new". What shipped this week makes a cheap test possible: invites, sign-up approval, rate limiting and outgoing email, on top of the working /resume/ chatbot…</p>
+          <div class="foot actions"><button class="sbtn">Considering</button><button class="sbtn">Planned</button><button class="sbtn">In progress</button><button class="sbtn">Done</button><button class="sbtn decline">Declined</button></div>
+        </article>
+        <article class="card">
+          <div class="head"><p class="title">Risk limits per bot strategy: auto-pause and alert</p><span class="time">2h ago</span></div>
+          <div class="meta"><span class="badge b-app">Trading</span><span class="badge b-hi">High</span><span class="badge">Grok</span></div>
+          <p class="preview">The new strategies feature already works out each strategy's realized P&amp;L, max drawdown and profit factor. Add a loss or drawdown limit per strategy that pauses it and sends an alert…</p>
+          <div class="foot actions"><button class="sbtn">Considering</button><button class="sbtn">Planned</button><button class="sbtn">In progress</button><button class="sbtn">Done</button><button class="sbtn decline">Declined</button></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Option C -->
+  <section class="opt c">
+    <h2>Option C: Inbox (list + detail)</h2>
+    <p>Like an email inbox: titles on the left, the selected item's full details on the right with the actions. Best for reading long suggestions; on phones the detail opens below the list.</p>
+    <div class="frame">
+      <div class="tabs"><span class="on">New<span class="count">6</span></span><span>Considering<span class="count">0</span></span><span>Planned<span class="count">6</span></span><span>Declined<span class="count">20</span></span></div>
+      <div class="split">
+        <div class="side">
+          <div class="item sel"><p class="title">Smallest paid test of your resume-chatbot service idea</p><div class="meta" style="margin-top:4px"><span class="badge b-med">Medium</span><span class="time">2h ago</span></div></div>
+          <div class="item"><p class="title">Risk limits per bot strategy: auto-pause and alert</p><div class="meta" style="margin-top:4px"><span class="badge b-hi">High</span><span class="time">2h ago</span></div></div>
+          <div class="item"><p class="title">Restaurant, travel and vacation planner</p><div class="meta" style="margin-top:4px"><span class="badge b-med">Medium</span><span class="time">11h ago</span></div></div>
+        </div>
+        <div class="detail">
+          <div><h3>Smallest paid test of your resume-chatbot service idea</h3>
+            <div class="meta" style="margin-top:8px"><span class="badge b-app">Whole site</span><span class="badge b-med">Medium priority</span><span class="badge">Grok</span><span class="time">2h ago</span></div></div>
+          <p style="margin:0;font-size:14px">Ideas #6 and #7 are still at "new". What shipped this week makes a cheap test possible. Proposed steps:</p>
+          <ul>
+            <li>Add an owner field to the resume settings and content, with your data as the first owner.</li>
+            <li>Add pages at /r/&lt;username&gt;/ for other owners, editable from the app launcher.</li>
+            <li>Give each owner their own monthly AI cost cap, shown in Admin.</li>
+            <li>Charge with a payment link and turn pages off by hand if someone stops paying.</li>
+            <li>Invite 3 to 5 people you know who are job hunting.</li>
+          </ul>
+          <div class="bar">
+            <div class="actions"><button class="sbtn primary">Considering<span class="kbd">C</span></button><button class="sbtn">Planned<span class="kbd">P</span></button><button class="sbtn">In progress<span class="kbd">I</span></button><button class="sbtn">Done</button><button class="sbtn decline">Declined<span class="kbd">X</span></button></div>
+            <button class="sbtn">Copy as Claude Code prompt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+const btn=document.getElementById('themeBtn');
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);btn.textContent=t==='dark'?'Switch to light mode':'Switch to dark mode';}
+btn.addEventListener('click',()=>setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'));
+document.querySelectorAll('.c .item').forEach(it=>it.addEventListener('click',()=>{document.querySelectorAll('.c .item').forEach(x=>x.classList.remove('sel'));it.classList.add('sel');}));
+</script>
+</body>
+</html>
