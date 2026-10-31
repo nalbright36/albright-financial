@@ -72,6 +72,18 @@ def meals(user):
             "size": "text"}
 
 
+def notes(user):
+    """Pinned notes, and the most recently changed note's title (the user's own and ones shared with them)."""
+    from albright_notes.models import Note
+    visible = Note.objects.visible_to(user).filter(archived=False)
+    pinned = visible.filter(pinned=True).count()
+    latest = visible.order_by("-updated_at", "-pk").values_list("title", flat=True).first()
+    if latest and len(latest) > 40:
+        latest = latest[:39].rstrip() + "…"
+    return {"value": latest or "No notes yet", "note": f"{pinned} pinned" + (" · latest" if latest else ""),
+            "size": "text", "tone": "" if latest else "warn"}
+
+
 def admin(user):
     """Scheduled jobs that are late or failing (Admin > System health)."""
     from albright_control import jobs

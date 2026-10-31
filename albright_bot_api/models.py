@@ -27,6 +27,9 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("meals:read", "Read the Meals plan, grocery list, meal ideas and recipes."),
     ("meals:write", "Add and change Meals data: save recipes, set a day's meal (and remove its own), add to or "
                     "update the grocery list, add meal ideas. Shown on the site as \"Recipe Bot\"."),
+    ("notes:read", "List the owner's own notes (titles, tags, dates, ids) - never notes others shared with them."),
+    ("notes:write", "Save notes for the owner (labeled with this bot's name), and add to or change the notes this bot "
+                    "created or that are shared with the owner to edit."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

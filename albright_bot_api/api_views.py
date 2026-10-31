@@ -46,7 +46,8 @@ def _iso(value):
 
 DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions - except in Meals,
 whose meals:write endpoints add to the household's plan, grocery list, ideas and recipes directly (labeled
-"Recipe Bot" on the site).
+"Recipe Bot" on the site), and in Notes, whose notes:write endpoints save the owner's notes (labeled with
+your token's name).
 
 BASE URL: <site>/api/bot/v1/
 AUTH: send "Authorization: Bearer <token>" on every request, over HTTPS.
@@ -210,6 +211,29 @@ POST meals/recipes/import                             scope: meals:write
   Errors ({"error": "..."}): 400 not a public http(s) page; 422 "No recipe found on that page." (or the page is
   over 3 MB); 502 the page couldn't be loaded; 504 it took over 10 seconds; 503 no recipe data and the AI
   reader is unavailable or over its daily limit.
+
+NOTES (the owner's private notes - Markdown; site feature ideas go to POST ideas instead)
+------------------------------------------------------------------------------------------
+Every call is a 403 if the owner can't open Notes. Tags are lowercased, "#" dropped, <=20 of <=50 chars.
+Links point a note at a record the owner can open: {"app": "meals", "type": "recipe", "id": 12} - kinds:
+meals/recipe, resell/ledger, resell/lot, opps/opportunity, trade/strategy, trade/option_strategy - or
+{"url": "<a record's page on this site>"}.
+
+GET  notes?q=<words>&tag=<tag>&archived=1             scope: notes:read
+  The owner's own notes (never notes others shared with them), pinned first then most recently changed, or
+  best matches first with q (full-text over title, tags and body; each word also matches as a prefix).
+  Up to 200. Returns {"notes": [{"id", "title", "tags", "pinned", "archived", "created_by", "created_at",
+  "updated_at"}]}.
+
+POST notes                                            scope: notes:write
+  Body: {"title": str (required, <=200), "body": Markdown str (optional, <=100000), "tags": [str] (optional),
+  "pinned": bool (optional), "link": {"app", "type", "id"} or {"url"} (optional)}.
+  The note belongs to the owner and shows "by <your token's name>". Returns 201 {"id", ..., "url", "linked"}.
+
+PATCH notes/<id>                                      scope: notes:write
+  Only notes this token created, or that are shared with the owner to edit (anything else is a 404).
+  Body: {"append": str} (added after a blank line) or {"body": str} (replaces it), and/or {"tags": [str]}
+  (added to the note's tags). Returns the note.
 """
 
 

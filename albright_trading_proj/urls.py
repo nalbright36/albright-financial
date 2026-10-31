@@ -40,6 +40,8 @@ urlpatterns = [
     path("opportunities/", include("albright_crypto_app.urls")),
     # Albright Meals: the meal plan, the shared grocery list, ideas and recipes.
     path("meals/", include("albright_meals.urls")),
+    # Albright Notes: private Markdown notes, optionally shared.
+    path("notes/", include("albright_notes.urls")),
     re_path(r"^(?:crypto|albright_crypto_app)/(?P<rest>.*)$", legacy_redirect, name="opportunities_legacy_redirect"),
     # Bot API: the token pages (Trading nav "Bot API") and the token-authenticated JSON API.
     path("bot-api/", include("albright_bot_api.urls")),

@@ -71,9 +71,9 @@ class LauncherTilesTests(Base):
         self.assertNotIn("Admin", self.labels())
         self.user.is_superuser = True
         self.user.save()
-        self.set_pref(app_order=["admin", "meals", "trade", "resell", "opps"],
-                      visible_apps=["admin", "meals", "trade", "resell", "opps"])
-        self.assertEqual(self.labels(), ["Home", "Meals", "Trade", "Resell", "Opps", "Admin"])
+        self.set_pref(app_order=["admin", "meals", "trade", "resell", "opps", "notes"],
+                      visible_apps=["admin", "meals", "trade", "resell", "opps", "notes"])
+        self.assertEqual(self.labels(), ["Home", "Meals", "Trade", "Resell", "Opps", "Notes", "Admin"])
 
     def test_current_app_is_highlighted(self):
         self.user.is_superuser = True
@@ -243,8 +243,11 @@ class MealsAccentTests(TestCase):
         self.assertIn("--accent: #C2410C;", self.block('[data-theme="light"] body[data-app="meals"]'))
         self.assertIn("--app-meals: #FB923C;", self.css)       # dark
         self.assertIn("--app-meals: #F97316;", self.css)       # light
+        # Meals' own rules are orange, not pink (pink is Albright Notes' accent).
+        meals_rules = "".join(self.block(s) for s in ('\nbody[data-app="meals"]', '[data-theme="light"] body[data-app="meals"]',
+                                                       '.labs-tile[data-app-accent="meals"]'))
         for pink in ("#EC4899", "#F472B6", "#BE185D", "#9D174D", "236, 72, 153"):
-            self.assertNotIn(pink, self.css)
+            self.assertNotIn(pink, meals_rules)
         self.assertIn('.app-launcher__tile[data-app-target="meals"] { --app-color: var(--app-meals); }',
                       LAUNCHER_CSS.read_text(encoding="utf-8"))
         self.assertIn('.labs-tile[data-app-accent="meals"] { --labs-tile-color: var(--app-meals); }', self.css)
@@ -286,12 +289,12 @@ class LauncherRenderingTests(Base):
                 self.assertIn('aria-expanded="false"', re.search(r'<button[^>]*id="app-launcher-button"[^>]*>', content).group(0))
                 nav = content[content.index('<nav class="navbar">'):content.index("</nav>")]
                 svgs = re.findall(r"<svg\b[^>]*>", nav)
-                self.assertGreaterEqual(len(svgs), 6 + 4)   # six tiles, the grid button, theme toggle (2), account
+                self.assertGreaterEqual(len(svgs), 7 + 4)   # seven tiles, the grid button, theme toggle (2), account
                 for svg in svgs:
                     self.assertRegex(svg, r'\swidth="\d+"')
                     self.assertRegex(svg, r'\sheight="\d+"')
                 self.assertIn('<svg width="16" height="16" viewBox="0 0 16 16"', nav)   # the 3x3 grid icon
-                self.assertEqual(nav.count('<svg width="19" height="19"'), 6)        # one per tile
+                self.assertEqual(nav.count('<svg width="19" height="19"'), 7)        # one per tile
 
     def test_css_and_js_are_on_every_page_with_the_header(self):
         for url in self.app_pages():

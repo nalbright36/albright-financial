@@ -8,6 +8,8 @@
         <link rel="stylesheet" href="{% static_version 'style.css' %}">
         <link rel="stylesheet" href="{% static_version 'labs/launcher.css' %}">
         {% if in_admin_area %}<link rel="stylesheet" href="{% static_version 'albright_control/inbox.css' %}">{% endif %}
+        {# An app's own stylesheets (its base template, e.g. albright_notes/base.html). #}
+        {% block app_head %}{% endblock %}
         <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Trading" }}</title>
         <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
         <script>
@@ -33,7 +35,7 @@
         <nav class="navbar">
             <div class="navbar__main-row">
                 {# The brand stays within the current app - never "/", which follows the remembered app. #}
-                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% elif in_meals_app %}{% url 'albright_meals:week' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
+                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% elif in_meals_app %}{% url 'albright_meals:week' %}{% elif in_notes_app %}{% url 'albright_notes:list' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
 
                 {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
                 <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">
@@ -89,6 +91,10 @@
                         <a href="{% url 'albright_meals:groceries' %}"{% if request.resolver_match.url_name == 'groceries' %} class="active" aria-current="page"{% endif %}>Groceries</a>
                         <a href="{% url 'albright_meals:ideas' %}"{% if request.resolver_match.url_name == 'ideas' %} class="active" aria-current="page"{% endif %}>Ideas</a>
                         <a href="{% url 'albright_meals:recipes' %}"{% if request.resolver_match.url_name in 'recipes recipe recipe_add recipe_edit' %} class="active" aria-current="page"{% endif %}>Recipes</a>
+                        {% elif in_notes_app %}
+                        <a href="{% url 'albright_notes:list' %}"{% if request.resolver_match.url_name == 'list' and not request.GET.shared and not request.GET.archived %} class="active" aria-current="page"{% endif %}>Notes</a>
+                        <a href="{% url 'albright_notes:list' %}?shared=1"{% if request.GET.shared %} class="active" aria-current="page"{% endif %}>Shared with me</a>
+                        <a href="{% url 'albright_notes:list' %}?archived=1"{% if request.GET.archived %} class="active" aria-current="page"{% endif %}>Archived</a>
                         {% elif in_opportunities_app %}
                         <a href="{% url 'albright_crypto_app:inbox' %}">Inbox</a>
                         <a href="{% url 'albright_crypto_app:pipeline' %}">Pipeline</a>
@@ -332,5 +338,7 @@
             })();
         </script>
         <script src="{% static_version 'labs/launcher.js' %}"></script>
+        {# An app's own scripts (its base template). #}
+        {% block app_scripts %}{% endblock %}
     </body>
 </html>

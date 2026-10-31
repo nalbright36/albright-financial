@@ -30,4 +30,5 @@ def current_app(request):
         "in_admin_area": key == "admin",
         "in_labs": key == "labs",
         "in_meals_app": key == "meals",
+        "in_notes_app": key == "notes",
     }

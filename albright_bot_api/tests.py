@@ -216,7 +216,8 @@ class EndpointTests(BotApiTestCase):
         from albright_bot_api.urls import api_urlpatterns
         for pattern in api_urlpatterns:
             route = str(pattern.pattern).replace("<int:lot_id>", "<id>").replace("<int:entry_id>", "<id>") \
-                .replace("<int:opportunity_id>", "<id>").replace("<int:item_id>", "<id>")
+                .replace("<int:opportunity_id>", "<id>").replace("<int:item_id>", "<id>") \
+                .replace("<int:note_id>", "<id>")
             self.assertIn(route, text, route)
         for phrase in ("Authorization: Bearer", "401", "403", "429", "5000", "PLAIN TEXT", "WHAT YOU CANNOT DO"):
             self.assertIn(phrase, text)
@@ -357,18 +358,21 @@ class HardLimitTests(BotApiTestCase):
         return [(method, path, self.call(method, path, body)) for method, path, body in calls]
 
     def test_api_routes_are_only_these_get_and_post_views(self):
-        from albright_bot_api import api_views, meals_api
+        from albright_bot_api import api_views, meals_api, notes_api
         from albright_bot_api.urls import api_urlpatterns
         for pattern in api_urlpatterns:
             self.assertIsInstance(pattern, URLPattern)
-            # Meals' endpoints (the Recipe Bot - they do write, to Meals' own tables) live in their own
-            # module, all under meals/; everything else is in api_views.
+            # Meals' and Notes' endpoints (they do write, to those apps' own tables) live in their own
+            # modules, under meals/ and notes; everything else is in api_views.
             if str(pattern.pattern).startswith("meals/"):
                 self.assertEqual(pattern.callback.__module__, meals_api.__name__)
+            elif str(pattern.pattern).startswith("notes"):
+                self.assertEqual(pattern.callback.__module__, notes_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 19)   # incl. trading/strategies, site-suggestions and ideas (Admin), 7 for Meals
+        self.assertEqual(len(api_urlpatterns), 21)   # incl. trading/strategies, site-suggestions and ideas (Admin), 7 Meals, 2 Notes
         self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 7)
+        self.assertEqual(sum(str(p.pattern).startswith("notes") for p in api_urlpatterns), 2)
 
     def test_no_forbidden_side_effects(self):
         from albright_reselling_app.models import LedgerEntry, LedgerSale

@@ -116,6 +116,7 @@
   --app-admin: #94A3B8;
   --app-labs: #2DD4BF;
   --app-meals: #FB923C;
+  --app-notes: #F472B6;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -173,6 +174,7 @@
   --app-admin: #64748B;
   --app-labs: #14B8A6;
   --app-meals: #F97316;
+  --app-notes: #EC4899;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -276,6 +278,16 @@ body[data-app="meals"] {
   --accent-solid: #C2410C;
   --accent-solid-hover: #9A3412;
 }
+/* Albright Notes: pink #EC4899. Text: the lighter #F472B6 in dark mode, the
+   deeper #BE185D in light mode (#EC4899 is ~3.5:1 on white); white-text fills
+   use #BE185D (6.0:1). */
+body[data-app="notes"] {
+  --accent-rgb: 236, 72, 153;
+  --accent: #F472B6;
+  --accent-hover: #F9A8D4;
+  --accent-solid: #BE185D;
+  --accent-solid-hover: #9D174D;
+}
 /* Light: text shades one step deeper (hover goes darker, not lighter). */
 [data-theme="light"] body,
 [data-theme="light"] body[data-app="trading"] {
@@ -301,6 +313,10 @@ body[data-app="meals"] {
 [data-theme="light"] body[data-app="meals"] {
   --accent: #C2410C;
   --accent-hover: #9A3412;
+}
+[data-theme="light"] body[data-app="notes"] {
+  --accent: #BE185D;
+  --accent-hover: #9D174D;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1533,6 +1549,7 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .labs-tile[data-app-accent="opportunities"] { --labs-tile-color: var(--app-opportunities); }
 .labs-tile[data-app-accent="admin"] { --labs-tile-color: var(--app-admin); }
 .labs-tile[data-app-accent="meals"] { --labs-tile-color: var(--app-meals); }
+.labs-tile[data-app-accent="notes"] { --labs-tile-color: var(--app-notes); }
 .labs-tile__head { display: flex; align-items: center; gap: 8px; }
 .labs-tile__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--labs-tile-color); flex-shrink: 0; }
 .labs-tile__name { font-weight: 700; font-size: 1.0625rem; color: var(--text-primary); }

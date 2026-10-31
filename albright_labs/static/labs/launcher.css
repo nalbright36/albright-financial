@@ -49,6 +49,7 @@
 .app-launcher__tile[data-app-target="reselling"] { --app-color: var(--app-reselling); }
 .app-launcher__tile[data-app-target="opportunities"] { --app-color: var(--app-opportunities); }
 .app-launcher__tile[data-app-target="meals"] { --app-color: var(--app-meals); }
+.app-launcher__tile[data-app-target="notes"] { --app-color: var(--app-notes); }
 .app-launcher__tile[data-app-target="admin"] { --app-color: var(--app-admin); }
 .app-launcher__icon {
   width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0;

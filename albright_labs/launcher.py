@@ -68,13 +68,19 @@ def meals(user):
     return title if len(title) <= MAX_DINNER else title[:MAX_DINNER - 1].rstrip() + "…"
 
 
+def notes(user):
+    from albright_notes.models import Note
+    pinned = Note.objects.visible_to(user).filter(archived=False, pinned=True).count()
+    return f"{pinned} pinned" if pinned else "No pinned notes"
+
+
 def admin(user):
     from albright_control import jobs
     problems = sum(1 for row in jobs.health_rows() if row["status"] in ("failing", "late"))
     return _plural(problems, "problem") if problems else "All good"
 
 
-LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "admin": admin}
+LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "notes": notes, "admin": admin}
 
 
 def _line(key, user):
