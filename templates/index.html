@@ -136,7 +136,7 @@
                         </button>
                         <div class="app-launcher__menu" id="app-launcher-panel" role="menu" aria-label="Apps" hidden>
                             <div class="app-launcher__grid">
-                                {% for app in launcher_apps %}<a href="{% url app.url_name %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %}>
+                                {% for app in launcher_apps %}<a href="{% url app.url_name %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %}{% if app.color %} style="--app-color: var(--app-{{ app.accent }}, {{ app.color }});"{% endif %}>
                                     <span class="app-launcher__icon" aria-hidden="true">{% include "_app_icon.html" with key=app.key %}</span>
                                     <span class="app-launcher__label">{{ app.short_label }}</span>
                                     <span class="app-launcher__line" data-line-for="{{ app.key }}">{{ app.line|default:"" }}</span>
