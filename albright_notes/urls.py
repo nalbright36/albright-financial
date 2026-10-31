@@ -6,6 +6,7 @@ app_name = "albright_notes"
 
 urlpatterns = [
     path("", views.note_list, name="list"),
+    path("new/", views.note_new, name="new"),
     path("capture/", views.capture, name="capture"),
     path("links/search/", views.link_search, name="link_search"),
     path("leave/", views.leave, name="leave"),

@@ -1,0 +1,164 @@
+{% extends "albright_notes/base.html" %}
+{% block page_title %}{% if open %}{{ open.title }} · {% endif %}Notes · {% endblock %}
+{% block content %}
+{% comment %}
+Albright Notes - Option A of docs/design/"Albright Notes - design options.html"
+("Three-pane workspace"): folders and tags on the left, the notes in the
+middle, the open note on the right (stacked on phones). Its features, all
+real: folder-style sidebar, tag counts, formatting toolbar, checklists, link
+to records, word count, "/" to search. Styles: albright_notes/notes.css (the
+mockup's .a rules, its colors mapped to the site's theme variables);
+behavior: albright_notes/notes.js; views.workspace.
+{% endcomment %}
+<div class="container nt" id="notes" data-search-url="{% url 'albright_notes:link_search' %}">
+    <h1 class="visually-hidden">Notes</h1>
+    <div class="nt-frame"><div class="nt-panes">
+        <nav class="nt-side" aria-label="Folders and tags">
+            <form method="post" action="{% url 'albright_notes:new' %}" class="nt-new">{% csrf_token %}<button type="submit" class="nt-btn primary" id="nt-new">+ New note</button></form>
+            {% for f in folders %}<a href="{{ f.url }}" class="nt-folder{% if f.key == view and not tag %} on{% endif %}" data-folder="{{ f.key }}"{% if f.key == view and not tag %} aria-current="page"{% endif %}><span>{% if f.icon %}<span aria-hidden="true">{{ f.icon }}</span> {% endif %}{{ f.label }}</span> <span class="nt-muted">{{ f.count }}</span></a>
+            {% endfor %}
+            {% if tags %}<h4>Tags</h4>
+            {% for t, count in tags %}<a href="{{ list_url }}?tag={{ t|urlencode }}" class="nt-folder{% if t == tag %} on{% endif %}" data-tag="{{ t }}"{% if t == tag %} aria-current="page"{% endif %}><span># {{ t }}</span> <span class="nt-muted">{{ count }}</span></a>
+            {% endfor %}{% endif %}
+        </nav>
+
+        <div class="nt-list">
+            <form method="get" action="{{ list_url }}" class="nt-search" role="search">
+                {% if view != "all" %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+                {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+                <label for="nt-q" class="visually-hidden">Search notes</label>
+                <input type="search" name="q" id="nt-q" value="{{ q }}" class="nt-input" placeholder="Search notes…  ( / )" autocomplete="off">
+            </form>
+            <div class="nt-notes" id="nt-notes">
+            {% for r in rows %}{% with n=r.note %}
+                <a href="{% url 'albright_notes:note' n.pk %}{{ query }}" class="nt-note{% if open and open.pk == n.pk %} on{% endif %}" id="note-{{ n.pk }}"{% if open and open.pk == n.pk %} aria-current="true"{% endif %}>
+                    <b>{% if n.pinned %}<span class="nt-pin" aria-hidden="true">📌</span><span class="visually-hidden">Pinned: </span> {% endif %}{{ n.title }}</b>
+                    <p>{{ r.summary }}</p>
+                    {% for t in n.tags|slice:":3" %}<span class="nt-tag">{{ t }}</span> {% endfor %}{% if r.shared %}<span class="nt-chip"><span aria-hidden="true">👥</span> Shared</span> {% endif %}{% if n.from_bot %}<span class="nt-chip"><span aria-hidden="true">🤖</span> {{ n.created_by }}</span> {% endif %}{% for c in r.chips|slice:":2" %}<span class="nt-chip"><span aria-hidden="true">🔗</span> {{ c.label }}</span> {% endfor %}
+                </a>
+            {% endwith %}{% empty %}
+                <p class="nt-empty">{% if q or tag or view != "all" %}No notes here.{% else %}No notes yet - press &ldquo;+ New note&rdquo;.{% endif %}</p>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% if open %}
+        <article class="nt-editor" id="note" aria-label="{{ open.title }}"
+                 data-note-id="{{ open.pk }}" data-version="{{ open.version }}" data-can-edit="{{ can_edit|yesno:'1,0' }}"
+                 data-save-url="{% url 'albright_notes:save' open.pk %}" data-check-url="{% url 'albright_notes:check' open.pk %}">
+            <div class="nt-toolbar" role="toolbar" aria-label="Note tools">
+                {% if can_edit %}
+                <button type="button" class="nt-btn sm" data-fmt="bold" title="Bold" aria-label="Bold"><b>B</b></button>
+                <button type="button" class="nt-btn sm" data-fmt="italic" title="Italic" aria-label="Italic"><i>I</i></button>
+                <button type="button" class="nt-btn sm" data-fmt="heading" title="Heading" aria-label="Heading">H</button>
+                <button type="button" class="nt-btn sm" data-fmt="check" title="Checklist">☑ List</button>
+                <button type="button" class="nt-btn sm" data-pop="nt-pop-link" aria-expanded="false" aria-controls="nt-pop-link">🔗 Link record</button>
+                {% endif %}
+                <span class="nt-grow"></span>
+                {% if is_owner %}
+                <form method="post" action="{% url 'albright_notes:pin' open.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'albright_notes:note' open.pk %}{{ query }}"><button type="submit" class="nt-btn sm{% if open.pinned %} is-on{% endif %}" id="nt-pin" aria-pressed="{{ open.pinned|yesno:'true,false' }}" title="{% if open.pinned %}Unpin{% else %}Pin{% endif %}" aria-label="{% if open.pinned %}Unpin{% else %}Pin{% endif %}">📌</button></form>
+                <button type="button" class="nt-btn sm" data-pop="nt-pop-share" aria-expanded="false" aria-controls="nt-pop-share">👥 Share</button>
+                {% endif %}
+                {% if can_edit %}<button type="button" class="nt-btn sm" data-pop="nt-pop-more" aria-expanded="false" aria-controls="nt-pop-more" aria-label="More">⋯</button>{% endif %}
+            </div>
+
+            {% if can_edit %}
+            <section class="nt-pop" id="nt-pop-link" aria-label="Linked records" hidden>
+                <ul class="nt-chips" id="nt-links">
+                    {% for c in chips %}<li class="nt-chip"><span aria-hidden="true">🔗</span> {% if c.href %}<a href="{{ c.href }}"{% if c.kind == "Auction lot" %} target="_blank" rel="noopener noreferrer"{% endif %}>{% if c.kind %}{{ c.kind }}: {% endif %}{{ c.label }}</a>{% else %}{{ c.label }}{% endif %}
+                        <form method="post" action="{% url 'albright_notes:link_remove' open.pk c.id %}">{% csrf_token %}<button type="submit" class="nt-x" aria-label="Remove link to {{ c.label }}">&times;</button></form></li>
+                    {% empty %}<li class="nt-muted nt-small">Not linked to anything yet.</li>{% endfor %}
+                </ul>
+                <div class="nt-picker" id="nt-picker" data-add-url="{% url 'albright_notes:link_add' open.pk %}">
+                    <label for="nt-picker-q" class="nt-label">Search the apps you can open</label>
+                    <input type="search" id="nt-picker-q" class="nt-input" placeholder="Recipes, ledger items, lots, opportunities, strategies" autocomplete="off">
+                    <ul class="nt-results" id="nt-picker-results" hidden></ul>
+                </div>
+                <form method="post" action="{% url 'albright_notes:link_add' open.pk %}" class="nt-row" id="nt-link-url">{% csrf_token %}
+                    <label for="nt-link-url-input" class="visually-hidden">Paste a link to a page on this site</label>
+                    <input type="text" name="url" id="nt-link-url-input" class="nt-input" placeholder="…or paste a link to a recipe, item or strategy page" required>
+                    <button type="submit" class="nt-btn sm">Link</button>
+                </form>
+            </section>
+            <section class="nt-pop" id="nt-pop-more" aria-label="More" hidden>
+                <label for="nt-tags" class="nt-label">Tags</label>
+                <input type="text" id="nt-tags" class="nt-input" data-field="tags" value="{{ open.tags|join:', ' }}" placeholder="Comma-separated, e.g. reselling, home">
+                {% if is_owner %}
+                <div class="nt-row">
+                    <form method="post" action="{% url 'albright_notes:archive' open.pk %}">{% csrf_token %}<button type="submit" class="nt-btn sm" id="nt-archive">🗄 {% if open.archived %}Unarchive{% else %}Archive{% endif %}</button></form>
+                    <form method="post" action="{% url 'albright_notes:delete' open.pk %}" data-confirm="Delete &ldquo;{{ open.title }}&rdquo;? This can't be undone.">{% csrf_token %}<button type="submit" class="nt-btn sm danger" id="nt-delete">Delete</button></form>
+                </div>
+                {% endif %}
+            </section>
+            {% endif %}
+            {% if is_owner %}
+            <section class="nt-pop" id="nt-pop-share" aria-label="Sharing" hidden>
+                <ul class="nt-shares" id="nt-shares">
+                    {% for s in shares %}
+                    <li class="nt-row">
+                        <span class="nt-share-who">{{ s.user.get_username }}</span>
+                        <form method="post" action="{% url 'albright_notes:share_update' open.pk s.pk %}" class="nt-row">{% csrf_token %}
+                            <label for="nt-perm-{{ s.pk }}" class="visually-hidden">Permission for {{ s.user.get_username }}</label>
+                            <select name="permission" id="nt-perm-{{ s.pk }}" class="nt-input nt-select" data-autosubmit>
+                                {% for value, label in permissions %}<option value="{{ value }}"{% if value == s.permission %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                            </select>
+                            <button type="submit" class="nt-btn sm nt-nojs">Save</button>
+                            <button type="submit" name="remove" value="1" class="nt-btn sm">Stop sharing</button>
+                        </form>
+                    </li>
+                    {% empty %}<li class="nt-muted nt-small">Only you can see this note.</li>{% endfor %}
+                </ul>
+                {% if share_choices %}
+                <form method="post" action="{% url 'albright_notes:share_add' open.pk %}" class="nt-row" id="nt-share-add">{% csrf_token %}
+                    <label for="nt-share-user" class="visually-hidden">Share with</label>
+                    <select name="user" id="nt-share-user" class="nt-input nt-select" required>
+                        <option value="">Share with…</option>
+                        {% for u in share_choices %}<option value="{{ u.pk }}">{{ u.get_username }}</option>{% endfor %}
+                    </select>
+                    <label for="nt-share-perm" class="visually-hidden">Permission</label>
+                    <select name="permission" id="nt-share-perm" class="nt-input nt-select">
+                        {% for value, label in permissions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="nt-btn sm primary">Share</button>
+                </form>
+                {% elif not shares %}<p class="nt-muted nt-small">Nobody else can open Notes yet - give someone access in Admin &rarr; Users.</p>{% endif %}
+            </section>
+            {% endif %}
+
+            <div class="nt-conflict" id="nt-conflict" role="alert" hidden>
+                <p><strong id="nt-conflict-who">Someone</strong> changed this note while you were editing (at <span id="nt-conflict-when"></span>). Your latest changes aren't saved.</p>
+                <div class="nt-row">
+                    <button type="button" class="nt-btn sm" id="nt-conflict-load">Load their version</button>
+                    <button type="button" class="nt-btn sm" id="nt-conflict-keep">Keep mine (overwrite)</button>
+                </div>
+            </div>
+
+            {% if can_edit %}
+            <label for="nt-title" class="visually-hidden">Title</label>
+            <input type="text" id="nt-title" class="nt-title" value="{{ open.title }}" maxlength="200" data-field="title">
+            {% else %}
+            <h3 class="nt-title">{{ open.title }}</h3>
+            {% endif %}
+            <div class="nt-small nt-muted nt-meta">Edited <span id="nt-updated">{{ updated }}</span>{% if not is_owner %} &middot; shared by {{ open.owner.get_username }}, {% if my_permission == "edit" %}you can edit{% else %}view only{% endif %}{% endif %}{% if open.from_bot %} &middot; by {{ open.created_by }}{% endif %}{% if open.archived %} &middot; archived{% endif %}
+                {% for t in open.tags %} <span class="nt-tag">{{ t }}</span>{% endfor %}
+                {% for c in chips %} <span class="nt-chip"><span aria-hidden="true">🔗</span> {% if c.href %}<a href="{{ c.href }}"{% if c.kind == "Auction lot" %} target="_blank" rel="noopener noreferrer"{% endif %}>{% if c.kind %}{{ c.kind }}: {% endif %}{{ c.label }}</a>{% else %}{{ c.label }}{% endif %}</span>{% endfor %}
+            </div>
+
+            <div class="nt-doc" id="nt-doc" data-mode="{% if can_edit and not open.body %}write{% else %}preview{% endif %}">
+                <div class="nt-md" id="nt-preview"{% if can_edit %} title="Click to edit"{% endif %}>{% if open.body %}{{ html }}{% else %}<p class="nt-muted">Nothing written yet.</p>{% endif %}</div>
+                {% if can_edit %}
+                <label for="nt-body" class="visually-hidden">Note (Markdown)</label>
+                <textarea id="nt-body" class="nt-body" data-field="body" spellcheck="true" placeholder="Start writing… **bold**, *italic*, ## heading, - [ ] checklist">{{ open.body }}</textarea>
+                {% endif %}
+            </div>
+
+            <div class="nt-foot"><span id="nt-saved" aria-live="polite">{% if can_edit %}Saved ✓{% else %}View only{% endif %}</span><span id="nt-words">{{ words }} word{{ words|pluralize }}</span></div>
+        </article>
+        {% else %}
+        <article class="nt-editor nt-editor--empty">
+            <p class="nt-muted">Pick a note, or press &ldquo;+ New note&rdquo;.</p>
+        </article>
+        {% endif %}
+    </div></div>
+</div>
+{% endblock %}

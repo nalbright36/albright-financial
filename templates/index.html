@@ -92,9 +92,9 @@
                         <a href="{% url 'albright_meals:ideas' %}"{% if request.resolver_match.url_name == 'ideas' %} class="active" aria-current="page"{% endif %}>Ideas</a>
                         <a href="{% url 'albright_meals:recipes' %}"{% if request.resolver_match.url_name in 'recipes recipe recipe_add recipe_edit' %} class="active" aria-current="page"{% endif %}>Recipes</a>
                         {% elif in_notes_app %}
-                        <a href="{% url 'albright_notes:list' %}"{% if request.resolver_match.url_name == 'list' and not request.GET.shared and not request.GET.archived %} class="active" aria-current="page"{% endif %}>Notes</a>
-                        <a href="{% url 'albright_notes:list' %}?shared=1"{% if request.GET.shared %} class="active" aria-current="page"{% endif %}>Shared with me</a>
-                        <a href="{% url 'albright_notes:list' %}?archived=1"{% if request.GET.archived %} class="active" aria-current="page"{% endif %}>Archived</a>
+                        <a href="{% url 'albright_notes:list' %}"{% if not request.GET.view %} class="active" aria-current="page"{% endif %}>Notes</a>
+                        <a href="{% url 'albright_notes:list' %}?view=shared"{% if request.GET.view == 'shared' %} class="active" aria-current="page"{% endif %}>Shared with me</a>
+                        <a href="{% url 'albright_notes:list' %}?view=archived"{% if request.GET.view == 'archived' %} class="active" aria-current="page"{% endif %}>Archived</a>
                         {% elif in_opportunities_app %}
                         <a href="{% url 'albright_crypto_app:inbox' %}">Inbox</a>
                         <a href="{% url 'albright_crypto_app:pipeline' %}">Pipeline</a>

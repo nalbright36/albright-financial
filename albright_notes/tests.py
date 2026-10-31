@@ -5,6 +5,7 @@ to records the user can open (and not to ones they can't); every Bot API
 endpoint with and without its scope; the Home tile; the registry and
 launcher entry; no access for new users; and the app's static files."""
 import json
+import pathlib
 import re
 from io import StringIO
 
@@ -121,11 +122,12 @@ class CreateEditTests(Base):
         NoteShare.objects.create(note=note, user=self.wife)
         links.add(note, links.BY_KEY[("meals", "recipe")], Recipe.objects.create(title="Fish tacos"))
         row = self.client.get(url("list")).content.decode().split(f'id="note-{note.pk}"', 1)[1].split("</a>", 1)[0]
-        self.assertIn('<span class="nt-row__preview">Plan</span>', row)
-        self.assertIn("#food", row)
-        self.assertIn('class="nt-shared"', row)
-        self.assertIn('<span class="nt-chip" data-accent="meals">Fish tacos</span>', row)
-        self.assertIn("updated just now", row)
+        self.assertIn("<p>Plan</p>", row)
+        self.assertIn('<span class="nt-tag">food</span>', row)
+        self.assertIn('<span class="nt-chip"><span aria-hidden="true">👥</span> Shared</span>', row)
+        self.assertIn('<span class="nt-chip"><span aria-hidden="true">🔗</span> Fish tacos</span>', row)
+        page = self.client.get(url("note", note.pk)).content.decode()
+        self.assertIn('Edited <span id="nt-updated">just now</span>', page)
 
 
 class SearchTagTests(Base):
@@ -147,7 +149,8 @@ class SearchTagTests(Base):
         page = self.client.get(url("list") + "?tag=house").content.decode()
         self.assertIn(f'id="note-{a.pk}"', page)
         self.assertNotIn(f'id="note-{b.pk}"', page)
-        self.assertIn('<option value="car">#car</option>', page)
+        self.assertIn('data-tag="car"><span># car</span> <span class="nt-muted">1</span></a>', page)
+        self.assertIn('class="nt-folder on" data-tag="house" aria-current="page"', page)
 
     def test_tags_are_cleaned(self):
         self.assertEqual(notes.clean_tags("#Taxes, house , , taxes,  Big   Trip"), ["taxes", "house", "big trip"])
@@ -490,3 +493,86 @@ class AppEntryTests(TestCase):
         listing = out.getvalue().replace("\\", "/")
         for path in ("albright_notes/notes.css", "albright_notes/notes.js"):
             self.assertRegex(listing, rf"(Copying|Pretending to copy|Skipping) .*{re.escape(path)}")
+
+
+@override_settings(CRYPTO=CRYPTO)
+class WorkspaceTests(Base):
+    """Option A of docs/design/"Albright Notes - design options.html": the three panes and their features."""
+
+    def test_three_panes_in_order_and_the_first_note_open(self):
+        older = self.note(title="Older")
+        newer = self.note(title="Newer", body="Some words here")
+        Note.objects.filter(pk=older.pk).update(updated_at="2021-01-01T00:00:00Z")
+        page = self.client.get(url("list")).content.decode()
+        order = [page.index(marker) for marker in ('class="nt-frame"', 'class="nt-side"', 'class="nt-list"', 'class="nt-editor"')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('class="nt-panes"', page)
+        self.assertIn(f'data-note-id="{newer.pk}"', page)                            # the first in the list is open
+        self.assertIn(f'class="nt-note on" id="note-{newer.pk}"', page)
+        self.assertIn('placeholder="Search notes…  ( / )"', page)
+        self.assertIn('<span id="nt-words">3 words</span>', page)
+        self.assertIn('<span id="nt-saved" aria-live="polite">Saved ✓</span>', page)
+
+    def test_opening_a_note_keeps_the_folder_tag_and_search(self):
+        a = self.note(title="Alpha", tags=["home"], pinned=True)
+        page = self.client.get(url("list") + "?view=pinned&tag=home").content.decode()
+        self.assertIn(f'href="{url("note", a.pk)}?view=pinned&amp;tag=home"', page)
+        page = self.client.get(url("note", a.pk) + "?view=pinned").content.decode()
+        self.assertIn('class="nt-folder on" data-folder="pinned" aria-current="page"', page)
+
+    def test_sidebar_folders_and_tag_counts(self):
+        self.note(title="Pinned one", pinned=True, tags=["home", "reselling"])
+        self.note(title="List", body="Garage\n- [x] sort\n- [ ] donate", tags=["home"])
+        archived = self.note(title="Old", tags=["home"])
+        Note.objects.filter(pk=archived.pk).update(archived=True)
+        theirs = self.note(owner=self.wife, title="Gift ideas")
+        NoteShare.objects.create(note=theirs, user=self.me)
+        page = self.client.get(url("list")).content.decode()
+        counts = dict(re.findall(r'data-folder="(\w+)"(?: aria-current="page")?><span>.*?</span> <span class="nt-muted">(\d+)</span>', page))
+        self.assertEqual(counts, {"all": "3", "pinned": "1", "shared": "1", "checklists": "1", "archived": "1"})
+        tags = dict(re.findall(r'data-tag="([\w-]+)"><span># [\w-]+</span> <span class="nt-muted">(\d+)</span>', page))
+        self.assertEqual(tags, {"home": "2", "reselling": "1"})                        # archived notes aren't counted
+        for view, titles in (("pinned", ["Pinned one"]), ("shared", ["Gift ideas"]), ("checklists", ["List"]),
+                             ("archived", ["Old"])):
+            with self.subTest(view=view):
+                content = self.client.get(url("list") + "?view=" + view).content.decode()
+                listed = re.findall(r'<a href="/notes/\d+/[^"]*" class="nt-note[^"]*" id="note-\d+"[^>]*>\s*<b>(?:<span[^>]*>[^<]*</span><span[^>]*>[^<]*</span> )?([^<]+)</b>', content)
+                self.assertEqual(listed, titles)
+        self.assertIn("1 of 2 done", self.client.get(url("list") + "?view=checklists").content.decode())
+
+    def test_toolbar_and_panels(self):
+        note = self.note(title="Plan", body="- [ ] cash")
+        page = self.client.get(url("note", note.pk)).content.decode()
+        toolbar = page.split('class="nt-toolbar"', 1)[1].split("</div>", 1)[0]
+        for marker in ('data-fmt="bold"', 'data-fmt="italic"', 'data-fmt="heading"', 'data-fmt="check"',
+                       'data-pop="nt-pop-link"', 'id="nt-pin"', 'data-pop="nt-pop-share"', 'data-pop="nt-pop-more"'):
+            self.assertIn(marker, toolbar)
+        for panel in ("nt-pop-link", "nt-pop-share", "nt-pop-more"):
+            self.assertRegex(page, rf'<section class="nt-pop" id="{panel}"[^>]*hidden>')
+        # Someone it's shared with to view: no formatting, no panels, no editor.
+        NoteShare.objects.create(note=note, user=self.wife)
+        page = self.as_user(self.wife).get(url("note", note.pk)).content.decode()
+        self.assertNotIn("data-fmt=", page)
+        self.assertNotIn('id="nt-pop-', page)
+        self.assertIn('<h3 class="nt-title">Plan</h3>', page)
+
+    def test_new_note_opens_in_the_editor(self):
+        response = self.client.post(url("new"))
+        note = Note.objects.get()
+        self.assertRedirects(response, url("note", note.pk) + "?new=1")
+        self.assertEqual((note.title, note.owner), (notes.UNTITLED, self.me))
+        page = self.client.get(url("note", note.pk) + "?new=1").content.decode()
+        self.assertIn('data-mode="write"', page)                                        # empty: straight to typing
+
+    def test_word_count(self):
+        from albright_notes.views import word_count
+        self.assertEqual(word_count("Two estate sales - [ ] Saturday, 25 miles.\n\n**Bring** cash"), 8)
+        self.assertEqual(word_count(""), 0)
+
+    def test_component_resets_every_control_and_uses_theme_variables(self):
+        css = finders.find("albright_notes/notes.css")
+        text = pathlib.Path(css).read_text(encoding="utf-8")
+        self.assertIn(":where(.nt) :where(button, input, select, textarea)", text)
+        self.assertIn("appearance: none", text)
+        self.assertNotRegex(text, r"background(?:-color)?:\s*(?:#fff\b|#ffffff|white|#000\b|black)")
+        self.assertIn("--nt-accent: var(--accent);", text)

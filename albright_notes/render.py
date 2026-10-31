@@ -113,7 +113,8 @@ def render(body, editable=False):
         n = next(count)
         state = " checked" if match.group(2) != " " else ""
         attrs = f' data-task="{n}"' if live else " disabled"
-        return f'<li class="nt-task">{match.group(1) or ""}<input type="checkbox" class="nt-check"{attrs}{state} ' \
+        done = " done" if state else ""
+        return f'<li class="nt-task{done}">{match.group(1) or ""}<input type="checkbox" class="nt-check"{attrs}{state} ' \
                f'aria-label="Done"> '
     return mark_safe(CHECK_HTML.sub(box, html))
 

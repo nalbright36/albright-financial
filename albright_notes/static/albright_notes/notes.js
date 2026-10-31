@@ -1,22 +1,24 @@
 /*
- * Albright Notes (albright_notes/base.html loads it on every Notes page). Vanilla JS.
+ * Albright Notes - the three-pane workspace (albright_notes/workspace.html, Option A of
+ * docs/design/"Albright Notes - design options.html"). Vanilla JS, loaded by albright_notes/base.html.
  *
- * The list: filters apply as soon as one changes (the search box: on Enter);
- * the Filter button is only for no-JS use.
- *
- * A note's page:
- *   - Write / Preview / Side by side (the default on wide screens);
- *   - autosave while typing (title, body, tags), debounced, with "Saving…" /
- *     "Saved" - each save sends the version it started from, and a 409 means
- *     someone else changed the note meanwhile: the conflict banner offers
- *     "Load their version" or "Keep mine (overwrite)";
- *   - ticking a checklist box in the preview rewrites that "- [ ]" line (server-side);
- *   - the link picker searches the apps you can open as you type.
+ *   "/"            focuses the search box (when you're not typing somewhere)
+ *   toolbar        B / I / H / ☑ List format the selection in the Markdown (switching to it if needed);
+ *                  🔗 Link record, 👥 Share and ⋯ open their panels
+ *   the document   shows the rendered note; click it (not a link or checkbox) to edit the Markdown,
+ *                  Esc or clicking away shows it rendered again
+ *   autosave       title, body and tags save as you type (debounced): "Saving…" / "Saved ✓". Each save
+ *                  sends the version it started from; a 409 means someone else changed the note meanwhile
+ *                  and the warning offers "Load their version" or "Keep mine (overwrite)"
+ *   checklist      ticking a box in the rendered note rewrites that "- [ ]" line on the server
+ *   word count     the footer's count follows the text
+ * On a phone the panes stack; opening a note scrolls to it.
  */
 (function () {
     "use strict";
 
     var SAVE_DELAY = 800;
+    var workspace = document.getElementById("notes");
 
     function byId(id) { return document.getElementById(id); }
     function csrfToken() {
@@ -40,47 +42,133 @@
         if (text != null) node.textContent = text;
         return node;
     }
-
-    // ---------- The list: filters apply on change ----------
-    var filters = byId("nt-filters");
-    if (filters) {
-        filters.addEventListener("change", function (event) {
-            if (event.target.name !== "q") filters.submit();
-        });
+    function isTyping(target) {
+        return target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
     }
 
-    // Any <select data-autosubmit> (sharing permissions) saves on change.
+    // Any <select data-autosubmit> (a share's permission) saves on change.
     document.addEventListener("change", function (event) {
         if (event.target.matches && event.target.matches("select[data-autosubmit]")) event.target.form.submit();
     });
 
-    // ---------- One note ----------
+    // "/" to search
+    var search = byId("nt-q");
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "/" && search && !isTyping(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault();
+            search.focus();
+            search.select();
+        }
+    });
+
     var root = byId("note");
-    if (!root) return;
+    if (!workspace || !root) return;
     var canEdit = root.dataset.canEdit === "1";
     var version = parseInt(root.dataset.version, 10) || 1;
-    var editor = byId("nt-editor");
+    var doc = byId("nt-doc");
     var preview = byId("nt-preview");
     var saved = byId("nt-saved");
+    var words = byId("nt-words");
+    var fields = {title: byId("nt-title"), body: byId("nt-body"), tags: byId("nt-tags")};
 
-    // Write / Preview / Side by side
+    // A phone shows the panes stacked: bring the note you picked into view.
+    if (window.matchMedia("(max-width: 860px)").matches && /\/notes\/\d+\//.test(location.pathname)) {
+        root.scrollIntoView({block: "start"});
+    }
+
+    // ---------- Panels: Link record, Share, More ----------
+    root.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-pop]");
+        if (!button) return;
+        var pop = byId(button.dataset.pop), open = pop.hidden;
+        root.querySelectorAll(".nt-pop").forEach(function (p) { p.hidden = true; });
+        root.querySelectorAll("[data-pop]").forEach(function (b) { b.setAttribute("aria-expanded", "false"); });
+        pop.hidden = !open;
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) {
+            var first = pop.querySelector("input:not([type=hidden]), select, button");
+            if (first) first.focus();
+        }
+    });
+    if (location.hash === "#links" && byId("nt-pop-link")) {
+        byId("nt-pop-link").hidden = false;
+    }
+
+    // ---------- Word count ----------
+    // A word: anything between spaces with a letter or digit in it (views.word_count counts the same way).
+    function countWords(text) {
+        return (text || "").split(/\s+/).filter(function (w) { return /[0-9A-Za-zÀ-￿]/.test(w); }).length;
+    }
+    function showWords() {
+        if (!words || !fields.body) return;
+        var n = countWords(fields.body.value);
+        words.textContent = n + " word" + (n === 1 ? "" : "s");
+    }
+
+    // ---------- Rendered note <-> Markdown ----------
     function setMode(mode) {
-        editor.dataset.mode = mode;
-        editor.querySelectorAll("[data-mode-button]").forEach(function (b) {
-            b.setAttribute("aria-pressed", b.dataset.modeButton === mode ? "true" : "false");
-        });
-        if (mode !== "write") flush();
+        if (!canEdit) return;
+        doc.dataset.mode = mode;
+        if (mode === "write") fields.body.focus();
     }
     if (canEdit) {
-        editor.addEventListener("click", function (event) {
-            var button = event.target.closest("[data-mode-button]");
-            if (button) setMode(button.dataset.modeButton);
+        preview.addEventListener("click", function (event) {
+            if (event.target.closest("a, input, label")) return;
+            if (window.getSelection && String(window.getSelection())) return;     // selecting text to copy
+            setMode("write");
         });
-        if (window.matchMedia("(min-width: 1000px)").matches) setMode("split");
+        fields.body.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") { event.preventDefault(); flush(); setMode("preview"); }
+        });
+        fields.body.addEventListener("blur", function (event) {
+            // Leaving for the toolbar (B / I / H / List) keeps the Markdown open.
+            if (event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest(".nt-toolbar")) return;
+            flush();
+            if (fields.body.value.trim()) setMode("preview");
+        });
+        if (/[?&]new=1/.test(location.search) && fields.title) {
+            fields.title.focus();
+            fields.title.select();
+        }
     }
 
+    // ---------- Formatting toolbar ----------
+    function lineRange(text, start, end) {
+        var from = text.lastIndexOf("\n", start - 1) + 1;
+        var to = text.indexOf("\n", end);
+        return [from, to === -1 ? text.length : to];
+    }
+    function format(kind) {
+        var box = fields.body;
+        if (doc.dataset.mode !== "write") setMode("write");
+        var text = box.value, start = box.selectionStart, end = box.selectionEnd, out, selStart, selEnd;
+        if (kind === "bold" || kind === "italic") {
+            var mark = kind === "bold" ? "**" : "*";
+            var picked = text.slice(start, end) || (kind === "bold" ? "bold text" : "italic text");
+            out = text.slice(0, start) + mark + picked + mark + text.slice(end);
+            selStart = start + mark.length;
+            selEnd = selStart + picked.length;
+        } else {
+            var range = lineRange(text, start, end);
+            var lines = text.slice(range[0], range[1]).split("\n").map(function (line) {
+                if (kind === "heading") return /^#{1,6}\s/.test(line) ? line.replace(/^#{1,6}\s+/, "") : "## " + line;
+                return /^\s*[-*+]\s+\[[ xX]\]\s?/.test(line) ? line : "- [ ] " + line.replace(/^\s*[-*+]\s+/, "");
+            });
+            var block = lines.join("\n");
+            out = text.slice(0, range[0]) + block + text.slice(range[1]);
+            selStart = selEnd = range[0] + block.length;
+        }
+        box.value = out;
+        box.focus();
+        box.setSelectionRange(selStart, selEnd);
+        box.dispatchEvent(new Event("input", {bubbles: true}));
+    }
+    root.querySelectorAll("[data-fmt]").forEach(function (button) {
+        button.addEventListener("mousedown", function (event) { event.preventDefault(); });   // keep the selection
+        button.addEventListener("click", function () { format(button.dataset.fmt); });
+    });
+
     // ---------- Autosave ----------
-    var fields = {title: byId("nt-title"), body: byId("nt-body"), tags: byId("nt-tags")};
     var dirty = {}, timer = null, inFlight = null, conflict = false;
 
     function showSaved(text, isError) {
@@ -100,14 +188,19 @@
     function applyState(data, replaceInputs) {
         version = data.version;
         root.dataset.version = String(version);
-        if (data.html != null) preview.innerHTML = data.html || '<p class="nt-hint">Nothing written yet.</p>';
+        if (data.html != null) preview.innerHTML = data.html || '<p class="nt-muted">Nothing written yet.</p>';
         if (data.updated && byId("nt-updated")) byId("nt-updated").textContent = "at " + data.updated;
         if (replaceInputs) {
             if (fields.title) fields.title.value = data.title;
             if (fields.body) fields.body.value = data.body;
             if (fields.tags) fields.tags.value = (data.tags || []).join(", ");
-            document.title = data.title + document.title.slice(document.title.indexOf(" · "));
         }
+        if (fields.title) {
+            var row = byId("note-" + root.dataset.noteId);
+            var title = row && row.querySelector("b");
+            if (title) title.lastChild.textContent = (title.childNodes.length > 1 ? " " : "") + (data.title || fields.title.value);
+        }
+        showWords();
     }
 
     function showConflict(data) {
@@ -140,7 +233,7 @@
                 return;
             }
             applyState(res.data, false);
-            showSaved("Saved");
+            showSaved("Saved ✓");
             if (Object.keys(dirty).length) schedule();
         }).catch(function () {
             inFlight = null;
@@ -166,15 +259,16 @@
             input.addEventListener("input", function () {
                 dirty[key] = true;
                 showSaved("Unsaved changes");
+                if (key === "body") showWords();
                 schedule();
             });
-            input.addEventListener("blur", flush);
+            if (key !== "body") input.addEventListener("blur", flush);
         });
-        // The title box: Enter moves to the body instead of doing nothing.
+        // The title box: Enter moves on to the note itself.
         if (fields.title) fields.title.addEventListener("keydown", function (event) {
-            if (event.key === "Enter") { event.preventDefault(); if (fields.body) fields.body.focus(); }
+            if (event.key === "Enter") { event.preventDefault(); setMode("write"); }
         });
-        // Leaving with unsaved changes: save now (sendBeacon can't carry the CSRF header, so ask first).
+        // Leaving with unsaved changes: save now, and ask the browser to wait.
         window.addEventListener("beforeunload", function (event) {
             if (Object.keys(dirty).length || inFlight) {
                 flush();
@@ -199,35 +293,37 @@
         });
     }
 
-    // ---------- Checklist: tick a box in the preview ----------
+    // ---------- Checklist: tick a box in the rendered note ----------
     preview.addEventListener("change", function (event) {
         var box = event.target;
         if (!box.matches || !box.matches("input.nt-check[data-task]")) return;
         var index = parseInt(box.dataset.task, 10), checked = box.checked;
+        var item = box.closest("li");
+        if (item) item.classList.toggle("done", checked);
+        var undo = function () { box.checked = !checked; if (item) item.classList.toggle("done", !checked); };
         flush();
         (inFlight || Promise.resolve()).then(function () {
-            if (conflict) { box.checked = !checked; return; }
+            if (conflict) { undo(); return; }
             return postJson(root.dataset.checkUrl, {index: index, checked: checked, version: version}).then(function (res) {
-                if (res.status === 409) { box.checked = !checked; showConflict(res.data); return; }
-                if (!res.ok) { box.checked = !checked; showSaved("Couldn't save", true); return; }
+                if (res.status === 409) { undo(); showConflict(res.data); return; }
+                if (!res.ok) { undo(); showSaved("Couldn't save", true); return; }
                 applyState(res.data, false);
                 if (fields.body && !dirty.body) fields.body.value = res.data.body;
-                showSaved("Saved");
+                showWords();
+                showSaved("Saved ✓");
             });
-        }).catch(function () { box.checked = !checked; showSaved("Offline - not saved", true); });
+        }).catch(function () { undo(); showSaved("Offline - not saved", true); });
     });
 
-    // ---------- Link picker ----------
+    // ---------- Link record: search the apps you can open ----------
     var picker = byId("nt-picker");
     if (picker) {
         var input = byId("nt-picker-q"), list = byId("nt-picker-results"), searchTimer = null, lastQuery = "";
         var renderResults = function (results) {
             list.textContent = "";
-            if (!results.length) {
-                list.appendChild(el("li", "nt-picker__empty", "Nothing found in the apps you can open."));
-            }
+            if (!results.length) list.appendChild(el("li", "nt-empty", "Nothing found in the apps you can open."));
             results.forEach(function (r) {
-                var li = el("li", "nt-picker__result");
+                var li = el("li");
                 var form = el("form");
                 form.method = "post";
                 form.action = picker.dataset.addUrl;
@@ -252,7 +348,7 @@
             if (q.length < 2) { list.hidden = true; return; }
             searchTimer = setTimeout(function () {
                 lastQuery = q;
-                fetch(picker.dataset.searchUrl + "?q=" + encodeURIComponent(q), {credentials: "same-origin",
+                fetch(workspace.dataset.searchUrl + "?q=" + encodeURIComponent(q), {credentials: "same-origin",
                     headers: {"X-Requested-With": "XMLHttpRequest"}})
                     .then(function (r) { return r.json(); })
                     .then(function (data) { if (q === lastQuery) renderResults(data.results || []); })
@@ -260,7 +356,7 @@
             }, 250);
         });
         input.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") { list.hidden = true; }
+            if (event.key === "Escape") list.hidden = true;
             if (event.key === "Enter") event.preventDefault();
         });
     }

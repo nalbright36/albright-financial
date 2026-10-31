@@ -1,22 +1,22 @@
 {% extends "albright_notes/base.html" %}
 {% block page_title %}Unverified link · {% endblock %}
 {% block content %}
-<div class="container nt-page nt-narrow">
-    <section class="card nt-card" id="leave-warning">
+<div class="container nt nt-leave">
+    <section class="nt-frame" id="leave-warning">
         {% if url %}
-        <h1 class="nt-head__title">This site isn't on your verified list</h1>
-        <p>You're about to leave for:</p>
+        <h1>This site isn't on your verified list</h1>
+        <p class="nt-muted">You're about to leave for:</p>
         <p class="nt-domain" id="leave-domain">{{ domain }}</p>
-        {% if status == "lookalike" %}<p class="nt-danger">This domain looks like an impersonation of a site on your verified list. Don't continue unless you're certain it's genuine.</p>{% endif %}
-        <p class="nt-hint">Full link: {{ url }}</p>
-        <div class="nt-actions">
-            <a href="{% url 'albright_notes:list' %}" class="btn btn-primary" id="leave-back">Back to notes</a>
-            <a href="{{ url }}" class="btn btn-secondary" id="leave-continue" rel="noopener noreferrer nofollow" target="_blank">Continue to {{ domain }}</a>
+        {% if status == "lookalike" %}<p style="color: var(--red);">This domain looks like an impersonation of a site on your verified list. Don't continue unless you're certain it's genuine.</p>{% endif %}
+        <p class="nt-small nt-muted" style="overflow-wrap: anywhere;">Full link: {{ url }}</p>
+        <div class="nt-row" style="margin-top: 14px;">
+            <a href="{% url 'albright_notes:list' %}" class="nt-btn primary" id="leave-back">Back to notes</a>
+            <a href="{{ url }}" class="nt-btn" id="leave-continue" rel="noopener noreferrer nofollow" target="_blank">Continue to {{ domain }}</a>
         </div>
         {% else %}
-        <h1 class="nt-head__title">That isn't a web link</h1>
-        <p>Only http(s) links can be opened from a note.</p>
-        <a href="{% url 'albright_notes:list' %}" class="btn btn-secondary">Back to notes</a>
+        <h1>That isn't a web link</h1>
+        <p class="nt-muted">Only http(s) links can be opened from a note.</p>
+        <a href="{% url 'albright_notes:list' %}" class="nt-btn">Back to notes</a>
         {% endif %}
     </section>
 </div>

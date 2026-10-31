@@ -1,6 +1,10 @@
-"""Albright Notes pages (/notes/): the list (with quick capture) and one
-note's page (Markdown editor with autosave, preview, checklist, tags, pin,
-archive, sharing, links, delete).
+"""Albright Notes (/notes/): one three-pane workspace - Option A of
+docs/design/"Albright Notes - design options.html". The folders and tags
+sidebar (with counts), the notes list with search, and the open note's
+editor (formatting toolbar, Markdown with a tickable checklist, autosave,
+word count, links, sharing, pin / archive / delete). /notes/ opens the first
+note in the list; /notes/<id>/ opens that one. The list's view, tag and
+search stay in the query string as you move between notes.
 
 Who can do what - always checked here, on the server:
   - see a note: its owner and the people it's shared with; anyone else gets 404
@@ -10,6 +14,8 @@ Who can do what - always checked here, on the server:
   - pin, archive, share and delete it: the owner only.
 Opening Notes at all needs access in Admin > Users (albright_labs.app_access)."""
 import json
+import re
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -25,6 +31,14 @@ from albright_crypto_app.links import is_web_url, link_status
 
 from . import links, notes, render as md
 from .models import Note, NoteLink, NoteShare
+
+# The sidebar's folders: (key, label, icon) - Option A's order and glyphs.
+VIEWS = [("all", "All notes", ""), ("pinned", "Pinned", "\U0001F4CC"), ("shared", "Shared with me", "\U0001F465"),
+         ("checklists", "Checklists", "\u2611"), ("archived", "Archived", "\U0001F5C4")]
+# A Markdown checklist line ("- [ ] ..." / "* [x] ..."), as a PostgreSQL regex (the Checklists folder).
+CHECKLIST_SQL = r"(^|\n)[ \t]*(>[ \t]*)*[-*+][ \t]+\[[ xX]\]"
+WORD = re.compile("[0-9A-Za-zÀ-￿]")     # a word has a letter or digit (as notes.js counts)
+LIST_LIMIT = 300
 
 
 def _json(request):
@@ -68,39 +82,106 @@ def _state(note, user):
             "updated": f"{timezone.localtime(note.updated_at):%I:%M %p}".lstrip("0")}
 
 
-# ---------------------------------------------------------------------------
-# The list
-# ---------------------------------------------------------------------------
+def word_count(text):
+    return sum(1 for w in (text or "").split() if WORD.search(w))
+
+
+def _folder(qs, view, user):
+    """Notes in one sidebar folder (archived notes only in Archived)."""
+    if view == "archived":
+        return qs.filter(archived=True)
+    qs = qs.filter(archived=False)
+    if view == "pinned":
+        return qs.filter(pinned=True)
+    if view == "shared":
+        return qs.exclude(owner=user)
+    if view == "checklists":
+        return qs.filter(body__regex=CHECKLIST_SQL)
+    return qs
+
+
+def _row(note, user, now, allowed):
+    tasks = md.checklist_lines(note.body)
+    done = sum(1 for _line, checked in tasks if checked)
+    shared_with_me = note.owner_id != user.pk
+    if shared_with_me:
+        summary = f"Shared by {note.owner.get_username()} \u00b7 edited {ago(note.updated_at, now)}"
+    elif tasks:
+        summary = f"{done} of {len(tasks)} done"                       # a checklist shows its progress
+    else:
+        summary = md.preview(note.body) or f"Edited {ago(note.updated_at, now)}"
+    return {"note": note, "summary": summary, "updated": ago(note.updated_at, now),
+            "shared": shared_with_me or bool(note.shares.all()), "chips": links.chips(user, list(note.links.all()), allowed)}
+
 
 @login_required
-def note_list(request):
+@never_cache
+def workspace(request, pk=None):
     user = request.user
+    view = request.GET.get("view", "")
+    if request.GET.get("archived") == "1":
+        view = "archived"
+    elif request.GET.get("shared") == "1":
+        view = "shared"
+    view = view if view in dict((k, l) for k, l, _i in VIEWS) else "all"
     q = request.GET.get("q", "").strip()[:200]
-    tag = request.GET.get("tag", "").strip().lower()[:50]
-    shared = request.GET.get("shared") == "1"
-    archived = request.GET.get("archived") == "1"
+    tag = request.GET.get("tag", "").strip().lstrip("#").lower()[:50]
 
     visible = Note.objects.visible_to(user)
-    qs = visible.filter(archived=archived)
-    if shared:
-        qs = qs.exclude(owner=user)
+    qs = _folder(visible, view, user)
     if tag:
         qs = qs.filter(tags__contains=[tag])
     qs = notes.search(qs, q) if q else qs.order_by("-pinned", "-updated_at", "-pk")
-    rows = list(qs.select_related("owner").prefetch_related("links", "shares")[:300])
+    rows = list(qs.select_related("owner").prefetch_related("links", "shares")[:LIST_LIMIT])
 
+    open_note = _visible(request, pk) if pk else (rows[0] if rows else None)
     allowed = links._allowed_apps(user)
     now = timezone.now()
-    items = [{
-        "note": n, "preview": md.preview(n.body), "updated": ago(n.updated_at, now),
-        "shared": bool(n.shares.all()) or n.owner_id != user.pk, "mine": n.owner_id == user.pk,
-        "chips": links.chips(user, list(n.links.all()), allowed),
-    } for n in rows]
-    return render(request, "albright_notes/list.html", {
-        "items": items, "q": q, "tag": tag, "shared": shared, "archived": archived,
-        "tags": notes.all_tags(visible.filter(archived=False)),
-        "filtered": bool(q or tag or shared or archived),
-    })
+    current = visible.filter(archived=False)
+    tag_counts = {}
+    for tags in current.values_list("tags", flat=True):
+        for t in tags or []:
+            tag_counts[t] = tag_counts.get(t, 0) + 1
+    keep = {k: v for k, v in (("view", "" if view == "all" else view), ("tag", tag), ("q", q)) if v}
+    query = ("?" + urlencode(keep)) if keep else ""
+    context = {
+        "rows": [_row(n, user, now, allowed) for n in rows], "view": view, "tag": tag, "q": q, "query": query,
+        "folders": [{"key": k, "label": l, "icon": i, "count": _folder(visible, k, user).count(),
+                     "url": reverse("albright_notes:list") + ("" if k == "all" else "?view=" + k)} for k, l, i in VIEWS],
+        "tags": sorted(tag_counts.items()), "open": open_note, "list_url": reverse("albright_notes:list"),
+    }
+    if open_note:
+        context.update(_editor(open_note, user, now, allowed))
+    return render(request, "albright_notes/workspace.html", context)
+
+
+def _editor(note, user, now, allowed):
+    can_edit, is_owner = note.can_edit(user), note.owner_id == user.pk
+    shares = list(note.shares.select_related("user")) if is_owner else []
+    shared_ids = {s.user_id for s in shares} | {note.owner_id}
+    return {
+        "can_edit": can_edit, "is_owner": is_owner, "html": md.render(note.body, editable=can_edit),
+        "chips": links.chips(user, list(note.links.all()), allowed), "words": word_count(note.body),
+        "shares": shares, "share_choices": [u for u in notes.notes_users() if u.pk not in shared_ids] if is_owner else [],
+        "permissions": NoteShare.PERMISSIONS, "updated": ago(note.updated_at, now),
+        "my_permission": None if is_owner else note.shares.filter(user=user).values_list("permission", flat=True).first(),
+    }
+
+
+def note_list(request):
+    return workspace(request)
+
+
+def note_page(request, pk):
+    return workspace(request, pk)
+
+
+@login_required
+@require_POST
+def note_new(request):
+    """"+ New note": an empty note, opened in the editor ready to type."""
+    note = notes.create(request.user, notes.UNTITLED)
+    return redirect(_note_url(note) + "?new=1")
 
 
 @login_required
@@ -113,30 +194,8 @@ def capture(request):
     note = notes.create(request.user, title, body)
     if request.POST.get("open"):
         return redirect(_note_url(note))
-    messages.success(request, f"Saved “{note.title}”.")
+    messages.success(request, f"Saved \u201c{note.title}\u201d.")
     return redirect("albright_notes:list")
-
-
-# ---------------------------------------------------------------------------
-# One note
-# ---------------------------------------------------------------------------
-
-@login_required
-@never_cache
-def note_page(request, pk):
-    note = _visible(request, pk)
-    user = request.user
-    can_edit, is_owner = note.can_edit(user), note.owner_id == user.pk
-    shares = list(note.shares.select_related("user")) if is_owner else []
-    shared_ids = {s.user_id for s in shares} | {note.owner_id}
-    return render(request, "albright_notes/note.html", {
-        "note": note, "can_edit": can_edit, "is_owner": is_owner,
-        "html": md.render(note.body, editable=can_edit),
-        "chips": links.chips(user, list(note.links.all())),
-        "shares": shares, "share_choices": [u for u in notes.notes_users() if u.pk not in shared_ids] if is_owner else [],
-        "permissions": NoteShare.PERMISSIONS, "updated": ago(note.updated_at),
-        "my_permission": None if is_owner else note.shares.filter(user=user).values_list("permission", flat=True).first(),
-    })
 
 
 @login_required
