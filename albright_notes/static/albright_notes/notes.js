@@ -115,10 +115,14 @@
         preview.addEventListener("click", function (event) {
             if (event.target.closest("a, input, label")) return;
             if (window.getSelection && String(window.getSelection())) return;     // selecting text to copy
+            var item = event.target.closest("li.nt-task");
+            var box = item && item.querySelector("input.nt-check[data-task]");
+            if (box && box.closest("li") === item) { openTask(parseInt(box.dataset.task, 10), null); return; }
             setMode("write");
         });
         fields.body.addEventListener("keydown", function (event) {
             if (event.key === "Escape") { event.preventDefault(); flush(); setMode("preview"); }
+            else if (event.key === "Enter") continueList(event);
         });
         fields.body.addEventListener("blur", function (event) {
             // Leaving for the toolbar (B / I / H / List) keeps the Markdown open.
@@ -168,6 +172,175 @@
         button.addEventListener("click", function () { format(button.dataset.fmt); });
     });
 
+    // ---------- Lists continue on Enter (the Markdown) ----------
+    // "- [ ] item" / "- item" / "* item" / "1. item": Enter starts the next item (same indentation; numbers count
+    // up), splitting the line if the cursor is mid-text. Enter on an empty item removes its marker and ends the
+    // list. Shift+Enter is a plain line break.
+    var LIST_ITEM = /^([ \t]*)(?:([-*+])[ \t]+\[[ xX]\](?:[ \t]+|$)|([-*+])[ \t]+|(\d{1,9})([.)])[ \t]+)/;
+
+    function replaceText(box, from, to, text, caret) {
+        box.focus();
+        box.setSelectionRange(from, to);
+        // insertText keeps the browser's undo history; setRangeText is the fallback.
+        var done = document.queryCommandSupported && document.queryCommandSupported("insertText") &&
+            document.execCommand("insertText", false, text);
+        if (!done) {
+            box.setRangeText(text, from, to, "end");
+            box.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+        box.setSelectionRange(caret, caret);
+    }
+
+    function continueList(event) {
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+        var box = fields.body, text = box.value, start = box.selectionStart, end = box.selectionEnd;
+        var lineStart = text.lastIndexOf("\n", start - 1) + 1;
+        var lineEnd = text.indexOf("\n", start);
+        if (lineEnd === -1) lineEnd = text.length;
+        if (end > lineEnd) return;                                       // a selection across lines: plain Enter
+        var line = text.slice(lineStart, lineEnd), m = LIST_ITEM.exec(line);
+        if (!m || start - lineStart < m[0].length) return;               // not a list line, or the cursor is in the marker
+        event.preventDefault();
+        if (!line.slice(m[0].length).trim()) {                          // an empty item: end the list
+            replaceText(box, lineStart, lineEnd, "", lineStart);
+            return;
+        }
+        var indent = m[1];
+        var marker = m[2] ? m[2] + " [ ] " : m[3] ? m[3] + " " : (parseInt(m[4], 10) + 1) + m[5] + " ";
+        var rest = text.slice(end, lineEnd).replace(/^[ \t]+/, "");
+        var insert = "\n" + indent + marker + rest;
+        replaceText(box, start, lineEnd, insert, start + 1 + indent.length + marker.length);
+    }
+
+    // ---------- Checklist items edited in place (the rendered note) ----------
+    // Click an item's text to edit it right there. Enter adds a new unchecked item below (splitting at the cursor)
+    // and moves to it; Enter on an empty item ends the list (its marker goes, and the Markdown opens on that
+    // line); Backspace on an empty item removes it and moves to the item above; Esc or clicking away finishes.
+    // Every change rewrites that line of the Markdown and autosaves; the server's rendering replaces the local
+    // one once you've stopped editing.
+    var TASK_LINE = /^((?:[ \t]*>)*[ \t]*[-*+][ \t]+)\[([ xX])\](?=[ \t]|$)/, FENCE = /^[ \t]*(```|~~~)/;
+    var taskEdit = null, pendingHtml = null;
+
+    function taskLines(body) {
+        var out = [], fenced = false;
+        body.split("\n").forEach(function (line, i) {
+            if (FENCE.test(line)) { fenced = !fenced; return; }
+            if (!fenced && TASK_LINE.test(line)) out.push(i);
+        });
+        return out;
+    }
+    function taskBox(index) { return preview.querySelector('input.nt-check[data-task="' + index + '"]'); }
+    function renumber(from, delta) {
+        Array.prototype.slice.call(preview.querySelectorAll("input.nt-check[data-task]")).forEach(function (box) {
+            var n = parseInt(box.dataset.task, 10);
+            if (n >= from) box.dataset.task = String(n + delta);
+        });
+    }
+    function bodyChanged(lines) {
+        fields.body.value = lines.join("\n");
+        dirty.body = true;
+        showSaved("Unsaved changes");
+        showWords();
+        schedule();
+    }
+    // The nodes after an item's checkbox (its text), up to any nested list.
+    function itemText(box) {
+        var nodes = [], node = box.nextSibling;
+        while (node && !(node.nodeType === 1 && /^(UL|OL)$/.test(node.tagName))) { nodes.push(node); node = node.nextSibling; }
+        return nodes;
+    }
+
+    function openTask(index, caret) {
+        var box = taskBox(index), lines = fields.body.value.split("\n"), number = taskLines(fields.body.value)[index];
+        if (!box || number == null) return;
+        closeTask(true);
+        pendingHtml = null;
+        var m = TASK_LINE.exec(lines[number]);
+        var input = el("input", "nt-task-input");
+        input.type = "text";
+        input.value = lines[number].slice(m[0].length).replace(/^[ \t]+/, "");
+        input.setAttribute("aria-label", "Checklist item");
+        var nodes = itemText(box);
+        nodes.forEach(function (node) { node.remove(); });
+        box.after(input);
+        taskEdit = {index: index, input: input};
+        input.focus();
+        var at = caret == null ? input.value.length : caret;
+        input.setSelectionRange(at, at);
+        input.addEventListener("input", function () { setTask(taskEdit.index, input.value); });
+        input.addEventListener("keydown", taskKey);
+        input.addEventListener("blur", function () { if (taskEdit && taskEdit.input === input) closeTask(false); });
+    }
+
+    function closeTask(switching) {
+        if (!taskEdit) return;
+        var input = taskEdit.input;
+        taskEdit = null;
+        input.replaceWith(document.createTextNode(" " + input.value));
+        if (!switching) {
+            flush();
+            if (pendingHtml != null && !Object.keys(dirty).length && !inFlight) {
+                preview.innerHTML = pendingHtml;
+            }
+            pendingHtml = null;
+        }
+    }
+
+    function setTask(index, value) {
+        var lines = fields.body.value.split("\n"), number = taskLines(fields.body.value)[index];
+        if (number == null) return;
+        var m = TASK_LINE.exec(lines[number]);
+        lines[number] = m[1] + "[" + m[2] + "] " + value;
+        bodyChanged(lines);
+    }
+
+    function taskKey(event) {
+        var input = event.target, index = taskEdit.index;
+        var lines = fields.body.value.split("\n"), numbers = taskLines(fields.body.value), number = numbers[index];
+        var box = taskBox(index), item = box.closest("li");
+        if (event.key === "Escape") { event.preventDefault(); input.blur(); return; }
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            if (!input.value.trim()) {                                    // an empty item: end the list here
+                lines[number] = "";
+                taskEdit = null;
+                item.remove();
+                renumber(index + 1, -1);
+                bodyChanged(lines);
+                var offset = lines.slice(0, number).join("\n").length + (number ? 1 : 0);
+                setMode("write");
+                fields.body.setSelectionRange(offset, offset);
+                return;
+            }
+            var caret = input.selectionStart, before = input.value.slice(0, caret), after = input.value.slice(input.selectionEnd);
+            var prefix = TASK_LINE.exec(lines[number])[1];
+            lines[number] = prefix + "[" + TASK_LINE.exec(lines[number])[2] + "] " + before;
+            lines.splice(number + 1, 0, prefix + "[ ] " + after);
+            input.value = before;
+            renumber(index + 1, 1);
+            var next = el("li", "nt-task"), check = el("input", "nt-check");
+            check.type = "checkbox";
+            check.dataset.task = String(index + 1);
+            check.setAttribute("aria-label", "Done");
+            next.appendChild(check);
+            next.appendChild(document.createTextNode(" " + after));
+            item.after(next);
+            bodyChanged(lines);
+            openTask(index + 1, 0);
+            return;
+        }
+        if (event.key === "Backspace" && !input.value && input.selectionStart === 0) {   // remove the empty item
+            event.preventDefault();
+            lines.splice(number, 1);
+            taskEdit = null;
+            item.remove();
+            renumber(index + 1, -1);
+            bodyChanged(lines);
+            if (index > 0) openTask(index - 1, null);
+            else flush();
+        }
+    }
+
     // ---------- Autosave ----------
     var dirty = {}, timer = null, inFlight = null, conflict = false;
 
@@ -188,7 +361,11 @@
     function applyState(data, replaceInputs) {
         version = data.version;
         root.dataset.version = String(version);
-        if (data.html != null) preview.innerHTML = data.html || '<p class="nt-muted">Nothing written yet.</p>';
+        if (data.html != null) {
+            var html = data.html || '<p class="nt-muted">Nothing written yet.</p>';
+            if (taskEdit) pendingHtml = html;                 // don't pull the item being edited out from under you
+            else { preview.innerHTML = html; pendingHtml = null; }
+        }
         if (data.updated && byId("nt-updated")) byId("nt-updated").textContent = "at " + data.updated;
         if (replaceInputs) {
             if (fields.title) fields.title.value = data.title;
