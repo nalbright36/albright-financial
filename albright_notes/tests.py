@@ -576,3 +576,73 @@ class WorkspaceTests(Base):
         self.assertIn("appearance: none", text)
         self.assertNotRegex(text, r"background(?:-color)?:\s*(?:#fff\b|#ffffff|white|#000\b|black)")
         self.assertIn("--nt-accent: var(--accent);", text)
+
+
+@override_settings(CRYPTO=CRYPTO)
+class AccentTests(TestCase):
+    """Notes is pink everywhere: the registry, <body data-app="notes"> on every Notes page, style.css's rules
+    for both themes, and nothing in Notes' own files bringing back green or overriding --accent."""
+
+    def setUp(self):
+        self.user = with_apps(User.objects.create_user(username="pat", password=PASSWORD))
+        self.client.force_login(self.user)
+
+    def test_registry_accent_is_pink(self):
+        app = apps_registry.BY_KEY["notes"]
+        self.assertEqual((app.key, app.accent, app.color.lower()), ("notes", "notes", "#ec4899"))
+
+    def test_every_notes_page_has_data_app_notes(self):
+        note = notes.create(self.user, "N")
+        for path in (url("list"), url("list") + "?view=archived", url("note", note.pk),
+                     url("leave") + "?to=https%3A%2F%2Fx.example"):
+            with self.subTest(path=path):
+                self.assertIn('<body data-app="notes">', self.client.get(path).content.decode())
+        redirected = self.client.get("/notes", follow=True)               # no trailing slash -> /notes/
+        self.assertIn('<body data-app="notes">', redirected.content.decode())
+
+    def test_style_css_defines_the_pink_accent_for_both_themes(self):
+        css = (settings.BASE_DIR / "albright_trading_app" / "static" / "style.css").read_text(encoding="utf-8")
+
+        def block(selector):
+            return css.split(selector + " {", 1)[1].split("}", 1)[0]
+        dark = block('\nbody[data-app="notes"]')
+        for line in ("--accent-rgb: 236, 72, 153;", "--accent: #F472B6;", "--accent-solid: #BE185D;"):
+            self.assertIn(line, dark)
+        self.assertIn("--accent: #BE185D;", block('[data-theme="light"] body[data-app="notes"]'))
+        # --accent-soft / --accent-glow / --accent-ring / --accent-contrast come from --accent-rgb on body,
+        # exactly as for every other app.
+        shared = block("\nbody")
+        for line in ("--accent-soft: rgba(var(--accent-rgb), 0.14);", "--accent-glow: rgba(var(--accent-rgb), 0.35);",
+                     "--accent-contrast: #FFFFFF;"):
+            self.assertIn(line, shared)
+        self.assertIn('.labs-tile[data-app-accent="notes"] { --labs-tile-color: var(--app-notes); }', css)
+        launcher = (settings.BASE_DIR / "albright_labs" / "static" / "labs" / "launcher.css").read_text(encoding="utf-8")
+        self.assertIn('.app-launcher__tile[data-app-target="notes"] { --app-color: var(--app-notes); }', launcher)
+
+    def test_no_green_or_accent_override_in_notes_files(self):
+        greens = ("#10b981", "#34d399", "#047857", "#065f46", "#6ee7b7", "16, 185, 129", "emerald", "--gain")
+        files = [p for p in (settings.BASE_DIR / "albright_notes").rglob("*") if p.suffix in (".css", ".js", ".html")]
+        self.assertTrue(files)
+        for path in files:
+            text = path.read_text(encoding="utf-8").lower()
+            with self.subTest(path=path.name):
+                for green in greens:
+                    self.assertNotIn(green, text)
+                self.assertNotRegex(text, r"--accent(-rgb|-solid|-soft|-glow|-contrast)?\s*:")   # reads it, never sets it
+
+    def test_check_flags_a_stale_collected_stylesheet(self):
+        """The cause of the green: a collected style.css older than the app's (no Notes rules in it)."""
+        import os
+        import tempfile
+        from albright_labs.checks import static_files_collected
+        with tempfile.TemporaryDirectory() as root, override_settings(STATIC_ROOT=root, DEBUG=False):
+            call_command("collectstatic", interactive=False, verbosity=0)
+            self.assertEqual(static_files_collected(), [])
+            old = os.path.join(root, "style.css")
+            with open(old, "w", encoding="utf-8") as f:
+                f.write("body { --accent: #34D399; }")                       # yesterday's stylesheet
+            os.utime(old, (1_000_000_000, 1_000_000_000))
+            warnings = static_files_collected()
+            self.assertEqual([w.id for w in warnings], ["albright_labs.W002"])
+            self.assertIn("style.css", warnings[0].msg)
+            self.assertIn("collectstatic", warnings[0].hint)
