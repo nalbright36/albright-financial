@@ -20,6 +20,7 @@ urlpatterns = [
     path("<int:pk>/remove/", views.remove, name="remove"),
     path("<int:pk>/note/", views.item_note, name="item_note"),
     path("<int:pk>/checklist/<int:row_id>/", views.checklist_toggle, name="checklist_toggle"),
+    path("<int:pk>/checklist/add/", views.checklist_add, name="checklist_add"),
     path("from-groceries/", views.from_groceries, name="from_groceries"),
     path("<int:pk>/share/", views.share_add, name="share_add"),
     path("<int:pk>/share/<int:share_id>/", views.share_update, name="share_update"),

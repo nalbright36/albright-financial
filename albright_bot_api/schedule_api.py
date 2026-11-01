@@ -158,7 +158,14 @@ def _occurrence_json(o):
     return {"item_id": o.item.pk, "title": o.title, "date": o.date.isoformat(),
             "occurrence_date": o.occurrence_date.isoformat(), "start_time": o.start_time.strftime("%H:%M") if o.start_time else None,
             "end_time": o.end_time.strftime("%H:%M") if o.end_time else None, "kind": o.item.kind,
-            "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats, "created_by": o.item.created_by}
+            "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats, "created_by": o.item.created_by,
+            "owner": _person(o.item.owner), "mine": not getattr(o, "shared_in", False),
+            "done_by": _person(o.done_by) if getattr(o, "done_by", None) else None}
+
+
+def _person(user):
+    from albright_planner.planner import person
+    return person(user)
 
 
 def _item_json(request, item):
@@ -213,6 +220,8 @@ def schedule_create(request, token):
         checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", 1000),
         recurrence=rule, recurrence_until=until, recurrence_count=count,
         created_by=token.name[:150], from_bot=True, bot_token=token)
+    from albright_planner.planner import apply_default_shares
+    apply_default_shares(item)                       # shared as the owner chose by default
     return _item_json(request, item), 201, f"item #{item.pk}: {item.title[:80]}" + (f" ({rule})" if rule else "")
 
 

@@ -25,7 +25,7 @@ from django.views.decorators.http import require_POST
 
 from . import checklist, planner, quickadd, recurrence, sources
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
-from .models import ItemShare, PlannerSettings, ScheduleItem
+from .models import ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -79,13 +79,15 @@ def _owned(request, pk):
 
 def _filters(request):
     kind = request.GET.get("kind", "")
+    who = request.GET.get("who", "")
+    if request.GET.get("shared") == "1":            # the old "Shared with me" checkbox's links
+        who = planner.SHARED
     return {"kind": kind if kind in (ScheduleItem.TASK, ScheduleItem.EVENT) else "",
-            "show_done": request.GET.get("done") != "0", "shared_only": request.GET.get("shared") == "1"}
+            "show_done": request.GET.get("done") != "0", "who": who if who in dict(planner.WHO) else ""}
 
 
 def _filter_params(f):
-    return {k: v for k, v in (("kind", f["kind"]), ("done", "" if f["show_done"] else "0"),
-                              ("shared", "1" if f["shared_only"] else "")) if v}
+    return {k: v for k, v in (("kind", f["kind"]), ("done", "" if f["show_done"] else "0"), ("who", f["who"])) if v}
 
 
 def _frame(request, view, day, prev_day, next_day, title):
@@ -106,7 +108,14 @@ def _frame(request, view, day, prev_day, next_day, title):
         "meals_toggle": sources.can_open(request.user, "meals"),
         "can_check_groceries": sources.can_open(request.user, "meals"),     # checklist rows linked to the list
         "meals_on": PlannerSettings.for_user(request.user).show_meals,
+        "who_choices": planner.WHO, **_quick_share(request.user),
     }
+
+
+def _quick_share(user):
+    """Quick add's "Shared with <name>" chip: the user's default share, changeable before saving."""
+    rows = planner.share_rows(user, planner.default_shares(user))
+    return {"quick_share": rows, "quick_share_label": planner.share_summary(rows), "permissions": ItemShare.PERMISSIONS}
 
 
 def _remember(response, view):
@@ -135,7 +144,7 @@ def day_view(request):
     day = _day(request.GET.get("date"), today)
     f = _filters(request)
     occs = planner.occurrences(request.user, day, day, **f)
-    overdue_occs = planner.overdue(request.user, day, kind=f["kind"], shared_only=f["shared_only"]) if day == today else []
+    overdue_occs = planner.overdue(request.user, day, kind=f["kind"], who=f["who"]) if day == today else []
     checklist.attach(occs + overdue_occs)
     top, timed = _split(occs)
     meals = sources.meals(request.user, day, day)
@@ -216,6 +225,9 @@ def quick_add(request):
         return redirect(_next(request))
     fields = quickadd.parse(text, planner.today())
     item = ScheduleItem.objects.create(owner=request.user, created_by=request.user.get_username(), **fields)
+    # The chip's choices when it was on the page (share_section), else the default share.
+    planner.set_shares(item, planner.posted_shares(request.POST, request.user) if request.POST.get("share_section")
+                       else planner.default_shares(request.user))
     when = recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count) or \
         f"{item.date:%a %b} {item.date.day}"
     if item.start_time:
@@ -235,9 +247,27 @@ def new_item(request):
         for name, value in changes.items():
             setattr(item, name, value)
         item.save()
+        _save_shares(request, item)
         messages.success(request, f"Added “{item.title}”.")
         return redirect(_next(request))
-    return render(request, "albright_planner/form.html", {"form": form, "item": None, "next": _next(request)})
+    chosen = planner.posted_shares(request.POST, request.user) if request.method == "POST" \
+        else planner.default_shares(request.user)
+    return render(request, "albright_planner/form.html", {"form": form, "item": None, "next": _next(request),
+                                                          "share_rows": planner.share_rows(request.user, chosen),
+                                                          "permissions": ItemShare.PERMISSIONS})
+
+
+def _save_shares(request, *items):
+    """The form's "Share with" section (owner only): share each item as chosen, and remember it as the default
+    when "Remember as my default" is ticked."""
+    if not request.POST.get("share_section"):
+        return
+    chosen = planner.posted_shares(request.POST, request.user)
+    for item in items:
+        if item is not None and item.owner_id == request.user.pk:
+            planner.set_shares(item, chosen)
+    if request.POST.get("remember_shares"):
+        planner.save_default_shares(request.user, chosen)
 
 
 @login_required
@@ -253,13 +283,16 @@ def edit_item(request, pk):
             raise Http404
         if form.is_valid():
             scope = form.cleaned_data.get("scope") or planner.ALL
-            planner.change(item, occurrence, scope, form.changes())
+            changed = planner.change(item, occurrence, scope, form.changes())
+            if is_owner:
+                _save_shares(request, item, changed if changed is not None and changed.pk != item.pk else None)
             messages.success(request, "Saved." if not item.repeats else
                              {"this": "Saved this occurrence.", "following": "Saved this and the following occurrences.",
                               "all": "Saved every occurrence."}[scope])
             return redirect(_next(request))
     shares = list(item.shares.select_related("user")) if is_owner else []
     taken = {s.user_id for s in shares} | {item.owner_id}
+    completion = item.completions.select_related("completed_by").filter(occurrence_date=occurrence).first()
     can_note = can_edit and sources.can_open(request.user, "notes")
     rows = list(item.checklist.select_related("grocery_item"))
     return render(request, "albright_planner/form.html", {
@@ -270,7 +303,10 @@ def edit_item(request, pk):
         "form": form, "item": item, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
         "can_remove": can_edit or (is_owner and item.locked),
         "summary": recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count),
-        "done": item.completions.filter(occurrence_date=occurrence).exists(), "next": _next(request),
+        "done": completion is not None, "done_by": planner.person(completion.completed_by) if completion else "",
+        "owner_name": planner.person(item.owner), "next": _next(request),
+        "share_rows": planner.share_rows(request.user, {s.user_id: s.permission for s in shares}) if is_owner else [],
+        "shared_with": [planner.person(s.user) for s in item.shares.select_related("user")] if is_owner else [],
         "shares": shares, "permissions": ItemShare.PERMISSIONS,
         "share_choices": [u for u in planner.planner_users() if u.pk not in taken] if is_owner else [],
     })
@@ -308,6 +344,19 @@ def checklist_toggle(request, pk, row_id):
         rows = list(item.checklist.select_related("grocery_item"))
         return JsonResponse({"ok": True, "checked": row.checked, "progress": checklist.progress(rows)["label"],
                              "task_done": item.completions.filter(occurrence_date=item.date).exists()})
+    return redirect(_next(request))
+
+
+@login_required
+@require_POST
+def checklist_add(request, pk):
+    """Add a row to a task's checklist (task editors - Edit sharing included)."""
+    item = _editable(request, pk)
+    text = " ".join((request.POST.get("text") or "").split())[:200]
+    if text:
+        last = item.checklist.order_by("-order").values_list("order", flat=True).first()
+        TaskChecklistItem.objects.create(task=item, text=text, order=(last + 1) if last is not None else 0)
+        checklist.reevaluate(item)           # a new unchecked row reopens a finished task
     return redirect(_next(request))
 
 
@@ -451,6 +500,7 @@ def from_note(request, note_id):
     item = ScheduleItem.objects.create(
         owner=request.user, created_by=request.user.get_username(), title=note.title[:200], date=d["date"],
         start_time=d.get("time"), recurrence=recurrence.build(d["repeat"], d["date"]), note=note)
+    planner.apply_default_shares(item)
     when = recurrence.summary(item.recurrence, item.date) or f"{item.date:%a %b} {item.date.day}"
     messages.success(request, f"Scheduled “{item.title}” – {when}.")
     return redirect(back)

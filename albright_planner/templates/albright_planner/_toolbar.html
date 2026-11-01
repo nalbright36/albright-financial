@@ -1,6 +1,7 @@
 {% comment %}
 Every Planner view's header: title, Day / Week / Month tabs, Today and the
-arrows, quick add, and the filters (they apply on change; planner.js). "Show
+arrows, quick add (with its "Shared with" chip), and the filters - kind,
+done, and whose: All / Mine / Shared with me (they apply on change; planner.js). "Show
 meals" (people who can open Meals) is remembered - it's saved, not a filter.
 {% endcomment %}
 <div class="pl-head">
@@ -25,7 +26,8 @@ meals" (people who can open Meals) is remembered - it's saved, not a filter.
                 <option value="event"{% if filters.kind == "event" %} selected{% endif %}>Events only</option>
             </select>
             <label class="pl-toggle"><input type="checkbox" name="done" value="0"{% if not filters.show_done %} checked{% endif %}> Hide completed</label>
-            <label class="pl-toggle"><input type="checkbox" name="shared" value="1"{% if filters.shared_only %} checked{% endif %}> Shared with me</label>
+            <label for="pl-who" class="visually-hidden">Whose</label>
+            <select name="who" id="pl-who" class="pl-input pl-select">{% for value, label in who_choices %}<option value="{{ value }}"{% if filters.who == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
             <button type="submit" class="pl-btn pl-nojs">Apply</button>
         </form>
         {% if meals_toggle %}
@@ -42,6 +44,21 @@ meals" (people who can open Meals) is remembered - it's saved, not a filter.
         <input type="text" name="text" id="pl-quick-text" class="pl-input" maxlength="500" autocomplete="off" required
                placeholder="Quick add: &ldquo;Gym Mon Wed Fri 6am&rdquo;, &ldquo;Call dentist tomorrow 3pm&rdquo;">
         <button type="submit" class="pl-btn pl-btn--primary">Add</button>
+        {% if quick_share %}
+        {# Quick add is shared the way new items are by default (Share with > Remember as my default); tap to change it for this one. #}
+        <details class="pl-quick-share" id="pl-quick-share">
+            <summary class="pl-share-chip" id="pl-quick-share-label">{{ quick_share_label }}</summary>
+            <div class="pl-quick-share__panel">
+                <input type="hidden" name="share_section" value="1">
+                {% for row in quick_share %}
+                <label class="pl-share-row"><span>{{ row.name }}</span>
+                    <select name="share_{{ row.user.pk }}" class="pl-input pl-select" data-share-name="{{ row.name }}">
+                        <option value="">Not shared</option>{% for value, label in permissions %}<option value="{{ value }}"{% if row.perm == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select></label>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
         <a href="{% url 'albright_planner:new' %}?date={{ day|date:'Y-m-d' }}&amp;next={{ here|urlencode }}" class="pl-btn" id="pl-new">New item</a>
     </form>
 </div>

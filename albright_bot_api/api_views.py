@@ -273,7 +273,8 @@ GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD          scope: schedule:read
   and time. Includes items shared with the owner. Returns {"start", "end", "occurrences": [{"item_id",
   "title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
   to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
-  "created_by"}]}.
+  "created_by", "owner" (whose item - first name), "mine" (false for an item someone shared with the owner),
+  "done_by" (who checked it off - either person, for a shared item - or null)}]}.
 
 POST schedule                                          scope: schedule:write
   Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
@@ -289,7 +290,8 @@ POST schedule                                          scope: schedule:write
   End a repeat with "until": YYYY-MM-DD or "count": 1-1000 (or UNTIL/COUNT in the rrule) - not both.
   Example: {"title": "Gym", "date": "2026-11-02", "start_time": "06:00", "repeat": "weekly",
   "days": ["MO", "WE", "FR"]}
-  The item belongs to the owner and shows "by <your token's name>". Returns 201 {"id", "title", "kind",
+  The item belongs to the owner and shows "by <your token's name>"; it's shared the way the owner shares new
+  items by default (Planner "Share with" > "Remember as my default"). Returns 201 {"id", "title", "kind",
   "date", "start_time", "end_time", "checkable", "notes", "rrule", "until", "count", "repeats" (plain
   English), "created_by", "url"}.
 

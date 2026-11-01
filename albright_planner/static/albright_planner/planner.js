@@ -52,6 +52,17 @@
         if (event.target.matches && event.target.matches("select[data-autosubmit]")) event.target.form.submit();
     });
 
+    // ---------- Quick add: the "Shared with <name>" chip follows its choices ----------
+    var quickShare = document.getElementById("pl-quick-share");
+    if (quickShare) {
+        quickShare.addEventListener("change", function () {
+            var names = Array.prototype.filter.call(quickShare.querySelectorAll("select[data-share-name]"),
+                function (sel) { return sel.value; }).map(function (sel) { return sel.dataset.shareName; });
+            document.getElementById("pl-quick-share-label").textContent = names.length
+                ? "Shared with " + names[0] + (names.length > 1 ? " +" + (names.length - 1) : "") : "Only me";
+        });
+    }
+
     // ---------- Week: drag to another day ----------
     var week = document.getElementById("pl-week"), dialog = document.getElementById("pl-scope"), dragged = null;
     function askScope(repeats) {

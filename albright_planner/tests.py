@@ -391,7 +391,7 @@ class SharingTests(Base):
         item = self.item()
         no_planner = with_apps(User.objects.create_user(username="notes_only", password=PASSWORD), ["notes"])
         page = self.client.get(url("edit", item.pk)).content.decode()
-        self.assertIn(f'<option value="{self.wife.pk}">sam</option>', page)
+        self.assertIn(f'name="share_{self.wife.pk}"', page)                # "Share with" in the form
         self.assertNotIn("notes_only", page)
         self.client.post(url("share_add", item.pk), {"user": no_planner.pk})
         self.assertFalse(ItemShare.objects.exists())

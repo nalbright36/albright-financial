@@ -90,6 +90,8 @@ def task_from_groceries(user, lines, title, day, start_time=None, note=""):
     TaskChecklistItem.objects.bulk_create([
         TaskChecklistItem(task=task, order=n, text=grocery_text(line), grocery_item=line)
         for n, line in enumerate(lines)])
+    from .planner import apply_default_shares
+    apply_default_shares(task)               # shared as the owner chose by default
     reevaluate(task)                         # already all bought: done from the start
     return task
 

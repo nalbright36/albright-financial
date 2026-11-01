@@ -459,7 +459,7 @@ class WebsiteImportTests(Base):
         self.assertContains(detail, f'Source: <a href="{CHILI_URL}" target="_blank" rel="noopener noreferrer nofollow">'
                                     'Example Kitchen</a> &middot; by Ann Baker', html=False)
         self.assertContains(detail, '<h3 class="meals-steps__heading">For the chili</h3>')
-        self.assertContains(detail, "<li>2 lb ground beef</li>")
+        self.assertContains(detail, "<span>2 lb ground beef</span></label>")   # a tickable ingredient
         self.assertContains(detail, 'id="recipe-reimport"')
         self.assertNotContains(detail, "Needs review")
 
@@ -624,7 +624,10 @@ class AddToGroceriesTests(Base):
         onion.refresh_from_db()
         self.assertEqual(onion.quantity, 4)
         self.assertEqual(set(onion.recipes.all()), {chili, tacos})
-        self.assertContains(self.client.get(reverse("albright_meals:groceries")), "from Chili, Tacos")
+        groceries_page = self.client.get(reverse("albright_meals:groceries"))
+        self.assertContains(groceries_page, "2 recipes</summary>")          # tap for which
+        self.assertContains(groceries_page, ">Chili</a>, <a")
+        self.assertContains(groceries_page, ">Tacos</a>")
 
 
 # ---------------------------------------------------------------------------

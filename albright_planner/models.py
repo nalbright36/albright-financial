@@ -184,6 +184,8 @@ class PlannerSettings(models.Model):
     # A task with a checklist checks itself off when every row is checked (and reopens when one is unchecked).
     complete_when_checklist_done = models.BooleanField(default=True,
                                                        verbose_name="Complete task when all items are checked")
+    # "Remember as my default" on the Share with section: {user pk (str): "view" | "edit"} for new items.
+    default_shares = models.JSONField(default=dict, blank=True)
     synced_at = models.DateTimeField(null=True, blank=True)      # sources last brought up to date
 
     @classmethod

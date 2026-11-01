@@ -4,13 +4,16 @@ item for "this occurrence only", "this and following" or "all occurrences"."""
 from datetime import time, timedelta
 
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
 from . import recurrence
 from .models import DeletedSourceItem, ItemCompletion, ItemException, ItemShare, ScheduleItem
 
 THIS, FOLLOWING, ALL = "this", "following", "all"
+# The views' "Show" filter: everything I can see, only mine, or only what others shared with me.
+EVERYONE, MINE, SHARED = "", "mine", "shared"
+WHO = [(EVERYONE, "All"), (MINE, "Mine"), (SHARED, "Shared with me")]
 SCOPES = [(THIS, "This occurrence only"), (FOLLOWING, "This and following"), (ALL, "All occurrences")]
 SERIES_FIELDS = ("notes", "kind", "checkable", "priority", "color", "end_time")
 
@@ -34,44 +37,69 @@ def _candidates(user, start, end):
     moved_in = Q(exceptions__action=ItemException.MOVE, exceptions__new_date__gte=start, exceptions__new_date__lte=end)
     ids = ScheduleItem.objects.visible_to(user).filter(archived=False).filter(one_off | repeating | moved_in) \
         .values_list("pk", flat=True).distinct()
-    return ScheduleItem.objects.filter(pk__in=list(ids)).select_related("owner").prefetch_related("exceptions", "completions")
+    return ScheduleItem.objects.filter(pk__in=list(ids)).select_related("owner").prefetch_related(
+        "exceptions", "shares__user", Prefetch("completions", queryset=ItemCompletion.objects.select_related("completed_by")))
 
 
-def occurrences(user, start, end, kind="", show_done=True, shared_only=False):
-    """Every occurrence the user can see between start and end (inclusive), sorted by day and time."""
+def _by_owner(items, user, who):
+    if who == MINE:
+        return [i for i in items if i.owner_id == user.pk]
+    if who == SHARED:
+        return [i for i in items if i.owner_id != user.pk]
+    return items
+
+
+def _mark_sharing(occ, user):
+    """shared_in: someone else's item (shown with their initial); shared_out: mine, shared with others."""
+    occ.shared_in = occ.item.owner_id != user.pk
+    occ.shared_out = not occ.shared_in and bool(occ.item.shares.all())
+
+
+def occurrences(user, start, end, kind="", show_done=True, shared_only=False, who=EVERYONE):
+    """Every occurrence the user can see - their own items and ones shared with them - between start and end
+    (inclusive), sorted by day and time. A check-off is the item's, so it shows for everyone who can see it, with
+    who did it (occ.done_by)."""
     items = list(_candidates(user, start, end))
     if kind in (ScheduleItem.TASK, ScheduleItem.EVENT):
         items = [i for i in items if i.kind == kind]
-    if shared_only:
-        items = [i for i in items if i.owner_id != user.pk]
+    items = _by_owner(items, user, SHARED if shared_only else who)
     editable = set(ScheduleItem.objects.editable_by(user).filter(pk__in=[i.pk for i in items]).values_list("pk", flat=True))
     out = []
     for item in items:
-        done = {c.occurrence_date for c in item.completions.all()}
+        completions = {c.occurrence_date: c for c in item.completions.all()}
         exceptions = {e.occurrence_date: e for e in item.exceptions.all()}
-        for occ in recurrence.occurrences(item, start, end, done, exceptions):
+        for occ in recurrence.occurrences(item, start, end, set(completions), exceptions):
             occ.can_edit = item.pk in editable
+            completion = completions.get(occ.occurrence_date)
+            occ.done_by = completion.completed_by if completion else None
+            _mark_sharing(occ, user)
             if show_done or not occ.done:
                 out.append(occ)
     out.sort(key=lambda o: (o.date, o.start_time is not None, o.start_time or time.min, o.title.lower()))
     return out
 
 
-def overdue(user, day=None, kind="", shared_only=False):
-    """One-off tasks from before `day` that aren't checked off - they roll into Today until done or moved."""
+def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
+    """One-off tasks from before `day` that aren't checked off - they roll into Today until done or moved. Includes
+    tasks shared with the user."""
     day = day or today()
     if kind == ScheduleItem.EVENT:
         return []
     qs = ScheduleItem.objects.visible_to(user).filter(archived=False, recurrence="", kind=ScheduleItem.TASK,
                                                       checkable=True, date__lt=day) \
-        .exclude(completions__occurrence_date=F("date")).select_related("owner").order_by("date", "start_time", "pk")
-    if shared_only:
+        .exclude(completions__occurrence_date=F("date")).select_related("owner").prefetch_related("shares__user") \
+        .order_by("date", "start_time", "pk")
+    who = SHARED if shared_only else who
+    if who == SHARED:
         qs = qs.exclude(owner=user)
+    elif who == MINE:
+        qs = qs.filter(owner=user)
     editable = set(ScheduleItem.objects.editable_by(user).filter(pk__in=[i.pk for i in qs]).values_list("pk", flat=True))
     out = []
     for item in qs:
         occ = recurrence.Occurrence(item, item.date, item.date, item.title, item.start_time, item.end_time)
-        occ.overdue, occ.can_edit = True, item.pk in editable
+        occ.overdue, occ.can_edit, occ.done_by = True, item.pk in editable, None
+        _mark_sharing(occ, user)
         out.append(occ)
     return out
 
@@ -219,6 +247,76 @@ def planner_users():
     from django.contrib.auth import get_user_model
     return get_user_model().objects.filter(is_active=True).filter(
         Q(is_superuser=True) | Q(labs_preference__allowed_apps__contains=["planner"])).order_by("username")
+
+
+# ---------------------------------------------------------------------------
+# Sharing: "Share with" on the new / edit forms and quick add, and the remembered default
+# ---------------------------------------------------------------------------
+
+def person(user):
+    """"Kim" - the first name, else the username."""
+    return (user.first_name or user.get_username()).strip() if user else ""
+
+
+def share_people(owner):
+    """Who the owner can share with: everyone else who can open the Planner."""
+    return list(planner_users().exclude(pk=owner.pk))
+
+
+def default_shares(user):
+    """The user's remembered "Share with" choice, {user pk: "view" | "edit"} - only people who still can open
+    the Planner."""
+    from .models import PlannerSettings
+    saved = PlannerSettings.for_user(user).default_shares or {}
+    people = {str(p.pk) for p in share_people(user)}
+    return {int(pk): perm for pk, perm in saved.items() if pk in people and perm in dict(ItemShare.PERMISSIONS)}
+
+
+def save_default_shares(user, choices):
+    from .models import PlannerSettings
+    prefs = PlannerSettings.for_user(user)
+    prefs.default_shares = {str(pk): perm for pk, perm in choices.items() if perm}
+    prefs.save(update_fields=["default_shares"])
+
+
+def posted_shares(post, owner):
+    """{user pk: "view" | "edit" | ""} from a form's "Share with" selects (share_<pk>); "" = not shared."""
+    out = {}
+    for p in share_people(owner):
+        perm = post.get(f"share_{p.pk}", "")
+        out[p.pk] = perm if perm in dict(ItemShare.PERMISSIONS) else ""
+    return out
+
+
+def set_shares(item, choices):
+    """Share the item exactly as chosen ({user pk: perm or ""}) - only with people who can open the Planner."""
+    allowed = {p.pk for p in share_people(item.owner)}
+    for pk, perm in choices.items():
+        if pk not in allowed:
+            continue
+        if perm:
+            ItemShare.objects.update_or_create(item=item, user_id=pk, defaults={"permission": perm})
+        else:
+            ItemShare.objects.filter(item=item, user_id=pk).delete()
+
+
+def apply_default_shares(item):
+    """A new item made outside the form (from a note, the grocery list, the Bot API): shared as its owner chose
+    by default."""
+    set_shares(item, default_shares(item.owner))
+
+
+def share_rows(owner, chosen):
+    """The "Share with" section's rows: [{"user", "name", "perm"}] for everyone the owner can share with."""
+    return [{"user": p, "name": person(p), "perm": chosen.get(p.pk, "")} for p in share_people(owner)]
+
+
+def share_summary(rows):
+    """"Shared with Kim" / "Shared with Kim +1" / "Only me" - quick add's chip."""
+    names = [r["name"] for r in rows if r["perm"]]
+    if not names:
+        return "Only me"
+    return f"Shared with {names[0]}" + (f" +{len(names) - 1}" if len(names) > 1 else "")
 
 
 # ---------------------------------------------------------------------------
