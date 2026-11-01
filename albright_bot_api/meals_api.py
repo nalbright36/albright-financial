@@ -187,7 +187,7 @@ def _item_json(i):
 @bot_endpoint("meals:read")
 def groceries_list(request, token):
     models = _meals()
-    items = [_item_json(i) for i in models.GroceryItem.objects.select_related("added_by")]
+    items = [_item_json(i) for i in models.GroceryItem.objects.active().select_related("added_by")]
     return {"items": items}, 200, f"listed {len(items)} grocery items"
 
 
@@ -225,7 +225,7 @@ def groceries_add(request, token):
 @bot_endpoint("meals:write", methods=("PATCH",))
 def grocery_update(request, token, item_id):
     models = _meals()
-    item = models.GroceryItem.objects.filter(pk=item_id).first()
+    item = models.GroceryItem.objects.active().filter(pk=item_id).first()   # cleared (archived) lines are gone
     if item is None:
         raise ApiError(404, f"No grocery item {item_id}.", "rejected: item not found")
     data = json_body(request)

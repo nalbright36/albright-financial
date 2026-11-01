@@ -1791,8 +1791,9 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .meals-aisle__name { font-size: 0.75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--text-secondary); margin: 0 0 6px; }
 .meals-aisle__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.meals-item { display: flex; align-items: stretch; gap: 6px; }
-.meals-item__toggle-form { flex: 1; margin: 0; }
+.meals-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "sel main del" "sel extra del";
+  align-items: stretch; column-gap: 6px; }
+.meals-item__toggle-form { grid-area: main; margin: 0; }
 .meals-item__toggle { width: 100%; min-height: 52px; display: flex; align-items: center; gap: var(--space-3); text-align: left;
   padding: 10px var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface);
   color: var(--text-primary); font: inherit; cursor: pointer; }
@@ -1809,7 +1810,41 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .meals-item__note { font-size: 0.8125rem; color: var(--text-secondary); overflow-wrap: anywhere; }
 .meals-item.is-checked .meals-item__name { text-decoration: line-through; color: var(--text-secondary); }
 .meals-item.is-checked .meals-item__toggle { background: transparent; }
-.meals-item__delete-form { margin: 0; display: flex; }
+.meals-item__delete-form { grid-area: del; margin: 0; display: flex; }
+/* Select mode (Create task): a box on each row. */
+.meals-item__select { grid-area: sel; display: none; align-items: center; padding: 0 4px; cursor: pointer; }
+.meals-item__select input { width: 22px; height: 22px; accent-color: var(--accent-solid); }
+.is-selecting .meals-item__select { display: flex; }
+#grocery-page:not(.is-selecting) [data-select-only] { display: none; }
+.is-selecting .meals-select-toggle { display: none; }
+.meals-task-form { margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.meals-task-form__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; }
+.meals-task-form__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
+.meals-task-form__grid .field { margin: 0; }
+.meals-task-form__grid input { min-height: 44px; }
+.meals-task-form__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.meals-task-form__actions .btn { min-height: 44px; }
+.meals-task-form .meals-hint { margin: 0; }
+.meals-link-btn { background: none; border: 0; padding: 4px 2px; color: var(--accent-hover); font: inherit; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; min-height: 32px; }
+/* Badges under a line: "2 recipes", "Possible duplicate" + Merge, "In task: ...". */
+.meals-item__extras { grid-area: extra; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 2px 2px; }
+.meals-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 2px 10px; border-radius: var(--radius-full);
+  border: 1px solid var(--border); background: var(--surface); font-size: 0.75rem; color: var(--text-secondary);
+  text-decoration: none; cursor: default; }
+a.meals-chip, summary.meals-chip, button.meals-chip { cursor: pointer; }
+a.meals-chip:hover { text-decoration: none; border-color: var(--border-strong); color: var(--text-primary); }
+.meals-chip--warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.meals-chip--action { font: inherit; font-size: 0.75rem; color: var(--accent-hover); border-color: var(--accent); }
+.meals-chip--task { color: var(--app-planner, var(--accent)); border-color: color-mix(in srgb, var(--app-planner, var(--accent)) 45%, transparent); }
+.meals-chip--on { color: var(--accent-hover); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.meals-item__merge-form { margin: 0; display: inline-flex; }
+.meals-chip-details { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.meals-chip-details > summary { list-style: none; }
+.meals-chip-details > summary::-webkit-details-marker { display: none; }
+.meals-chip-details__list { font-size: 0.75rem; color: var(--text-secondary); }
+.meals-item.is-duplicate:not(.is-checked) .meals-item__toggle { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
 .meals-item__delete { width: 44px; border-radius: var(--radius-md); border: 1px solid var(--border); background: none;
   color: var(--text-secondary); font-size: 1.25rem; cursor: pointer; }
 .meals-item__delete:hover { color: var(--loss); border-color: var(--loss); }
@@ -1849,6 +1884,15 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-section { margin-top: var(--space-4); }
 .meals-section__title { margin: 0 0 var(--space-3); font-size: var(--text-lg, 1.125rem); }
 .meals-ingredients { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+/* A recipe's ingredients, ticked to add to the grocery list. */
+.meals-pick-bar { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
+.meals-ingredients--pick { list-style: none; padding-left: 0; gap: 4px; }
+.meals-pick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.meals-pick { display: flex; align-items: flex-start; gap: 10px; min-height: 40px; padding: 6px 0; cursor: pointer; }
+.meals-pick input { width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; accent-color: var(--accent-solid); }
+.meals-pick-row.is-on-list .meals-pick span { color: var(--text-secondary); }
+.meals-pick-row .meals-chip--on { margin-left: 30px; }
+.meals-pick-submit { margin-top: var(--space-3); min-height: 44px; }
 .meals-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); }
 .meals-steps + .meals-steps__heading, .meals-steps__heading + .meals-steps__heading { margin-top: var(--space-4); }
 .meals-steps__heading { margin: 0 0 var(--space-2); font-size: var(--text-md); color: var(--text-primary); }

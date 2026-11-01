@@ -31,6 +31,13 @@ source off takes its items off the Planner; a deleted item never comes back.
             </label>
         </fieldset>
         {% endif %}
+        <fieldset class="pl-fieldset">
+            <legend class="pl-section__title">Checklists</legend>
+            <label class="pl-setting">
+                <input type="checkbox" name="complete_when_checklist_done" value="1"{% if prefs.complete_when_checklist_done %} checked{% endif %}>
+                <span><strong>Complete task when all items are checked</strong><span class="pl-help">A task with a checklist (e.g. a grocery run from the Meals grocery list) checks itself off when every item is checked, and reopens if one is unchecked.</span></span>
+            </label>
+        </fieldset>
         <div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">Save</button></div>
     </form>
 </div>

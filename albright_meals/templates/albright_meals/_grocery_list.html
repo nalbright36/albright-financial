@@ -1,23 +1,37 @@
-{% load meals_extras %}{% for key, label, rows in groups %}
+{% load meals_extras %}{% comment %}
+The grocery list's rows (replaced as a whole by groceries.js). Each row: a Select box (shown in Select mode; it
+belongs to #grocery-task-form, outside this list), the big check-off button, then any badges - "2 recipes" (tap
+for which), "Possible duplicate" with Merge (groceries.merge), and "In task: Grocery run (Sat)" for Planner tasks
+this person can see - and the remove button.
+{% endcomment %}{% for key, label, rows in groups %}
 <section class="meals-aisle" data-aisle="{{ key }}">
     <h2 class="meals-aisle__name">{{ label }}</h2>
     <ul class="meals-aisle__list">
-        {% for item in rows %}
-        <li class="meals-item{% if item.checked %} is-checked{% endif %}" data-item="{{ item.pk }}">
+        {% for item in rows %}{% with from_recipes=item.recipes.all %}
+        <li class="meals-item{% if item.checked %} is-checked{% endif %}{% if item.possible_duplicate %} is-duplicate{% endif %}" data-item="{{ item.pk }}">
+            {% if can_plan %}<label class="meals-item__select"><input type="checkbox" name="item" value="{{ item.pk }}" form="grocery-task-form" data-select-item{% if item.checked %} data-checked{% endif %}><span class="visually-hidden">Select {{ item.name }}</span></label>{% endif %}
             <form method="post" action="{% url 'albright_meals:grocery_toggle' item.pk %}" class="meals-item__toggle-form" data-list-action>{% csrf_token %}
                 <button type="submit" class="meals-item__toggle" aria-pressed="{% if item.checked %}true{% else %}false{% endif %}" data-item-button="{{ item.pk }}">
                     <span class="meals-item__box" aria-hidden="true"></span>
                     <span class="meals-item__text">
                         <span class="meals-item__name">{% if item.quantity is not None %}<span class="meals-item__qty">{{ item.quantity|qty }}{% if item.unit %} {{ item.unit }}{% endif %}</span> {% elif item.unit %}<span class="meals-item__qty">{{ item.unit }}</span> {% endif %}{{ item.name }}</span>
-                        {% with from_recipes=item.recipes.all %}{% if item.note or item.from_bot or from_recipes %}<span class="meals-item__note">{{ item.note }}{% if item.note and from_recipes %} &middot; {% endif %}{% if from_recipes %}from {% for r in from_recipes %}{{ r.title }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if item.from_bot %}{% if item.note or from_recipes %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>{% endif %}{% endwith %}
+                        {% if item.note or item.from_bot or from_recipes|length == 1 %}<span class="meals-item__note">{{ item.note }}{% if item.note and from_recipes|length == 1 %} &middot; {% endif %}{% if from_recipes|length == 1 %}from {{ from_recipes.0.title }}{% endif %}{% if item.from_bot %}{% if item.note or from_recipes|length == 1 %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>{% endif %}
                     </span>
                 </button>
             </form>
+            {% if from_recipes|length > 1 or item.possible_duplicate or item.tasks %}
+            <div class="meals-item__extras">
+                {% if from_recipes|length > 1 %}<details class="meals-chip-details"><summary class="meals-chip" data-recipes-badge>{{ from_recipes|length }} recipes</summary><span class="meals-chip-details__list">{% for r in from_recipes %}<a href="{% url 'albright_meals:recipe' r.pk %}">{{ r.title }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span></details>{% endif %}
+                {% if item.possible_duplicate %}<span class="meals-chip meals-chip--warn" data-duplicate-flag title="The same ingredient is on the list in a different unit or wording">Possible duplicate</span>
+                {% if item.can_merge %}<form method="post" action="{% url 'albright_meals:grocery_merge' item.pk %}" class="meals-item__merge-form" data-list-action>{% csrf_token %}<button type="submit" class="meals-chip meals-chip--action" aria-label="Merge {{ item.name }} into {{ item.duplicate_of.name }}">Merge</button></form>{% endif %}{% endif %}
+                {% for task in item.tasks %}<a href="{% url 'albright_planner:edit' task.pk %}" class="meals-chip meals-chip--task" data-task-chip>In task: {{ task.title }} ({{ task.date|date:"D" }})</a>{% endfor %}
+            </div>
+            {% endif %}
             <form method="post" action="{% url 'albright_meals:grocery_delete' item.pk %}" class="meals-item__delete-form" data-list-action>{% csrf_token %}
                 <button type="submit" class="meals-item__delete" aria-label="Remove {{ item.name }}">&times;</button>
             </form>
         </li>
-        {% endfor %}
+        {% endwith %}{% endfor %}
     </ul>
 </section>
 {% empty %}

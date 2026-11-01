@@ -8,15 +8,39 @@ aisle. static/meals/groceries.js checks items off and adds without a page
 reload, and re-fetches the list every 20 seconds (grocery_list) so two
 people shopping see each other's changes - only the list is replaced, never
 the quick-add box, so nothing being typed is lost. Without JS every button
-is a plain form.
+is a plain form. Select (?select=1, or in place with JS) shows a box on each
+row; "Create task" makes a Planner task whose checklist is those lines
+(albright_planner:from_groceries).
 {% endcomment %}
-<div class="container meals-page meals-narrow">
+<div class="container meals-page meals-narrow{% if selecting %} is-selecting{% endif %}" id="grocery-page">
     <div class="meals-head">
         <div>
             <h1 class="meals-head__title">Groceries</h1>
             <p class="meals-head__sub"><span id="grocery-count">{{ unchecked }}</span> to get</p>
         </div>
+        {% if can_plan %}<a href="?select=1" class="btn btn-secondary btn-sm meals-select-toggle" id="grocery-select" data-select-start>Select</a>{% endif %}
     </div>
+
+    {% if can_plan %}
+    <form method="post" action="{% url 'albright_planner:from_groceries' %}" class="card meals-task-form" id="grocery-task-form" data-select-only>
+        {% csrf_token %}<input type="hidden" name="next" value="{% url 'albright_meals:groceries' %}">
+        <div class="meals-task-form__head">
+            <strong>Create a Planner task</strong>
+            <span class="meals-hint"><span id="grocery-selected">0</span> selected &middot; <button type="button" class="meals-link-btn" data-select-all>All to get</button> &middot; <button type="button" class="meals-link-btn" data-select-none>None</button></span>
+        </div>
+        <div class="meals-task-form__grid">
+            <div class="field"><label for="task-title">Title</label><input type="text" name="title" id="task-title" class="ledger-input" maxlength="200" value="Grocery run"></div>
+            <div class="field"><label for="task-date">Date</label><input type="date" name="date" id="task-date" class="ledger-input" value="{{ today|date:'Y-m-d' }}" required></div>
+            <div class="field"><label for="task-time">Time <span class="meals-hint">(optional)</span></label><input type="time" name="time" id="task-time" class="ledger-input"></div>
+            <div class="field"><label for="task-note">Note <span class="meals-hint">(optional)</span></label><input type="text" name="note" id="task-note" class="ledger-input" maxlength="1000"></div>
+        </div>
+        <p class="meals-hint">Checking an item in the task checks it here too, and the other way round.</p>
+        <div class="meals-task-form__actions">
+            <button type="submit" class="btn btn-primary" id="grocery-task-submit">Create task (<span data-selected-count>0</span>)</button>
+            <a href="{% url 'albright_meals:groceries' %}" class="btn btn-secondary" data-select-cancel>Cancel</a>
+        </div>
+    </form>
+    {% endif %}
 
     <form method="post" action="{% url 'albright_meals:groceries' %}" class="meals-quickadd" id="grocery-add" autocomplete="off">{% csrf_token %}
         <label for="grocery-line" class="visually-hidden">Add an item</label>
@@ -35,7 +59,7 @@ is a plain form.
             <input type="hidden" name="start" value="{{ week_start|date:'Y-m-d' }}">
             <button type="submit" class="btn btn-secondary">Add ingredients from this week's meals</button>
         </form>
-        <form method="post" action="{% url 'albright_meals:grocery_clear' %}" data-confirm="Remove every checked item from the list?">{% csrf_token %}
+        <form method="post" action="{% url 'albright_meals:grocery_clear' %}" data-confirm="Clear every checked item off the list? (Planner tasks still show them.)">{% csrf_token %}
             <button type="submit" class="btn btn-secondary" id="grocery-clear"{% if not checked_count %} disabled{% endif %}>Clear checked items</button>
         </form>
     </div>

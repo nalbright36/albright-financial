@@ -1,4 +1,5 @@
 {% extends "index.html" %}
+{% load cache_bust %}
 {% block page_title %}{{ recipe.title }} · {% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
@@ -20,9 +21,6 @@
                 <div class="field"><label for="{{ plan_form.slot.id_for_label }}">Slot</label>{{ plan_form.slot }}</div>
                 <button type="submit" class="btn btn-primary">Add to plan</button>
             </form>
-            <form method="post" action="{% url 'albright_meals:recipe_groceries' recipe.pk %}">{% csrf_token %}
-                <button type="submit" class="btn btn-secondary"{% if not ingredients %} disabled{% endif %}>Add ingredients to grocery list</button>
-            </form>
             {% if source_link %}
             <form method="post" action="{% url 'albright_meals:recipe_reimport' recipe.pk %}" id="recipe-reimport">{% csrf_token %}
                 <button type="submit" class="btn btn-secondary">Re-import from source</button>
@@ -34,9 +32,19 @@
         <section class="card meals-section" id="ingredients">
             <h2 class="meals-section__title">Ingredients</h2>
             {% if ingredients %}
-            <ul class="meals-ingredients">
-                {% for i in ingredients %}<li>{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}</li>{% endfor %}
-            </ul>
+            {# Tick the ones to buy (static/meals/recipe.js keeps the count; without JS it's a plain form). Ones already on the list (unchecked) start unticked, with what's there. #}
+            <form method="post" action="{% url 'albright_meals:recipe_groceries' recipe.pk %}" id="ingredient-form">{% csrf_token %}
+                <input type="hidden" name="picked" value="1">
+                <p class="meals-pick-bar">Select <button type="button" class="meals-link-btn" data-pick="all">all</button> / <button type="button" class="meals-link-btn" data-pick="none">none</button></p>
+                <ul class="meals-ingredients meals-ingredients--pick">
+                    {% for i in ingredients %}<li class="meals-pick-row{% if i.on_list %} is-on-list{% endif %}">
+                        <label class="meals-pick"><input type="checkbox" name="ingredient" value="{{ i.index }}"{% if i.name and not i.on_list %} checked{% endif %}{% if not i.name %} disabled{% endif %} data-pick-box>
+                            <span>{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}</span></label>
+                        {% if i.on_list %}<span class="meals-chip meals-chip--on" data-on-list>On list: {{ i.on_list|join:"; " }}</span>{% endif %}
+                    </li>{% endfor %}
+                </ul>
+                <button type="submit" class="btn btn-primary meals-pick-submit" id="ingredient-add"{% if not picked_count %} disabled{% endif %}>Add <span data-pick-count>{{ picked_count }}</span> item<span data-pick-plural>{{ picked_count|pluralize }}</span> to the grocery list</button>
+            </form>
             {% else %}<p class="meals-hint">No ingredients listed.</p>{% endif %}
         </section>
 
@@ -52,4 +60,5 @@
         <p class="meals-hint">{% if source_link %}<a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">Original recipe</a> &middot; {% endif %}<a href="{% url 'albright_meals:recipe_edit' recipe.pk %}">Edit this recipe</a></p>
     </article>
 </div>
+<script src="{% static_version 'meals/recipe.js' %}" defer></script>
 {% endblock %}

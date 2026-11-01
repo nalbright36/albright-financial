@@ -237,3 +237,22 @@ html.js .pl .pl-nojs { display: none; }
 .pl-setting .pl-help { display: block; font-weight: 400; }
 .pl-col .pl-src { display: none; }          /* Week's narrow columns: the item page has "Open in its app" */
 #pl-settings .pl-fieldset { margin-bottom: 22px; }
+
+/* ---------- Task checklists (checklist.py) - a grocery run's items ---------- */
+.pl-item:has(.pl-cl) { flex-wrap: wrap; }
+.pl-cl { flex-basis: 100%; margin: 2px 0 0 32px; font-size: 0.8125rem; }
+.pl-cl > summary { cursor: pointer; color: var(--pl-muted); min-height: 28px; display: inline-flex; align-items: center; }
+.pl-cl-count { color: var(--pl-muted); }
+.pl-cl__rows { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pl-cl__rows--full { gap: 6px; margin: 0 0 8px; }
+.pl-cl__row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.pl-cl__rows--full .pl-cl__row { min-height: 40px; padding: 4px 8px; border: 1px solid var(--pl-line); border-radius: 8px; background: var(--pl-card); }
+.pl-cl__form { margin: 0; display: inline-flex; }
+.pl .pl-cl__check { width: 22px; height: 22px; flex-shrink: 0; display: grid; place-items: center; padding: 0;
+  border: 2px solid var(--pl-muted); border-radius: 6px; color: transparent; background: transparent; cursor: pointer; }
+.pl .pl-cl__check:hover { border-color: var(--accent); }
+.pl .pl-cl__check[aria-checked="true"] { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--accent-contrast); }
+.pl .pl-cl__check.is-readonly { cursor: default; opacity: .7; }
+.pl-cl__row.is-done .pl-cl__text { text-decoration: line-through; color: var(--pl-muted); }
+.pl-cl__text { overflow-wrap: anywhere; }
+.pl-cl__note { font-size: 0.6875rem; color: var(--pl-muted); }

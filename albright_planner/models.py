@@ -18,7 +18,10 @@ Links to the other apps:
     (services.upsert_source_item - one row per source record, updated in place).
     Only sources the user turned on add these (all are off by default), and
     one the user deleted is never added again (DeletedSourceItem).
-  - from_bot / bot_token: added through the Bot API, labeled with the bot's name."""
+  - from_bot / bot_token: added through the Bot API, labeled with the bot's name.
+  - checklist (TaskChecklistItem): a task's checklist, e.g. a grocery run made
+    from Meals' grocery list. A row linked to a grocery line has no "done" of
+    its own - it reads and writes GroceryItem.checked (checklist.py)."""
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
@@ -178,6 +181,9 @@ class PlannerSettings(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_settings")
     show_meals = models.BooleanField(default=True)
     sources_on = models.JSONField(default=list, blank=True)      # source keys turned ON; everything else is off
+    # A task with a checklist checks itself off when every row is checked (and reopens when one is unchecked).
+    complete_when_checklist_done = models.BooleanField(default=True,
+                                                       verbose_name="Complete task when all items are checked")
     synced_at = models.DateTimeField(null=True, blank=True)      # sources last brought up to date
 
     @classmethod
@@ -186,6 +192,28 @@ class PlannerSettings(models.Model):
 
     def source_on(self, key):
         return key in (self.sources_on or [])
+
+
+class TaskChecklistItem(models.Model):
+    """One row of a task's checklist. A row linked to a grocery line (grocery_item) is checked exactly when that
+    line is checked on the grocery list - its own `done` is ignored then (and only takes the line's last state if
+    the line is deleted). Rows keep their text, so a cleared (archived) grocery line still shows here."""
+    task = models.ForeignKey(ScheduleItem, on_delete=models.CASCADE, related_name="checklist")
+    order = models.PositiveIntegerField(default=0)
+    text = models.CharField(max_length=200)
+    done = models.BooleanField(default=False)
+    grocery_item = models.ForeignKey("albright_meals.GroceryItem", on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="checklist_rows")
+
+    class Meta:
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return self.text
+
+    @property
+    def checked(self):
+        return self.grocery_item.checked if self.grocery_item_id else self.done
 
 
 class DeletedSourceItem(models.Model):

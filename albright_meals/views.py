@@ -130,9 +130,24 @@ def settings_save(request):
 # Groceries
 # ---------------------------------------------------------------------------
 
+def _can_plan(user):
+    """Whether this user can open the Planner - the grocery list's Select / "Create task" and "In task" chips."""
+    from albright_labs import app_access
+    from albright_labs.models import UserPreference
+    return app_access.can_use(user, UserPreference.for_user(user), "planner")
+
+
 def _list_payload(request):
     groups = groceries.grouped()
-    html = render_to_string("albright_meals/_grocery_list.html", {"groups": groups}, request=request)
+    can_plan = _can_plan(request.user)
+    if can_plan:
+        from albright_planner.checklist import tasks_for_lines
+        tasks = tasks_for_lines([item for _k, _l, rows in groups for item in rows], request.user)
+        for _key, _label, rows in groups:
+            for item in rows:
+                item.tasks = tasks.get(item.pk, [])
+    html = render_to_string("albright_meals/_grocery_list.html", {"groups": groups, "can_plan": can_plan},
+                            request=request)
     unchecked = sum(1 for _key, _label, rows in groups for item in rows if not item.checked)
     return {"version": groceries.list_version(), "html": html, "unchecked": unchecked,
             "checked": sum(len(rows) for _k, _l, rows in groups) - unchecked}
@@ -155,7 +170,8 @@ def grocery_page(request):
     payload = _list_payload(request)
     return render(request, "albright_meals/groceries.html", {
         "list_html": payload["html"], "version": payload["version"], "unchecked": payload["unchecked"],
-        "checked_count": payload["checked"], "week_start": plan.week_start()})
+        "checked_count": payload["checked"], "week_start": plan.week_start(), "can_plan": _can_plan(request.user),
+        "selecting": request.GET.get("select") == "1", "today": timezone.localdate()})
 
 
 @never_cache
@@ -172,7 +188,7 @@ def grocery_list(request):
 @login_required
 @require_POST
 def grocery_toggle(request, pk):
-    item = get_object_or_404(GroceryItem, pk=pk)
+    item = get_object_or_404(GroceryItem.objects.active(), pk=pk)
     item.checked = not item.checked
     item.checked_by = request.user if item.checked else None
     item.checked_by_bot = False
@@ -194,8 +210,25 @@ def grocery_delete(request, pk):
 
 @login_required
 @require_POST
+def grocery_merge(request, pk):
+    """A "Possible duplicate" line's Merge: into the line it was linked to (groceries.merge)."""
+    item = get_object_or_404(GroceryItem.objects.active().select_related("duplicate_of"), pk=pk)
+    kept = groceries.merge(item)
+    if _wants_json(request):
+        return JsonResponse({"ok": kept is not None, **_list_payload(request)})
+    if kept is None:
+        messages.error(request, "Nothing to merge it into any more.")
+    else:
+        messages.success(request, f"Merged into {kept.name}.")
+    return redirect("albright_meals:groceries")
+
+
+@login_required
+@require_POST
 def grocery_clear(request):
-    count, _ = GroceryItem.objects.filter(checked=True).delete()
+    """Archives the checked lines (off the list, but a Planner task's checklist still shows them)."""
+    now = timezone.now()
+    count = GroceryItem.objects.active().filter(checked=True).update(archived_at=now, updated_at=now)
     messages.success(request, f"Cleared {count} checked item{'s' if count != 1 else ''}.")
     return redirect("albright_meals:groceries")
 
@@ -284,18 +317,21 @@ def recipes(request):
 def recipe(request, pk):
     obj = get_object_or_404(Recipe.objects.select_related("created_by"), pk=pk)
     ingredients = []
-    for ingredient in obj.ingredients or []:
+    listed = groceries.on_list()
+    for index, ingredient in enumerate(obj.ingredients or []):
         name, quantity, unit, note = groceries.ingredient_parts(ingredient)
         original = ingredient.get("original", "") if isinstance(ingredient, dict) else ""
         if name or original:
-            ingredients.append({"name": name, "quantity": groceries.format_quantity(quantity), "unit": unit,
-                                "note": note, "original": original})
+            on_list = [groceries.describe(item) for item in listed.get(groceries.name_key(name), [])] if name else []
+            ingredients.append({"index": index, "name": name, "quantity": groceries.format_quantity(quantity),
+                                "unit": unit, "note": note, "original": original, "on_list": on_list})
     source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
     host = (urlsplit(source_link).hostname or "") if source_link else ""
     return render(request, "albright_meals/recipe.html", {
         "recipe": obj, "ingredients": ingredients, "step_groups": importer.step_groups(obj.steps),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
-        "plan_form": PlanSlotForm(initial={"date": timezone.localdate()})})
+        "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
+        "picked_count": sum(1 for i in ingredients if i["name"] and not i["on_list"])})
 
 
 @login_required
@@ -329,8 +365,18 @@ def recipe_plan(request, pk):
 @login_required
 @require_POST
 def recipe_groceries(request, pk):
-    """Adds the recipe's ingredients - except any already on the list from this recipe (unchecked)."""
+    """The recipe page's "Add selected to grocery list" (picked=1, ingredient=<position>...): the ticked ones,
+    combined with a same-unit line already there, else linked to it as a possible duplicate. Without picked:
+    every ingredient, except any already on the list from this recipe (unchecked)."""
     obj = get_object_or_404(Recipe, pk=pk)
+    if request.POST.get("picked") == "1":
+        indexes = [int(v) for v in request.POST.getlist("ingredient") if v.isdigit()]
+        if not indexes:
+            messages.error(request, "Tick the ingredients to add first.")
+        else:
+            counts = groceries.add_selected(obj, indexes, user=request.user)
+            messages.success(request, groceries.summary(counts) + ".")
+        return redirect(reverse("albright_meals:recipe", args=[pk]) + "#ingredients")
     added, merged, skipped = groceries.add_recipes([obj], user=request.user, skip_listed=True)
     if not added and not merged and skipped:
         messages.info(request, "Everything from this recipe is already on the grocery list.")

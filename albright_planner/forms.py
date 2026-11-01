@@ -94,6 +94,18 @@ class ItemForm(forms.Form):
         }
 
 
+class GroceryTaskForm(forms.Form):
+    """Meals' grocery list "Create task": the picked lines become the task's checklist."""
+    title = forms.CharField(max_length=200, required=False)
+    date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"))
+    note = forms.CharField(max_length=1000, required=False)
+
+    def clean_title(self):
+        from .checklist import GROCERY_TITLE
+        return (self.cleaned_data.get("title") or "").strip() or GROCERY_TITLE
+
+
 class FromNoteForm(forms.Form):
     """Notes' "Add to schedule": a date, an optional time, and a simple repeat."""
     REPEATS = [(k, label) for k, label in recurrence.REPEATS if k in ("none", "daily", "weekdays", "weekly",

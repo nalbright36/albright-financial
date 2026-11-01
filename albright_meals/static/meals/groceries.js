@@ -8,6 +8,8 @@
  *    lives outside it, so whatever someone is typing is never touched.
  *  - Paused while the tab is hidden, and while one of our own requests is
  *    still on its way; checked again the moment the tab comes back.
+ *  - Select mode: a box on each row (they belong to #grocery-task-form); the
+ *    picks survive the 20-second refresh, and "Create task (N)" counts them.
  */
 (function () {
     "use strict";
@@ -20,6 +22,58 @@
     var sync = document.getElementById("grocery-sync");
     var REFRESH_MS = 20000;
     var busy = 0;
+    var page = document.getElementById("grocery-page");
+    var taskForm = document.getElementById("grocery-task-form");
+    var picked = {};      // grocery line pk -> true, kept across list swaps
+
+    function selectBoxes() { return Array.prototype.slice.call(list.querySelectorAll("[data-select-item]")); }
+
+    function countPicked() {
+        var n = selectBoxes().filter(function (b) { return b.checked; }).length;
+        document.querySelectorAll("[data-selected-count]").forEach(function (el) { el.textContent = n; });
+        var label = document.getElementById("grocery-selected");
+        if (label) label.textContent = n;
+        var submit = document.getElementById("grocery-task-submit");
+        if (submit) submit.disabled = n === 0;
+    }
+
+    function restorePicks() {
+        selectBoxes().forEach(function (b) { b.checked = !!picked[b.value]; });
+        countPicked();
+    }
+
+    function setSelecting(on) {
+        if (!page) return;
+        page.classList.toggle("is-selecting", on);
+        if (!on) { picked = {}; restorePicks(); }
+        var url = new URL(window.location.href);
+        if (on) url.searchParams.set("select", "1"); else url.searchParams.delete("select");
+        history.replaceState(null, "", url.pathname + url.search);
+        if (on && taskForm) {
+            var first = list.querySelector("[data-select-item]");
+            if (first) first.focus();
+        }
+    }
+
+    document.addEventListener("click", function (e) {
+        if (e.target.closest("[data-select-start]")) { e.preventDefault(); setSelecting(true); return; }
+        if (e.target.closest("[data-select-cancel]")) { e.preventDefault(); setSelecting(false); return; }
+        var all = e.target.closest("[data-select-all]"), none = e.target.closest("[data-select-none]");
+        if (all || none) {
+            e.preventDefault();
+            picked = {};
+            selectBoxes().forEach(function (b) {
+                b.checked = !!all && !b.hasAttribute("data-checked");     // "All to get": the unchecked lines
+                if (b.checked) picked[b.value] = true;
+            });
+            countPicked();
+        }
+    });
+    list.addEventListener("change", function (e) {
+        if (!e.target.matches("[data-select-item]")) return;
+        if (e.target.checked) picked[e.target.value] = true; else delete picked[e.target.value];
+        countPicked();
+    });
 
     function csrf(form) {
         var field = form.querySelector("input[name=csrfmiddlewaretoken]");
@@ -34,6 +88,7 @@
         var focusedId = focused ? focused.dataset.item : null;
         list.innerHTML = data.html;
         list.dataset.version = data.version;
+        restorePicks();
         if (count && typeof data.unchecked === "number") count.textContent = data.unchecked;
         if (clearButton && typeof data.checked === "number") clearButton.disabled = data.checked === 0;
         if (focusedId) {
@@ -87,6 +142,8 @@
             })
             .catch(function () { if (sync) sync.textContent = "Couldn't refresh - retrying."; });
     }
+    selectBoxes().forEach(function (b) { if (b.checked) picked[b.value] = true; });   // kept by the browser on reload
+    countPicked();
     setInterval(refresh, REFRESH_MS);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
 })();

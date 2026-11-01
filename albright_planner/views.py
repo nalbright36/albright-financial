@@ -23,8 +23,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import planner, quickadd, recurrence, sources
-from .forms import FromNoteForm, ItemForm
+from . import checklist, planner, quickadd, recurrence, sources
+from .forms import FromNoteForm, GroceryTaskForm, ItemForm
 from .models import ItemShare, PlannerSettings, ScheduleItem
 
 VIEWS = ("day", "week", "month")
@@ -104,6 +104,7 @@ def _frame(request, view, day, prev_day, next_day, title):
         "here": request.get_full_path(),
         "day_url": lambda d: link("day", d),
         "meals_toggle": sources.can_open(request.user, "meals"),
+        "can_check_groceries": sources.can_open(request.user, "meals"),     # checklist rows linked to the list
         "meals_on": PlannerSettings.for_user(request.user).show_meals,
     }
 
@@ -134,10 +135,12 @@ def day_view(request):
     day = _day(request.GET.get("date"), today)
     f = _filters(request)
     occs = planner.occurrences(request.user, day, day, **f)
+    overdue_occs = planner.overdue(request.user, day, kind=f["kind"], shared_only=f["shared_only"]) if day == today else []
+    checklist.attach(occs + overdue_occs)
     top, timed = _split(occs)
     meals = sources.meals(request.user, day, day)
     top = meals + top
-    overdue = planner.overdue(request.user, day, kind=f["kind"], shared_only=f["shared_only"]) if day == today else []
+    overdue = overdue_occs
     first = min([FIRST_HOUR] + [o.start_time.hour for o in timed])
     last = max([LAST_HOUR] + [o.start_time.hour for o in timed])
     hours = [{"hour": h, "label": datetime(2000, 1, 1, h).strftime("%I %p").lstrip("0"),
@@ -156,7 +159,7 @@ def week_view(request):
     day = _day(request.GET.get("date"), today)
     start = planner.week_start(day)
     end = start + timedelta(days=6)
-    occs = planner.occurrences(request.user, start, end, **_filters(request))
+    occs = checklist.attach(planner.occurrences(request.user, start, end, **_filters(request)))
     meals = sources.meals(request.user, start, end)
     days = []
     for i in range(7):
@@ -258,7 +261,10 @@ def edit_item(request, pk):
     shares = list(item.shares.select_related("user")) if is_owner else []
     taken = {s.user_id for s in shares} | {item.owner_id}
     can_note = can_edit and sources.can_open(request.user, "notes")
+    rows = list(item.checklist.select_related("grocery_item"))
     return render(request, "albright_planner/form.html", {
+        "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
+        "can_check_groceries": sources.can_open(request.user, "meals"),
         "linked_note": planner.linked_note(item, request.user), "can_note": can_note,
         "note_choices": planner.attachable_notes(request.user) if can_note else [],
         "form": form, "item": item, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
@@ -285,6 +291,49 @@ def toggle(request, pk):
     if _wants_json(request):
         return JsonResponse({"ok": True, "done": done})
     return redirect(_next(request))
+
+
+@login_required
+@require_POST
+def checklist_toggle(request, pk, row_id):
+    """Check or uncheck one checklist row (task editors). A grocery row checks the line on the grocery list itself,
+    so it also needs Meals."""
+    item = _editable(request, pk)
+    row = get_object_or_404(item.checklist.select_related("grocery_item"), pk=row_id)
+    if row.grocery_item_id and not sources.can_open(request.user, "meals"):
+        raise Http404
+    checklist.set_checked(row, not row.checked, request.user)
+    row.refresh_from_db()
+    if _wants_json(request):
+        rows = list(item.checklist.select_related("grocery_item"))
+        return JsonResponse({"ok": True, "checked": row.checked, "progress": checklist.progress(rows)["label"],
+                             "task_done": item.completions.filter(occurrence_date=item.date).exists()})
+    return redirect(_next(request))
+
+
+@login_required
+@require_POST
+def from_groceries(request):
+    """Meals' grocery list "Create task": the picked lines (item=<pk>...) become a task owned by this user, its
+    checklist reading and writing those lines. Needs Meals too (it reads the list)."""
+    if not sources.can_open(request.user, "meals"):
+        raise Http404
+    from albright_meals.models import GroceryItem
+    back = _next(request, "albright_meals:groceries")
+    ids = [int(pk) for pk in request.POST.getlist("item") if pk.isdigit()]
+    lines = list(GroceryItem.objects.active().filter(pk__in=ids).order_by("aisle", "checked", "name", "pk"))
+    form = GroceryTaskForm(request.POST)
+    if not lines:
+        messages.error(request, "Pick at least one item for the task.")
+        return redirect(back)
+    if not form.is_valid():
+        messages.error(request, "Pick a date for the task" + (" (and a valid time)." if "time" in form.errors else "."))
+        return redirect(back)
+    data = form.cleaned_data
+    task = checklist.task_from_groceries(request.user, lines, data["title"], data["date"], data["time"], data["note"])
+    messages.success(request, f"Created \u201c{task.title}\u201d for {task.date:%a %b} {task.date.day} with "
+                              f"{len(lines)} item{'s' if len(lines) != 1 else ''}.")
+    return redirect(back)
 
 
 @login_required
@@ -434,7 +483,8 @@ def settings_view(request):
         prefs.sources_on = [k for k in sources.SOURCE_KEYS if (k in chosen if k in offered else k in was_on)]
         if meals_toggle:
             prefs.show_meals = request.POST.get("show_meals") == "1"
-        prefs.save(update_fields=["sources_on", "show_meals"])
+        prefs.complete_when_checklist_done = request.POST.get("complete_when_checklist_done") == "1"
+        prefs.save(update_fields=["sources_on", "show_meals", "complete_when_checklist_done"])
         sources.sync(request.user)              # the only place source items are added or updated
         messages.success(request, "Planner settings saved.")
         return redirect("albright_planner:settings")

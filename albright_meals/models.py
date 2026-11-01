@@ -131,8 +131,17 @@ class MealIdea(_Authored):
         return self.title
 
 
+class ActiveGroceryQuerySet(models.QuerySet):
+    def active(self):
+        """On the list: not archived by "Clear checked items"."""
+        return self.filter(archived_at__isnull=True)
+
+
 class GroceryItem(_Authored):
-    """One line on the shared grocery list."""
+    """One line on the shared grocery list. "Clear checked items" archives checked lines (archived_at) rather than
+    deleting them, so a Planner task's checklist keeps showing what was bought; archived lines are off the list.
+    duplicate_of links a line to an unchecked line for the same ingredient in a different unit ("1 lb" vs "2 cups")
+    - shown as "Possible duplicate" with a Merge button."""
     AUTHOR_FIELD = "added_by"
     name = models.CharField(max_length=120)
     quantity = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
@@ -147,6 +156,10 @@ class GroceryItem(_Authored):
     from_recipe = models.ForeignKey(Recipe, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     # Every recipe this line's ingredients came from (merging adds to it).
     recipes = models.ManyToManyField(Recipe, blank=True, related_name="grocery_items")
+    duplicate_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="duplicates")
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = ActiveGroceryQuerySet.as_manager()
 
     class Meta:
         ordering = ["aisle", "checked", "checked_at", "name", "pk"]

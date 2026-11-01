@@ -236,7 +236,7 @@ class GroceryPageTests(Base):
         GroceryItem.objects.create(name="apples", checked=True, checked_at=timezone.now())
         GroceryItem.objects.create(name="milk")
         self.client.post(reverse("albright_meals:grocery_clear"))
-        self.assertEqual(list(GroceryItem.objects.values_list("name", flat=True)), ["milk"])
+        self.assertEqual(list(GroceryItem.objects.active().values_list("name", flat=True)), ["milk"])
 
     def test_refresh_endpoint(self):
         url = reverse("albright_meals:grocery_list")

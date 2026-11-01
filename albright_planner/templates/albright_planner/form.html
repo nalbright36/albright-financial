@@ -70,6 +70,14 @@ repeating item asks which occurrences the change applies to.
         </fieldset>
     </form>
 
+    {% if checklist %}
+    <section class="pl-section" id="checklist" aria-labelledby="pl-cl-h">
+        <h2 class="pl-section__title" id="pl-cl-h">Checklist <span class="pl-muted pl-small" id="pl-cl-progress">{{ checklist_progress.label }}</span></h2>
+        <ul class="pl-cl__rows pl-cl__rows--full">{% for row in checklist %}{% if can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path can_toggle=True %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path can_toggle=False %}{% endif %}{% endfor %}</ul>
+        <p class="pl-muted pl-small">{% if checklist.0.grocery_item_id %}These are lines on the Meals grocery list: checking one here checks it there, and the other way round. {% endif %}{% if item.repeats %}{% else %}The task checks itself off when every item is checked (Planner settings).{% endif %}</p>
+    </section>
+    {% endif %}
+
     {% if item %}
     <section class="pl-section" id="note" aria-labelledby="pl-note-h">
         <h2 class="pl-section__title" id="pl-note-h">Note</h2>
