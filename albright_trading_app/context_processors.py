@@ -13,6 +13,7 @@ APP_KEYS = {ns: app.accent for ns, app in apps_registry.BY_NAMESPACE.items() if 
 APP_KEYS[apps_registry.HOME_NAMESPACE] = apps_registry.HOME_ACCENT
 APP_BRANDS = {app.accent: app.brand for app in apps_registry.APPS}
 APP_BRANDS[apps_registry.HOME_ACCENT] = apps_registry.HOME_BRAND
+APPS_BY_ACCENT = {app.accent: app for app in apps_registry.APPS}
 
 
 def app_key_for(app_name):
@@ -31,4 +32,8 @@ def current_app(request):
         "in_labs": key == "labs",
         "in_meals_app": key == "meals",
         "in_notes_app": key == "notes",
+        "in_planner_app": key == "planner",
+        # The app's own CSS/JS (apps_registry.App.stylesheet / script) - on every one of its pages.
+        "app_stylesheet": getattr(APPS_BY_ACCENT.get(key), "stylesheet", ""),
+        "app_script": getattr(APPS_BY_ACCENT.get(key), "script", ""),
     }

@@ -84,6 +84,15 @@ def notes(user):
             "size": "text", "tone": "" if latest else "warn"}
 
 
+def planner(user):
+    """Today's open tasks (and how many are overdue)."""
+    from albright_planner.planner import open_tasks_today
+    todays, overdue = open_tasks_today(user)
+    count = len(todays) + len(overdue)
+    return {"value": str(count), "note": f"open task{'s' if count != 1 else ''} today"
+            + (f" · {len(overdue)} overdue" if overdue else ""), "tone": "warn" if overdue else ""}
+
+
 def admin(user):
     """Scheduled jobs that are late or failing (Admin > System health)."""
     from albright_control import jobs

@@ -74,13 +74,20 @@ def notes(user):
     return f"{pinned} pinned" if pinned else "No pinned notes"
 
 
+def planner(user):
+    from albright_planner.planner import open_tasks_today
+    todays, overdue = open_tasks_today(user)
+    count = len(todays) + len(overdue)
+    return f"{_plural(count, 'task')} today" if count else "Nothing due today"
+
+
 def admin(user):
     from albright_control import jobs
     problems = sum(1 for row in jobs.health_rows() if row["status"] in ("failing", "late"))
     return _plural(problems, "problem") if problems else "All good"
 
 
-LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "notes": notes, "admin": admin}
+LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "notes": notes, "planner": planner, "admin": admin}
 
 
 def _line(key, user):

@@ -28,6 +28,10 @@ class App:
     tile: str = ""            # the function in albright_labs.tiles for Home's live number
     pages: tuple = ()         # ((key, label, URL name), ...) - "Where I land" options
     superuser_only: bool = False
+    # The app's own stylesheet / script (static paths): templates/index.html includes them on EVERY page of the
+    # app (context_processors.current_app), so no page can miss its styles.
+    stylesheet: str = ""
+    script: str = ""
     # Pages in its namespace that stay open to anyone (sign in, password reset).
     ungated_url_names: frozenset = field(default_factory=frozenset)
 
@@ -77,12 +81,20 @@ APPS = (
         color="#EC4899", landing_url_name="albright_notes:list", namespaces=("albright_notes",),
         description="Private Markdown notes and checklists - share one, link it to a recipe, lot or strategy.",
         last_app_cookie="notes", tile="notes",
-        pages=(("notes:list", "Notes", "albright_notes:list"),)),
+        pages=(("notes:list", "Notes", "albright_notes:list"),),
+        stylesheet="albright_notes/notes.css", script="albright_notes/notes.js"),
+    App(key="planner", label="Planner", short_label="Plan", brand="Albright Planner", accent="planner",
+        color="#84CC16", landing_url_name="albright_planner:home", namespaces=("albright_planner",),
+        description="Tasks and events - repeating items, check-off, and Day, Week and Month views.",
+        last_app_cookie="planner", tile="planner",
+        pages=(("planner:day", "Day", "albright_planner:day"), ("planner:week", "Week", "albright_planner:week"),
+               ("planner:month", "Month", "albright_planner:month")),
+        stylesheet="albright_planner/planner.css", script="albright_planner/planner.js"),
     App(key="admin", label="Admin", short_label="Admin", brand="Albright Admin", accent="admin",
         color="#94A3B8", landing_url_name="albright_control:overview",
         namespaces=("albright_control", "albright_resume_admin", "labs_admin"),
         description="System health, integrations, AI spend, ideas and the audit log.",
-        last_app_cookie="admin", tile="admin", superuser_only=True,
+        last_app_cookie="admin", tile="admin", superuser_only=True, stylesheet="albright_control/inbox.css",
         pages=(("admin:overview", "Overview", "albright_control:overview"),
                ("admin:ideas", "Ideas", "albright_control:ideas"),
                ("admin:health", "System health", "albright_control:health"))),

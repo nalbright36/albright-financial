@@ -1,0 +1,28 @@
+{% extends "albright_planner/base.html" %}
+{% block page_title %}{{ title }} · {% endblock %}
+{% block planner %}
+{% include "albright_planner/_toolbar.html" %}
+<div class="pl-day" id="pl-day">
+    {% if overdue %}
+    <section class="pl-section pl-section--overdue" aria-labelledby="pl-overdue-h">
+        <h2 class="pl-section__title" id="pl-overdue-h">Overdue <span class="pl-count">{{ overdue|length }}</span></h2>
+        <ul class="pl-list">{% for o in overdue %}{% include "albright_planner/_occ.html" %}{% endfor %}</ul>
+    </section>
+    {% endif %}
+    <section class="pl-section" aria-labelledby="pl-allday-h">
+        <h2 class="pl-section__title" id="pl-allday-h">All day &amp; tasks</h2>
+        <ul class="pl-list" id="pl-allday">{% for o in top %}{% include "albright_planner/_occ.html" %}{% empty %}<li class="pl-empty">Nothing without a time.</li>{% endfor %}</ul>
+    </section>
+    <section class="pl-section" aria-labelledby="pl-timeline-h">
+        <h2 class="pl-section__title" id="pl-timeline-h">Schedule</h2>
+        <ol class="pl-timeline" id="pl-timeline">
+            {% for h in hours %}
+            <li class="pl-hour{% if h.items %} has-items{% endif %}" data-hour="{{ h.hour }}">
+                <span class="pl-hour__label">{{ h.label }}</span>
+                <ul class="pl-list pl-hour__items">{% for o in h.items %}{% include "albright_planner/_occ.html" %}{% endfor %}</ul>
+            </li>
+            {% endfor %}
+        </ol>
+    </section>
+</div>
+{% endblock %}

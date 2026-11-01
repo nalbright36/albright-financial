@@ -1,9 +1,6 @@
 {% extends "index.html" %}
-{% load cache_bust %}
 {% comment %}
-Albright Notes' base template: every Notes page extends it, so the app's own
-stylesheet and script (albright_notes/static/albright_notes/) load on all of
-them and nowhere else.
+Albright Notes' base template. The app's stylesheet and script come from the
+app registry (apps_registry: Notes' stylesheet / script), which index.html
+includes on every Notes page.
 {% endcomment %}
-{% block app_head %}<link rel="stylesheet" href="{% static_version 'albright_notes/notes.css' %}">{% endblock %}
-{% block app_scripts %}<script src="{% static_version 'albright_notes/notes.js' %}"></script>{% endblock %}

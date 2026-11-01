@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'albright_labs',
     'albright_meals',
     'albright_notes',
+    'albright_planner',
     'django.contrib.humanize',
 ]
 

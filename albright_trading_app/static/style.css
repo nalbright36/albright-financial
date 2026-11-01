@@ -117,6 +117,7 @@
   --app-labs: #2DD4BF;
   --app-meals: #FB923C;
   --app-notes: #F472B6;
+  --app-planner: #A3E635;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -175,6 +176,7 @@
   --app-labs: #14B8A6;
   --app-meals: #F97316;
   --app-notes: #EC4899;
+  --app-planner: #84CC16;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -288,6 +290,16 @@ body[data-app="notes"] {
   --accent-solid: #BE185D;
   --accent-solid-hover: #9D174D;
 }
+/* Albright Planner: lime #84CC16. Text: the lighter #A3E635 in dark mode, the
+   deeper #4D7C0F in light mode (#84CC16 is only ~2.2:1 on white); white-text
+   fills use #4D7C0F (5.6:1). */
+body[data-app="planner"] {
+  --accent-rgb: 132, 204, 22;
+  --accent: #A3E635;
+  --accent-hover: #BEF264;
+  --accent-solid: #4D7C0F;
+  --accent-solid-hover: #3F6212;
+}
 /* Light: text shades one step deeper (hover goes darker, not lighter). */
 [data-theme="light"] body,
 [data-theme="light"] body[data-app="trading"] {
@@ -317,6 +329,10 @@ body[data-app="notes"] {
 [data-theme="light"] body[data-app="notes"] {
   --accent: #BE185D;
   --accent-hover: #9D174D;
+}
+[data-theme="light"] body[data-app="planner"] {
+  --accent: #4D7C0F;
+  --accent-hover: #3F6212;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1550,6 +1566,7 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .labs-tile[data-app-accent="admin"] { --labs-tile-color: var(--app-admin); }
 .labs-tile[data-app-accent="meals"] { --labs-tile-color: var(--app-meals); }
 .labs-tile[data-app-accent="notes"] { --labs-tile-color: var(--app-notes); }
+.labs-tile[data-app-accent="planner"] { --labs-tile-color: var(--app-planner); }
 .labs-tile__head { display: flex; align-items: center; gap: 8px; }
 .labs-tile__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--labs-tile-color); flex-shrink: 0; }
 .labs-tile__name { font-weight: 700; font-size: 1.0625rem; color: var(--text-primary); }

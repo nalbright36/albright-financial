@@ -2,6 +2,8 @@
 {% load static %}
 {% load cache_bust %}
 {% block page_title %}Home · {% endblock %}
+{% block app_head %}{% if planner_today %}<link rel="stylesheet" href="{% static_version 'albright_planner/planner.css' %}">{% endif %}{% endblock %}
+{% block app_scripts %}{% if planner_today %}<script src="{% static_version 'albright_planner/planner.js' %}"></script>{% endif %}{% endblock %}
 {% block content %}
 {% comment %}
 Home (labs.views.hub): a tile per app with one live number each. The numbers
@@ -12,6 +14,8 @@ tiles still link to each app.
 <div class="container" style="padding-top: 32px; padding-bottom: 48px;">
     <h1 style="margin: 0 0 6px;">Albright Labs</h1>
     <p style="margin: 0 0 24px; color: var(--text-secondary);">Everything in one place. Pick an app, or choose below which apps show in your navigation and where you land after signing in.</p>
+
+    {% if planner_today %}{% include "albright_planner/_today_panel.html" %}{% endif %}
 
     <div class="labs-tiles" id="labs-tiles">
         {% for card in cards %}

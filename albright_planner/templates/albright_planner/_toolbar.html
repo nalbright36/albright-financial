@@ -1,0 +1,39 @@
+{% comment %}
+Every Planner view's header: title, Day / Week / Month tabs, Today and the
+arrows, quick add, and the filters (they apply on change; planner.js).
+{% endcomment %}
+<div class="pl-head">
+    <div class="pl-head__row">
+        <h1 class="pl-title">{{ title }}</h1>
+        <div class="pl-nav">
+            <a href="{{ prev_url }}" class="pl-btn pl-btn--icon" id="pl-prev" aria-label="Previous {{ view }}">&lsaquo;</a>
+            <a href="{{ today_url }}" class="pl-btn" id="pl-today">Today</a>
+            <a href="{{ next_url }}" class="pl-btn pl-btn--icon" id="pl-next" aria-label="Next {{ view }}">&rsaquo;</a>
+        </div>
+    </div>
+    <div class="pl-head__row">
+        <nav class="pl-tabs" aria-label="View">
+            {% for key, label, url in tabs %}<a href="{{ url }}" class="pl-tab{% if key == view %} is-on{% endif %}" data-view="{{ key }}"{% if key == view %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+        </nav>
+        <form method="get" class="pl-filters" id="pl-filters">
+            <input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}">
+            <label for="pl-kind" class="visually-hidden">Show</label>
+            <select name="kind" id="pl-kind" class="pl-input pl-select">
+                <option value="">Tasks and events</option>
+                <option value="task"{% if filters.kind == "task" %} selected{% endif %}>Tasks only</option>
+                <option value="event"{% if filters.kind == "event" %} selected{% endif %}>Events only</option>
+            </select>
+            <label class="pl-toggle"><input type="checkbox" name="done" value="0"{% if not filters.show_done %} checked{% endif %}> Hide completed</label>
+            <label class="pl-toggle"><input type="checkbox" name="shared" value="1"{% if filters.shared_only %} checked{% endif %}> Shared with me</label>
+            <button type="submit" class="pl-btn pl-nojs">Apply</button>
+        </form>
+    </div>
+    <form method="post" action="{% url 'albright_planner:quick_add' %}" class="pl-quick" id="pl-quick">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ here }}">
+        <label for="pl-quick-text" class="visually-hidden">Quick add</label>
+        <input type="text" name="text" id="pl-quick-text" class="pl-input" maxlength="500" autocomplete="off" required
+               placeholder="Quick add: &ldquo;Gym Mon Wed Fri 6am&rdquo;, &ldquo;Call dentist tomorrow 3pm&rdquo;">
+        <button type="submit" class="pl-btn pl-btn--primary">Add</button>
+        <a href="{% url 'albright_planner:new' %}?date={{ day|date:'Y-m-d' }}&amp;next={{ here|urlencode }}" class="pl-btn" id="pl-new">New item</a>
+    </form>
+</div>

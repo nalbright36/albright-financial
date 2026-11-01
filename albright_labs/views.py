@@ -103,7 +103,20 @@ def hub(request):
     cards = [{"key": app.key, "label": app.short_label, "description": app.description, "accent": app.accent,
               "color": app.color, "url_name": app.landing_url_name, "tile": bool(app.tile)}
              for app in (apps_registry.BY_KEY[key] for key in app_access.nav_keys(request.user, pref))]
-    return render(request, "albright_labs/hub.html", {"cards": cards, **_settings_context(request)})
+    return render(request, "albright_labs/hub.html", {"cards": cards, "planner_today": _planner_today(request, pref),
+                                                       **_settings_context(request)})
+
+
+def _planner_today(request, pref):
+    """Home's Today panel, for someone who can open the Planner (else None). A failure hides the panel."""
+    if not app_access.can_use(request.user, pref, "planner"):
+        return None
+    try:
+        from albright_planner.planner import today_panel
+        return {**today_panel(request.user), "here": request.get_full_path()}
+    except Exception:  # noqa: BLE001 - the panel must never break Home
+        log.exception("Home's Today panel failed")
+        return None
 
 
 @login_required

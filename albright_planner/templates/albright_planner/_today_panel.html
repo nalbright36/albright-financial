@@ -1,0 +1,22 @@
+{% comment %}
+Home's "Today" panel (albright_labs.views.hub, for people who can open the
+Planner): today's tasks with their checkboxes, today's events, and how many
+tasks are overdue. Styles and check-off: the Planner's planner.css / planner.js.
+{% endcomment %}
+<section class="card pl pl-today" id="planner-today" aria-labelledby="planner-today-h">
+    <div class="pl-today__head">
+        <h2 class="pl-section__title" id="planner-today-h">Today <span class="pl-muted pl-small">{{ planner_today.date|date:"l, F j" }}</span></h2>
+        <a href="{% url 'albright_planner:day' %}" class="pl-small">Open Planner &rarr;</a>
+    </div>
+    {% if planner_today.overdue %}<p class="pl-overdue pl-small"><a href="{% url 'albright_planner:day' %}">{{ planner_today.overdue }} overdue task{{ planner_today.overdue|pluralize }}</a></p>{% endif %}
+    <div class="pl-today__cols">
+        <div>
+            <h3 class="pl-label">Tasks</h3>
+            <ul class="pl-list">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
+        </div>
+        <div>
+            <h3 class="pl-label">Events</h3>
+            <ul class="pl-list">{% for o in planner_today.events %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No events today.</li>{% endfor %}</ul>
+        </div>
+    </div>
+</section>

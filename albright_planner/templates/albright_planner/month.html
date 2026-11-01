@@ -1,0 +1,21 @@
+{% extends "albright_planner/base.html" %}
+{% block page_title %}{{ title }} · {% endblock %}
+{% block planner %}
+{% include "albright_planner/_toolbar.html" %}
+<div class="pl-month" id="pl-month" role="grid" aria-label="{{ title }}">
+    <div class="pl-month__dows" role="row">{% for name in weekdays %}<span role="columnheader">{{ name }}</span>{% endfor %}</div>
+    {% for week in weeks %}
+    <div class="pl-month__week" role="row">
+        {% for d in week %}
+        <div class="pl-cell{% if not d.in_month %} is-out{% endif %}{% if d.is_today %} is-today{% endif %}" role="gridcell" data-date="{{ d.date|date:'Y-m-d' }}">
+            <a href="{{ d.url }}" class="pl-cell__num" aria-label="{{ d.date|date:'l, F j' }}">{{ d.date|date:"j" }}</a>
+            <ul class="pl-cell__items">
+                {% for o in d.items %}<li class="pl-chip{% if o.done %} is-done{% endif %}{% if o.item.kind == 'event' %} is-event{% endif %}"{% if o.item.color %} style="--pl-color: {{ o.item.color }};"{% endif %}><a href="{{ d.url }}">{% if o.start_time %}<span class="pl-time">{{ o.start_time|time:"g:i" }}</span> {% endif %}{{ o.title }}</a></li>{% endfor %}
+                {% if d.more %}<li class="pl-more"><a href="{{ d.url }}">+{{ d.more }} more</a></li>{% endif %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

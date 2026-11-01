@@ -1,0 +1,11 @@
+{% extends "index.html" %}
+{% comment %}
+Albright Planner's base template. Its stylesheet and script come from the app
+registry (apps_registry: Planner's stylesheet / script), which index.html
+includes on every Planner page.
+{% endcomment %}
+{% block content %}
+<div class="container pl" id="planner">
+    {% block planner %}{% endblock %}
+</div>
+{% endblock %}
