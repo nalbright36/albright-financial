@@ -208,3 +208,32 @@ html.js .pl .pl-nojs { display: none; }
 .pl-today .pl-label { margin-bottom: 6px; }
 
 @media (prefers-reduced-motion: reduce) { .pl * { transition: none !important; } }
+
+/* ---------- Links to other apps ---------- */
+/* Planned meals (read live from Meals): the Meals orange, a fork, no checkbox or drag. */
+.pl-item.is-meal, .pl-chip.is-meal { --pl-color: var(--app-meals); }
+.pl-item.is-meal { background: color-mix(in srgb, var(--pl-color) 8%, var(--pl-card)); }
+.pl-meal-icon { display: inline-flex; color: var(--app-meals); flex-shrink: 0; }
+.pl-item.is-meal .pl-meal-icon { width: 22px; height: 22px; align-items: center; justify-content: center; }
+.pl-chip.is-meal .pl-meal-icon svg { width: 11px; height: 11px; vertical-align: -1px; }
+.pl .pl-meals-switch { padding: 0 10px; border: 1px solid var(--pl-line); border-radius: 999px; }
+.pl .pl-meals-switch[aria-checked="true"] { color: var(--text-primary); border-color: var(--app-meals);
+  background: color-mix(in srgb, var(--app-meals) 14%, transparent); }
+.pl .pl-meals-switch[aria-checked="false"] .pl-meal-icon { color: var(--pl-muted); }
+/* An item another app keeps up to date: a small link back to its record. */
+.pl-src { flex-shrink: 0; align-self: center; padding: 2px 6px; border-radius: 6px; color: var(--pl-muted); text-decoration: none; }
+.pl-src:hover { color: var(--accent); background: var(--accent-soft); }
+.pl-note-mark { color: var(--text-secondary); }
+/* The item page's linked note: its title and a one-line preview (it opens in Notes). */
+.pl-note-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin: 0 0 10px; border-radius: 10px;
+  background: var(--pl-card); border: 1px solid var(--pl-line); border-left: 3px solid var(--app-notes, var(--accent));
+  color: var(--text-primary); text-decoration: none; }
+.pl-note-card:hover { border-color: var(--app-notes, var(--accent)); color: var(--text-primary); text-decoration: none; }
+.pl-note-card__title { font-weight: 600; }
+.pl-note-card__preview { font-size: 0.8125rem; color: var(--pl-muted); }
+/* Settings */
+.pl-setting { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--pl-line); cursor: pointer; }
+.pl-setting input { margin-top: 3px; }
+.pl-setting .pl-help { display: block; font-weight: 400; }
+.pl-col .pl-src { display: none; }          /* Week's narrow columns: the item page has "Open in its app" */
+#pl-settings .pl-fieldset { margin-bottom: 22px; }

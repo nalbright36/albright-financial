@@ -1,0 +1,35 @@
+{% extends "albright_planner/base.html" %}
+{% block page_title %}Planner settings · {% endblock %}
+{% block planner %}
+{% comment %}
+Which apps may add items to your Planner (sources.SOURCES - only the ones whose
+app you can open are listed), and the Meals overlay. Turning a source off
+takes its items off the Planner; turning it back on brings them back.
+{% endcomment %}
+<a href="{% url 'albright_planner:home' %}" class="pl-back">&larr; Planner</a>
+<div class="pl-form-wrap">
+    <h1 class="pl-title">Planner settings</h1>
+    <form method="post" class="pl-form" id="pl-settings">{% csrf_token %}
+        <fieldset class="pl-fieldset">
+            <legend class="pl-section__title">Added by other apps</legend>
+            {% for row in sources %}
+            <label class="pl-setting">
+                <input type="checkbox" name="source" value="{{ row.source.key }}"{% if row.on %} checked{% endif %}>
+                <span><strong>{{ row.source.label }}</strong><span class="pl-help">{{ row.source.help }}</span></span>
+            </label>
+            {% empty %}<p class="pl-muted pl-small">None of the apps that add items are open to you.</p>{% endfor %}
+            <p class="pl-help">These items stay in step with their app: a change there updates the item here.</p>
+        </fieldset>
+        {% if meals_toggle %}
+        <fieldset class="pl-fieldset">
+            <legend class="pl-section__title">Meals</legend>
+            <label class="pl-setting">
+                <input type="checkbox" name="show_meals" value="1"{% if prefs.show_meals %} checked{% endif %}>
+                <span><strong>Show meals</strong><span class="pl-help">The Meals plan in Day, Week and Month (view only - open a meal to change it in Meals).</span></span>
+            </label>
+        </fieldset>
+        {% endif %}
+        <div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">Save</button></div>
+    </form>
+</div>
+{% endblock %}

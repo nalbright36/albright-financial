@@ -1,4 +1,7 @@
-{% comment %}One occurrence: its checkbox (check-off records this date only), title, time and markers. drag: draggable (Week).{% endcomment %}
+{% comment %}One occurrence: its checkbox (check-off records this date only), title, time and markers. drag: draggable (Week).
+A planned meal (sources.Meal) renders as _meal.html instead. An item another app keeps up to date links back to its record;
+a locked one (the watchlist's auctions) opens its record directly.{% endcomment %}
+{% if o.is_meal %}{% include "albright_planner/_meal.html" %}{% else %}
 <li class="pl-item{% if o.done %} is-done{% endif %}{% if o.overdue %} is-overdue{% endif %}{% if o.item.kind == 'event' %} is-event{% endif %}"
     data-item="{{ o.item.pk }}" data-date="{{ o.occurrence_date|date:'Y-m-d' }}" data-repeats="{{ o.item.repeats|yesno:'1,0' }}"
     {% if o.can_edit and drag %}draggable="true" data-move-url="{% url 'albright_planner:move' o.item.pk %}" {% endif %}{% if o.item.color %}style="--pl-color: {{ o.item.color }};"{% endif %}>
@@ -9,8 +12,11 @@
     </form>
     {% else %}<span class="pl-check is-readonly" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-disabled="true" aria-label="Done: {{ o.title }} (view only)"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endif %}
     {% else %}<span class="pl-dot" aria-hidden="true"></span>{% endif %}
-    <a href="{% url 'albright_planner:edit' o.item.pk %}?date={{ o.occurrence_date|date:'Y-m-d' }}&amp;next={{ here|urlencode }}" class="pl-item__body">
+    {% if o.item.locked and o.item.source_href %}<a href="{{ o.item.source_href }}" class="pl-item__body" target="_blank" rel="noopener noreferrer">
+    {% else %}<a href="{% url 'albright_planner:edit' o.item.pk %}?date={{ o.occurrence_date|date:'Y-m-d' }}&amp;next={{ here|urlencode }}" class="pl-item__body">{% endif %}
         <span class="pl-item__title">{{ o.title }}</span>
-        <span class="pl-item__meta">{% if o.start_time %}<span class="pl-time">{{ o.start_time|time:"g:i A" }}{% if o.end_time %}&ndash;{{ o.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}{% if o.overdue %}<span class="pl-overdue">Overdue &middot; {{ o.date|date:"M j" }}</span>{% endif %}{% if o.item.repeats %}<span title="Repeats" aria-label="Repeats">&#x21bb;</span>{% endif %}{% if o.moved %}<span>moved from {{ o.occurrence_date|date:"M j" }}</span>{% endif %}{% if o.item.owner_id != request.user.pk %}<span title="Shared by {{ o.item.owner.get_username }}">&#x1F465; {{ o.item.owner.get_username }}</span>{% endif %}{% if o.item.priority == "high" %}<span class="pl-prio">High</span>{% endif %}</span>
+        <span class="pl-item__meta">{% if o.start_time %}<span class="pl-time">{{ o.start_time|time:"g:i A" }}{% if o.end_time %}&ndash;{{ o.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}{% if o.overdue %}<span class="pl-overdue">Overdue &middot; {{ o.date|date:"M j" }}</span>{% endif %}{% if o.item.repeats %}<span title="Repeats" aria-label="Repeats">&#x21bb;</span>{% endif %}{% if o.moved %}<span>moved from {{ o.occurrence_date|date:"M j" }}</span>{% endif %}{% if o.item.owner_id != request.user.pk %}<span title="Shared by {{ o.item.owner.get_username }}">&#x1F465; {{ o.item.owner.get_username }}</span>{% endif %}{% if o.item.priority == "high" %}<span class="pl-prio">High</span>{% endif %}{% if o.item.from_bot %}<span title="Added by a bot">&#x1F916; {{ o.item.created_by }}</span>{% endif %}{% if o.item.note_id %}<span class="pl-note-mark" title="Linked note">&#x1F4DD; Note</span>{% elif o.item.note_deleted %}<span class="pl-note-mark">Note deleted</span>{% endif %}</span>
     </a>
+    {% if o.item.source_href and not o.item.locked %}<a href="{{ o.item.source_href }}" class="pl-src" title="Open in its app" aria-label="Open &ldquo;{{ o.title }}&rdquo; in its app">&#x2197;</a>{% endif %}
 </li>
+{% endif %}

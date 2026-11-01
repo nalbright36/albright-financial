@@ -46,8 +46,9 @@ def _iso(value):
 
 DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions - except in Meals,
 whose meals:write endpoints add to the household's plan, grocery list, ideas and recipes directly (labeled
-"Recipe Bot" on the site), and in Notes, whose notes:write endpoints save the owner's notes (labeled with
-your token's name).
+"Recipe Bot" on the site), in Notes, whose notes:write endpoints save the owner's notes (labeled with
+your token's name), and in the Planner, whose schedule:write endpoints add items to the owner's schedule and
+check occurrences off (labeled with your token's name).
 
 BASE URL: <site>/api/bot/v1/
 AUTH: send "Authorization: Bearer <token>" on every request, over HTTPS.
@@ -234,6 +235,42 @@ PATCH notes/<id>                                      scope: notes:write
   Only notes this token created, or that are shared with the owner to edit (anything else is a 404).
   Body: {"append": str} (added after a blank line) or {"body": str} (replaces it), and/or {"tags": [str]}
   (added to the note's tags). Returns the note.
+
+SCHEDULE (the owner's Planner - tasks and events, one-off or repeating)
+-----------------------------------------------------------------------
+Every call is a 403 if the owner can't open the Planner. Dates are YYYY-MM-DD, times HH:MM (24-hour, the
+owner's local time). A repeating item is one item; each date it happens is an "occurrence".
+
+GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD          scope: schedule:read
+  Occurrences between start and end, inclusive (default: the 7 days from today; at most 366 days), by day
+  and time. Includes items shared with the owner. Returns {"start", "end", "occurrences": [{"item_id",
+  "title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
+  to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
+  "created_by"}]}.
+
+POST schedule                                          scope: schedule:write
+  Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
+  (optional; none = all day), "end_time": HH:MM (optional), "kind": "task"|"event" (default "task"),
+  "checkable": bool (events only; tasks always can be checked off), "notes": str (optional, <=1000),
+  and optionally a repeat - EITHER the Planner's simple choices:
+    "repeat": "daily"|"weekdays"|"weekly"|"every_n_weeks"|"monthly_day"|"monthly_nth"|"yearly",
+    "days": ["MO","WE","FR"] (weekly / every_n_weeks; default the date's weekday), "interval": 1-52
+    (every_n_weeks), "month_day": 1-31 (monthly_day), "nth": 1|2|3|4|-1 and "nth_weekday": "TU"
+    (monthly_nth - e.g. the 2nd Tuesday)
+  OR "rrule": an RFC 5545 rule using FREQ (DAILY|WEEKLY|MONTHLY|YEARLY), INTERVAL, BYDAY, BYMONTHDAY,
+    BYMONTH, BYSETPOS, WKST, UNTIL, COUNT - e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR".
+  End a repeat with "until": YYYY-MM-DD or "count": 1-1000 (or UNTIL/COUNT in the rrule) - not both.
+  Example: {"title": "Gym", "date": "2026-11-02", "start_time": "06:00", "repeat": "weekly",
+  "days": ["MO", "WE", "FR"]}
+  The item belongs to the owner and shows "by <your token's name>". Returns 201 {"id", "title", "kind",
+  "date", "start_time", "end_time", "checkable", "notes", "rrule", "until", "count", "repeats" (plain
+  English), "created_by", "url"}.
+
+POST schedule/<id>/complete                            scope: schedule:write
+POST schedule/<id>/uncomplete                          scope: schedule:write
+  Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item; a one-off item's own date otherwise).
+  Checks off (or un-checks) THAT occurrence only. Only items the owner may edit and that can be checked off
+  (anything else is a 404 or 400). Returns {"item_id", "occurrence_date", "done"}.
 """
 
 

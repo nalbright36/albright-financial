@@ -14,6 +14,8 @@ repeating item asks which occurrences the change applies to.
     <p class="pl-muted pl-small">
         {% if item.repeats %}{{ summary }} &middot; this occurrence: {{ occurrence|date:"D M j, Y" }}{% if done %} &middot; done{% endif %}{% else %}{{ item.date|date:"D M j, Y" }}{% endif %}
         {% if not is_owner %} &middot; shared by {{ item.owner.get_username }}{% if not can_edit %} (view only){% endif %}{% endif %}
+        {% if item.from_bot %} &middot; added by {{ item.created_by }}{% endif %}
+        {% if item.source_href %} &middot; <a href="{{ item.source_href }}"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app</a>{% if item.locked %} (kept up to date from there - view only){% endif %}{% endif %}
     </p>
     {% endif %}
 
@@ -67,6 +69,35 @@ repeating item asks which occurrences the change applies to.
             {% if not item or can_edit %}<div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">{% if item %}Save{% else %}Add{% endif %}</button> <a href="{{ next }}" class="pl-btn pl-btn--ghost">Cancel</a></div>{% endif %}
         </fieldset>
     </form>
+
+    {% if item %}
+    <section class="pl-section" id="note" aria-labelledby="pl-note-h">
+        <h2 class="pl-section__title" id="pl-note-h">Note</h2>
+        {% if linked_note.title %}
+        <a href="{{ linked_note.url }}" class="pl-note-card" id="pl-linked-note">
+            <span class="pl-note-card__title">&#x1F4DD; {{ linked_note.title }}</span>
+            {% if linked_note.preview %}<span class="pl-note-card__preview">{{ linked_note.preview }}</span>{% endif %}
+        </a>
+        {% elif linked_note.hidden %}<p class="pl-muted pl-small" id="pl-linked-note">A note is linked, but it isn't shared with you.</p>
+        {% elif linked_note.deleted %}<p class="pl-muted pl-small" id="pl-linked-note">Note deleted</p>
+        {% elif not can_note %}<p class="pl-muted pl-small">No note linked.</p>{% endif %}
+        {% if can_edit and item.note_id %}
+        <form method="post" action="{% url 'albright_planner:item_note' item.pk %}" class="pl-inline">{% csrf_token %}<input type="hidden" name="action" value="detach"><button type="submit" class="pl-btn pl-btn--ghost" id="pl-note-detach">Remove note from item</button></form>
+        {% elif can_note %}
+        <div class="pl-actions">
+            {% if note_choices %}
+            <form method="post" action="{% url 'albright_planner:item_note' item.pk %}" class="pl-inline" id="pl-note-attach">{% csrf_token %}
+                <input type="hidden" name="action" value="attach">
+                <label for="pl-note-pick" class="visually-hidden">Note to attach</label>
+                <select name="note" id="pl-note-pick" class="pl-input pl-select" required><option value="">Attach note&hellip;</option>{% for n in note_choices %}<option value="{{ n.pk }}">{{ n.title }}</option>{% endfor %}</select>
+                <button type="submit" class="pl-btn">Attach note</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'albright_planner:item_note' item.pk %}" class="pl-inline">{% csrf_token %}<input type="hidden" name="action" value="new"><button type="submit" class="pl-btn" id="pl-note-new">New note</button></form>
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
 
     {% if item and can_edit %}
     <section class="pl-section" id="delete">

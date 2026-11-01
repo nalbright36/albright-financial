@@ -30,6 +30,9 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("notes:read", "List the owner's own notes (titles, tags, dates, ids) - never notes others shared with them."),
     ("notes:write", "Save notes for the owner (labeled with this bot's name), and add to or change the notes this bot "
                     "created or that are shared with the owner to edit."),
+    ("schedule:read", "List the owner's Planner occurrences in a date range, with whether each is checked off."),
+    ("schedule:write", "Add items to the owner's Planner (labeled with this bot's name), and check occurrences off or "
+                       "back on."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

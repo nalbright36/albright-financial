@@ -159,7 +159,15 @@ def _editor(note, user, now, allowed):
     can_edit, is_owner = note.can_edit(user), note.owner_id == user.pk
     shares = list(note.shares.select_related("user")) if is_owner else []
     shared_ids = {s.user_id for s in shares} | {note.owner_id}
+    # The Planner links to notes by id (ScheduleItem.note): "Add to schedule", and a chip per linked item.
+    can_schedule = "planner" in allowed
+    if can_schedule:
+        from albright_planner import planner
+        from albright_planner.forms import FromNoteForm
     return {
+        "can_schedule": can_schedule,
+        "scheduled": planner.scheduled_for_note(note, user) if can_schedule else [],
+        "schedule_form": FromNoteForm(initial={"date": timezone.localdate()}) if can_schedule else None,
         "can_edit": can_edit, "is_owner": is_owner, "html": md.render(note.body, editable=can_edit),
         "chips": links.chips(user, list(note.links.all()), allowed), "words": word_count(note.body),
         "shares": shares, "share_choices": [u for u in notes.notes_users() if u.pk not in shared_ids] if is_owner else [],

@@ -5,7 +5,10 @@ sharing.
 Who can do what - checked here, on the server:
   - see an item: its owner and the people it's shared with; anyone else gets 404;
   - check it off, edit or move it, skip one occurrence: the owner and people it's shared with "Can edit";
-  - share it, delete it (or end a series): the owner only.
+  - share it, delete it (or end a series): the owner only;
+  - attach a note: someone who can edit the item, and only a note they can see (Notes access needed).
+Items another app keeps up to date (sources.py) are brought up to date when a view opens; planned meals
+are read live from Meals for people who can open it (and haven't hidden them).
 Opening the Planner at all needs access in Admin > Users (albright_labs.app_access)."""
 import json
 from datetime import date, datetime, timedelta
@@ -20,9 +23,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import planner, quickadd, recurrence
-from .forms import ItemForm
-from .models import ItemShare, ScheduleItem
+from . import planner, quickadd, recurrence, sources
+from .forms import FromNoteForm, ItemForm
+from .models import ItemShare, PlannerSettings, ScheduleItem
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -100,6 +103,8 @@ def _frame(request, view, day, prev_day, next_day, title):
         "prev_url": link(view, prev_day), "next_url": link(view, next_day), "today_url": link(view, None),
         "here": request.get_full_path(),
         "day_url": lambda d: link("day", d),
+        "meals_toggle": sources.can_open(request.user, "meals"),
+        "meals_on": PlannerSettings.for_user(request.user).show_meals,
     }
 
 
@@ -128,8 +133,11 @@ def day_view(request):
     today = planner.today()
     day = _day(request.GET.get("date"), today)
     f = _filters(request)
+    sources.sync(request.user)
     occs = planner.occurrences(request.user, day, day, **f)
     top, timed = _split(occs)
+    meals = sources.meals(request.user, day, day)
+    top = meals + top
     overdue = planner.overdue(request.user, day, kind=f["kind"], shared_only=f["shared_only"]) if day == today else []
     first = min([FIRST_HOUR] + [o.start_time.hour for o in timed])
     last = max([LAST_HOUR] + [o.start_time.hour for o in timed])
@@ -138,7 +146,7 @@ def day_view(request):
     context = _frame(request, "day", day, day - timedelta(days=1), day + timedelta(days=1),
                      f"{day:%A, %B} {day.day}" + (f", {day.year}" if day.year != today.year else ""))
     context.update({"top": top, "hours": hours, "overdue": overdue, "is_today": day == today,
-                    "empty": not (occs or overdue)})
+                    "empty": not (occs or overdue or meals)})
     return _remember(render(request, "albright_planner/day.html", context), "day")
 
 
@@ -149,11 +157,14 @@ def week_view(request):
     day = _day(request.GET.get("date"), today)
     start = planner.week_start(day)
     end = start + timedelta(days=6)
+    sources.sync(request.user)
     occs = planner.occurrences(request.user, start, end, **_filters(request))
+    meals = sources.meals(request.user, start, end)
     days = []
     for i in range(7):
         d = start + timedelta(days=i)
         top, timed = _split([o for o in occs if o.date == d])
+        top = [m for m in meals if m.date == d] + top
         days.append({"date": d, "top": top, "timed": timed, "is_today": d == today})
     title = f"{start:%b} {start.day} – " + (f"{end.day}" if end.month == start.month else f"{end:%b} {end.day}") + f", {end.year}"
     context = _frame(request, "week", day, day - timedelta(days=7), day + timedelta(days=7), title)
@@ -175,13 +186,15 @@ def month_view(request):
     grid_start = planner.week_start(first)
     last = _add_months(first, 1) - timedelta(days=1)
     grid_end = planner.week_start(last) + timedelta(days=6)
+    sources.sync(request.user)
     occs = planner.occurrences(request.user, grid_start, grid_end, **_filters(request))
+    meals = sources.meals(request.user, grid_start, grid_end)
     context = _frame(request, "month", day, _add_months(first, -1), _add_months(first, 1), f"{first:%B %Y}")
     weeks, d = [], grid_start
     while d <= grid_end:
         week = []
         for _ in range(7):
-            items = [o for o in occs if o.date == d]
+            items = [m for m in meals if m.date == d] + [o for o in occs if o.date == d]
             week.append({"date": d, "items": items[:3], "more": max(0, len(items) - 3), "in_month": d.month == first.month,
                          "is_today": d == today, "url": context["day_url"](d)})
             d += timedelta(days=1)
@@ -247,7 +260,10 @@ def edit_item(request, pk):
             return redirect(_next(request))
     shares = list(item.shares.select_related("user")) if is_owner else []
     taken = {s.user_id for s in shares} | {item.owner_id}
+    can_note = can_edit and sources.can_open(request.user, "notes")
     return render(request, "albright_planner/form.html", {
+        "linked_note": planner.linked_note(item, request.user), "can_note": can_note,
+        "note_choices": planner.attachable_notes(request.user) if can_note else [],
         "form": form, "item": item, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
         "summary": recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count),
         "done": item.completions.filter(occurrence_date=occurrence).exists(), "next": _next(request),
@@ -335,3 +351,96 @@ def share_update(request, pk, share_id):
         share.permission = request.POST["permission"]
         share.save(update_fields=["permission"])
     return redirect(reverse("albright_planner:edit", args=[item.pk]) + "#sharing")
+
+
+# ---------------------------------------------------------------------------
+# Notes (an item stores the note's id - edits in either app show in both)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+def item_note(request, pk):
+    """action=attach (note=<id> of a note you can see), new (a note titled from the item, linked), or detach."""
+    from albright_notes import notes
+    from albright_notes.models import Note
+    item = _editable(request, pk)
+    action = request.POST.get("action")
+    back = reverse("albright_planner:edit", args=[item.pk]) + "#note"
+    if action == "detach":
+        item.note, item.note_deleted = None, False
+        item.save(update_fields=["note", "note_deleted", "updated_at"])
+        messages.success(request, "Removed the note from this item (the note itself is unchanged).")
+        return redirect(back)
+    if action not in ("attach", "new") or not sources.can_open(request.user, "notes"):
+        raise Http404
+    if action == "attach":
+        note = Note.objects.visible_to(request.user).filter(pk=request.POST.get("note") or 0).first()
+        if note is None:
+            messages.error(request, "Pick one of your notes (or one shared with you).")
+            return redirect(back)
+    else:
+        note = notes.create(request.user, item.title, author=request.user)
+    item.note, item.note_deleted = note, False
+    item.save(update_fields=["note", "note_deleted", "updated_at"])
+    if action == "new":
+        messages.success(request, f"Created the note “{note.title}” and linked it.")
+        return redirect(reverse("albright_notes:note", args=[note.pk]))
+    messages.success(request, f"Linked the note “{note.title}”.")
+    return redirect(back)
+
+
+@login_required
+@require_POST
+def from_note(request, note_id):
+    """Notes' "Add to schedule": an item titled from the note, linked to it (date, optional time and repeat)."""
+    from albright_notes.models import Note
+    note = get_object_or_404(Note.objects.visible_to(request.user), pk=note_id)
+    back = reverse("albright_notes:note", args=[note.pk])
+    form = FromNoteForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Pick a date to schedule it on.")
+        return redirect(back)
+    d = form.cleaned_data
+    item = ScheduleItem.objects.create(
+        owner=request.user, created_by=request.user.get_username(), title=note.title[:200], date=d["date"],
+        start_time=d.get("time"), recurrence=recurrence.build(d["repeat"], d["date"]), note=note)
+    when = recurrence.summary(item.recurrence, item.date) or f"{item.date:%a %b} {item.date.day}"
+    messages.success(request, f"Scheduled “{item.title}” – {when}.")
+    return redirect(back)
+
+
+# ---------------------------------------------------------------------------
+# Settings: the Meals overlay and which apps may add items
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+def toggle_meals(request):
+    """The views' "Show meals" switch - remembered (PlannerSettings.show_meals)."""
+    prefs = PlannerSettings.for_user(request.user)
+    prefs.show_meals = request.POST.get("show") == "1"
+    prefs.save(update_fields=["show_meals"])
+    return redirect(_next(request))
+
+
+@login_required
+def settings_view(request):
+    prefs = PlannerSettings.for_user(request.user)
+    available = sources.available(request.user)
+    meals_toggle = sources.can_open(request.user, "meals")
+    if request.method == "POST":
+        chosen = set(request.POST.getlist("source"))
+        offered = {s.key for s in available}
+        # Sources this user can't open keep whatever they were set to.
+        was_off = set(prefs.sources_off or [])
+        prefs.sources_off = [k for k in sources.SOURCE_KEYS
+                             if (k not in chosen if k in offered else k in was_off)]
+        if meals_toggle:
+            prefs.show_meals = request.POST.get("show_meals") == "1"
+        prefs.save(update_fields=["sources_off", "show_meals"])
+        sources.sync(request.user, force=True)
+        messages.success(request, "Planner settings saved.")
+        return redirect("albright_planner:settings")
+    return render(request, "albright_planner/settings.html", {
+        "sources": [{"source": s, "on": prefs.source_on(s.key)} for s in available], "prefs": prefs,
+        "meals_toggle": meals_toggle})

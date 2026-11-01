@@ -1,6 +1,7 @@
 {% comment %}
 Every Planner view's header: title, Day / Week / Month tabs, Today and the
-arrows, quick add, and the filters (they apply on change; planner.js).
+arrows, quick add, and the filters (they apply on change; planner.js). "Show
+meals" (people who can open Meals) is remembered - it's saved, not a filter.
 {% endcomment %}
 <div class="pl-head">
     <div class="pl-head__row">
@@ -27,6 +28,13 @@ arrows, quick add, and the filters (they apply on change; planner.js).
             <label class="pl-toggle"><input type="checkbox" name="shared" value="1"{% if filters.shared_only %} checked{% endif %}> Shared with me</label>
             <button type="submit" class="pl-btn pl-nojs">Apply</button>
         </form>
+        {% if meals_toggle %}
+        <form method="post" action="{% url 'albright_planner:toggle_meals' %}" class="pl-filters" id="pl-meals-toggle">{% csrf_token %}
+            <input type="hidden" name="next" value="{{ here }}"><input type="hidden" name="show" value="{{ meals_on|yesno:'0,1' }}">
+            <button type="submit" class="pl-toggle pl-meals-switch" role="switch" aria-checked="{{ meals_on|yesno:'true,false' }}"><span class="pl-meal-icon" aria-hidden="true">{% include "albright_planner/_fork.html" %}</span> Show meals</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'albright_planner:settings' %}" class="pl-btn pl-btn--ghost pl-small" id="pl-settings-link">Settings</a>
     </div>
     <form method="post" action="{% url 'albright_planner:quick_add' %}" class="pl-quick" id="pl-quick">{% csrf_token %}
         <input type="hidden" name="next" value="{{ here }}">

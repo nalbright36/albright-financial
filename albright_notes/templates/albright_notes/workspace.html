@@ -59,6 +59,7 @@ behavior: albright_notes/notes.js; views.workspace.
                 <form method="post" action="{% url 'albright_notes:pin' open.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'albright_notes:note' open.pk %}{{ query }}"><button type="submit" class="nt-btn sm{% if open.pinned %} is-on{% endif %}" id="nt-pin" aria-pressed="{{ open.pinned|yesno:'true,false' }}" title="{% if open.pinned %}Unpin{% else %}Pin{% endif %}" aria-label="{% if open.pinned %}Unpin{% else %}Pin{% endif %}">📌</button></form>
                 <button type="button" class="nt-btn sm" data-pop="nt-pop-share" aria-expanded="false" aria-controls="nt-pop-share">👥 Share</button>
                 {% endif %}
+                {% if can_schedule %}<button type="button" class="nt-btn sm" data-pop="nt-pop-schedule" aria-expanded="false" aria-controls="nt-pop-schedule" id="nt-schedule-btn">📅 Add to schedule</button>{% endif %}
                 {% if can_edit %}<button type="button" class="nt-btn sm" data-pop="nt-pop-more" aria-expanded="false" aria-controls="nt-pop-more" aria-label="More">⋯</button>{% endif %}
             </div>
 
@@ -89,6 +90,19 @@ behavior: albright_notes/notes.js; views.workspace.
                     <form method="post" action="{% url 'albright_notes:delete' open.pk %}" data-confirm="Delete &ldquo;{{ open.title }}&rdquo;? This can't be undone.">{% csrf_token %}<button type="submit" class="nt-btn sm danger" id="nt-delete">Delete</button></form>
                 </div>
                 {% endif %}
+            </section>
+            {% endif %}
+            {% if can_schedule %}
+            <section class="nt-pop" id="nt-pop-schedule" aria-label="Add to schedule" hidden>
+                <form method="post" action="{% url 'albright_planner:from_note' open.pk %}" class="nt-schedule" id="nt-schedule">{% csrf_token %}
+                    <p class="nt-small nt-muted">Adds &ldquo;{{ open.title }}&rdquo; to your Planner, linked to this note.</p>
+                    <div class="nt-row">
+                        <label class="nt-label" for="nt-sched-date">Date<input type="date" name="date" id="nt-sched-date" class="nt-input" value="{{ schedule_form.initial.date|date:'Y-m-d' }}" required></label>
+                        <label class="nt-label" for="nt-sched-time">Time (optional)<input type="time" name="time" id="nt-sched-time" class="nt-input"></label>
+                        <label class="nt-label" for="nt-sched-repeat">Repeat<select name="repeat" id="nt-sched-repeat" class="nt-input nt-select">{% for value, label in schedule_form.fields.repeat.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                    </div>
+                    <button type="submit" class="nt-btn primary sm">Add to schedule</button>
+                </form>
             </section>
             {% endif %}
             {% if is_owner %}
@@ -142,6 +156,7 @@ behavior: albright_notes/notes.js; views.workspace.
             <div class="nt-small nt-muted nt-meta">Edited <span id="nt-updated">{{ updated }}</span>{% if not is_owner %} &middot; shared by {{ open.owner.get_username }}, {% if my_permission == "edit" %}you can edit{% else %}view only{% endif %}{% endif %}{% if open.from_bot %} &middot; by {{ open.created_by }}{% endif %}{% if open.archived %} &middot; archived{% endif %}
                 {% for t in open.tags %} <span class="nt-tag">{{ t }}</span>{% endfor %}
                 {% for c in chips %} <span class="nt-chip"><span aria-hidden="true">🔗</span> {% if c.href %}<a href="{{ c.href }}"{% if c.kind == "Auction lot" %} target="_blank" rel="noopener noreferrer"{% endif %}>{% if c.kind %}{{ c.kind }}: {% endif %}{{ c.label }}</a>{% else %}{{ c.label }}{% endif %}</span>{% endfor %}
+                {% for s in scheduled %} <span class="nt-chip nt-chip--scheduled"><span aria-hidden="true">📅</span> <a href="{{ s.url }}" title="{{ s.item.title }}">Scheduled: {{ s.date|date:"D M j" }}{% if s.repeats %} &#x21bb;{% endif %}</a></span>{% endfor %}
             </div>
 
             <div class="nt-doc" id="nt-doc" data-mode="{% if can_edit and not open.body %}write{% else %}preview{% endif %}">

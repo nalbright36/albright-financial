@@ -1,0 +1,8 @@
+{% comment %}A planned meal from Meals (read live, never copied): view only - no checkbox, no drag. Opens it in Meals.{% endcomment %}
+<li class="pl-item is-meal" data-meal="{{ o.entry.pk }}">
+    <span class="pl-meal-icon" aria-hidden="true">{% include "albright_planner/_fork.html" %}</span>
+    <a href="{{ o.url }}" class="pl-item__body">
+        <span class="pl-item__title">{{ o.title }}</span>
+        <span class="pl-item__meta"><span>{{ o.slot }}</span><span>Meals</span></span>
+    </a>
+</li>

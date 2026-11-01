@@ -92,3 +92,15 @@ class ItemForm(forms.Form):
             "recurrence_until": d.get("until") if rule and d.get("ends") == "on" else None,
             "recurrence_count": d.get("count") if rule and d.get("ends") == "after" else None,
         }
+
+
+class FromNoteForm(forms.Form):
+    """Notes' "Add to schedule": a date, an optional time, and a simple repeat."""
+    REPEATS = [(k, label) for k, label in recurrence.REPEATS if k in ("none", "daily", "weekdays", "weekly",
+                                                                      "monthly_day", "yearly")]
+    date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"))
+    repeat = forms.ChoiceField(choices=REPEATS, initial="none", required=False)
+
+    def clean_repeat(self):
+        return self.cleaned_data.get("repeat") or "none"

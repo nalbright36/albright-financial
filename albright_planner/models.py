@@ -9,13 +9,28 @@ stored per occurrence:
   - ItemException: a "this occurrence only" change - skipped, moved to another
     day/time, or retitled.
 Items are private to their owner unless shared (ItemShare: view or edit);
-everyone else gets a 404 (ScheduleItem.objects.visible_to)."""
+everyone else gets a 404 (ScheduleItem.objects.visible_to).
+
+Links to the other apps:
+  - note: a Note the item points at (its id - the note itself is never copied).
+    If the note is deleted the item stays, with note_deleted set ("Note deleted").
+  - source_app / source_id / source_url: an item another app keeps up to date
+    (services.upsert_source_item - one row per source record, updated in place).
+  - from_bot / bot_token: added through the Bot API, labeled with the bot's name."""
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
 
 DEFAULT_TIMEZONE = "America/New_York"
 ME = "me"
+# Sources whose items can't be edited, moved or checked off here (they mirror the source exactly).
+LOCKED_SOURCES = {"watchlist"}
+
+
+def note_gone(collector, field, sub_objs, using):
+    """on_delete for ScheduleItem.note: unlink it and remember there was one (the item shows "Note deleted")."""
+    collector.add_field_update(field, None, sub_objs)
+    collector.add_field_update(field.model._meta.get_field("note_deleted"), True, sub_objs)
 
 
 class ItemQuerySet(models.QuerySet):
@@ -29,7 +44,7 @@ class ItemQuerySet(models.QuerySet):
         if not (user and user.is_authenticated):
             return self.none()
         shared = ItemShare.objects.filter(user=user, permission=ItemShare.EDIT).values("item_id")
-        return self.filter(Q(owner=user) | Q(pk__in=shared))
+        return self.filter(Q(owner=user) | Q(pk__in=shared)).exclude(source_app__in=LOCKED_SOURCES)
 
 
 class ScheduleItem(models.Model):
@@ -53,9 +68,16 @@ class ScheduleItem(models.Model):
     recurrence = models.CharField(max_length=500, blank=True)
     recurrence_until = models.DateField(null=True, blank=True)
     recurrence_count = models.PositiveIntegerField(null=True, blank=True)
-    # Set when another app created it (e.g. a Meals plan); empty = added by hand.
+    # Set when another app keeps it up to date (sources.SOURCES key, e.g. "watchlist"); empty = added by hand.
     source_app = models.CharField(max_length=20, blank=True)
     source_id = models.CharField(max_length=64, blank=True)
+    source_url = models.CharField(max_length=1000, blank=True)    # the record's page (a site path, or an external URL)
+    note = models.ForeignKey("albright_notes.Note", on_delete=note_gone, null=True, blank=True,
+                             related_name="planner_items")
+    note_deleted = models.BooleanField(default=False)
+    from_bot = models.BooleanField(default=False)
+    bot_token = models.ForeignKey("albright_bot_api.BotToken", on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="+")
     shared_with = models.ManyToManyField(settings.AUTH_USER_MODEL, through="ItemShare", related_name="planner_shared_items",
                                          blank=True)
     archived = models.BooleanField(default=False)
@@ -68,8 +90,12 @@ class ScheduleItem(models.Model):
     class Meta:
         ordering = ["date", "start_time", "pk"]
         indexes = [models.Index(fields=["owner", "archived", "date"], name="planner_owner_date")]
-        constraints = [models.CheckConstraint(
-            condition=Q(recurrence_until__isnull=True) | Q(recurrence_count__isnull=True), name="planner_until_or_count")]
+        constraints = [
+            models.CheckConstraint(condition=Q(recurrence_until__isnull=True) | Q(recurrence_count__isnull=True),
+                                   name="planner_until_or_count"),
+            models.UniqueConstraint(fields=["owner", "source_app", "source_id"], condition=~Q(source_app=""),
+                                    name="planner_one_item_per_source"),
+        ]
 
     def __str__(self):
         return self.title
@@ -82,7 +108,24 @@ class ScheduleItem(models.Model):
     def all_day(self):
         return self.start_time is None
 
+    @property
+    def locked(self):
+        return self.source_app in LOCKED_SOURCES
+
+    @property
+    def source_href(self):
+        """Where the item's source link points: a site page as is; an external URL through the link check."""
+        url = self.source_url
+        if not url:
+            return ""
+        if url.startswith("/") and not url.startswith("//"):
+            return url
+        from albright_crypto_app.links import outbound_href
+        return outbound_href(url)
+
     def can_edit(self, user):
+        if self.locked:
+            return False
         return self.owner_id == user.pk or self.shares.filter(user=user, permission=ItemShare.EDIT).exists()
 
 
@@ -126,3 +169,18 @@ class ItemException(models.Model):
     class Meta:
         ordering = ["occurrence_date"]
         constraints = [models.UniqueConstraint(fields=["item", "occurrence_date"], name="planner_one_exception")]
+
+
+class PlannerSettings(models.Model):
+    """Per-user Planner preferences: the Meals overlay, and which apps may add items (sources.SOURCES)."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_settings")
+    show_meals = models.BooleanField(default=True)
+    sources_off = models.JSONField(default=list, blank=True)     # source keys turned off; everything else is on
+    synced_at = models.DateTimeField(null=True, blank=True)      # sources last brought up to date
+
+    @classmethod
+    def for_user(cls, user):
+        return cls.objects.get_or_create(user=user)[0]
+
+    def source_on(self, key):
+        return key not in (self.sources_off or [])

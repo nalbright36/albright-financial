@@ -166,6 +166,7 @@ def change(item, occurrence_date, scope, changes):
         before = recurrence.count_before(item, occurrence_date)
         new = ScheduleItem.objects.get(pk=item.pk)
         new.pk = new.id = None
+        new.source_app = new.source_id = ""          # one item per source record: the copy isn't it
         new.date = occurrence_date + delta
         if item.recurrence_count:
             new.recurrence_count = max(1, item.recurrence_count - before)
@@ -217,3 +218,45 @@ def planner_users():
     from django.contrib.auth import get_user_model
     return get_user_model().objects.filter(is_active=True).filter(
         Q(is_superuser=True) | Q(labs_preference__allowed_apps__contains=["planner"])).order_by("username")
+
+
+# ---------------------------------------------------------------------------
+# Linked notes (ScheduleItem.note - the note's id; the note lives in Notes)
+# ---------------------------------------------------------------------------
+
+def linked_note(item, user):
+    """What an item page shows about its note: {"title", "preview", "url"}; {"hidden": True} for a note this user
+    can't see; {"deleted": True} once the note was deleted; None when there's none."""
+    if item.note_id is None:
+        return {"deleted": True} if item.note_deleted else None
+    from albright_notes.models import Note
+    from albright_notes.render import preview
+    from django.urls import reverse
+    note = Note.objects.visible_to(user).filter(pk=item.note_id).first()
+    if note is None:
+        return {"hidden": True}
+    return {"title": note.title, "preview": preview(note.body), "url": reverse("albright_notes:note", args=[note.pk]),
+            "id": note.pk}
+
+
+def attachable_notes(user, limit=200):
+    """The notes this user may attach: theirs and ones shared with them, most recently changed first."""
+    from albright_notes.models import Note
+    return list(Note.objects.visible_to(user).filter(archived=False).order_by("-updated_at", "-pk")
+                .only("pk", "title")[:limit])
+
+
+def scheduled_for_note(note, user):
+    """Notes' "Scheduled: <date>" chips: this user's visible items linked to the note, each with its next date
+    (a repeating one's next occurrence from today, else its first) and a link to that day in the Planner."""
+    from django.urls import reverse
+    day = today()
+    out = []
+    for item in ScheduleItem.objects.visible_to(user).filter(note=note, archived=False).order_by("date", "pk"):
+        when = item.date
+        if item.recurrence:
+            upcoming = recurrence.scheduled_dates(item, day, day + timedelta(days=400))
+            when = upcoming[0] if upcoming else item.date
+        out.append({"item": item, "date": when, "repeats": item.repeats,
+                    "url": reverse("albright_planner:day") + f"?date={when.isoformat()}"})
+    return out
