@@ -1,15 +1,16 @@
 """What other apps put on the Planner, and the Meals overlay.
 
-Sources (each can be turned off in Planner settings; on by default for anyone
-who can open the source's app):
+Sources (all OFF by default - nothing is added unless the user turns one on in
+Planner settings, and can open the source's app):
   watchlist      Reselling watchlist - each watched lot's auction end time, a
                  view-only event linking to the lot.
   opportunities  Opportunities - "Apply by" on saved ones with a deadline, and
                  "Follow up" a week after applying with no movement (tasks).
   markdown       Reselling ledger - markdown steps that are due (tasks).
-sync() brings a user's source items up to date through services.upsert_source_item
-(at most every SYNC_EVERY, when they open the Planner); a source that's off,
-or whose app they can't open, has its items archived.
+sync() brings a user's source items up to date through services.upsert_source_item.
+It runs only when they save Planner settings - never on page loads, signals,
+scans or schedules. A source that's off, or whose app they can't open, has its
+items archived. Items the user deleted are never made again.
 
 Meals are NOT copied: meals() reads the plan live for the dates on screen."""
 import logging
@@ -23,7 +24,6 @@ from . import services
 from .models import PlannerSettings
 
 log = logging.getLogger(__name__)
-SYNC_EVERY = timedelta(minutes=5)
 FOLLOW_UP_AFTER = timedelta(days=7)
 OPEN_PIPELINE = ("saved", "applied", "talking", "working")
 UNSOLD = ("holding", "partially_sold")
@@ -95,11 +95,13 @@ class Source:
 
 
 SOURCES = (
-    Source("watchlist", "Reselling watchlist", "Auction end times of watched lots (view only, links to the lot).",
-           "resell", _watchlist),
-    Source("opportunities", "Opportunities", "Application deadlines and follow-up reminders (tasks).", "opps",
-           _opportunities),
-    Source("markdown", "Reselling ledger", "Markdown steps that are due (tasks).", "resell", _markdown),
+    Source("watchlist", "Automatically add auction end times from my Watchlist",
+           "View-only events that link to the lot.", "resell", _watchlist),
+    Source("opportunities", "Automatically add application deadlines and follow-ups from Opportunities",
+           "Tasks: “Apply by” for saved opportunities with a deadline, and “Follow up” a week "
+           "after applying.", "opps", _opportunities),
+    Source("markdown", "Automatically add due markdown steps from my Reselling ledger",
+           "Tasks to check off when a listed item's next markdown is due.", "resell", _markdown),
 )
 SOURCE_KEYS = [s.key for s in SOURCES]
 
@@ -109,12 +111,11 @@ def available(user):
     return [s for s in SOURCES if can_open(user, s.app)]
 
 
-def sync(user, force=False, today=None):
-    """Bring the user's source items up to date. Returns {source key: number of items now} for the sources run."""
+def sync(user, today=None):
+    """Bring the user's source items up to date (only the sources they turned on). Returns {source key: number of
+    records found} for the sources run. Called from Planner settings only."""
     prefs = PlannerSettings.for_user(user)
     now = timezone.now()
-    if not force and prefs.synced_at and now - prefs.synced_at < SYNC_EVERY:
-        return {}
     today = today or timezone.localdate()
     done = {}
     for source in SOURCES:

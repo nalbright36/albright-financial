@@ -16,6 +16,8 @@ Links to the other apps:
     If the note is deleted the item stays, with note_deleted set ("Note deleted").
   - source_app / source_id / source_url: an item another app keeps up to date
     (services.upsert_source_item - one row per source record, updated in place).
+    Only sources the user turned on add these (all are off by default), and
+    one the user deleted is never added again (DeletedSourceItem).
   - from_bot / bot_token: added through the Bot API, labeled with the bot's name."""
 from django.conf import settings
 from django.db import models
@@ -175,7 +177,7 @@ class PlannerSettings(models.Model):
     """Per-user Planner preferences: the Meals overlay, and which apps may add items (sources.SOURCES)."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_settings")
     show_meals = models.BooleanField(default=True)
-    sources_off = models.JSONField(default=list, blank=True)     # source keys turned off; everything else is on
+    sources_on = models.JSONField(default=list, blank=True)      # source keys turned ON; everything else is off
     synced_at = models.DateTimeField(null=True, blank=True)      # sources last brought up to date
 
     @classmethod
@@ -183,4 +185,21 @@ class PlannerSettings(models.Model):
         return cls.objects.get_or_create(user=user)[0]
 
     def source_on(self, key):
-        return key not in (self.sources_off or [])
+        return key in (self.sources_on or [])
+
+
+class DeletedSourceItem(models.Model):
+    """A source item its owner deleted: services.upsert_source_item never makes it again, even with the source on."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    source_app = models.CharField(max_length=40)
+    source_id = models.CharField(max_length=64)
+    deleted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["owner", "source_app", "source_id"],
+                                               name="planner_deleted_source_once")]
+
+    @classmethod
+    def record(cls, item):
+        if item.source_app:
+            cls.objects.get_or_create(owner_id=item.owner_id, source_app=item.source_app, source_id=item.source_id)

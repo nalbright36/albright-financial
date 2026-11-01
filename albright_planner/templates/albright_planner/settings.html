@@ -3,22 +3,24 @@
 {% block planner %}
 {% comment %}
 Which apps may add items to your Planner (sources.SOURCES - only the ones whose
-app you can open are listed), and the Meals overlay. Turning a source off
-takes its items off the Planner; turning it back on brings them back.
+app you can open are listed; all are off until ticked), and the Meals overlay.
+Saving is what adds or updates source items - nothing else does. Turning a
+source off takes its items off the Planner; a deleted item never comes back.
 {% endcomment %}
 <a href="{% url 'albright_planner:home' %}" class="pl-back">&larr; Planner</a>
 <div class="pl-form-wrap">
     <h1 class="pl-title">Planner settings</h1>
     <form method="post" class="pl-form" id="pl-settings">{% csrf_token %}
         <fieldset class="pl-fieldset">
-            <legend class="pl-section__title">Added by other apps</legend>
+            <legend class="pl-section__title">Automatic items from other apps</legend>
+            <p class="pl-help">All off unless you turn one on &mdash; otherwise only items you add yourself appear.</p>
             {% for row in sources %}
             <label class="pl-setting">
                 <input type="checkbox" name="source" value="{{ row.source.key }}"{% if row.on %} checked{% endif %}>
                 <span><strong>{{ row.source.label }}</strong><span class="pl-help">{{ row.source.help }}</span></span>
             </label>
             {% empty %}<p class="pl-muted pl-small">None of the apps that add items are open to you.</p>{% endfor %}
-            <p class="pl-help">These items stay in step with their app: a change there updates the item here.</p>
+            <p class="pl-help">Items are added when you save this page; save again to bring them up to date{% if prefs.synced_at %} (last updated {{ prefs.synced_at|date:"M j, g:i A" }}){% endif %}. Delete one and it never comes back.</p>
         </fieldset>
         {% if meals_toggle %}
         <fieldset class="pl-fieldset">

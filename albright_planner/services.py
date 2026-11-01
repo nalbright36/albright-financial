@@ -7,10 +7,11 @@ planner_one_item_per_source constraint.
     remove_source_items(user, "watchlist", keep=[...])     # what's no longer in the source
 
 Whether a source may add items at all is the user's choice (Planner settings;
-sources.SOURCES lists them) - sources.sync() checks it before calling these."""
+sources.SOURCES lists them, all off by default) - sources.sync() checks it before
+calling these. An item the user deleted is never made again (DeletedSourceItem)."""
 from django.db import IntegrityError, transaction
 
-from .models import ScheduleItem
+from .models import DeletedSourceItem, ScheduleItem
 
 SOURCE_TITLE_MAX = 200
 
@@ -18,12 +19,15 @@ SOURCE_TITLE_MAX = 200
 @transaction.atomic
 def upsert_source_item(user, source_app, source_id, title, date, time=None, checkable=True, url=""):
     """Create, or update in place, the item for one record of another app. A checkable item is a task, a view-only
-    one an event. Coming back after its source was turned off un-archives it. Returns (item, created)."""
+    one an event. Coming back after its source was turned off un-archives it. Returns (item, created) - or
+    (None, False) when the user deleted this one: deletes are permanent."""
     fields = {"title": (title or "").strip()[:SOURCE_TITLE_MAX] or "Untitled", "date": date, "start_time": time,
               "end_time": None, "recurrence": "", "recurrence_until": None, "recurrence_count": None,
               "checkable": bool(checkable), "kind": ScheduleItem.TASK if checkable else ScheduleItem.EVENT,
               "source_url": (url or "")[:1000], "archived": False}
     key = {"owner": user, "source_app": source_app, "source_id": str(source_id)[:64]}
+    if DeletedSourceItem.objects.filter(**key).exists():
+        return None, False
     item = ScheduleItem.objects.select_for_update().filter(**key).first()
     if item is None:
         try:

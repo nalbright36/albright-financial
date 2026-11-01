@@ -8,7 +8,7 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from . import recurrence
-from .models import ItemCompletion, ItemException, ItemShare, ScheduleItem
+from .models import DeletedSourceItem, ItemCompletion, ItemException, ItemShare, ScheduleItem
 
 THIS, FOLLOWING, ALL = "this", "following", "all"
 SCOPES = [(THIS, "This occurrence only"), (FOLLOWING, "This and following"), (ALL, "All occurrences")]
@@ -200,6 +200,7 @@ def change(item, occurrence_date, scope, changes):
 def remove(item, occurrence_date, scope):
     """Delete a one-off item; for a series skip this occurrence, end it before this one, or delete it all."""
     if not item.recurrence or scope == ALL or (scope == FOLLOWING and occurrence_date <= item.date):
+        DeletedSourceItem.record(item)                    # a source item never comes back once deleted
         item.delete()
         return
     if scope == THIS:

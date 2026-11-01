@@ -224,16 +224,19 @@ class UpsertTests(Base):
 
 
 class SourceTests(Base):
+    """How each source behaves once it's turned ON (they're all off by default - see test_no_auto_items)."""
     def setUp(self):
         super().setUp()
         self.today = timezone.localdate()
+        for user in (self.me, self.wife):
+            PlannerSettings.objects.update_or_create(user=user, defaults={"sources_on": list(sources.SOURCE_KEYS)})
 
     def sync(self, user=None):
-        return sources.sync(user or self.me, force=True, today=self.today)
+        return sources.sync(user or self.me, today=self.today)
 
     def turn(self, key, on):
         prefs = PlannerSettings.for_user(self.me)
-        prefs.sources_off = [k for k in prefs.sources_off if k != key] + ([] if on else [key])
+        prefs.sources_on = [k for k in prefs.sources_on if k != key] + ([key] if on else [])
         prefs.save()
 
     def watched_lot(self):
@@ -323,13 +326,13 @@ class SourceTests(Base):
                 self.sync()
                 self.assertEqual(ScheduleItem.objects.filter(source_app=key, archived=False).count(), 1)
 
-    def test_settings_page_turns_sources_off(self):
+    def test_settings_page_turns_sources_on_and_off(self):
         page = self.client.get(url("settings")).content.decode()
         for source in sources.SOURCES:
             self.assertIn(f'value="{source.key}"', page)
         self.client.post(url("settings"), {"source": ["opportunities"], "show_meals": "1"})
         prefs = PlannerSettings.objects.get(user=self.me)
-        self.assertEqual(prefs.sources_off, ["watchlist", "markdown"])
+        self.assertEqual(prefs.sources_on, ["opportunities"])
         self.assertTrue(prefs.show_meals)
 
     def test_sources_need_access_to_their_app(self):
@@ -338,11 +341,12 @@ class SourceTests(Base):
         self.assertFalse(ScheduleItem.objects.filter(owner=self.wife).exists())
         self.assertNotIn('value="watchlist"', self.as_user(self.wife).get(url("settings")).content.decode())
 
-    def test_sync_runs_at_most_every_few_minutes_unless_forced(self):
+    def test_only_saving_settings_syncs_never_a_page_load(self):
         self.watched_lot()
-        self.assertEqual(sources.sync(self.me)["watchlist"], 1)
-        self.assertEqual(sources.sync(self.me), {})
-        self.client.get(url("day"))                                     # a view syncs too (throttled)
+        for view in ("day", "week", "month"):
+            self.client.get(url(view))
+        self.assertFalse(ScheduleItem.objects.exists())
+        self.client.post(url("settings"), {"source": list(sources.SOURCE_KEYS), "show_meals": "1"})
         self.assertEqual(ScheduleItem.objects.filter(source_app="watchlist").count(), 1)
 
 

@@ -133,7 +133,6 @@ def day_view(request):
     today = planner.today()
     day = _day(request.GET.get("date"), today)
     f = _filters(request)
-    sources.sync(request.user)
     occs = planner.occurrences(request.user, day, day, **f)
     top, timed = _split(occs)
     meals = sources.meals(request.user, day, day)
@@ -157,7 +156,6 @@ def week_view(request):
     day = _day(request.GET.get("date"), today)
     start = planner.week_start(day)
     end = start + timedelta(days=6)
-    sources.sync(request.user)
     occs = planner.occurrences(request.user, start, end, **_filters(request))
     meals = sources.meals(request.user, start, end)
     days = []
@@ -186,7 +184,6 @@ def month_view(request):
     grid_start = planner.week_start(first)
     last = _add_months(first, 1) - timedelta(days=1)
     grid_end = planner.week_start(last) + timedelta(days=6)
-    sources.sync(request.user)
     occs = planner.occurrences(request.user, grid_start, grid_end, **_filters(request))
     meals = sources.meals(request.user, grid_start, grid_end)
     context = _frame(request, "month", day, _add_months(first, -1), _add_months(first, 1), f"{first:%B %Y}")
@@ -265,6 +262,7 @@ def edit_item(request, pk):
         "linked_note": planner.linked_note(item, request.user), "can_note": can_note,
         "note_choices": planner.attachable_notes(request.user) if can_note else [],
         "form": form, "item": item, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
+        "can_remove": can_edit or (is_owner and item.locked),
         "summary": recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count),
         "done": item.completions.filter(occurrence_date=occurrence).exists(), "next": _next(request),
         "shares": shares, "permissions": ItemShare.PERMISSIONS,
@@ -311,7 +309,7 @@ def remove(request, pk):
     occurrence = _day(request.POST.get("date"), item.date)
     scope = request.POST.get("scope") or planner.ALL
     owner = item.owner_id == request.user.pk
-    if scope not in dict(planner.SCOPES) or not item.can_edit(request.user) or \
+    if scope not in dict(planner.SCOPES) or not (item.can_edit(request.user) or (owner and item.locked)) or \
             (not owner and not (item.repeats and scope == planner.THIS)):
         raise Http404
     title = item.title
@@ -432,13 +430,12 @@ def settings_view(request):
         chosen = set(request.POST.getlist("source"))
         offered = {s.key for s in available}
         # Sources this user can't open keep whatever they were set to.
-        was_off = set(prefs.sources_off or [])
-        prefs.sources_off = [k for k in sources.SOURCE_KEYS
-                             if (k not in chosen if k in offered else k in was_off)]
+        was_on = set(prefs.sources_on or [])
+        prefs.sources_on = [k for k in sources.SOURCE_KEYS if (k in chosen if k in offered else k in was_on)]
         if meals_toggle:
             prefs.show_meals = request.POST.get("show_meals") == "1"
-        prefs.save(update_fields=["sources_off", "show_meals"])
-        sources.sync(request.user, force=True)
+        prefs.save(update_fields=["sources_on", "show_meals"])
+        sources.sync(request.user)              # the only place source items are added or updated
         messages.success(request, "Planner settings saved.")
         return redirect("albright_planner:settings")
     return render(request, "albright_planner/settings.html", {
