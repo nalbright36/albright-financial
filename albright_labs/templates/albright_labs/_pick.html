@@ -1,0 +1,20 @@
+{% comment %}One app-picker tile (hub.html): the app's icon in its accent, its name, and the live line (filled by hub.js). The pin (shown on hover, focus or a long press; always while pinned) and, in Edit mode, Show + up/down are siblings of the link - never inside it. Admin stays last, so it has no arrows and doesn't drag.{% endcomment %}
+<li class="labs-pick{% if not t.shown %} is-off{% endif %}{% if t.pinned %} is-pinned{% endif %}" data-key="{{ t.key }}" data-app-accent="{{ t.accent }}"{% if t.key == "admin" %} data-fixed{% endif %} style="--app-dot: var(--app-{{ t.accent }}, {{ t.color }});">
+    <input type="hidden" name="order" value="{{ t.key }}">
+    <a href="{% url t.url_name %}" class="labs-pick__link" data-pick-link>
+        <span class="labs-pick__icon" aria-hidden="true">{% include "_app_icon.html" with key=t.key %}</span>
+        <span class="labs-pick__name">{{ t.label }}</span>
+        <span class="labs-pick__line" data-line-for="{{ t.key }}"></span>
+    </a>
+    <button type="submit" formaction="{% url 'labs:toggle_pin' %}" name="key" value="{{ t.key }}" class="labs-pick__pin" data-pin
+            aria-pressed="{% if t.pinned %}true{% else %}false{% endif %}" aria-label="{% if t.pinned %}Unpin{% else %}Pin{% endif %} {{ t.label }}" title="{% if t.pinned %}Unpin from Favorites{% else %}Pin to Favorites{% endif %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 17v5"/><path d="M9 10.8V4h6v6.8l3 3.2v2H6v-2z"/></svg>
+    </button>
+    <div class="labs-pick__edit" data-edit-only>
+        <label class="labs-choice"><input type="checkbox" name="visible" value="{{ t.key }}"{% if t.shown %} checked{% endif %} data-visible> Show</label>
+        {% if t.key != "admin" %}<span class="labs-pick__move">
+            <button type="submit" name="move" value="up:{{ t.key }}" class="btn btn-secondary btn-sm" data-move="up" aria-label="Move {{ t.label }} earlier">&larr;</button>
+            <button type="submit" name="move" value="down:{{ t.key }}" class="btn btn-secondary btn-sm" data-move="down" aria-label="Move {{ t.label }} later">&rarr;</button>
+        </span>{% endif %}
+    </div>
+</li>

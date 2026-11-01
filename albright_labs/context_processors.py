@@ -2,16 +2,16 @@
 panel of tiles - Home, then the apps this user can open and has kept in their
 navigation, in their order, Admin last (albright_labs.launcher). Hidden for
 someone who can open only one app. Also the "Hidden from your nav" note for a
-page of an app the user has hidden."""
+page of an app the user has hidden, and home_url - the app picker ("/?picker=1"), for every "Home" link."""
 from albright_trading_app.context_processors import app_key_for
 
-from . import app_access, launcher
+from . import app_access, landing, launcher
 
 
 def app_nav(request):
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
-        return {"launcher_apps": [], "show_launcher": False, "nav_hidden_app": None}
+        return {"launcher_apps": [], "show_launcher": False, "nav_hidden_app": None, "home_url": landing.home_url()}
     resolved = getattr(request, "resolver_match", None)
     current = app_key_for(resolved.app_name if resolved else None)
     pref = app_access.preference(request)
@@ -21,4 +21,5 @@ def app_nav(request):
     if page_app and page_app.key not in {item["key"] for item in items} \
             and app_access.can_use(user, pref, page_app.key):
         hidden = page_app
-    return {"launcher_apps": items, "show_launcher": launcher.shows_launcher(user, pref), "nav_hidden_app": hidden}
+    return {"launcher_apps": items, "show_launcher": launcher.shows_launcher(user, pref), "nav_hidden_app": hidden,
+            "home_url": landing.home_url()}

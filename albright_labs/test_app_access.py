@@ -17,7 +17,7 @@ from albright_control.models import AuditEntry
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import apps_registry
-from .testing import current_tiles, launcher_tiles, with_apps
+from .testing import current_tiles, home_tiles, launcher_tiles, with_apps
 from .models import UserPreference
 from .tests import OUTLOOK, resume_site
 
@@ -72,10 +72,12 @@ class RegistryTests(Base):
         hub = self.page(reverse("labs:hub"))
         self.assertEqual(buttons(hub), [("labs", "Home")] + [(a.accent, a.short_label) for a in apps_registry.APPS
                                                       if not a.superuser_only])
-        self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["trade", "resell", "opps", "meals", "notes", "planner"])
-        options = self.client.get(reverse("labs:hub")).context["landing_form"].fields["landing_page"].choices
-        self.assertEqual([group for group, _ in options[1:]], ["Trade", "Resell", "Opps", "Meals", "Notes", "Plan"])
-        self.assertEqual([k for k, _ in options[2][1]], [k for k, _l, _u in apps_registry.BY_KEY["resell"].pages])
+        self.assertEqual(home_tiles(hub), ["trade", "resell", "opps", "meals", "notes", "planner"])
+        groups = self.client.get(reverse("labs:hub")).context["open_after_groups"]
+        self.assertEqual([group for group, _ in groups], ["Trading", "Reselling", "Opportunities", "Meals", "Notes",
+                                                          "Planner"])
+        self.assertEqual([k for k, _ in groups[1][1]],
+                         ["app:resell"] + [f"page:{k}" for k, _l, _u in apps_registry.BY_KEY["resell"].pages])
 
     def test_a_new_app_is_one_entry(self):
         self.with_garden()
@@ -84,11 +86,10 @@ class RegistryTests(Base):
                                         ("opportunities", "Opps"), ("meals", "Meals"), ("notes", "Notes"), ("planner", "Plan"),
                                         ("garden", "Garden")])
         self.assertIn('style="--app-dot: var(--app-garden, #F59E0B);"', hub)
-        self.assertIn('data-tile="garden"', hub)
-        self.assertIn("Plan the week&#x27;s watering.", hub)
-        choices = dict(self.client.get(reverse("labs:hub")).context["landing_form"].fields["landing_page"].choices)
-        self.assertEqual(choices["Garden"], [("garden:plan", "Plan")])
-        self.client.post(reverse("labs:save_landing"), {"landing": "page", "landing_page": "garden:plan"})
+        self.assertIn("garden", home_tiles(hub))
+        groups = dict(self.client.get(reverse("labs:hub")).context["open_after_groups"])
+        self.assertEqual(groups["Garden"], [("app:garden", "Garden (its main page)"), ("page:garden:plan", "Garden › Plan")])
+        self.client.post(reverse("labs:save_landing"), {"open_after": "page:garden:plan"})
         self.assertRedirects(self.client.get("/"), reverse("labs:account"), fetch_redirect_response=False)
         # Admin > Users offers it too.
         self.user.is_superuser = True
@@ -126,11 +127,14 @@ class AccessTests(Base):
         self.assertNotIn("Opportunities", response.content.decode())
 
     def test_header_and_home_show_only_allowed_apps(self):
-        hub = self.page(reverse("labs:hub"))
-        # One app: nothing to switch to, so no launcher at all.
-        self.assertEqual(buttons(hub), [])
-        self.assertNotIn('id="app-launcher"', hub)
-        self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["resell"])
+        # One app: no picker (straight to the app) and nothing to switch to, so no launcher at all.
+        self.assertRedirects(self.client.get(reverse("labs:hub")), reverse("albright_reselling_app:dashboard"),
+                             fetch_redirect_response=False)
+        page = self.page(reverse("albright_reselling_app:dashboard"))
+        self.assertEqual(buttons(page), [])
+        self.assertNotIn('id="app-launcher"', page)
+        self.set_pref(allowed_apps=["resell", "opps"])
+        self.assertEqual(home_tiles(self.page(reverse("labs:hub"))), ["resell", "opps"])
 
     def test_public_pages_bot_api_and_sign_in_are_unaffected(self):
         resume_site()
@@ -172,7 +176,7 @@ class SuperuserTests(Base):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
         hub = self.page(reverse("labs:hub"))
-        self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["trade", "resell", "opps", "meals", "notes", "planner", "admin"])
+        self.assertEqual(home_tiles(hub), ["trade", "resell", "opps", "meals", "notes", "planner", "admin"])
         self.assertEqual([label for _, label in buttons(hub)],
                          ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan", "Admin"])
         admin = self.page(reverse("albright_control:overview"))
@@ -195,7 +199,7 @@ class VisibilityTests(Base):
         self.client.post(reverse("labs:save_nav"), {"visible": ["resell"], "order": ["trade", "resell", "opps"]})
         hub = self.page(reverse("labs:hub"))
         self.assertEqual(buttons(hub), [("labs", "Home"), ("reselling", "Resell")])
-        self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["resell"])
+        self.assertEqual(home_tiles(hub), ["resell"])
         self.assertNotIn('id="nav-hidden-note"', hub)
         trade = self.client.get(reverse("trading_home"))
         self.assertEqual(trade.status_code, 200)                                  # still opens by URL
@@ -254,11 +258,11 @@ class OrderTests(Base):
                                                     "order": ["opps", "trade", "resell"]})
         hub = self.page(reverse("labs:hub"))
         self.assertEqual([label for _, label in buttons(hub)], ["Home", "Opps", "Trade", "Resell"])
-        self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["opps", "trade", "resell"])
+        self.assertEqual(home_tiles(hub), ["opps", "trade", "resell"])
         self.assertEqual([r["key"] for r in self.client.get(reverse("labs:account")).context["nav_rows"]],
                          ["opps", "trade", "resell", "meals", "notes", "planner"])
-        options = self.client.get(reverse("labs:hub")).context["landing_form"].fields["landing_page"].choices
-        self.assertEqual([group for group, _ in options[1:]], ["Opps", "Trade", "Resell"])
+        groups = self.client.get(reverse("labs:hub")).context["open_after_groups"]
+        self.assertEqual([group for group, _ in groups], ["Opportunities", "Trading", "Reselling"])
 
     def test_up_down_buttons_work_without_js(self):
         order = ["trade", "resell", "opps"]
@@ -292,8 +296,8 @@ class LandingFallbackTests(Base):
         self.set_pref(visible_apps=["trade", "resell"])
         self.sign_in()
         self.assertTemplateUsed(self.client.get("/"), "albright_labs/hub.html")
-        choices = dict(self.client.get(reverse("labs:hub")).context["landing_form"].fields["landing_page"].choices)
-        self.assertNotIn("Opps", choices)
+        groups = dict(self.client.get(reverse("labs:hub")).context["open_after_groups"])
+        self.assertNotIn("Opportunities", groups)
 
     def test_removed_access_falls_back_to_home(self):
         self.set_pref(landing="page", landing_page="resell:watchlist", allowed_apps=["trade", "opps"])
@@ -307,12 +311,12 @@ class LandingFallbackTests(Base):
                              fetch_redirect_response=False)
         self.set_pref(visible_apps=["trade"])
         self.assertTemplateUsed(self.client.get("/"), "albright_labs/hub.html")
-        self.set_pref(visible_apps=["trade", "resell"], allowed_apps=["trade"])
+        self.set_pref(visible_apps=["trade", "resell"], allowed_apps=["trade", "opps"])   # Reselling taken away
         self.assertTemplateUsed(self.client.get("/"), "albright_labs/hub.html")
 
     def test_a_hidden_apps_page_cant_be_chosen(self):
         self.set_pref(visible_apps=["trade"])
-        self.client.post(reverse("labs:save_landing"), {"landing": "page", "landing_page": "resell:watchlist"})
+        self.client.post(reverse("labs:save_landing"), {"open_after": "page:resell:watchlist"})
         self.assertEqual(UserPreference.objects.get(user=self.user).landing_page, "")
 
 

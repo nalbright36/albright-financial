@@ -6,30 +6,61 @@
 {% block app_scripts %}{% if planner_today %}<script src="{% static_version 'albright_planner/planner.js' %}"></script>{% endif %}{% endblock %}
 {% block content %}
 {% comment %}
-Home (labs.views.hub): a tile per app with one live number each. The numbers
-load separately (static/labs/hub.js -> labs:tile, one request per tile), so a
-slow or failing one never holds up the page or the others; without JS the
-tiles still link to each app.
+Home, the app picker (labs.views.hub): a greeting and a tile per app the user can open and shows, in their order
+(Favorites first, Admin last). Each tile's status line comes from the launcher's endpoint (labs:launcher_lines),
+filled in after the page shows (static/labs/hub.js). Edit (?edit=1, or hub.js without a reload) adds drag and
+up/down reordering, Show checkboxes (hidden apps appear only here), "Open after sign-in" and the Today panel
+switch; Done saves them (labs:save_picker). Pins save at once (labs:toggle_pin). Everything works without JS:
+the buttons submit the form.
 {% endcomment %}
-<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
-    <h1 style="margin: 0 0 6px;">Albright Labs</h1>
-    <p style="margin: 0 0 24px; color: var(--text-secondary);">Everything in one place. Pick an app, or choose below which apps show in your navigation and where you land after signing in.</p>
+<div class="container labs-picker{% if editing %} is-editing{% endif %}" id="labs-picker"
+     data-lines-url="{% url 'labs:launcher_lines' %}" data-pin-url="{% url 'labs:toggle_pin' %}">
+    <div class="labs-picker__head">
+        <h1 class="labs-greeting" id="labs-greeting">{{ greeting }}</h1>
+        <a href="{{ home_url }}&amp;edit=1" class="btn btn-secondary btn-sm labs-picker__edit" id="picker-edit" data-view-only>Edit</a>
+    </div>
 
     {% if planner_today %}{% include "albright_planner/_today_panel.html" %}{% endif %}
 
-    <div class="labs-tiles" id="labs-tiles">
-        {% for card in cards %}
-        <a href="{% url card.url_name %}" class="card labs-tile" data-app-accent="{{ card.accent }}" data-tile="{{ card.key }}"
-           {% if card.tile %}data-tile-url="{% url 'labs:tile' card.key %}" {% endif %}style="--app-dot: var(--app-{{ card.accent }}, {{ card.color }});">
-            <div class="labs-tile__head"><span class="labs-tile__dot" aria-hidden="true"></span><span class="labs-tile__name">{{ card.label }}</span></div>
-            <p class="labs-tile__desc">{{ card.description }}</p>
-            {% if card.tile %}<div class="labs-tile__value num" data-tile-value aria-live="polite">&hellip;</div>
-            <div class="labs-tile__note" data-tile-note>Loading</div>{% endif %}
-        </a>
-        {% endfor %}
-    </div>
+    <form method="post" action="{% url 'labs:save_picker' %}" id="picker-form">
+        {% csrf_token %}
+        {# Enter in a field saves (the first submit button is the form's default - not a tile's pin or move). #}
+        <button type="submit" class="labs-picker__default" tabindex="-1" aria-hidden="true">Done</button>
+        <input type="hidden" name="editing" value="{% if editing %}1{% endif %}" id="picker-editing">
+        <p class="labs-picker__hint" data-edit-only>Drag tiles (or use the arrows) to reorder, untick <strong>Show</strong> to hide an app, and pin your favorites. Hidden apps still open by their address.</p>
 
-    {% include "albright_labs/_app_settings.html" %}
+        <section class="labs-picker__group" id="picker-favorites"{% if not favorites %} hidden{% endif %}>
+            <h2 class="labs-picker__label">Favorites</h2>
+            <ol class="labs-picks" data-list="favorites">
+                {% for t in favorites %}{% include "albright_labs/_pick.html" %}{% endfor %}
+            </ol>
+        </section>
+        <section class="labs-picker__group" id="picker-others">
+            <h2 class="labs-picker__label" id="picker-others-label"{% if not favorites %} hidden{% endif %}>More apps</h2>
+            <ol class="labs-picks" data-list="others">
+                {% for t in others %}{% include "albright_labs/_pick.html" %}{% endfor %}
+            </ol>
+        </section>
+
+        <div class="card labs-picker__settings" data-edit-only>
+            <div class="field labs-picker__field">
+                <label for="open-after">Open after sign-in</label>
+                <select name="open_after" id="open-after" class="ledger-input">
+                    {% include "albright_labs/_open_after_options.html" %}
+                </select>
+                <span class="labs-picker__note">The app picker is always one click away: the Home tile in the app menu, and every Home link, open it.</span>
+            </div>
+            {% if today_setting %}
+            <input type="hidden" name="today_panel" value="1">
+            <label class="labs-choice"><input type="checkbox" name="show_today" value="1" id="show-today"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel <span class="labs-picker__note">(the Planner's tasks for today, above the tiles)</span></label>
+            {% endif %}
+        </div>
+        <div class="labs-picker__actions" data-edit-only>
+            <button type="submit" class="btn btn-primary" id="picker-done">Done</button>
+            <a href="{{ home_url }}" class="btn btn-secondary" id="picker-cancel">Cancel</a>
+            <span class="labs-picker__note" id="picker-note" aria-live="polite"></span>
+        </div>
+    </form>
 </div>
 <script src="{% static_version 'labs/hub.js' %}" defer></script>
 {% endblock %}

@@ -59,7 +59,7 @@ class LauncherTilesTests(Base):
                       app_order=["meals", "opps", "trade", "resell"])
         self.assertEqual(self.labels(), ["Home", "Meals", "Opps", "Trade"])        # Resell hidden, not allowed: none
         links = launcher_links(self.page(reverse("labs:hub")))
-        self.assertEqual(links, {"Home": reverse("labs:hub"), "Meals": reverse("albright_meals:week"),
+        self.assertEqual(links, {"Home": "/?picker=1", "Meals": reverse("albright_meals:week"),
                                  "Opps": reverse("albright_crypto_app:inbox"), "Trade": reverse("trading_home")})
 
     def test_not_allowed_apps_never_show_even_if_marked_visible(self):

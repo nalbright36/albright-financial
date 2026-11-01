@@ -19,7 +19,7 @@ from albright_resume.models import Project, ResumeSettings
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import tiles
-from .testing import current_tiles, launcher_links, launcher_tiles, with_apps
+from .testing import current_tiles, home_tiles, launcher_links, launcher_tiles, with_apps
 from .checks import static_files_collected
 from .models import LandingSettings, UserPreference
 
@@ -106,10 +106,7 @@ class HomeTests(TestCase):
         response = self.client.get("/")
         self.assertTemplateUsed(response, "albright_labs/hub.html")
         page = response.content.decode()
-        for key in ("trade", "resell", "opps"):
-            self.assertIn(f'data-tile="{key}"', page)
-            self.assertIn(f'data-tile-url="{reverse("labs:tile", args=[key])}"', page)
-        self.assertNotIn('data-tile="admin"', page)
+        self.assertEqual(home_tiles(page), ["trade", "resell", "opps", "meals", "notes", "planner"])
         self.assertIn('<body data-app="labs">', page)
         self.assertIn('class="navbar__brand">Albright Labs</a>', page)
         self.assertEqual(self.client.get(reverse("labs:hub")).status_code, 200)
@@ -117,7 +114,7 @@ class HomeTests(TestCase):
     def test_admin_tile_for_superusers_only(self):
         self.assertEqual(self.client.get(reverse("labs:tile", args=["admin"])).status_code, 404)
         self.client.force_login(User.objects.create_superuser(username="boss", password="pw-not-real-12345", email=""))
-        self.assertIn('data-tile="admin"', self.client.get(reverse("labs:hub")).content.decode())
+        self.assertEqual(home_tiles(self.client.get(reverse("labs:hub")).content.decode())[-1], "admin")
         data = self.client.get(reverse("labs:tile", args=["admin"])).json()
         self.assertTrue(data["ok"])
 
@@ -221,16 +218,16 @@ class LandingPreferenceTests(TestCase):
 
     def test_saving_the_setting(self):
         self.client.force_login(self.user)
-        self.client.post(reverse("labs:save_landing"), {"landing": "page", "landing_page": "resell:watchlist"})
+        self.client.post(reverse("labs:save_landing"), {"open_after": "page:resell:watchlist"})
         pref = UserPreference.objects.get(user=self.user)
         self.assertEqual((pref.landing, pref.landing_page), ("page", "resell:watchlist"))
-        self.client.post(reverse("labs:save_landing"), {"landing": "page", "landing_page": "admin:health"})
+        self.client.post(reverse("labs:save_landing"), {"open_after": "page:admin:health"})
         self.assertEqual(UserPreference.objects.get(user=self.user).landing_page, "resell:watchlist")  # refused
-        self.client.post(reverse("labs:save_landing"), {"landing": "last_app", "landing_page": "opps:inbox"})
+        self.client.post(reverse("labs:save_landing"), {"open_after": "last_app"})
         pref.refresh_from_db()
         self.assertEqual((pref.landing, pref.landing_page), ("last_app", ""))
-        response = self.client.get(reverse("labs:hub"))
-        self.assertEqual(response.context["landing_form"].initial["landing"], "last_app")
+        response = self.client.get(reverse("labs:account"))
+        self.assertEqual(response.context["open_after"], "last_app")
         self.assertNotIn("System health", response.content.decode().split('id="landing-form"')[1])  # Admin: superusers only
 
 
@@ -248,7 +245,7 @@ class HeaderTests(TestCase):
             with self.subTest(url=url):
                 content = self.content(url)
                 self.assertEqual(launcher_tiles(content)[0], ("labs", "Home"))
-                self.assertEqual(launcher_links(content)["Home"], reverse("labs:hub"))
+                self.assertEqual(launcher_links(content)["Home"], "/?picker=1")
         self.assertEqual(current_tiles(self.content(reverse("labs:hub"))), ["labs"])
 
     def test_app_brands_unchanged(self):

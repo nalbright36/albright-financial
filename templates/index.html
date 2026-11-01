@@ -36,7 +36,7 @@
         <nav class="navbar">
             <div class="navbar__main-row">
                 {# The brand stays within the current app - never "/", which follows the remembered app. #}
-                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{% url 'labs:hub' %}{% elif in_meals_app %}{% url 'albright_meals:week' %}{% elif in_notes_app %}{% url 'albright_notes:list' %}{% elif in_planner_app %}{% url 'albright_planner:home' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
+                <a href="{% if in_reselling_app %}{% url 'albright_reselling_app:dashboard' %}{% elif in_opportunities_app %}{% url 'albright_crypto_app:inbox' %}{% elif in_admin_area %}{% url 'albright_control:overview' %}{% elif in_labs %}{{ home_url }}{% elif in_meals_app %}{% url 'albright_meals:week' %}{% elif in_notes_app %}{% url 'albright_notes:list' %}{% elif in_planner_app %}{% url 'albright_planner:home' %}{% else %}{% url 'trading_home' %}{% endif %}" class="navbar__brand">{{ app_brand|default:"Albright Trading" }}</a>
 
                 {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
                 <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">
@@ -85,7 +85,7 @@
                         </div>
                         {% endif %}{% endfor %}
                         {% elif in_labs %}
-                        <a href="{% url 'labs:hub' %}">Home</a>
+                        <a href="{{ home_url }}">Home</a>
                         <a href="{% url 'albright_resume:page' %}">Resume</a>
                         {% elif in_meals_app %}
                         <a href="{% url 'albright_meals:week' %}"{% if request.resolver_match.url_name in 'week plan_entry' %} class="active" aria-current="page"{% endif %}>This week</a>
@@ -144,7 +144,7 @@
                         </button>
                         <div class="app-launcher__menu" id="app-launcher-panel" role="menu" aria-label="Apps" hidden>
                             <div class="app-launcher__grid">
-                                {% for app in launcher_apps %}<a href="{% url app.url_name %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %}>
+                                {% for app in launcher_apps %}<a href="{% if app.href %}{{ app.href }}{% else %}{% url app.url_name %}{% endif %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %}>
                                     <span class="app-launcher__icon" aria-hidden="true">{% include "_app_icon.html" with key=app.key %}</span>
                                     <span class="app-launcher__label">{{ app.short_label }}</span>
                                     <span class="app-launcher__line" data-line-for="{{ app.key }}">{{ app.line|default:"" }}</span>

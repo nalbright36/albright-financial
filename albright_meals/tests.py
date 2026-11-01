@@ -81,8 +81,11 @@ class MealsOnlyAccountTests(Base):
                 self.assertEqual(self.client.get(url).status_code, 404)
         for name in ("groceries", "ideas", "recipes"):
             self.assertEqual(self.client.get(reverse(f"albright_meals:{name}")).status_code, 200)
-        hub = self.client.get(reverse("labs:hub")).content.decode()
-        self.assertEqual(re.findall(r'data-tile="(\w+)"', hub), ["meals"])
+        # One app: no app picker - Home goes straight to Meals.
+        self.assertRedirects(self.client.get(reverse("labs:hub")), reverse("albright_meals:week"),
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.client.get("/?picker=1"), reverse("albright_meals:week"),
+                             fetch_redirect_response=False)
 
     def test_she_lands_on_this_week(self):
         sam = self.create_wife()
@@ -549,7 +552,8 @@ class BotApiTests(Base):
 
 class TileAndDigestTests(Base):
     def test_home_tile(self):
-        self.assertIn('data-tile="meals"', self.client.get(reverse("labs:hub")).content.decode())
+        from albright_labs.testing import home_tiles
+        self.assertIn("meals", home_tiles(self.client.get(reverse("labs:hub")).content.decode()))
         empty = self.client.get(reverse("labs:tile", args=["meals"])).json()
         self.assertEqual((empty["ok"], empty["value"]), (True, "Nothing planned"))
         MealPlanEntry.objects.create(date=self.today, slot="dinner", title="Tacos")

@@ -2,32 +2,10 @@ from django import forms
 
 from albright_crypto_app.guards import reject_secrets
 
-from . import apps_registry, landing
-from .models import INVITE_DAYS_CHOICES, LANDING_CHOICES, LandingSettings
+from . import apps_registry
+from .models import INVITE_DAYS_CHOICES, LandingSettings
 
 INPUT = {"class": "ledger-input"}
-
-
-class LandingPreferenceForm(forms.Form):
-    landing = forms.ChoiceField(choices=LANDING_CHOICES, widget=forms.RadioSelect, label="Where I land after signing in")
-    landing_page = forms.ChoiceField(required=False, label="Page", widget=forms.Select(attrs=INPUT))
-
-    def __init__(self, *args, user, pref=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.user, self.pref = user, pref
-        # Only pages of apps the user can open and has kept in their navigation.
-        self.fields["landing_page"].choices = [("", "Pick a page")] + [
-            (f"{group}", [(key, label) for key, label in pages]) for group, pages in landing.page_choices(user, pref)]
-
-    def clean(self):
-        cleaned = super().clean()
-        if cleaned.get("landing") == "page":
-            key = cleaned.get("landing_page")
-            if not key:
-                self.add_error("landing_page", "Pick the page to land on.")
-            elif not landing.allowed_page(self.user, key, self.pref):
-                self.add_error("landing_page", "That page isn't available.")
-        return cleaned
 
 
 class LandingSettingsForm(forms.ModelForm):

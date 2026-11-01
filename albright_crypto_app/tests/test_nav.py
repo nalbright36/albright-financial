@@ -44,7 +44,7 @@ class OpportunitiesNavTests(TestCase):
     def test_opportunities_app_shows_all_three_with_itself_highlighted(self, _outlook):
         content = self.client.get(reverse("albright_crypto_app:inbox")).content.decode()
         buttons = self.switch_buttons(reverse("albright_crypto_app:inbox"))
-        self.assertEqual(buttons, {"Home": reverse("labs:hub"), "Trade": reverse("trading_home"),
+        self.assertEqual(buttons, {"Home": "/?picker=1", "Trade": reverse("trading_home"),
                                    "Resell": reverse("albright_reselling_app:dashboard"),
                                    "Opps": reverse("albright_crypto_app:inbox"), "Meals": reverse("albright_meals:week"),
                                    "Notes": reverse("albright_notes:list"), "Plan": reverse("albright_planner:home")})

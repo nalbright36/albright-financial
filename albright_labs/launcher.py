@@ -11,7 +11,7 @@ import logging
 from django.core.cache import cache
 from django.utils import timezone
 
-from . import app_access, apps_registry, tiles
+from . import app_access, apps_registry, landing, tiles
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def launcher_items(user, pref, current_accent):
     keys = app_access.nav_keys(user, pref)
     keys = [key for key in keys if key != "admin"] + [key for key in keys if key == "admin"]
     home = {"key": HOME_KEY, "short_label": "Home", "label": "Home", "brand": apps_registry.HOME_BRAND,
-            "accent": apps_registry.HOME_ACCENT, "color": "", "url_name": "labs:hub",
+            "accent": apps_registry.HOME_ACCENT, "color": "", "url_name": "labs:hub", "href": landing.home_url(),
             "current": current_accent == apps_registry.HOME_ACCENT, "line": HOME_LINE}
     return [home] + [app_access.nav_item(apps_registry.BY_KEY[key], current_accent) for key in keys]
 

@@ -28,6 +28,22 @@ def current_tiles(content):
     return [target for _href, cls, _key, target, _label in TILE.findall(launcher_panel(content)) if "is-current" in cls]
 
 
+PICK = re.compile(r'<li class="labs-pick([^"]*)" data-key="(\w+)"')
+
+
+def home_tiles(content, include_hidden=False):
+    """The app keys of Home's (the app picker's) tiles, in page order - Favorites first. Hidden apps' tiles are
+    in the page for Edit mode; they're left out unless include_hidden."""
+    return [key for cls, key in PICK.findall(content) if include_hidden or "is-off" not in cls]
+
+
+def favorite_tiles(content):
+    """The app keys in Home's Favorites row."""
+    if 'data-list="favorites"' not in content:
+        return []
+    return home_tiles(content.split('data-list="favorites"', 1)[1].split('data-list="others"', 1)[0])
+
+
 def with_apps(user, keys=None):
     """Give a test user every app (or just these keys) - new accounts start with none, so a test
     that signs in a plain user to use an app gives them access first, as Admin > Users would.

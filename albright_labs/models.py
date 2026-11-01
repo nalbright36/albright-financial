@@ -10,7 +10,9 @@ from django.utils import timezone
 
 from . import apps_registry
 
-LANDING_CHOICES = [("home", "Home"), ("last_app", "Last used app"), ("page", "A specific page")]
+# "Open after sign-in": the app picker (Home), the last app used, an app's main page, or one of its pages.
+LANDING_CHOICES = [("home", "App picker (Home)"), ("last_app", "Last used app"), ("app", "An app"),
+                   ("page", "A specific page")]
 
 
 def default_allowed_apps():
@@ -24,8 +26,9 @@ def default_app_keys():
 
 
 class UserPreference(models.Model):
-    """Per-user settings for the hub. landing_page is a key from
-    apps_registry.PAGES (e.g. "resell:watchlist"). A user with no row has
+    """Per-user settings for the hub. landing is "Open after sign-in" (labs.landing); landing_page is an app key
+    for landing="app" (e.g. "meals") or a key from apps_registry.PAGES for landing="page" (e.g.
+    "resell:watchlist"). A user with no row has
     the defaults: no apps allowed (superusers always have every app), and
     any app they're later given shown, in the registry's order."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="labs_preference")
@@ -38,6 +41,9 @@ class UserPreference(models.Model):
     # choice, My account). Hiding one never changes access.
     visible_apps = models.JSONField(default=default_app_keys, blank=True)
     app_order = models.JSONField(default=default_app_keys, blank=True)
+    # Home's Favorites row (app keys, shown first) and whether Home shows the Planner's Today panel.
+    pinned_apps = models.JSONField(default=list, blank=True)
+    show_today_panel = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -45,7 +51,7 @@ class UserPreference(models.Model):
 
     @classmethod
     def for_user(cls, user):
-        """The saved preference, or an unsaved default (Home) - never creates a row just by reading."""
+        """The saved preference, or an unsaved default (the app picker) - never creates a row just by reading."""
         return cls.objects.filter(user=user).first() or cls(user=user)
 
 

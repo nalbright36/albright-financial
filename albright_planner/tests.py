@@ -400,7 +400,18 @@ class SharingTests(Base):
 
 
 class HomeTests(Base):
+    def show_panel(self, on=True):
+        from albright_labs.models import UserPreference
+        UserPreference.objects.filter(user=self.me).update(show_today_panel=on)
+
+    def test_today_panel_is_off_by_default(self):
+        self.item(title="Water plants")
+        page = self.client.get(reverse("labs:hub")).content.decode()
+        self.assertNotIn('id="planner-today"', page)
+        self.assertNotIn("planner.css", page)
+
     def test_today_panel(self):
+        self.show_panel()
         self.item(title="Water plants")
         self.item(title="Standup", kind="event", checkable=False, start_time=time(9))
         self.item(title="Late task", date=d(11, 1))
@@ -413,7 +424,8 @@ class HomeTests(Base):
         self.assertRegex(page, r'<link rel="stylesheet" href="/static/albright_planner/planner\.css\?v=\d+">')
 
     def test_no_panel_without_planner_access(self):
-        with_apps(self.me, ["notes"])
+        self.show_panel()
+        with_apps(self.me, ["notes", "meals"])
         self.assertNotIn('id="planner-today"', self.client.get(reverse("labs:hub")).content.decode())
 
     def test_launcher_and_home_tile_numbers(self):

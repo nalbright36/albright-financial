@@ -1582,6 +1582,71 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .labs-choice { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
 @media (prefers-reduced-motion: reduce) { .labs-tile { transition: none; } }
 
+/* ===== Albright Labs: Home, the app picker (albright_labs/hub.html, labs/hub.js) ===== */
+.labs-picker { padding-top: 32px; padding-bottom: 48px; }
+.labs-picker__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); }
+.labs-greeting { margin: 0; font-size: clamp(1.375rem, 2.6vw, 1.875rem); }
+.labs-picker.is-editing .labs-picker__edit { display: none; }
+.labs-picker:not(.is-editing) [data-edit-only] { display: none; }
+.labs-picker__default { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.labs-picker__hint { margin: 0 0 var(--space-4); font-size: var(--text-sm); color: var(--text-secondary); }
+.labs-picker__group + .labs-picker__group { margin-top: var(--space-6, 24px); }
+.labs-picker__label { margin: 0 0 10px; font-size: 0.75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-secondary); }
+.labs-picks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+@media (min-width: 720px) { .labs-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1080px) { .labs-picks { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.labs-pick { --pick-color: var(--app-dot, var(--accent)); position: relative; display: flex; flex-direction: column; }
+.labs-pick[data-app-accent="trading"] { --pick-color: var(--app-trading); }
+.labs-pick[data-app-accent="reselling"] { --pick-color: var(--app-reselling); }
+.labs-pick[data-app-accent="opportunities"] { --pick-color: var(--app-opportunities); }
+.labs-pick[data-app-accent="meals"] { --pick-color: var(--app-meals); }
+.labs-pick[data-app-accent="notes"] { --pick-color: var(--app-notes); }
+.labs-pick[data-app-accent="planner"] { --pick-color: var(--app-planner); }
+.labs-pick[data-app-accent="admin"] { --pick-color: var(--app-admin); }
+.labs-pick__link { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 148px; padding: var(--space-5);
+  border-radius: var(--radius-card, 14px); border: 1px solid var(--border); background: var(--glass-bg, var(--surface));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 14px)); backdrop-filter: blur(var(--glass-blur, 14px));
+  box-shadow: var(--shadow-sm); color: inherit; text-decoration: none;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.labs-pick__link:hover, .labs-pick__link:focus-visible { text-decoration: none; transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--pick-color) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pick-color) 35%, transparent), 0 8px 28px color-mix(in srgb, var(--pick-color) 22%, transparent); }
+.labs-pick__link:focus-visible { outline: 2px solid var(--pick-color); outline-offset: 2px; }
+.labs-pick__icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0;
+  color: var(--pick-color); background: color-mix(in srgb, var(--pick-color) 18%, transparent); }
+.labs-pick__icon svg { width: 24px; height: 24px; display: block; }
+.labs-pick__name { font-weight: 700; font-size: 1.125rem; color: var(--text-primary); margin-top: auto; }
+.labs-pick__line { min-height: 1.3em; font-size: var(--text-sm); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The pin: on hover / focus / long press, and always while pinned. */
+.labs-pick__pin { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: grid; place-items: center;
+  border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
+  cursor: pointer; opacity: 0; transition: opacity .15s ease, color .15s ease, border-color .15s ease; }
+.labs-pick:hover .labs-pick__pin, .labs-pick:focus-within .labs-pick__pin, .labs-pick.show-pin .labs-pick__pin,
+.labs-pick.is-pinned .labs-pick__pin, .labs-picker.is-editing .labs-pick__pin { opacity: 1; }
+.labs-pick__pin:hover, .labs-pick__pin:focus-visible { color: var(--pick-color); border-color: var(--pick-color); }
+.labs-pick.is-pinned .labs-pick__pin { color: var(--pick-color); background: color-mix(in srgb, var(--pick-color) 16%, var(--surface)); }
+.labs-pick.is-pinned .labs-pick__pin svg { fill: currentColor; }
+@media (hover: none) { .labs-pick:focus-within:not(.show-pin):not(.is-pinned) .labs-pick__pin { opacity: 0; } }
+
+/* Edit mode */
+.labs-pick.is-off { display: none; }
+.labs-picker.is-editing .labs-pick.is-off { display: flex; }
+.labs-picker.is-editing .labs-pick.is-off .labs-pick__link { opacity: .5; border-style: dashed; }
+.labs-picker.is-editing .labs-pick__link { cursor: grab; }
+.labs-picker.is-editing .labs-pick[data-fixed] .labs-pick__link { cursor: default; }
+.labs-pick.is-dragging { opacity: .4; }
+.labs-pick__edit { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 0; }
+.labs-pick__move { display: inline-flex; gap: 4px; }
+.labs-pick__move .btn { min-width: 40px; min-height: 36px; justify-content: center; }
+.labs-picker__settings { margin-top: var(--space-6, 24px); display: flex; flex-direction: column; gap: var(--space-3); }
+.labs-picker__field { margin: 0; max-width: 420px; }
+.labs-picker__note { font-size: 0.75rem; color: var(--text-secondary); }
+.labs-picker__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+@media (prefers-reduced-motion: reduce) { .labs-pick__link, .labs-pick__pin { transition: none; } .labs-pick__link:hover { transform: none; } }
+
 /* ===== Resume chat transcripts (Admin > Resume > Conversations) ===== */
 .transcript-msg { padding: var(--space-3) 0; border-top: 1px solid var(--border); }
 .transcript-msg:first-child { border-top: none; padding-top: 0; }

@@ -1,7 +1,8 @@
 {% load static %}{% load cache_bust %}
 {% comment %}
-Home and My account: "Show in my navigation" (which apps, and their order) and
-"Where I land after signing in". Both forms come back to the page they're on.
+My account: "Show in my navigation" (which apps, and their order), and "Open
+after sign-in" with the Today panel switch. (Home's Edit mode has the same
+settings on the tiles themselves.) Both forms come back to this page.
 The up/down buttons work without JS (they submit move=up:<key>);
 static/labs/nav_settings.js moves the rows in place instead, saved with Save.
 {% endcomment %}
@@ -22,7 +23,7 @@ static/labs/nav_settings.js moves the rows in place instead, saved with Save.
         </li>
         {% endfor %}
     </ol>
-    <p class="labs-nav-form__note" id="nav-form-note" aria-live="polite">Home is always shown, and at least one app stays in your navigation. Hiding an app only takes it off the header and Home - you can still open it by its address.</p>
+    <p class="labs-nav-form__note" id="nav-form-note" aria-live="polite">Home is always in the app menu, and at least one app stays in your navigation. Hiding an app only takes it off the app menu and Home - you can still open it by its address.</p>
     <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save</button>
     {% else %}
     <p class="labs-nav-form__note">You don't have access to any apps yet - ask the site's owner.</p>
@@ -31,15 +32,16 @@ static/labs/nav_settings.js moves the rows in place instead, saved with Save.
 
 <form method="post" action="{% url 'labs:save_landing' %}" class="card labs-landing-form" id="landing-form">
     {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
-    <div class="card__header"><span class="card__label">Where I land after signing in</span></div>
-    <div class="labs-landing-form__choices">
-        {% for radio in landing_form.landing %}<label class="labs-choice">{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}
+    <div class="card__header"><span class="card__label">Open after sign-in</span></div>
+    <div class="field" style="margin: 0; max-width: 360px;">
+        <label for="open-after">Open after sign-in</label>
+        <select name="open_after" id="open-after" class="ledger-input">{% include "albright_labs/_open_after_options.html" %}</select>
     </div>
-    <div class="field" style="margin: 12px 0 0; max-width: 360px;">
-        <label for="{{ landing_form.landing_page.id_for_label }}">{{ landing_form.landing_page.label }} (for "A specific page")</label>
-        {{ landing_form.landing_page }}
-    </div>
-    <p style="margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary);">"Last used app" reopens whichever app you were in last. Only apps in your navigation are offered; if yours is hidden or no longer available, you land on Home. A link that sent you to sign in (e.g. a bookmarked page) always wins.</p>
+    <p style="margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary);">"App picker (Home)" shows your app tiles. "Last used app" reopens whichever app you were in last. Only apps in your navigation are offered; if yours is hidden or no longer available, you get the app picker. A link that sent you to sign in (e.g. a bookmarked page) always wins, and the Home tile in the app menu always opens the picker.</p>
+    {% if today_setting %}
+    <input type="hidden" name="today_panel" value="1">
+    <label class="labs-choice" style="margin-top: 12px;"><input type="checkbox" name="show_today" value="1" id="show-today"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel on Home <span style="font-size: 0.75rem; color: var(--text-secondary);">(the Planner's tasks for today, above the app tiles)</span></label>
+    {% endif %}
     <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save</button>
 </form>
 <script src="{% static_version 'labs/nav_settings.js' %}" defer></script>
