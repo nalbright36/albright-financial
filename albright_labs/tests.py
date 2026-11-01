@@ -329,11 +329,41 @@ class SecurityHeaderScopeTests(TestCase):
     def test_login_page_for_visitors_has_no_csp(self):
         self.assertNotIn("Content-Security-Policy", self.client.get(reverse("user_login")))
 
-    def test_every_page_layout_points_at_a_favicon_that_exists(self):
-        self.assertTrue(finders.find("images/favicon.svg"))
+    def test_every_page_layout_points_at_icons_that_exist(self):
+        for name in ("favicon-32.png", "favicon-16.png", "favicon.ico", "apple-touch-icon.png", "icon-192.png",
+                     "icon-512.png", "icon-maskable-512.png"):
+            self.assertTrue(finders.find(f"icons/{name}"), name)
         with mock.patch(OUTLOOK):
             for url in ("/", reverse("albright_resume:page"), reverse("user_login")):
-                self.assertIn('href="/static/images/favicon.svg"', self.client.get(url).content.decode())
+                html = self.client.get(url).content.decode()
+                for href in ("/static/icons/favicon-32.png", "/static/icons/favicon-16.png",
+                             "/static/icons/favicon.ico", "/static/icons/apple-touch-icon.png", "/site.webmanifest"):
+                    self.assertIn(f'href="{href}"', html)
+                self.assertIn('<meta name="apple-mobile-web-app-title" content="Albright">', html)
+                self.assertIn('<meta name="apple-mobile-web-app-capable" content="yes">', html)
+                self.assertIn('<meta name="theme-color" content="#0b0d10">', html)
+
+    def test_manifest_and_root_icons_are_served_without_login(self):
+        import json
+        response = self.client.get("/site.webmanifest")
+        self.assertEqual((response.status_code, response["Content-Type"]), (200, "application/manifest+json"))
+        data = json.loads(response.content)
+        self.assertEqual({k: data[k] for k in ("name", "short_name", "start_url", "display", "background_color",
+                                               "theme_color")},
+                         {"name": "Albright Labs", "short_name": "Albright", "start_url": "/",
+                          "display": "standalone", "background_color": "#0b0d10", "theme_color": "#0b0d10"})
+        self.assertEqual([(i["src"], i["sizes"], i.get("purpose")) for i in data["icons"]],
+                         [("/static/icons/icon-192.png", "192x192", None), ("/static/icons/icon-512.png", "512x512", None),
+                          ("/static/icons/icon-maskable-512.png", "512x512", "maskable")])
+        for path, kind in (("/favicon.ico", "image/x-icon"), ("/apple-touch-icon.png", "image/png")):
+            response = self.client.get(path)
+            self.assertEqual((response.status_code, response["Content-Type"]), (200, kind), path)
+            self.assertTrue(b"".join(response.streaming_content))
+
+    def test_strict_csp_allows_the_manifest_and_icons(self):
+        from albright_resume.security import CSP
+        self.assertIn("manifest-src 'self'", CSP)
+        self.assertIn("img-src 'self'", CSP)
 
 
 class LocalStaticServingTests(TestCase):

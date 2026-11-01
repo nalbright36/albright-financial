@@ -12,7 +12,7 @@
         {# Anything else a page needs in <head> (e.g. Home's Today panel borrows the Planner's stylesheet). #}
         {% block app_head %}{% endblock %}
         <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Trading" }}</title>
-        <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+        {% include "_head_icons.html" %}
         <script>
             // Runs before paint so there's no flash of the wrong theme.
             // Mirrors the wiring at the bottom of this file and in

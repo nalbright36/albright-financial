@@ -1,0 +1,10 @@
+{% load static %}{# The app icons, on every page layout (index.html, the public landing and resume, the styleguide). Files: albright_trading_app/static/icons/; the manifest and the root /favicon.ico + /apple-touch-icon.png: albright_trading_proj/site_icons.py. #}
+        <link rel="icon" type="image/png" sizes="32x32" href="{% static 'icons/favicon-32.png' %}">
+        <link rel="icon" type="image/png" sizes="16x16" href="{% static 'icons/favicon-16.png' %}">
+        <link rel="icon" href="{% static 'icons/favicon.ico' %}" sizes="any">
+        <link rel="apple-touch-icon" sizes="180x180" href="{% static 'icons/apple-touch-icon.png' %}">
+        <link rel="manifest" href="{% url 'site_manifest' %}">
+        <meta name="apple-mobile-web-app-title" content="Albright">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="theme-color" content="#0b0d10">

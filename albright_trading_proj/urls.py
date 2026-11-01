@@ -23,9 +23,14 @@ from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
 from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
 from albright_labs import password_views
+from albright_trading_proj import site_icons
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # App icons browsers and iOS look for at the root, and the web app manifest (site_icons.py).
+    path("favicon.ico", site_icons.favicon, name="favicon"),
+    path("apple-touch-icon.png", site_icons.apple_touch_icon, name="apple_touch_icon"),
+    path("site.webmanifest", site_icons.manifest, name="site_manifest"),
     # Password setup/reset links (Admin > Users "Send password setup link", and "Reset password" on sign-in).
     path("reset_password/", password_views.reset_request, name="password_reset"),
     path("reset_password/sent/", password_views.ResetDone.as_view(), name="password_reset_done"),
