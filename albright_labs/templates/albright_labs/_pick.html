@@ -1,4 +1,4 @@
-{% comment %}One app-picker tile (hub.html): the app's icon in its accent, its name, and the live line (filled by hub.js). The pin (shown on hover, focus or a long press; always while pinned) and, in Edit mode, Show + up/down are siblings of the link - never inside it. Admin stays last, so it has no arrows and doesn't drag.{% endcomment %}
+{% comment %}One app-picker tile (hub.html): the app's icon in its accent, its name, and the live line (filled by hub.js). The link covers the whole tile: one click or tap opens the app. The pin, Show and up/down are Edit mode only (hidden otherwise, so nothing sits on top of the link) and are siblings of the link - never inside it. Admin stays last, so it has no arrows and doesn't drag.{% endcomment %}
 <li class="labs-pick{% if not t.shown %} is-off{% endif %}{% if t.pinned %} is-pinned{% endif %}" data-key="{{ t.key }}" data-app-accent="{{ t.accent }}"{% if t.key == "admin" %} data-fixed{% endif %} style="--app-dot: var(--app-{{ t.accent }}, {{ t.color }});">
     <input type="hidden" name="order" value="{{ t.key }}">
     <a href="{% url t.url_name %}" class="labs-pick__link" data-pick-link>

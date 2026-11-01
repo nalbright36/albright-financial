@@ -1610,26 +1610,30 @@ input[type="range"] { accent-color: var(--accent-solid); }
   -webkit-backdrop-filter: blur(var(--glass-blur, 14px)); backdrop-filter: blur(var(--glass-blur, 14px));
   box-shadow: var(--shadow-sm); color: inherit; text-decoration: none;
   transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-.labs-pick__link:hover, .labs-pick__link:focus-visible { text-decoration: none; transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--pick-color) 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pick-color) 35%, transparent), 0 8px 28px color-mix(in srgb, var(--pick-color) 22%, transparent); }
-.labs-pick__link:focus-visible { outline: 2px solid var(--pick-color); outline-offset: 2px; }
+.labs-pick__link:hover, .labs-pick__link:focus { text-decoration: none; color: inherit; }
+/* Hover only where there's a real pointer, and it never shows or hides anything: on a touch screen a tap that
+   changes what's displayed is taken as a hover, and the app wouldn't open until a second tap. */
+@media (hover: hover) {
+  .labs-pick__link:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--pick-color) 55%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--pick-color) 35%, transparent), 0 8px 28px color-mix(in srgb, var(--pick-color) 22%, transparent); }
+}
+.labs-pick__link:focus-visible { outline: 2px solid var(--pick-color); outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--pick-color) 55%, transparent); }
 .labs-pick__icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0;
   color: var(--pick-color); background: color-mix(in srgb, var(--pick-color) 18%, transparent); }
 .labs-pick__icon svg { width: 24px; height: 24px; display: block; }
 .labs-pick__name { font-weight: 700; font-size: 1.125rem; color: var(--text-primary); margin-top: auto; }
 .labs-pick__line { min-height: 1.3em; font-size: var(--text-sm); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The pin: on hover / focus / long press, and always while pinned. */
-.labs-pick__pin { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: grid; place-items: center;
+/* The pin button: Edit mode only (outside it, nothing sits on top of the tile's link). */
+.labs-pick__pin { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: none; place-items: center;
   border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
-  cursor: pointer; opacity: 0; transition: opacity .15s ease, color .15s ease, border-color .15s ease; }
-.labs-pick:hover .labs-pick__pin, .labs-pick:focus-within .labs-pick__pin, .labs-pick.show-pin .labs-pick__pin,
-.labs-pick.is-pinned .labs-pick__pin, .labs-picker.is-editing .labs-pick__pin { opacity: 1; }
-.labs-pick__pin:hover, .labs-pick__pin:focus-visible { color: var(--pick-color); border-color: var(--pick-color); }
+  cursor: pointer; transition: color .15s ease, border-color .15s ease; }
+.labs-picker.is-editing .labs-pick__pin { display: grid; }
+@media (hover: hover) { .labs-pick__pin:hover { color: var(--pick-color); border-color: var(--pick-color); } }
+.labs-pick__pin:focus-visible { color: var(--pick-color); border-color: var(--pick-color); }
 .labs-pick.is-pinned .labs-pick__pin { color: var(--pick-color); background: color-mix(in srgb, var(--pick-color) 16%, var(--surface)); }
 .labs-pick.is-pinned .labs-pick__pin svg { fill: currentColor; }
-@media (hover: none) { .labs-pick:focus-within:not(.show-pin):not(.is-pinned) .labs-pick__pin { opacity: 0; } }
 
 /* Edit mode */
 .labs-pick.is-off { display: none; }
@@ -1645,7 +1649,7 @@ input[type="range"] { accent-color: var(--accent-solid); }
 .labs-picker__field { margin: 0; max-width: 420px; }
 .labs-picker__note { font-size: 0.75rem; color: var(--text-secondary); }
 .labs-picker__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-@media (prefers-reduced-motion: reduce) { .labs-pick__link, .labs-pick__pin { transition: none; } .labs-pick__link:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .labs-pick__link, .labs-pick__pin { transition: none; } .labs-pick__link:hover { transform: none !important; } }
 
 /* ===== Resume chat transcripts (Admin > Resume > Conversations) ===== */
 .transcript-msg { padding: var(--space-3) 0; border-top: 1px solid var(--border); }
