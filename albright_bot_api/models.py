@@ -22,6 +22,7 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("opportunities:read", "Read opportunities found in the last 7 days."),
     ("opportunities:suggest", "Leave notes and proposal drafts on opportunities (never sent anywhere)."),
     ("site:suggest", "Drop website improvement ideas in the Admin inbox (Bot suggestions)."),
+    ("suggestions:read", "Read bot suggestions and their status (e.g. what's New, Planned, or In progress)."),
     ("ideas:write", "Save the owner's ideas (what they told the bot) to Admin > Ideas."),
     ("ideas:read", "List existing idea titles and statuses, to avoid sending duplicates."),
     ("meals:read", "Read the Meals plan, grocery list, meal ideas and recipes."),
@@ -173,3 +174,19 @@ class SiteSuggestion(_BotWrite):
     status = models.CharField(max_length=11, choices=STATUSES, default="new", db_index=True)
     my_notes = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_status = instance.status if "status" in field_names else None
+        return instance
+
+    def save(self, *args, **kwargs):
+        """status_changed_at follows every status change (and the first save), as on Idea."""
+        if self._state.adding or getattr(self, "_loaded_status", self.status) != self.status:
+            self.status_changed_at = timezone.now()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = list(kwargs["update_fields"]) + ["status_changed_at"]
+        super().save(*args, **kwargs)
+        self._loaded_status = self.status

@@ -25,9 +25,10 @@ RATE_WINDOW = timedelta(minutes=1)
 
 
 class ApiError(Exception):
-    def __init__(self, status, message, summary=""):
+    def __init__(self, status, message, summary="", extra=None):
         super().__init__(message)
         self.status, self.message, self.summary = status, message, summary or message
+        self.extra = extra or {}     # more keys for the JSON error body
 
 
 def require_https():
@@ -93,7 +94,7 @@ def bot_endpoint(scope=None, methods=("GET",)):
             except ApiError as exc:
                 log_token = getattr(exc, "token", token)
                 _log(request, log_token, exc.status, exc.summary)
-                response = JsonResponse({"error": exc.message}, status=exc.status)
+                response = JsonResponse({"error": exc.message, **exc.extra}, status=exc.status)
                 if exc.status == 401:
                     response["WWW-Authenticate"] = 'Bearer realm="albright-bot-api"'
                 return response

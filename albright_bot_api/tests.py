@@ -372,7 +372,7 @@ class HardLimitTests(BotApiTestCase):
                 self.assertEqual(pattern.callback.__module__, schedule_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 24)   # incl. trading/strategies, site-suggestions and ideas (Admin), 7 Meals, 2 Notes, 3 Planner
+        self.assertEqual(len(api_urlpatterns), 25)   # incl. trading/strategies, site-suggestions (+ counts) and ideas (Admin), 7 Meals, 2 Notes, 3 Planner
         self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 7)
         self.assertEqual(sum(str(p.pattern).startswith("notes") for p in api_urlpatterns), 2)
         self.assertEqual(sum(str(p.pattern).startswith("schedule") for p in api_urlpatterns), 3)

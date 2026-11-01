@@ -29,6 +29,7 @@ api_urlpatterns = [
     path("opportunities/<int:opportunity_id>/proposal-draft", api_views.opportunity_proposal,
          name="opportunity_proposal"),
     path("site-suggestions", api_views.site_suggestions, name="site_suggestions"),
+    path("site-suggestions/counts", api_views.site_suggestion_counts, name="site_suggestion_counts"),
     path("ideas", api_views.ideas, name="ideas"),
     # Meals (albright_bot_api.meals_api) - the Recipe Bot.
     path("meals/plan", meals_api.plan, name="meals_plan"),

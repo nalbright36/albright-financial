@@ -3,10 +3,12 @@ suggestions - nothing here bids, changes a max bid, touches the watchlist,
 creates/deletes ledger entries, changes a price, submits an application,
 trades, or reads credentials, keys, tokens or my profile. Every write goes
 to this app's own tables (models.py)."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.db.models import Count, F
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
 from .auth import ApiError, bot_endpoint, json_body
@@ -123,8 +125,33 @@ POST site-suggestions                                 scope: site:suggest
   Body: {"app": "trade" | "resell" | "opps" | "all" (required), "area": str (optional, <=100, e.g. "Watchlist page"),
          "title": str (required, <=200), "description": str (required - what to change and why),
          "priority": "low" | "medium" | "high" (optional, default "medium")}
-  The owner reviews it (New -> Accepted / Declined -> Done); nothing changes on the site by itself.
-  Returns 201 {"id": int, "status": "new"}.
+  The owner reviews it and moves it through new -> considering -> planned -> in_progress -> done (or
+  declined); nothing changes on the site by itself. Returns 201 {"id": int, "status": "new"}.
+
+GET  site-suggestions                                  scope: suggestions:read (or site:suggest - own only)
+  Bot suggestions and where they stand. With suggestions:read: every bot suggestion. With only site:suggest:
+  just the ones THIS token sent. Without either: 403 {"error": "missing scope", "required": "suggestions:read"}.
+  Query (all optional):
+    status=new,planned    one or more of new, considering, planned, in_progress, done, declined
+    app=trade,opps        one or more of trade, resell, opps, all
+    priority=high         one or more of low, medium, high
+    created_since / updated_since    YYYY-MM-DD or an ISO date-time
+    q=calendar            words in the title
+    include=description   add each suggestion's description (left out by default to keep responses small)
+    sort=created_at (default) | status_changed_at   - newest first either way
+    page=N, page_size=1-100 (default 25)
+  Returns {"suggestions": [{"id", "title", "app", "priority", "status", "source" (the name of the bot token that
+  sent it, or null), "created_at", "status_changed_at", "description" (only with include=description)}],
+  "page", "page_size", "pages", "total", "next_page" (null on the last page), "own_only"}.
+  The owner's private notes on a suggestion are never included.
+  Examples:
+    GET site-suggestions?status=new                         what hasn't been looked at yet
+    GET site-suggestions?status=planned,in_progress&include=description
+    GET site-suggestions?sort=status_changed_at&updated_since=2026-11-01&page_size=10
+
+GET  site-suggestions/counts                           scope: suggestions:read
+  How many bot suggestions are in each status. Returns {"counts": {"new": 6, "considering": 1, "planned": 6,
+  "in_progress": 0, "done": 3, "declined": 2}, "total": 18} - every status is listed, 0 when empty.
 
 POST ideas                                            scope: ideas:write
   Save an idea the owner told you, for them to review on Admin > Ideas.
@@ -463,7 +490,7 @@ def opportunity_proposal(request, token, opportunity_id):
 # ---------------------------------------------------------------------------
 
 @bot_endpoint("site:suggest", methods=("POST",))
-def site_suggestions(request, token):
+def site_suggestions_create(request, token):
     data = json_body(request)
     app = data.get("app")
     if app not in dict(SiteSuggestion.APPS):
@@ -475,6 +502,115 @@ def site_suggestions(request, token):
         token=token, app=app, area=_text(data, "area", required=False, limit=100),
         title=_text(data, "title", limit=200), description=_text(data, "description"), priority=priority)
     return {"id": suggestion.pk, "status": "new"}, 201, f"site suggestion ({app}): {suggestion.title[:80]}"
+
+
+SUGGESTIONS_PAGE_SIZE, SUGGESTIONS_MAX_PAGE_SIZE = 25, 100
+SUGGESTION_SORTS = ("created_at", "status_changed_at")
+
+
+def _missing_scope(scope):
+    return ApiError(403, "missing scope", f"rejected: needs {scope}", extra={"required": scope})
+
+
+def _keys(request, name, choices):
+    """A comma-separated filter like status=new,planned - every value must be one of choices."""
+    values = [v.strip() for v in (request.GET.get(name) or "").split(",") if v.strip()]
+    bad = [v for v in values if v not in dict(choices)]
+    if bad:
+        raise ApiError(400, f'"{name}" must be one or more of: {", ".join(k for k, _ in choices)}.',
+                       f"rejected: bad {name}")
+    return values
+
+
+def _since(request, name):
+    """YYYY-MM-DD (from the start of that day) or an ISO date-time; None when not given."""
+    raw = (request.GET.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        moment = parse_datetime(raw)
+        day = None if moment else parse_date(raw)
+    except ValueError:
+        moment = day = None
+    if day:
+        moment = datetime.combine(day, datetime.min.time())
+    if moment is None:
+        raise ApiError(400, f'"{name}" must be YYYY-MM-DD or an ISO date-time.', f"rejected: bad {name}")
+    return timezone.make_aware(moment) if timezone.is_naive(moment) else moment
+
+
+def _number(request, name, default, high=None):
+    try:
+        value = int(request.GET.get(name) or default)
+    except ValueError as exc:
+        raise ApiError(400, f'"{name}" must be a number.', f"rejected: bad {name}") from exc
+    if value < 1 or (high and value > high):
+        raise ApiError(400, f'"{name}" must be from 1 to {high}.' if high else f'"{name}" must be 1 or more.',
+                       f"rejected: bad {name}")
+    return value
+
+
+@bot_endpoint()
+def site_suggestions_list(request, token):
+    """suggestions:read sees every bot suggestion; site:suggest alone sees only this token's own."""
+    if "suggestions:read" in token.scopes:
+        qs, own = SiteSuggestion.objects.all(), False
+    elif "site:suggest" in token.scopes:
+        qs, own = SiteSuggestion.objects.filter(token=token), True
+    else:
+        raise _missing_scope("suggestions:read")
+    statuses = _keys(request, "status", SiteSuggestion.STATUSES)
+    apps = _keys(request, "app", SiteSuggestion.APPS)
+    priorities = _keys(request, "priority", SiteSuggestion.PRIORITIES)
+    include = _keys(request, "include", [("description", "")])
+    sort = request.GET.get("sort") or "created_at"
+    if sort not in SUGGESTION_SORTS:
+        raise ApiError(400, '"sort" must be created_at or status_changed_at.', "rejected: bad sort")
+    query = (request.GET.get("q") or "").strip()[:200]
+    created_since, updated_since = _since(request, "created_since"), _since(request, "updated_since")
+    page = _number(request, "page", 1)
+    size = _number(request, "page_size", SUGGESTIONS_PAGE_SIZE, SUGGESTIONS_MAX_PAGE_SIZE)
+    if statuses:
+        qs = qs.filter(status__in=statuses)
+    if apps:
+        qs = qs.filter(app__in=apps)
+    if priorities:
+        qs = qs.filter(priority__in=priorities)
+    if created_since:
+        qs = qs.filter(created_at__gte=created_since)
+    if updated_since:
+        qs = qs.filter(updated_at__gte=updated_since)
+    if query:
+        qs = qs.filter(title__icontains=query)
+    qs = qs.select_related("token").order_by(F(sort).desc(nulls_last=True), "-pk")
+    total = qs.count()
+    pages = max(1, -(-total // size))
+    rows = []
+    for s in qs[(page - 1) * size: page * size]:   # never my_notes
+        row = {"id": s.pk, "title": s.title, "app": s.app, "priority": s.priority, "status": s.status,
+               "source": s.token.name if s.token else None, "created_at": _iso(s.created_at),
+               "status_changed_at": _iso(s.status_changed_at)}
+        if "description" in include:
+            row["description"] = s.description
+        rows.append(row)
+    return ({"suggestions": rows, "page": page, "page_size": size, "pages": pages, "total": total,
+             "next_page": page + 1 if page < pages else None, "own_only": own}, 200,
+            f"listed {len(rows)} site suggestions (page {page}{', own only' if own else ''})")
+
+
+@bot_endpoint()
+def site_suggestion_counts(request, token):
+    if "suggestions:read" not in token.scopes:
+        raise _missing_scope("suggestions:read")
+    found = dict(SiteSuggestion.objects.order_by().values("status").annotate(n=Count("pk")).values_list("status", "n"))
+    counts = {key: found.get(key, 0) for key, _label in SiteSuggestion.STATUSES}
+    return {"counts": counts, "total": sum(counts.values())}, 200, "site suggestion counts"
+
+
+@csrf_exempt
+def site_suggestions(request):
+    """One path, two uses: POST adds one (site:suggest), anything else lists (GET only)."""
+    return site_suggestions_create(request) if request.method == "POST" else site_suggestions_list(request)
 
 
 # ---------------------------------------------------------------------------
