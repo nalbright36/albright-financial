@@ -158,8 +158,11 @@ def _planner_today(request, pref):
 
 @login_required
 def account(request):
-    """My account: which apps show in my navigation (and their order), and where I land."""
-    return render(request, "albright_labs/account.html", _settings_context(request))
+    """My account: which apps show in my navigation (and their order), and where I land - and a link to My API
+    keys for someone allowed them."""
+    from albright_bot_api.scopes import keys_allowed
+    return render(request, "albright_labs/account.html", {**_settings_context(request),
+                                                          "api_keys": keys_allowed(request.user)})
 
 
 @login_required

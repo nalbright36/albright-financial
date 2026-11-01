@@ -77,10 +77,18 @@ def bot_api(request):
 
 
 def _bot_api_page(request, form=None, new_token=None, new_token_note=""):
+    from albright_bot_api import scopes as scope_rules
     docs = reverse("bot_api_v1:docs")
+    tokens = BotToken.objects.select_related("owner")
+    owner = request.GET.get("owner", "")
+    if owner.isdigit():
+        tokens = tokens.filter(owner_id=int(owner))      # Admin > Users "N active keys"
+    tokens = list(tokens)
+    for t in tokens:
+        t.grantable = set(scope_rules.available(t.owner))   # another person's key: only their apps' scopes
     return render(request, "albright_control/bot_api.html", {
         "form": form or TokenForm(user=request.user), "new_token": new_token, "new_token_note": new_token_note,
-        "tokens": BotToken.objects.select_related("owner"), "scopes": SCOPES,
+        "tokens": tokens, "scopes": SCOPES, "owner_filter": owner,
         "docs_path": docs, "api_base": docs.removesuffix("docs"),
     })
 
@@ -99,8 +107,9 @@ def edit_token_scopes(request, pk):
     token = get_object_or_404(BotToken, pk=pk, revoked_at=None)
     if not _password_ok(request, f'"{token.name}"\'s permissions were not changed.'):
         return redirect("albright_control:bot_api")
+    from albright_bot_api import scopes as scope_rules
     old = list(token.scopes)
-    token.set_scopes(request.POST.getlist("scopes"))
+    token.set_scopes([key for key in request.POST.getlist("scopes") if scope_rules.allowed(token.owner, key)])
     if old == token.scopes:
         messages.info(request, f'"{token.name}" already had those permissions.')
     else:

@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_bot_api.models import BotRequestLog, BotToken
-from albright_labs.testing import with_apps
+from albright_labs.testing import allow_api_keys, with_apps
 from albright_meals.models import MealPlanEntry
 from albright_notes.models import Note, NoteShare
 
@@ -358,6 +358,7 @@ class SourceTests(Base):
 class ScheduleApiTests(Base):
     def setUp(self):
         super().setUp()
+        allow_api_keys(self.me)
         self.token, self.raw = BotToken.issue(self.me, "Grok bot", ["schedule:read", "schedule:write"])
         self.api = Client()
 

@@ -1,0 +1,119 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}My API keys · {% endblock %}
+{% block content %}
+{% comment %}
+My account > My API keys (albright_bot_api.key_views): keys that act as this person, with only the permissions
+for apps they can open. A new or rotated key is shown once (only its hash is kept). Password to create, change
+permissions or rotate.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
+    <a href="{% url 'labs:account' %}" style="font-size: 0.875rem;">&larr; My account</a>
+    <h1 style="margin: 8px 0 6px;">My API keys</h1>
+    <p style="margin: 0 0 20px; color: var(--text-secondary);">A key lets a bot (like a Grok assistant) work with your account - it sees only what you can see, and what it adds is yours (and shared the way your new items are). It can only do what you tick below, and only in apps you can open.</p>
+
+    {% if new_key %}
+    <div class="card" style="margin-bottom: 20px; border-color: var(--accent);" id="new-key">
+        <div class="card__header"><span class="card__label">{{ new_key_note|default:"Your new key" }}</span><span class="badge warn">shown once</span></div>
+        <p style="margin: 0 0 8px; font-size: 0.875rem;">Copy it now - it can't be shown again. If you lose it, rotate or revoke it and make a new one.</p>
+        <div style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;">
+            <code id="new-key-value" style="font-size: 0.875rem; overflow-wrap: anywhere;">{{ new_key }}</code>
+            <button type="button" class="btn btn-primary btn-sm js-copy" data-copy-target="new-key-value">Copy</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
+        <form method="post" class="card" id="key-form">{% csrf_token %}
+            <div class="card__header"><span class="card__label">New key</span></div>
+            {% if choices %}
+            <div class="field">
+                <label for="{{ form.name.id_for_label }}">Name <span style="font-weight: 400; color: var(--text-secondary);">(e.g. "Grok assistant")</span></label>
+                {{ form.name }}
+                {% for e in form.name.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+            </div>
+            <fieldset class="field" style="border: 0; padding: 0; margin-left: 0; margin-right: 0;">
+                <legend style="font-weight: 600; margin-bottom: 6px;">{{ form.scopes.label }}</legend>
+                {% for choice in form.scopes %}<label style="display: flex; gap: 8px; align-items: flex-start; font-weight: 400; min-height: 32px;">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>{% endfor %}
+                {% for e in form.scopes.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+            </fieldset>
+            <div class="field">
+                <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                {{ form.password }}
+                {% for e in form.password.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Create key</button>
+            {% else %}<p style="margin: 0; color: var(--text-secondary);">None of your apps can be used with a key yet (keys work with the Planner, Meals and Notes).</p>{% endif %}
+        </form>
+
+        <section class="card" id="connect-help">
+            <div class="card__header"><span class="card__label">How to connect a bot</span></div>
+            <ol style="margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.875rem;">
+                <li>Give the bot this API address: <code id="api-address" style="overflow-wrap: anywhere;">{{ api_address }}</code> <button type="button" class="btn btn-secondary btn-sm js-copy" data-copy-target="api-address">Copy</button></li>
+                <li>Put the key in the bot's <strong>secret settings</strong> (sometimes called "secrets", "credentials" or "environment") - <strong>never paste it into a chat message</strong>, where it could be seen or saved.</li>
+                <li>The bot sends it as <code>Authorization: Bearer &lt;key&gt;</code> on every request, and can read <code style="overflow-wrap: anywhere;">{{ docs_address }}</code> to learn what it may do.</li>
+            </ol>
+        </section>
+    </div>
+
+    <section class="card" style="margin-top: 20px; padding: 0;" id="my-keys">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Your keys</span></div>
+        {% if tokens %}
+        <div class="table-scroll">
+        <table class="holdings" id="my-keys-table">
+            <thead><tr><th>Name</th><th>Can</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+            <tbody>
+            {% for t in tokens %}
+            <tr data-key="{{ t.pk }}">
+                <td><strong>{{ t.name }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);"><code>{{ t.display_prefix }}…</code></div></td>
+                <td style="font-size: 0.8125rem;">{% for row in t.scope_rows %}<div>{{ row.label }}{% if not row.usable %} <span class="badge warn" title="You no longer have access to this app, so this doesn't work">off</span>{% endif %}</div>{% empty %}<span style="color: var(--text-secondary);">nothing</span>{% endfor %}</td>
+                <td style="font-size: 0.8125rem;">{{ t.created_at|date:"M j, Y" }}</td>
+                <td style="font-size: 0.8125rem;">{% if t.last_used_at %}{{ t.last_used_at|date:"M j, g:i A" }}{% else %}never{% endif %}</td>
+                <td>{% if t.is_active %}
+                    <div style="display: flex; flex-direction: column; gap: 6px; min-width: 210px;">
+                        <details id="edit-key-{{ t.pk }}">
+                            <summary class="btn btn-secondary btn-sm" style="list-style: none;">Edit permissions</summary>
+                            <form method="post" action="{% url 'albright_bot_api:my_key_scopes' t.pk %}" style="margin: 8px 0 0;">{% csrf_token %}
+                                {% for key, label in choices %}<label style="display: flex; gap: 6px; align-items: flex-start; font-size: 0.8125rem; font-weight: 400; min-height: 28px;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in t.scopes %} checked{% endif %}> <span>{{ label }}</span></label>{% endfor %}
+                                <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to change {{ t.name }}'s permissions" autocomplete="current-password" required style="margin-top: 6px;">
+                                <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 6px;">Save permissions</button>
+                            </form>
+                        </details>
+                        <form method="post" action="{% url 'albright_bot_api:my_key_rotate' t.pk %}" style="margin: 0; display: flex; gap: 4px; flex-wrap: wrap;"
+                              data-confirm="Rotate {{ t.name }}? The current key stops working immediately - the bot needs the new one.">{% csrf_token %}
+                            <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to rotate {{ t.name }}" autocomplete="current-password" required style="max-width: 120px;">
+                            <button type="submit" class="btn btn-secondary btn-sm">Rotate</button></form>
+                        <form method="post" action="{% url 'albright_bot_api:my_key_revoke' t.pk %}" style="margin: 0;"
+                              data-confirm="Revoke {{ t.name }}? It stops working immediately.">{% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Revoke</button></form>
+                    </div>
+                    {% else %}<span class="badge loss">revoked {{ t.revoked_at|date:"M j" }}</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No keys yet.</p>{% endif %}
+    </section>
+
+    <section class="card" style="margin-top: 20px; padding: 0;" id="my-key-activity">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Activity</span><span style="font-size: 0.75rem; color: var(--text-secondary);">your keys' last {{ activity_limit }} requests</span></div>
+        {% if logs %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead><tr><th>When</th><th>Key</th><th>Request</th><th>Result</th></tr></thead>
+            <tbody>
+            {% for log in logs %}
+            <tr><td style="font-size: 0.8125rem; white-space: nowrap;">{{ log.created_at|date:"M j, g:i:s A" }}</td>
+                <td style="font-size: 0.8125rem;">{{ log.token_name|default:log.token.name }}</td>
+                <td style="font-size: 0.8125rem;"><code>{{ log.method }} {{ log.endpoint }}</code></td>
+                <td style="font-size: 0.8125rem;"><span class="badge {% if log.status < 300 %}gain{% elif log.status < 500 %}warn{% else %}loss{% endif %}">{{ log.status }}</span> {{ log.summary }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No requests yet.</p>{% endif %}
+    </section>
+</div>
+<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}

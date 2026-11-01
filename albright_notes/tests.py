@@ -20,7 +20,7 @@ from django.urls import reverse
 from albright_bot_api.models import SCOPE_KEYS, BotRequestLog, BotToken
 from albright_labs import app_access, apps_registry, tiles
 from albright_labs.models import UserPreference
-from albright_labs.testing import launcher_links, launcher_tiles, with_apps
+from albright_labs.testing import allow_api_keys, launcher_links, launcher_tiles, with_apps
 
 from . import links, notes, render
 from .models import ME, Note, NoteLink, NoteShare
@@ -322,7 +322,7 @@ class LinkTests(Base):
 @override_settings(BOT_API_REQUIRE_HTTPS=False, CRYPTO=CRYPTO)
 class BotApiTests(TestCase):
     def setUp(self):
-        self.owner = with_apps(User.objects.create_user(username="owner", password=PASSWORD))
+        self.owner = allow_api_keys(with_apps(User.objects.create_user(username="owner", password=PASSWORD)))
         self.token, self.raw = BotToken.issue(self.owner, "Note Bot", ["notes:read", "notes:write"])
         self.bare, self.bare_raw = BotToken.issue(self.owner, "No scopes", [])
         self.api = Client()

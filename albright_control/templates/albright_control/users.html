@@ -34,7 +34,7 @@
     <section class="card" style="padding: 0;">
         <div class="table-scroll">
         <table class="holdings" id="users-table">
-            <thead><tr><th>User</th>{% for app in apps %}<th>{{ app.label }}</th>{% endfor %}<th></th></tr></thead>
+            <thead><tr><th>User</th>{% for app in apps %}<th>{{ app.label }}</th>{% endfor %}<th></th><th>API keys</th></tr></thead>
             <tbody>
             {% for row in rows %}
             <tr>
@@ -50,6 +50,7 @@
                     {% if row.user.is_active %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="setup_link"><input type="hidden" name="user_id" value="{{ row.user.pk }}">
                     <button type="submit" class="btn btn-secondary btn-sm">Send password setup link</button></form>{% endif %}</td>
                 {% endif %}
+                <td class="users-keys" data-keys-for="{{ row.user.pk }}">{% if row.user.is_superuser %}<span style="font-size: 0.75rem; color: var(--text-secondary);">always</span>{% else %}<form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="api_keys"><input type="hidden" name="user_id" value="{{ row.user.pk }}"><input type="hidden" name="allowed" value="{% if row.keys_allowed %}0{% else %}1{% endif %}"><button type="submit" class="btn btn-secondary btn-sm" role="switch" aria-checked="{{ row.keys_allowed|yesno:'true,false' }}" aria-label="Allow API keys for {{ row.user.username }}">{% if row.keys_allowed %}Allowed &middot; turn off{% else %}Off &middot; allow{% endif %}</button></form>{% endif %}<div style="font-size: 0.75rem; margin-top: 4px;">{% if row.active_keys %}<a href="{% url 'albright_control:bot_api' %}?owner={{ row.user.pk }}#tokens-table">{{ row.active_keys }} active key{{ row.active_keys|pluralize }}</a>{% else %}<span style="color: var(--text-secondary);">no keys</span>{% endif %}</div></td>
             </tr>
             {% endfor %}
             </tbody>

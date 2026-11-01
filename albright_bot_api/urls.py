@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import api_views, meals_api, notes_api, schedule_api, views
+from . import api_views, key_views, meals_api, notes_api, schedule_api, views
 
 # Site pages. Token management and the activity log moved to the Admin area
 # (/control/bot-api/); the old URLs redirect there.
@@ -9,6 +9,11 @@ urlpatterns = [
     path("", views.moved_to_admin, name="tokens"),
     path("tokens/<int:pk>/revoke/", views.moved_to_admin, name="revoke"),
     path("activity/", views.moved_to_admin, {"target": "albright_control:bot_activity"}, name="activity"),
+    # My account > My API keys (key_views) - for anyone allowed API keys.
+    path("keys/", key_views.my_keys, name="my_keys"),
+    path("keys/<int:pk>/scopes/", key_views.my_key_scopes, name="my_key_scopes"),
+    path("keys/<int:pk>/rotate/", key_views.my_key_rotate, name="my_key_rotate"),
+    path("keys/<int:pk>/revoke/", key_views.my_key_revoke, name="my_key_revoke"),
     path("suggestions/<int:pk>/<str:decision>/", views.decide_suggestion, name="decide_suggestion"),
     path("trading-notes/bulk/", views.trading_notes_bulk, name="trading_notes_bulk"),
     path("trading-notes/<int:pk>/delete/", views.trading_note_delete, name="trading_note_delete"),

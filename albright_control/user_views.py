@@ -27,7 +27,9 @@ from .access import audit, superuser_required
 
 
 def _rows():
-    users = get_user_model().objects.order_by("username")
+    from django.db.models import Count, Q
+    users = get_user_model().objects.order_by("username").annotate(
+        active_keys=Count("bot_tokens", filter=Q(bot_tokens__revoked_at__isnull=True)))
     prefs = {p.user_id: p for p in UserPreference.objects.filter(user__in=users)}
     apps = [app for app in apps_registry.APPS if not app.superuser_only]
     rows = []
@@ -35,7 +37,8 @@ def _rows():
         pref = prefs.get(user.pk) or UserPreference(user=user)
         allowed = set(app_access.allowed_keys(user, pref)) if user.is_active else set(pref.allowed_apps or [])
         rows.append({"user": user, "cells": [{"key": app.key, "label": app.label, "on": app.key in allowed}
-                                             for app in apps]})
+                                             for app in apps],
+                     "keys_allowed": user.is_superuser or pref.api_keys_allowed, "active_keys": user.active_keys})
     return rows, apps
 
 
@@ -98,6 +101,19 @@ def users(request):
         audit(request, "user_access_changed",
               f"{user.username}: {', '.join(before) or 'none'} -> {', '.join(pref.allowed_apps) or 'none'}")
         messages.success(request, f"Saved {user.username}'s access.")
+        return redirect("albright_control:users")
+    if action == "api_keys":
+        # "Allow API keys": off stops the person's keys working at once (they're kept, and work again if it's
+        # turned back on); revoke them from Admin > Bot API to end them for good.
+        user = get_object_or_404(get_user_model(), pk=request.POST.get("user_id"))
+        if user.is_superuser:
+            messages.error(request, "Superusers can always have API keys.")
+            return redirect("albright_control:users")
+        pref = UserPreference.objects.filter(user=user).first() or UserPreference(user=user)
+        pref.api_keys_allowed = request.POST.get("allowed") == "1"
+        pref.save()
+        audit(request, "user_api_keys", f"{user.username}: API keys {'allowed' if pref.api_keys_allowed else 'not allowed'}")
+        messages.success(request, f"{user.username} {'can now' if pref.api_keys_allowed else 'can no longer'} use API keys.")
         return redirect("albright_control:users")
     if action == "invite":
         invite_form = InviteForm(request.POST)

@@ -31,7 +31,8 @@ def url(name, *args):
 @override_settings(BOT_API_REQUIRE_HTTPS=False, CRYPTO={**settings.CRYPTO, "allowlist": ["github.com"]})
 class BotApiTestCase(TestCase):
     def setUp(self):
-        self.user = with_apps(User.objects.create_user(username="owner", password="pw-not-real-12345"))
+        # The trading / reseller / opportunities scopes are admin-only, so the owner is a superuser.
+        self.user = User.objects.create_superuser(username="owner", password="pw-not-real-12345", email="")
         self.token, self.raw = BotToken.issue(self.user, "Grok bot", ALL)
         self.api = Client()
 
@@ -121,7 +122,7 @@ class TokenTests(BotApiTestCase):
         self.assertEqual(self.call("GET", url("docs")).status_code, 401)
 
     def test_not_a_superuser_gets_404(self):
-        self.client.force_login(self.user)
+        self.client.force_login(with_apps(User.objects.create_user(username="plain", password=self.PASSWORD)))
         self.assertEqual(self.client.post(reverse("albright_control:revoke_token", args=[self.token.pk]),
                                           {"password": self.PASSWORD}).status_code, 404)
         self.assertTrue(BotToken.objects.get(pk=self.token.pk).is_active)
@@ -210,6 +211,9 @@ class AuthTests(BotApiTestCase):
 
 class EndpointTests(BotApiTestCase):
     def test_docs_describe_every_endpoint(self):
+        # The docs list only what the calling key can use, so this key has every scope.
+        from albright_bot_api.models import SCOPE_KEYS
+        self.token.set_scopes(SCOPE_KEYS)
         response = self.call("GET", url("docs"))
         self.assertEqual(response["Content-Type"], "text/plain; charset=utf-8")
         text = response.content.decode()
@@ -221,7 +225,7 @@ class EndpointTests(BotApiTestCase):
             self.assertIn(route, text, route)
         for phrase in ("Authorization: Bearer", "401", "403", "429", "5000", "PLAIN TEXT", "WHAT YOU CANNOT DO"):
             self.assertIn(phrase, text)
-        self.assertIn("YOUR TOKEN'S SCOPES: " + ", ".join(ALL), text)
+        self.assertIn("YOUR TOKEN'S SCOPES: " + ", ".join(SCOPE_KEYS), text)
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_trading_notes_on_the_grok_bot_page_newest_first_and_escaped(self, _outlook):

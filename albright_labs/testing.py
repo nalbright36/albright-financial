@@ -44,6 +44,13 @@ def favorite_tiles(content):
     return home_tiles(content.split('data-list="favorites"', 1)[1].split('data-list="others"', 1)[0])
 
 
+def allow_api_keys(user, on=True):
+    """Admin > Users "Allow API keys" for a test user (superusers always may). Returns the user."""
+    from .models import UserPreference
+    UserPreference.objects.update_or_create(user=user, defaults={"api_keys_allowed": on})
+    return user
+
+
 def with_apps(user, keys=None):
     """Give a test user every app (or just these keys) - new accounts start with none, so a test
     that signs in a plain user to use an app gives them access first, as Admin > Users would.

@@ -495,7 +495,8 @@ class SnapshotCommandTests(PageBase):
 @override_settings(BOT_API_REQUIRE_HTTPS=False)
 class BotApiStrategyTests(TestCase):
     def setUp(self):
-        self.owner = with_apps(User.objects.create_user(username="nate", password="pw-not-real-12345"))
+        # trading:notes is admin-only, so the token's owner is a superuser.
+        self.owner = User.objects.create_superuser(username="nate", password="pw-not-real-12345", email="")
         self.eng = BotStrategy.objects.create(user=self.owner, name="Engulfing", prefixes=["eng"], display_order=0)
         BotStrategy.objects.create(user=self.owner, name="Intraday", prefixes=["intra", "INTRA2"], status="paused",
                                    display_order=1)

@@ -18,6 +18,7 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from . import scopes
 from .models import BotRequestLog, BotToken, hash_token
 
 RATE_LIMIT = 60          # requests per minute per token
@@ -84,8 +85,15 @@ def bot_endpoint(scope=None, methods=("GET",)):
                 token = found
                 if request.method not in methods:
                     raise ApiError(405, f"Method not allowed - use {' or '.join(methods)}.", f"rejected: {request.method}")
+                if not scopes.keys_allowed(token.owner):
+                    raise ApiError(403, "API keys are turned off for this token's account.",
+                                   "rejected: owner not allowed API keys")
                 if scope and scope not in token.scopes:
                     raise ApiError(403, f"This token doesn't have the {scope} scope.", f"rejected: needs {scope}")
+                if scope and not scopes.allowed(token.owner, scope):
+                    # The owner lost the app (or isn't an admin): the key stops working for it at once.
+                    raise ApiError(403, scopes.denial(token.owner, scope), f"rejected: owner can't use {scope}",
+                                   extra={"required": scope})
                 recent = BotRequestLog.objects.filter(token=token, created_at__gte=timezone.now() - RATE_WINDOW) \
                     .exclude(status=429).count()
                 if recent >= RATE_LIMIT:

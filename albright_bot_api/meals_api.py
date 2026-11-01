@@ -150,7 +150,7 @@ def plan_set(request, token):
     if not recipe and not title:
         raise ApiError(400, 'Send "recipe_id" or "title".', "rejected: no recipe or title")
     notes = _str(data, "notes", 5000) if "notes" in data else None
-    entry, created = set_slot(day, slot, recipe=recipe, title=title, notes=notes, token=token)
+    entry, created = set_slot(day, slot, recipe=recipe, title=title, notes=notes, token=token, user=token.owner)
     return ({"id": entry.pk, "created": created, **_entry_json(entry)}, 201 if created else 200,
             f"{'set' if created else 'replaced'} {day} {slot}: {entry.display_title[:80]}")
 
@@ -215,7 +215,8 @@ def groceries_add(request, token):
     results = []
     with transaction.atomic():
         for row in cleaned:
-            saved, merged = add_item(row["name"], row["quantity"], row["unit"], row["aisle"], row["note"], token=token)
+            saved, merged = add_item(row["name"], row["quantity"], row["unit"], row["aisle"], row["note"], token=token,
+                                     user=token.owner)
             results.append({"id": saved.pk, "merged": merged, **_item_json(saved)})
     merged = sum(r["merged"] for r in results)
     return ({"items": results}, 201, f"added {len(results) - merged} grocery items, merged {merged}: "
@@ -276,7 +277,8 @@ def ideas_add(request, token):
     models = _meals()
     data = json_body(request)
     idea = models.MealIdea.objects.create(title=_str(data, "title", 200, required=True), notes=_str(data, "notes", 5000),
-                                          link=_url(data, "link"), from_bot=True, bot_token=token)
+                                          link=_url(data, "link"), from_bot=True, bot_token=token,
+                                          added_by=token.owner)
     return {"id": idea.pk, **_idea_json(idea)}, 201, f"meal idea #{idea.pk}: {idea.title[:80]}"
 
 
@@ -376,7 +378,7 @@ def recipes_upsert(request, token):
         recipe = models.Recipe.objects.select_for_update().filter(title__iexact=title).order_by("pk").first()
         created = recipe is None
         if created:
-            recipe = models.Recipe(title=title, from_bot=True, bot_token=token)
+            recipe = models.Recipe(title=title, from_bot=True, bot_token=token, created_by=token.owner)
         for key, value in fields.items():
             setattr(recipe, key, value)
         recipe.save()
@@ -422,7 +424,7 @@ def recipes_import(request, token):
         raise ApiError(400, '"add_to_groceries" must be true or false.', "rejected: bad add_to_groceries")
     host = (urlsplit(url).hostname or "")[:80]
     try:
-        recipe, status = importer.import_url(url, token=token)
+        recipe, status = importer.import_url(url, token=token, user=token.owner)
     except importer.RecipeImportError as exc:
         raise ApiError(IMPORT_ERROR_STATUS.get(exc.code, 422), exc.message,
                        f"import from {host} failed: {exc.code}") from exc
@@ -430,11 +432,11 @@ def recipes_import(request, token):
               "url": request.build_absolute_uri(reverse("albright_meals:recipe", args=[recipe.pk]))}
     extras = []
     if day:
-        entry, _created = set_slot(day, slot, recipe=recipe, token=token)
+        entry, _created = set_slot(day, slot, recipe=recipe, token=token, user=token.owner)
         result["plan"] = _entry_json(entry)
         extras.append(f"planned {day} {slot}")
     if to_groceries:
-        added, merged, skipped = add_recipes([recipe], token=token, skip_listed=True)
+        added, merged, skipped = add_recipes([recipe], user=token.owner, token=token, skip_listed=True)
         result["groceries"] = {"added": added, "merged": merged, "already_listed": skipped}
         extras.append(f"groceries +{added} ~{merged}")
     return (result, 200 if status == "already_saved" else 201,

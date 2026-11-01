@@ -3,6 +3,7 @@ suggestions - nothing here bids, changes a max bid, touches the watchlist,
 creates/deletes ledger entries, changes a price, submits an application,
 trades, or reads credentials, keys, tokens or my profile. Every write goes
 to this app's own tables (models.py)."""
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -11,6 +12,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
+from . import scopes as scope_rules
 from .auth import ApiError, bot_endpoint, json_body
 from .models import MAX_TEXT, SCOPES, InventorySuggestion, LotNote, OpportunityNote, SiteSuggestion, TradingNote
 
@@ -303,10 +305,33 @@ POST schedule/<id>/uncomplete                          scope: schedule:write
 """
 
 
+ENDPOINT_LINE = re.compile(r"^(GET|POST|PATCH|DELETE)\s")
+SCOPE_NAMES = re.compile(r"\b([a-z]+:[a-z]+)\b")
+
+
+def docs_for(token):
+    """DOCS with only the endpoints this token can call (its scopes its owner can still use). An app's heading
+    shows only when one of its endpoints does."""
+    intro, body = DOCS.split("ENDPOINTS\n---------\n", 1)
+    kept, pending = [], []
+    for para in body.split("\n\n"):
+        lines = [line for line in para.splitlines() if ENDPOINT_LINE.match(line)]
+        if not lines:
+            pending.append(para)                      # a heading: shown with its first visible endpoint
+            continue
+        needed = {name for line in lines for name in SCOPE_NAMES.findall(line.split("scope:", 1)[1])} \
+            if "scope:" in lines[0] else set()
+        if not needed or any(scope_rules.usable(token, name) for name in needed):
+            kept.extend(pending + [para])
+        pending = []
+    return intro + "ENDPOINTS\n---------\n" + "\n\n".join(kept).rstrip("\n") + "\n"
+
+
 @bot_endpoint()
 def docs(request, token):
-    scopes = ", ".join(token.scopes) or "none"
-    return DOCS + f"\nYOUR TOKEN'S SCOPES: {scopes}\nALL SCOPES: " + ", ".join(k for k, _ in SCOPES) + "\n", 200, "read docs"
+    usable = [key for key in token.scopes if scope_rules.allowed(token.owner, key)]
+    return (docs_for(token) + f"\nYOUR TOKEN'S SCOPES: {', '.join(usable) or 'none'}\n"
+            "(Only the endpoints those scopes allow are listed above.)\n", 200, "read docs")
 
 
 # ---------------------------------------------------------------------------
@@ -555,9 +580,9 @@ def _number(request, name, default, high=None):
 @bot_endpoint()
 def site_suggestions_list(request, token):
     """suggestions:read sees every bot suggestion; site:suggest alone sees only this token's own."""
-    if "suggestions:read" in token.scopes:
+    if scope_rules.usable(token, "suggestions:read"):
         qs, own = SiteSuggestion.objects.all(), False
-    elif "site:suggest" in token.scopes:
+    elif scope_rules.usable(token, "site:suggest"):
         qs, own = SiteSuggestion.objects.filter(token=token), True
     else:
         raise _missing_scope("suggestions:read")
@@ -602,7 +627,7 @@ def site_suggestions_list(request, token):
 
 @bot_endpoint()
 def site_suggestion_counts(request, token):
-    if "suggestions:read" not in token.scopes:
+    if not scope_rules.usable(token, "suggestions:read"):
         raise _missing_scope("suggestions:read")
     found = dict(SiteSuggestion.objects.order_by().values("status").annotate(n=Count("pk")).values_list("status", "n"))
     counts = {key: found.get(key, 0) for key, _label in SiteSuggestion.STATUSES}

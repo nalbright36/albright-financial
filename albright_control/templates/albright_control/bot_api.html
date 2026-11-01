@@ -47,7 +47,7 @@
         </form>
 
         <div class="card" style="padding: 0;">
-            <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Tokens</span></div>
+            <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Tokens{% if owner_filter %} &middot; {{ tokens.0.owner.username|default:"this user" }}'s{% endif %}</span>{% if owner_filter %}<a href="{% url 'albright_control:bot_api' %}" style="font-size: 0.8125rem;">Show everyone's</a>{% endif %}</div>
             {% if tokens %}
             <div class="table-scroll">
             <table class="holdings" id="tokens-table">
@@ -64,7 +64,7 @@
                         <details class="token-edit" id="edit-token-{{ t.pk }}">
                             <summary class="btn btn-secondary btn-sm" style="list-style: none;">Edit permissions</summary>
                             <form method="post" action="{% url 'albright_control:edit_token_scopes' t.pk %}" style="margin: 8px 0 0;">{% csrf_token %}
-                                {% for key, label in scopes %}<label style="display: flex; gap: 6px; align-items: flex-start; font-size: 0.8125rem; font-weight: 400;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in t.scopes %} checked{% endif %}> <span><code>{{ key }}</code> &mdash; {{ label }}</span></label>{% endfor %}
+                                {% for key, label in scopes %}{% if key in t.grantable %}<label style="display: flex; gap: 6px; align-items: flex-start; font-size: 0.8125rem; font-weight: 400;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in t.scopes %} checked{% endif %}> <span><code>{{ key }}</code> &mdash; {{ label }}</span></label>{% endif %}{% endfor %}
                                 <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to change {{ t.name }}'s permissions" autocomplete="current-password" required style="margin-top: 6px;">
                                 <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 6px;">Save permissions</button>
                             </form>

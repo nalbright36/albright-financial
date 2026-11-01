@@ -50,9 +50,10 @@ class SharedItemsEverywhereTests(SharedBase):
         self.hers(title="Gym", date=d(2), recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR")
         self.assertIn("Gym", self.page("week"))
         self.assertEqual([o.date for o in planner.occurrences(self.me, d(2), d(8))], [d(2), d(4), d(6)])   # Mon, Wed, Fri
-        self.assertIn("Gym", self.page("day", d(6)))
-        self.assertNotIn("Gym", self.page("day", d(5)))
-        self.assertEqual(len([o for o in planner.occurrences(self.me, d(1), d(30)) if o.item.title == "Gym"]), 12)
+        day_items = lambda day: self.page("day", day).split('id="pl-day"', 1)[1]     # not the quick-add placeholder
+        self.assertIn("Gym", day_items(d(6)))
+        self.assertNotIn("Gym", day_items(d(5)))
+        self.assertEqual(len([o for o in planner.occurrences(self.me, d(1), d(30)) if o.item.title == "Gym"]), 13)   # 5 Mon + 4 Wed + 4 Fri
 
     def test_overdue_today_panel_and_counts_include_them(self):
         self.hers(title="Late one", date=TODAY - timedelta(days=2))
@@ -68,6 +69,8 @@ class SharedItemsEverywhereTests(SharedBase):
     @override_settings(BOT_API_REQUIRE_HTTPS=False)
     def test_bot_api_lists_them_for_the_tokens_owner(self):
         self.hers()
+        from albright_labs.testing import allow_api_keys
+        allow_api_keys(self.me)
         _token, raw = BotToken.issue(self.me, "Grok bot", ["schedule:read"])
         data = Client().get(f"/api/bot/v1/schedule?start={TODAY}&end={TODAY}", HTTP_AUTHORIZATION=f"Bearer {raw}").json()
         row = next(r for r in data["occurrences"] if r["title"] == SAM_ITEM)

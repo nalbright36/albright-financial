@@ -663,7 +663,7 @@ class BotImportTests(Base):
         self.assertEqual(response.json(), {"id": recipe.pk, "title": "Weeknight Chili & Cornbread", "status": "created",
                                            "url": "http://testserver" + reverse("albright_meals:recipe", args=[recipe.pk])})
         self.assertTrue(recipe.from_bot)
-        self.assertIsNone(recipe.created_by)
+        self.assertEqual(recipe.created_by, self.owner)     # a key acts as its owner
         log = BotRequestLog.objects.filter(endpoint=self.PATH).get()
         self.assertEqual(log.status, 201)
         self.assertIn(f"import from www.examplekitchen.com: created recipe #{recipe.pk}", log.summary)
