@@ -210,7 +210,7 @@ def schedule_list(request, token):
 
 @bot_endpoint("schedule:write", methods=("POST",))
 def schedule_create(request, token):
-    from albright_planner.models import ScheduleItem
+    from albright_planner.models import NOTES_MAX, ScheduleItem
     _require_planner_access(token)
     data = json_body(request)
     title = _str(data, "title", 200, required=True)
@@ -243,7 +243,7 @@ def schedule_create(request, token):
                        "rejected: repeat_from_completion without an open-ended task")
     item = ScheduleItem.objects.create(
         owner=token.owner, title=title, date=start, start_time=start_time, end_time=end_time, kind=kind,
-        checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", 1000),
+        checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", NOTES_MAX),
         recurrence=rule, recurrence_until=until, recurrence_count=count, repeat_from_completion=from_completion,
         created_by=token.name[:150], from_bot=True, bot_token=token)
     from albright_planner.checklist import create_rows

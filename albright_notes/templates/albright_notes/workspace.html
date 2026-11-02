@@ -160,7 +160,7 @@ behavior: albright_notes/notes.js; views.workspace.
             </div>
 
             <div class="nt-doc" id="nt-doc" data-mode="{% if can_edit and not open.body %}write{% else %}preview{% endif %}">
-                <div class="nt-md" id="nt-preview"{% if can_edit %} title="Click to edit"{% endif %}>{% if open.body %}{{ html }}{% else %}<p class="nt-muted">Nothing written yet.</p>{% endif %}</div>
+                <div class="nt-md md-body" id="nt-preview"{% if can_edit %} title="Click to edit"{% endif %}>{% if open.body %}{{ html }}{% else %}<p class="nt-muted">Nothing written yet.</p>{% endif %}</div>
                 {% if can_edit %}
                 <label for="nt-body" class="visually-hidden">Note (Markdown)</label>
                 <textarea id="nt-body" class="nt-body" data-field="body" spellcheck="true" placeholder="Start writing… **bold**, *italic*, ## heading, - [ ] checklist">{{ open.body }}</textarea>

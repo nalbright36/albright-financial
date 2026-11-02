@@ -24,6 +24,7 @@ repeating item asks which occurrences the change applies to.
     <form method="post" class="pl-form" id="pl-form" novalidate>{% csrf_token %}
         <input type="hidden" name="next" value="{{ next }}">{% if then %}<input type="hidden" name="then" value="{{ then }}">{% endif %}
         {% if item %}<input type="hidden" name="occurrence" value="{{ occurrence|date:'Y-m-d' }}">{% endif %}
+        {% if form.errors %}<p class="pl-error pl-error--banner" id="pl-form-errors" role="alert">Not saved yet - fix what&rsquo;s marked below. Everything you typed is still here.</p>{% endif %}
         {% if form.non_field_errors %}<p class="pl-error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
         <fieldset class="pl-fieldset"{% if item and not can_edit %} disabled{% endif %}>
             <div class="pl-field">{{ form.title.label_tag }}{{ form.title }}{% for e in form.title.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
@@ -62,7 +63,12 @@ repeating item asks which occurrences the change applies to.
                 <div class="pl-field">{{ form.color.label_tag }}{{ form.color }}</div>
             </div>
             <label class="pl-toggle" id="pl-checkable">{{ form.checkable }} {{ form.checkable.label }}</label>
-            <div class="pl-field">{{ form.notes.label_tag }}{{ form.notes }}</div>
+            {# Notes: Markdown, in the shared editor (templates/_md_editor.html) - rendered on the view panel like a note. #}
+            <div class="pl-field pl-field--notes{% if form.notes.errors %} has-error{% endif %}">{{ form.notes.label_tag }}
+                {% url 'albright_planner:notes_preview' as notes_preview_url %}{% include "_md_editor.html" with field=form.notes preview_url=notes_preview_url %}
+                {% for e in form.notes.errors %}<span class="pl-error" id="pl-notes-error">{{ e }}</span>{% endfor %}
+                <span class="pl-help">Markdown: **bold**, *italic*, ## heading, - list, 1. list, - [ ] checklist, [link](https://&hellip;).</span>
+            </div>
 
             {# Checklist (tasks): one subtask per line - Enter adds the next, Enter on an empty one finishes; drag or the arrows to reorder (planner.js). Clearing one removes it. #}
             {% if not item or can_edit %}<div class="pl-field pl-cl-edit" id="pl-cl-edit" data-kind-only="task">

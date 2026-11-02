@@ -470,4 +470,12 @@
     // A disabled box isn't submitted: re-enable it on submit so a task stays checkable.
     form.addEventListener("submit", function () { if (form.elements.checkable) form.elements.checkable.disabled = false; });
     refresh();
+    // Not saved (the server said why): bring the first problem into view with its field focused - what you typed is
+    // still in the form.
+    var problem = form.querySelector(".pl-field .pl-error");
+    if (problem) {
+        var field = problem.closest(".pl-field").querySelector("input:not([type=hidden]), select, textarea");
+        problem.scrollIntoView({block: "center"});
+        if (field) field.focus({preventScroll: true});
+    }
 })();

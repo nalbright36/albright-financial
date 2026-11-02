@@ -1,0 +1,25 @@
+{% comment %}
+The shared Markdown editor: a formatting toolbar, the textarea (a form field whose widget has data-md-input) and
+a Write / Preview toggle. Behavior: js/md_editor.js (also used by Notes' editor); styles: style.css "Markdown
+editor". Preview posts the text to preview_url, which answers with the same sanitized HTML a note gets
+(albright_notes.render). The toolbar shows only with JS - without it this is a plain textarea.
+  {% include "_md_editor.html" with field=form.notes preview_url=... %}
+{% endcomment %}
+<div class="md-editor" data-md-editor data-mode="write" data-preview-url="{{ preview_url }}">
+    <div class="md-editor__bar" role="toolbar" aria-label="Formatting" aria-controls="{{ field.id_for_label }}" data-md-toolbar hidden>
+        <button type="button" class="md-editor__btn" data-fmt="bold" title="Bold (Ctrl+B)" aria-label="Bold"><b>B</b></button>
+        <button type="button" class="md-editor__btn" data-fmt="italic" title="Italic (Ctrl+I)" aria-label="Italic"><i>I</i></button>
+        <button type="button" class="md-editor__btn" data-fmt="heading" title="Heading" aria-label="Heading">H</button>
+        <span class="md-editor__sep" aria-hidden="true"></span>
+        <button type="button" class="md-editor__btn" data-fmt="bullet" title="Bulleted list" aria-label="Bulleted list"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="3" cy="4" r=".9" fill="currentColor"/><circle cx="3" cy="8" r=".9" fill="currentColor"/><circle cx="3" cy="12" r=".9" fill="currentColor"/><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/></svg></button>
+        <button type="button" class="md-editor__btn" data-fmt="number" title="Numbered list" aria-label="Numbered list"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><text x="1" y="5.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">1</text><text x="1" y="9.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">2</text><text x="1" y="13.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">3</text></svg></button>
+        <button type="button" class="md-editor__btn" data-fmt="check" title="Checklist" aria-label="Checklist"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="4" height="4" rx="1"/><path d="m2.3 11 1 1 1.8-2.2"/><path d="M8 4.5h6M8 11h6"/></svg></button>
+        <button type="button" class="md-editor__btn" data-fmt="link" title="Link" aria-label="Link"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6.8 9.2a3 3 0 0 0 4.2 0l2.2-2.2a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M9.2 6.8a3 3 0 0 0-4.2 0L2.8 9a3 3 0 0 0 4.2 4.2l.9-.9"/></svg></button>
+        {% if preview_url %}<span class="md-editor__tabs">
+            <button type="button" class="md-editor__tab" data-md-mode="write" aria-pressed="true">Write</button>
+            <button type="button" class="md-editor__tab" data-md-mode="preview" aria-pressed="false">Preview</button>
+        </span>{% endif %}
+    </div>
+    {{ field }}
+    {% if preview_url %}<div class="md-editor__preview md-body" data-md-preview aria-live="polite" hidden></div>{% endif %}
+</div>

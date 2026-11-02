@@ -2001,7 +2001,10 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .pl-view-dialog {
   width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 48px); padding: 0; overflow: auto;
   border: 1px solid var(--border); border-radius: 16px; color: var(--text-primary);
-  background: var(--glass-bg-dialog, var(--surface)); box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
+  /* Solid - the calendar must not show through it (no transparency, no backdrop-filter); the dimmed ::backdrop
+     sits behind it. --glass-bg-solid is the theme's solid surface, dark and light. */
+  background: var(--glass-bg-solid, var(--surface)); -webkit-backdrop-filter: none; backdrop-filter: none; opacity: 1;
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
 }
 .pl-view-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .pl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; }
@@ -2058,3 +2061,68 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
     background: var(--glass-bg-solid, var(--surface)); }
   .pl-view__foot .pl-btn { flex: 1; }
 }
+
+
+/* ---------- Rendered Markdown (.md-body) ----------
+   A note in Notes (#nt-preview), a Planner item's notes on its view panel, and the shared editor's Preview -
+   all rendered and sanitized on the server by albright_notes.render. Site tokens, so light and dark follow the
+   theme and links / ticks take the page's accent. Checkboxes (.nt-check) come from "- [ ]" lines. */
+.md-body { overflow-wrap: anywhere; color: var(--text-primary); }
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+.md-body p { margin: 6px 0; color: var(--text-primary); }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4, .md-body h5, .md-body h6 { margin: 14px 0 6px; line-height: 1.3; font-weight: 600; color: var(--text-primary); }
+.md-body h1 { font-size: 1.33em; } .md-body h2 { font-size: 1.2em; } .md-body h3, .md-body h4, .md-body h5, .md-body h6 { font-size: 1.07em; }
+.md-body ul, .md-body ol { padding-left: 20px; margin: 6px 0; }
+.md-body ul { list-style: disc; } .md-body ol { list-style: decimal; }
+.md-body li { margin: 3px 0; color: var(--text-primary); }
+.md-body a { color: var(--accent); text-decoration: underline; }
+.md-body blockquote { margin: 6px 0; padding: 2px 12px; border-left: 3px solid var(--accent); color: var(--text-secondary); }
+.md-body code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .875em; background: var(--surface-hover); border-radius: 5px; padding: 1px 5px; }
+.md-body pre { background: var(--surface-hover); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; overflow-x: auto; }
+.md-body pre code { background: none; padding: 0; }
+.md-body table { border-collapse: collapse; display: block; overflow-x: auto; }
+.md-body th, .md-body td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
+.md-body hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+.md-body li.nt-task { list-style: none; margin-left: -20px; }
+.md-body li.nt-task > p { display: inline; }
+.md-body li.nt-task.done { color: var(--text-secondary); text-decoration: line-through; }
+.md-body .nt-check {
+  -webkit-appearance: none; appearance: none; box-sizing: border-box; display: inline-block; width: 15px; height: 15px; margin: 0 8px 0 0;
+  padding: 0; vertical-align: -2px; cursor: pointer; border: 1.5px solid var(--text-secondary); border-radius: 3px;
+  background: transparent;
+}
+.md-body .nt-check:checked {
+  border-color: var(--accent); background-color: var(--accent);
+  background-image: linear-gradient(45deg, transparent 46%, var(--bg) 46%, var(--bg) 58%, transparent 58%),
+                    linear-gradient(-45deg, transparent 44%, var(--bg) 44%, var(--bg) 56%, transparent 56%);
+  background-size: 6px 6px, 9px 9px; background-position: 2px 6px, 5px 2px; background-repeat: no-repeat;
+}
+.md-body .nt-check:disabled { cursor: default; }
+.md-body .nt-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Markdown editor (templates/_md_editor.html, js/md_editor.js) ----------
+   The Planner's notes box: a toolbar (B, I, H, lists, checklist, link, Write / Preview) over a big textarea -
+   14 lines to start, growing with the text up to 70% of the screen, then scrolling. */
+.md-editor { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; }
+.md-editor [hidden] { display: none !important; }
+.md-editor__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.md-editor__btn, .md-editor__tab {
+  display: inline-grid; place-items: center; min-width: 34px; height: 32px; padding: 0 8px; margin: 0;
+  font: inherit; font-size: 0.875rem; color: var(--text-secondary); background: transparent;
+  border: 0; border-radius: 7px; cursor: pointer;
+}
+.md-editor__btn:hover, .md-editor__tab:hover { background: var(--surface-hover); color: var(--text-primary); }
+.md-editor__btn:focus-visible, .md-editor__tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.md-editor__sep { width: 1px; height: 18px; margin: 0 4px; background: var(--border); }
+.md-editor__tabs { display: inline-flex; gap: 2px; margin-left: auto; }
+.md-editor__tab { font-weight: 600; }
+.md-editor__tab[aria-pressed="true"] { background: var(--accent-soft); color: var(--text-primary); }
+.md-editor textarea {
+  display: block; width: 100%; min-height: calc(14 * 1.5em + 20px); max-height: 70vh; overflow-y: auto;
+  resize: vertical; line-height: 1.5; tab-size: 4;
+}
+.md-editor__preview { min-height: calc(14 * 1.5em + 20px); max-height: 70vh; overflow-y: auto; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); line-height: 1.55; }
+.md-editor__empty { color: var(--text-secondary); }

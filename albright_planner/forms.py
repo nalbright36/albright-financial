@@ -3,7 +3,7 @@
 from django import forms
 
 from . import recurrence
-from .models import ScheduleItem
+from .models import NOTES_MAX, ScheduleItem
 from .planner import SCOPES
 
 COLORS = [("", "App color"), ("#EF4444", "Red"), ("#F97316", "Orange"), ("#EAB308", "Yellow"), ("#22C55E", "Green"),
@@ -22,7 +22,10 @@ class ItemForm(forms.Form):
                                    help_text="Tasks always can; turn it on for an event you want to tick.")
     priority = forms.ChoiceField(choices=ScheduleItem.PRIORITIES, initial="none")
     color = forms.ChoiceField(choices=COLORS, required=False)
-    notes = forms.CharField(max_length=1000, required=False, widget=forms.Textarea(attrs={"rows": 3}))
+    # No max_length here: it would put maxlength on the textarea, and the browser would cut a long paste off
+    # without a word. clean_notes() checks the length and says so on the form, which keeps the text.
+    notes = forms.CharField(required=False, strip=False,
+                            widget=forms.Textarea(attrs={"rows": 14, "data-md-input": "", "spellcheck": "true"}))
 
     repeat = forms.ChoiceField(choices=recurrence.REPEATS, initial="none", label="Repeat")
     days = forms.MultipleChoiceField(choices=list(zip(recurrence.WEEKDAYS, recurrence.DAY_NAMES)), required=False,
@@ -51,6 +54,14 @@ class ItemForm(forms.Form):
                 field.widget.attrs.setdefault("class", "pl-input")
         if not show_scope:
             del self.fields["scope"]
+
+    def clean_notes(self):
+        notes = self.cleaned_data.get("notes") or ""
+        if len(notes) > NOTES_MAX:
+            raise forms.ValidationError(
+                f"Notes can be up to {NOTES_MAX:,} characters - these are {len(notes):,}. "
+                f"Shorten them by {len(notes) - NOTES_MAX:,} and save again; your text is still here.")
+        return notes
 
     @classmethod
     def initial_for(cls, item, occurrence_date):

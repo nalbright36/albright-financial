@@ -12,7 +12,6 @@ from albright_notes.models import Note
 
 from . import checklist
 from .models import ItemCompletion, ItemShare, ScheduleItem
-from .templatetags.planner_extras import notes_html
 from .tests import TODAY, Base, d, url
 
 
@@ -126,7 +125,7 @@ class LayoutTests(Fixtures):
         self.assertIn('id="pl-view-checklist"', panel)
         self.assertIn("1 of 3 done", panel)
         self.assertNotIn('name="cl_text"', panel)                         # no editing item text here
-        self.assertIn("<ul><li>tent</li><li>stove</li></ul><p>Leave by 8</p>", panel)
+        self.assertRegex(panel, r"<ul>\s*<li>tent</li>\s*<li>stove</li>\s*</ul>\s*<p>Leave by 8</p>")
         self.assertIn('data-clamp', panel)
         self.assertIn("Packing list", panel)
         self.assertIn("Bring the big tent", panel)
@@ -141,10 +140,10 @@ class LayoutTests(Fixtures):
         self.assertRegex(panel, r'id="pl-view-shared"><span class="pl-avatar"[^>]*>S</span> Shared by sam')
         self.assertNotIn("view only", panel)
 
-    def test_notes_render_escaped_with_line_breaks_and_lists(self):
-        self.assertEqual(notes_html("Line one\nline two\n\n1. a\n2. <b>b</b>"),
-                         "<p>Line one<br>line two</p><ol><li>a</li><li>&lt;b&gt;b&lt;/b&gt;</li></ol>")
-        self.assertEqual(notes_html(""), "")
+    def test_notes_render_as_markdown_with_line_breaks_and_lists(self):
+        panel = self.panel(self.item("Call", notes="Line one\nline two\n\n1. a\n2. <b>b</b>"))
+        self.assertIn("<p>Line one<br>\nline two</p>", panel)
+        self.assertRegex(panel, r"<ol>\s*<li>a</li>\s*<li><b>b</b></li>\s*</ol>")    # allowed formatting stays
 
     def test_menu(self):
         series = self.item("Standup", recurrence="FREQ=DAILY", recurrence_count=10)

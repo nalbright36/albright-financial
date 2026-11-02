@@ -57,6 +57,10 @@ class ItemQuerySet(models.QuerySet):
         return self.filter(Q(owner=user) | Q(pk__in=shared)).exclude(source_app__in=LOCKED_SOURCES)
 
 
+# An item's notes (Markdown): the model, the form and the Bot API all allow this many characters.
+NOTES_MAX = 50_000
+
+
 class ScheduleItem(models.Model):
     TASK, EVENT = "task", "event"
     KINDS = [(TASK, "Task"), (EVENT, "Event")]
@@ -64,7 +68,7 @@ class ScheduleItem(models.Model):
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_items")
     title = models.CharField(max_length=200)
-    notes = models.CharField(max_length=1000, blank=True)
+    notes = models.TextField(max_length=NOTES_MAX, blank=True)  # Markdown, rendered like a note (albright_notes.render)
     kind = models.CharField(max_length=5, choices=KINDS, default=TASK)
     date = models.DateField()                                     # the (first) day it happens
     start_time = models.TimeField(null=True, blank=True)          # empty = all day

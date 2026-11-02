@@ -288,7 +288,7 @@ GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD&expand=all  scope: schedule:read
 POST schedule                                          scope: schedule:write
   Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
   (optional; none = all day), "end_time": HH:MM (optional), "kind": "task"|"event" (default "task"),
-  "checkable": bool (events only; tasks always can be checked off), "notes": str (optional, <=1000),
+  "checkable": bool (events only; tasks always can be checked off), "notes": Markdown str (optional, <=50000),
   and optionally a repeat - EITHER the Planner's simple choices:
     "repeat": "daily"|"every_n_days"|"weekdays"|"weekly"|"every_n_weeks"|"monthly_day"|"monthly_nth"|"yearly",
     "days": ["MO","WE","FR"] (weekly / every_n_weeks; default the date's weekday), "interval": 1-52

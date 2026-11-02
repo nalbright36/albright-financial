@@ -11,6 +11,7 @@ urlpatterns = [
     path("month/", views.month_view, name="month"),
     path("add/", views.quick_add, name="quick_add"),
     path("new/", views.new_item, name="new"),
+    path("notes-preview/", views.notes_preview, name="notes_preview"),
     path("settings/", views.settings_view, name="settings"),
     path("meals/", views.toggle_meals, name="toggle_meals"),
     path("from-note/<int:note_id>/", views.from_note, name="from_note"),

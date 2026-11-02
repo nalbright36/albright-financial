@@ -150,42 +150,13 @@ html.js .nt .nt-nojs { display: none; }
   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px;
 }
 .nt .nt-body:focus { outline: none; border-color: var(--nt-accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.nt-md > :first-child { margin-top: 0; }
-.nt-md p { margin: 6px 0; color: var(--nt-ink); }
-.nt-md h1, .nt-md h2, .nt-md h3, .nt-md h4 { margin: 14px 0 6px; line-height: 1.3; font-weight: 600; }
-.nt-md h1 { font-size: 20px; } .nt-md h2 { font-size: 18px; } .nt-md h3, .nt-md h4 { font-size: 16px; }
-.nt-md ul, .nt-md ol { padding-left: 20px; margin: 6px 0; }
-.nt-md li { margin: 3px 0; color: var(--nt-ink); }
-.nt-md a { color: var(--nt-accent); text-decoration: underline; }
-.nt-md blockquote { margin: 6px 0; padding: 2px 12px; border-left: 3px solid var(--nt-accent); color: var(--nt-muted); }
-.nt-md code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .875em; background: var(--nt-hover); border-radius: 5px; padding: 1px 5px; }
-.nt-md pre { background: var(--nt-hover); border: 1px solid var(--nt-line); border-radius: 9px; padding: 10px 12px; overflow-x: auto; }
-.nt-md pre code { background: none; padding: 0; }
-.nt-md table { border-collapse: collapse; display: block; overflow-x: auto; }
-.nt-md th, .nt-md td { border: 1px solid var(--nt-line); padding: 5px 9px; text-align: left; }
-.nt-md hr { border: 0; border-top: 1px solid var(--nt-line); margin: 12px 0; }
-/* Checklists - the mockup's .check: an open box, a ticked accent box, done items muted and struck through. */
-.nt-md li.nt-task { list-style: none; margin-left: -20px; }
-.nt-md li.nt-task > p { display: inline; }
-.nt-md li.nt-task.done { color: var(--nt-muted); text-decoration: line-through; }
-.nt .nt-check {
-  display: inline-block; width: 15px; height: 15px; margin: 0 8px 0 0; vertical-align: -2px; cursor: pointer;
-  border: 1.5px solid var(--nt-muted); border-radius: 3px; background: transparent;
-}
-.nt .nt-check:checked {
-  border-color: var(--nt-accent); background-color: var(--nt-accent);
-  background-image: linear-gradient(45deg, transparent 46%, var(--nt-on-accent) 46%, var(--nt-on-accent) 58%, transparent 58%),
-                    linear-gradient(-45deg, transparent 44%, var(--nt-on-accent) 44%, var(--nt-on-accent) 56%, transparent 56%);
-  background-size: 6px 6px, 9px 9px; background-position: 2px 6px, 5px 2px; background-repeat: no-repeat;
-}
-.nt .nt-check:disabled { cursor: default; }
+/* The rendered Markdown itself (headings, lists, code, checkboxes...) is style.css's shared .md-body. */
 /* A checklist item being edited in place (notes.js): the item's own text, underlined in the accent. */
 .nt .nt-task-input {
   width: calc(100% - 28px); font: inherit; color: var(--nt-ink); background: transparent;
   border-bottom: 1px solid var(--nt-accent); padding: 0 2px; line-height: inherit;
 }
 .nt .nt-task-input:focus { outline: none; }
-.nt .nt-check:focus-visible { outline: 2px solid var(--nt-accent); outline-offset: 2px; }
 
 .nt-foot { margin-top: auto; display: flex; justify-content: space-between; color: var(--nt-muted); font-size: 12px; border-top: 1px solid var(--nt-line); padding-top: 10px; }
 .nt-foot .is-error { color: var(--red); }

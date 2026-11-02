@@ -1,10 +1,6 @@
 """Who an item belongs to, at a glance: the owner's initial in a small colored circle (the same color for the same
 person everywhere) and their first name."""
-import re
-
 from django import template
-from django.utils.html import escape
-from django.utils.safestring import mark_safe
 
 from albright_planner.planner import person as _person
 
@@ -31,27 +27,10 @@ def avatar_color(user):
     return AVATAR_COLORS[user.pk % len(AVATAR_COLORS)] if user and user.pk else AVATAR_COLORS[0]
 
 
-LIST_LINE = re.compile(r"^(?:([-*\u2022])|\d+[.)])\s+(.*)$")
-
-
 @register.filter
-def notes_html(text):
-    """An item's notes on its view panel: paragraphs keep their line breaks, and "- " / "* " / "1. " lines become
-    lists. Everything is escaped first."""
-    out, para, items, kind = [], [], [], None
-    for raw in (text or "").splitlines() + [""]:
-        line = raw.strip()
-        match = LIST_LINE.match(line)
-        want = ("ul" if match.group(1) else "ol") if match else None
-        if para and (match or not line):
-            out.append("<p>" + "<br>".join(para) + "</p>")
-            para = []
-        if items and want != kind:
-            out.append(f"<{kind}>" + "".join(f"<li>{i}</li>" for i in items) + f"</{kind}>")
-            items = []
-        if match:
-            kind = want
-            items.append(escape(match.group(2)))
-        elif line:
-            para.append(escape(line))
-    return mark_safe("".join(out))
+def notes_markdown(text):
+    """An item's notes (Markdown) on its view panel: rendered and sanitized exactly like a note - no scripts,
+    iframes, event handlers or javascript: links; external links go through the link check. Checkboxes show,
+    read-only."""
+    from albright_notes.render import render
+    return render(text or "")

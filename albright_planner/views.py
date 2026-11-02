@@ -25,7 +25,7 @@ from django.views.decorators.http import require_POST
 
 from . import checklist, planner, quickadd, recurrence, sources
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
-from .models import ItemShare, PlannerSettings, ScheduleItem
+from .models import NOTES_MAX, ItemShare, PlannerSettings, ScheduleItem
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -292,6 +292,15 @@ def _save_shares(request, *items):
             planner.set_shares(item, chosen)
     if request.POST.get("remember_shares"):
         planner.save_default_shares(request.user, chosen)
+
+
+@login_required
+@require_POST
+def notes_preview(request):
+    """The notes box's Preview (templates/_md_editor.html): its Markdown as the view panel will show it - rendered
+    and sanitized exactly like a note (albright_notes.render)."""
+    from albright_notes.render import render as render_markdown
+    return JsonResponse({"html": render_markdown(request.POST.get("notes", "")[:NOTES_MAX])})
 
 
 @login_required

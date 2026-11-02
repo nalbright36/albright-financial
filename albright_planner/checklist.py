@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from django.db import transaction
 from django.utils import timezone
 
-from .models import ChecklistItemCompletion, ItemCompletion, PlannerSettings, ScheduleItem, TaskChecklistItem
+from .models import NOTES_MAX, ChecklistItemCompletion, ItemCompletion, PlannerSettings, ScheduleItem, TaskChecklistItem
 
 GROCERY_TITLE = "Grocery run"
 MAX_ITEMS = 100
@@ -298,7 +298,7 @@ def grocery_text(line):
 def task_from_groceries(user, lines, title, day, start_time=None, note=""):
     """A Planner task owned by `user`, with one checklist row per grocery line (in list order)."""
     task = ScheduleItem.objects.create(owner=user, title=(title or GROCERY_TITLE)[:200], date=day,
-                                       start_time=start_time, notes=(note or "")[:1000], kind=ScheduleItem.TASK,
+                                       start_time=start_time, notes=(note or "")[:NOTES_MAX], kind=ScheduleItem.TASK,
                                        checkable=True, created_by=user.get_username())
     TaskChecklistItem.objects.bulk_create([
         TaskChecklistItem(task=task, order=n, text=grocery_text(line), grocery_item=line)

@@ -56,7 +56,7 @@ calendar; item.html is the same panel as a page. Every empty section is left out
     {% if item.notes %}
     <section class="pl-view__section" id="pl-view-notes" aria-labelledby="pl-view-notes-h">
         <h3 class="pl-view__label" id="pl-view-notes-h">Notes</h3>
-        <div class="pl-view__notes" data-clamp>{{ item.notes|notes_html }}</div>
+        <div class="pl-view__notes md-body" data-clamp>{{ item.notes|notes_markdown }}</div>
         <button type="button" class="pl-view__more" data-show-more aria-expanded="false" hidden>Show more</button>
     </section>
     {% endif %}

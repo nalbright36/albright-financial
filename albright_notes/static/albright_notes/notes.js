@@ -3,7 +3,8 @@
  * docs/design/"Albright Notes - design options.html"). Vanilla JS, loaded by albright_notes/base.html.
  *
  *   "/"            focuses the search box (when you're not typing somewhere)
- *   toolbar        B / I / H / ☑ List format the selection in the Markdown (switching to it if needed);
+ *   toolbar        B / I / H / ☑ List format the selection in the Markdown (switching to it if needed;
+ *                  Ctrl/Cmd+B and +I too) - the shared editor, md_editor.js, which also continues lists;
  *                  🔗 Link record, 👥 Share and ⋯ open their panels
  *   the document   shows the rendered note; click it (not a link or checkbox) to edit the Markdown,
  *                  Esc or clicking away shows it rendered again
@@ -122,7 +123,8 @@
         });
         fields.body.addEventListener("keydown", function (event) {
             if (event.key === "Escape") { event.preventDefault(); flush(); setMode("preview"); }
-            else if (event.key === "Enter") continueList(event);
+            else if (MdEditor.shortcut(event, fields.body)) return;                  // Ctrl/Cmd+B, Ctrl/Cmd+I
+            else if (event.key === "Enter") MdEditor.continueList(event, fields.body);   // lists continue
         });
         fields.body.addEventListener("blur", function (event) {
             // Leaving for the toolbar (B / I / H / List) keeps the Markdown open.
@@ -136,81 +138,15 @@
         }
     }
 
-    // ---------- Formatting toolbar ----------
-    function lineRange(text, start, end) {
-        var from = text.lastIndexOf("\n", start - 1) + 1;
-        var to = text.indexOf("\n", end);
-        return [from, to === -1 ? text.length : to];
-    }
+    // ---------- Formatting toolbar (the shared editor: albright_trading_app/static/js/md_editor.js) ----------
     function format(kind) {
-        var box = fields.body;
         if (doc.dataset.mode !== "write") setMode("write");
-        var text = box.value, start = box.selectionStart, end = box.selectionEnd, out, selStart, selEnd;
-        if (kind === "bold" || kind === "italic") {
-            var mark = kind === "bold" ? "**" : "*";
-            var picked = text.slice(start, end) || (kind === "bold" ? "bold text" : "italic text");
-            out = text.slice(0, start) + mark + picked + mark + text.slice(end);
-            selStart = start + mark.length;
-            selEnd = selStart + picked.length;
-        } else {
-            var range = lineRange(text, start, end);
-            var lines = text.slice(range[0], range[1]).split("\n").map(function (line) {
-                if (kind === "heading") return /^#{1,6}\s/.test(line) ? line.replace(/^#{1,6}\s+/, "") : "## " + line;
-                return /^\s*[-*+]\s+\[[ xX]\]\s?/.test(line) ? line : "- [ ] " + line.replace(/^\s*[-*+]\s+/, "");
-            });
-            var block = lines.join("\n");
-            out = text.slice(0, range[0]) + block + text.slice(range[1]);
-            selStart = selEnd = range[0] + block.length;
-        }
-        box.value = out;
-        box.focus();
-        box.setSelectionRange(selStart, selEnd);
-        box.dispatchEvent(new Event("input", {bubbles: true}));
+        MdEditor.format(fields.body, kind);
     }
     root.querySelectorAll("[data-fmt]").forEach(function (button) {
         button.addEventListener("mousedown", function (event) { event.preventDefault(); });   // keep the selection
         button.addEventListener("click", function () { format(button.dataset.fmt); });
     });
-
-    // ---------- Lists continue on Enter (the Markdown) ----------
-    // "- [ ] item" / "- item" / "* item" / "1. item": Enter starts the next item (same indentation; numbers count
-    // up), splitting the line if the cursor is mid-text. Enter on an empty item removes its marker and ends the
-    // list. Shift+Enter is a plain line break.
-    var LIST_ITEM = /^([ \t]*)(?:([-*+])[ \t]+\[[ xX]\](?:[ \t]+|$)|([-*+])[ \t]+|(\d{1,9})([.)])[ \t]+)/;
-
-    function replaceText(box, from, to, text, caret) {
-        box.focus();
-        box.setSelectionRange(from, to);
-        // insertText keeps the browser's undo history; setRangeText is the fallback.
-        var done = document.queryCommandSupported && document.queryCommandSupported("insertText") &&
-            document.execCommand("insertText", false, text);
-        if (!done) {
-            box.setRangeText(text, from, to, "end");
-            box.dispatchEvent(new Event("input", {bubbles: true}));
-        }
-        box.setSelectionRange(caret, caret);
-    }
-
-    function continueList(event) {
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
-        var box = fields.body, text = box.value, start = box.selectionStart, end = box.selectionEnd;
-        var lineStart = text.lastIndexOf("\n", start - 1) + 1;
-        var lineEnd = text.indexOf("\n", start);
-        if (lineEnd === -1) lineEnd = text.length;
-        if (end > lineEnd) return;                                       // a selection across lines: plain Enter
-        var line = text.slice(lineStart, lineEnd), m = LIST_ITEM.exec(line);
-        if (!m || start - lineStart < m[0].length) return;               // not a list line, or the cursor is in the marker
-        event.preventDefault();
-        if (!line.slice(m[0].length).trim()) {                          // an empty item: end the list
-            replaceText(box, lineStart, lineEnd, "", lineStart);
-            return;
-        }
-        var indent = m[1];
-        var marker = m[2] ? m[2] + " [ ] " : m[3] ? m[3] + " " : (parseInt(m[4], 10) + 1) + m[5] + " ";
-        var rest = text.slice(end, lineEnd).replace(/^[ \t]+/, "");
-        var insert = "\n" + indent + marker + rest;
-        replaceText(box, start, lineEnd, insert, start + 1 + indent.length + marker.length);
-    }
 
     // ---------- Checklist items edited in place (the rendered note) ----------
     // Click an item's text to edit it right there. Enter adds a new unchecked item below (splitting at the cursor)

@@ -346,6 +346,8 @@
             })();
         </script>
         <script src="{% static_version 'labs/launcher.js' %}"></script>
+        {# The shared Markdown editor (templates/_md_editor.html; Notes' notes.js uses it too) - before the app's script. #}
+        <script src="{% static_version 'js/md_editor.js' %}"></script>
         {# The current app's own script (apps_registry.App.script), then anything else a page adds. #}
         {% if app_script %}<script src="{% static_version app_script %}"></script>{% endif %}
         {% block app_scripts %}{% endblock %}

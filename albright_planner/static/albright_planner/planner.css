@@ -27,6 +27,10 @@ html.js .pl .pl-nojs { display: none; }
 .pl-label { display: block; font-size: 0.75rem; font-weight: 600; letter-spacing: .03em; color: var(--pl-muted); margin: 0 0 4px; }
 .pl-help { font-size: 0.75rem; color: var(--pl-muted); }
 .pl-error { color: var(--red); font-size: 0.8125rem; }
+.pl-error--banner { display: block; margin: 0 0 12px; padding: 10px 12px; font-size: 0.875rem; font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 10%, transparent); }
+.pl-field--notes.has-error textarea.pl-input { border-color: var(--red); }
 .pl-back { display: inline-block; margin-bottom: 10px; font-size: 0.875rem; }
 .pl-hint { color: var(--pl-muted); font-size: 0.8125rem; margin: 10px 0 0; }
 
@@ -47,6 +51,8 @@ html.js .pl .pl-nojs { display: none; }
   background: var(--surface); border: 1px solid var(--pl-line); border-radius: 10px;
 }
 .pl textarea.pl-input { min-height: 80px; resize: vertical; line-height: 1.5; }
+/* The notes box (the shared Markdown editor, style.css): 14 lines to start, growing to 70% of the screen. */
+.pl .md-editor textarea.pl-input { min-height: calc(14 * 1.5em + 20px); max-height: 70vh; overflow-y: auto; }
 .pl .pl-input::placeholder { color: var(--text-tertiary); opacity: 1; }
 .pl .pl-select, .pl select.pl-input {
   width: auto; padding-right: 30px; cursor: pointer;
