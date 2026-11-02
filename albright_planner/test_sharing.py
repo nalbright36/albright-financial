@@ -239,7 +239,7 @@ class PermissionTests(SharedBase):
         row = TaskChecklistItem.objects.create(task=item, text="Bread")
         page = self.client.get(url("edit", item.pk)).content.decode()
         self.assertIn("Bread", page)
-        self.assertNotIn('id="pl-cl-add"', page)
+        self.assertNotIn('id="pl-cl-edit"', page)
         for name, args, data in (("toggle", [item.pk], {"date": TODAY.isoformat()}),
                                  ("edit", [item.pk], {"title": "x"}),
                                  ("move", [item.pk], {"date": TODAY.isoformat(), "to": "2026-11-06"}),
@@ -256,13 +256,12 @@ class PermissionTests(SharedBase):
         self.assertEqual(list(item.checklist.values_list("text", "order")), [("Eggs", 0), ("Milk", 1)])
         row = item.checklist.first()
         self.client.post(url("checklist_toggle", item.pk, row.pk))
-        row.refresh_from_db()
-        self.assertTrue(row.done)
+        self.assertTrue(row.completions.filter(occurrence_date=item.date).exists())
         self.client.post(url("move", item.pk), json.dumps({"date": TODAY.isoformat(), "to": "2026-11-06"}),
                          content_type="application/json")
         item.refresh_from_db()
         self.assertEqual(item.date, d(6))
-        self.assertIn('id="pl-cl-add"', self.client.get(url("edit", item.pk)).content.decode())
+        self.assertIn('id="pl-cl-edit"', self.client.get(url("edit", item.pk)).content.decode())
 
     def test_only_the_owner_deletes_or_reshares(self):
         item = self.hers(permission="edit")

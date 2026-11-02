@@ -2,8 +2,9 @@
 
 Like Notes, these write straight to the Planner's own table. An item a bot creates belongs to the token's
 owner and is labeled with the bot's name (ScheduleItem.created_by / from_bot). schedule:read lists the
-occurrences in a date range (with whether each is checked off); schedule:write creates items and checks
-occurrences off (or back on) - only items the owner may edit. If the owner can't open the Planner
+occurrences in a date range (with whether each is checked off, and each one's checklist); schedule:write
+creates items (with a checklist) and checks occurrences and their subtasks off (or back on) - only items the
+owner may edit. If the owner can't open the Planner
 (Admin > Users), every call is a 403. Every call is in the Activity log (auth.bot_endpoint)."""
 from datetime import date, datetime, time, timedelta
 
@@ -161,7 +162,10 @@ def _occurrence_json(o):
             "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats,
             "one_at_a_time": o.item.one_at_a_time, "created_by": o.item.created_by,
             "owner": _person(o.item.owner), "mine": not getattr(o, "shared_in", False),
-            "done_by": _person(o.done_by) if getattr(o, "done_by", None) else None}
+            "done_by": _person(o.done_by) if getattr(o, "done_by", None) else None,
+            "checklist": [{"id": r.pk, "text": r.text, "done": r.checked,
+                           "done_by": _person(r.done_by) if r.checked and r.done_by else None}
+                          for r in getattr(o, "checklist", [])]}
 
 
 def _person(user):
@@ -180,6 +184,7 @@ def _item_json(request, item):
             "repeats": recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count) or None,
             "one_at_a_time": item.one_at_a_time, "repeat_from_completion": item.repeat_from_completion,
             "created_by": item.created_by,
+            "checklist": [{"id": r.pk, "text": r.text} for r in item.checklist.all()],
             "url": request.build_absolute_uri(reverse("albright_planner:edit", args=[item.pk]))}
 
 
@@ -196,7 +201,9 @@ def schedule_list(request, token):
     expand = request.GET.get("expand", "")
     if expand not in ("", "all"):
         raise ApiError(400, '"expand" must be "all" (or left out).', "rejected: bad expand")
-    rows = [_occurrence_json(o) for o in planner.occurrences(token.owner, start, end, expand=expand == "all")]
+    from albright_planner import checklist
+    occs = checklist.attach(planner.occurrences(token.owner, start, end, expand=expand == "all"))
+    rows = [_occurrence_json(o) for o in occs]
     return ({"start": start.isoformat(), "end": end.isoformat(), "occurrences": rows}, 200,
             f"listed {len(rows)} occurrences {start}..{end}" + (" (expand=all)" if expand else ""))
 
@@ -220,6 +227,14 @@ def schedule_create(request, token):
     if not isinstance(checkable, bool):
         raise ApiError(400, '"checkable" must be true or false.', "rejected: bad checkable")
     rule, until, count = _repeat(data, start)
+    subtasks = data.get("checklist", [])
+    if not isinstance(subtasks, list) or any(not isinstance(t, str) for t in subtasks):
+        raise ApiError(400, '"checklist" must be a list of strings.', "rejected: bad checklist")
+    if subtasks and kind != ScheduleItem.TASK:
+        raise ApiError(400, 'Only a task can have a "checklist".', "rejected: checklist on an event")
+    if len(subtasks) > 100 or any(len(t) > 200 for t in subtasks):
+        raise ApiError(400, 'A "checklist" can have at most 100 items of at most 200 characters.',
+                       "rejected: checklist too long")
     from_completion = data.get("repeat_from_completion", False)
     if not isinstance(from_completion, bool):
         raise ApiError(400, '"repeat_from_completion" must be true or false.', "rejected: bad repeat_from_completion")
@@ -231,7 +246,9 @@ def schedule_create(request, token):
         checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", 1000),
         recurrence=rule, recurrence_until=until, recurrence_count=count, repeat_from_completion=from_completion,
         created_by=token.name[:150], from_bot=True, bot_token=token)
+    from albright_planner.checklist import create_rows
     from albright_planner.planner import apply_default_shares
+    create_rows(item, subtasks)
     apply_default_shares(item)                       # shared as the owner chose by default
     return _item_json(request, item), 201, f"item #{item.pk}: {item.title[:80]}" + (f" ({rule})" if rule else "")
 
@@ -252,6 +269,42 @@ def _set_done(request, token, item_id, done):
         raise ApiError(400, f"Item {item_id} isn't scheduled on {occurrence}.", "rejected: not scheduled that day")
     return ({"item_id": item.pk, "occurrence_date": occurrence.isoformat(), "done": result}, 200,
             f"{'completed' if done else 'uncompleted'} item #{item.pk} on {occurrence}")
+
+
+def _set_subtask(request, token, item_id, row_id, done):
+    from albright_planner import checklist, planner, sources
+    from albright_planner.models import ScheduleItem
+    _require_planner_access(token)
+    item = ScheduleItem.objects.editable_by(token.owner).filter(pk=item_id, archived=False).first()
+    if item is None:
+        raise ApiError(404, f"No item {item_id} the owner can edit.", "rejected: item not found or not editable")
+    row = item.checklist.select_related("grocery_item").filter(pk=row_id).first()
+    if row is None:
+        raise ApiError(404, f"Item {item_id} has no checklist item {row_id}.", "rejected: no such checklist item")
+    if row.grocery_item_id and not sources.can_open(token.owner, "meals"):
+        raise ApiError(403, "That checklist item is a grocery list line - the owner can't open Meals.",
+                       "rejected: grocery row without Meals access")
+    data = json_body(request)
+    occurrence = _date(data.get("occurrence_date"), "occurrence_date", required=item.repeats) or item.date
+    if not planner.valid_occurrence(item, occurrence) or not row.applies_to(occurrence):
+        raise ApiError(400, f"Checklist item {row_id} isn't on item {item_id}'s {occurrence} occurrence.",
+                       "rejected: not on that occurrence")
+    checklist.set_checked(row, occurrence, done, token.owner)
+    rows = checklist.occurrence_rows(item, occurrence)
+    return ({"item_id": item.pk, "checklist_item_id": row.pk, "occurrence_date": occurrence.isoformat(),
+             "done": next(r.checked for r in rows if r.pk == row.pk), "progress": checklist.progress(rows)["label"],
+             "task_done": item.completions.filter(occurrence_date=occurrence).exists()}, 200,
+            f"{'ticked' if done else 'unticked'} item #{item.pk} subtask #{row.pk} on {occurrence}")
+
+
+@bot_endpoint("schedule:write", methods=("POST",))
+def schedule_subtask_complete(request, token, item_id, row_id):
+    return _set_subtask(request, token, item_id, row_id, True)
+
+
+@bot_endpoint("schedule:write", methods=("POST",))
+def schedule_subtask_uncomplete(request, token, item_id, row_id):
+    return _set_subtask(request, token, item_id, row_id, False)
 
 
 @bot_endpoint("schedule:write", methods=("POST",))

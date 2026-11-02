@@ -22,9 +22,11 @@ Links to the other apps:
     Only sources the user turned on add these (all are off by default), and
     one the user deleted is never added again (DeletedSourceItem).
   - from_bot / bot_token: added through the Bot API, labeled with the bot's name.
-  - checklist (TaskChecklistItem): a task's checklist, e.g. a grocery run made
-    from Meals' grocery list. A row linked to a grocery line has no "done" of
-    its own - it reads and writes GroceryItem.checked (checklist.py)."""
+  - checklist (TaskChecklistItem): a task's subtasks. Each occurrence has its
+    own ticks (ChecklistItemCompletion, per occurrence date), so every occurrence
+    of a repeating task starts with all of them open. A row linked to a grocery
+    line (a grocery run made from Meals' grocery list) has no ticks of its own -
+    it reads and writes GroceryItem.checked (checklist.py)."""
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
@@ -213,15 +215,18 @@ class PlannerSettings(models.Model):
 
 
 class TaskChecklistItem(models.Model):
-    """One row of a task's checklist. A row linked to a grocery line (grocery_item) is checked exactly when that
-    line is checked on the grocery list - its own `done` is ignored then (and only takes the line's last state if
-    the line is deleted). Rows keep their text, so a cleared (archived) grocery line still shows here."""
+    """One subtask of a task (the definition - whether it's ticked is per occurrence: ChecklistItemCompletion). A
+    row linked to a grocery line (grocery_item) is ticked exactly when that line is checked on the grocery list.
+    Rows keep their text, so a cleared (archived) grocery line still shows here.
+    starts_on / ends_on: the occurrences it belongs to (empty = from the start / still there). A repeating task's
+    checklist edits apply from its current occurrence on, so earlier occurrences keep the list they had."""
     task = models.ForeignKey(ScheduleItem, on_delete=models.CASCADE, related_name="checklist")
     order = models.PositiveIntegerField(default=0)
     text = models.CharField(max_length=200)
-    done = models.BooleanField(default=False)
     grocery_item = models.ForeignKey("albright_meals.GroceryItem", on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="checklist_rows")
+    starts_on = models.DateField(null=True, blank=True)
+    ends_on = models.DateField(null=True, blank=True)          # removed from this occurrence on
 
     class Meta:
         ordering = ["order", "pk"]
@@ -229,9 +234,29 @@ class TaskChecklistItem(models.Model):
     def __str__(self):
         return self.text
 
-    @property
-    def checked(self):
-        return self.grocery_item.checked if self.grocery_item_id else self.done
+    def applies_to(self, day):
+        return (self.starts_on is None or self.starts_on <= day) and (self.ends_on is None or day < self.ends_on)
+
+
+class ChecklistItemCompletion(models.Model):
+    """A subtask ticked on one occurrence of its task. `text` is the subtask as it read then, so the history stays
+    right after it's renamed or deleted (checklist_item is emptied then; task keeps the row with its task)."""
+    task = models.ForeignKey(ScheduleItem, on_delete=models.CASCADE, related_name="checklist_completions")
+    checklist_item = models.ForeignKey(TaskChecklistItem, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name="completions")
+    occurrence_date = models.DateField()
+    text = models.CharField(max_length=200)
+    done_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="+")
+    done_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["occurrence_date", "pk"]
+        constraints = [models.UniqueConstraint(fields=["checklist_item", "occurrence_date"],
+                                               name="planner_one_tick_per_subtask_occurrence")]
+
+    def __str__(self):
+        return f"{self.text} ({self.occurrence_date})"
 
 
 class DeletedSourceItem(models.Model):

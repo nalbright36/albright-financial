@@ -281,3 +281,17 @@ html.js .pl .pl-nojs { display: none; }
   background: var(--glass-bg-solid, var(--pl-card)); box-shadow: var(--shadow-md); }
 .pl-cl-add { margin: 0 0 8px; display: flex; gap: 6px; }
 .pl-cl-add .pl-input { flex: 1; min-width: 0; min-height: 40px; }
+.pl-cl__by:empty { display: none; }
+.pl-chip__cl { font-size: 0.625rem; color: var(--pl-muted); font-variant-numeric: tabular-nums; }
+
+/* The form's Checklist editor: one subtask per line, drag (the grip) or arrows to reorder, x to delete. */
+.pl-cl-edit__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pl-cl-edit__row { display: flex; align-items: center; gap: 4px; }
+.pl-cl-edit__row.is-dragging { opacity: .5; }
+.pl-cl-edit__grip { cursor: grab; color: var(--pl-muted); width: 16px; text-align: center; user-select: none; }
+.pl-cl-edit__text { flex: 1; min-width: 0; min-height: 40px; }
+.pl-cl-edit__btn { width: 32px; height: 40px; flex-shrink: 0; padding: 0; border: 1px solid var(--pl-line); border-radius: 8px;
+  background: var(--pl-card); color: var(--text-secondary); cursor: pointer; font: inherit; }
+.pl-cl-edit__btn:hover { color: var(--text-primary); border-color: var(--accent); }
+.pl-cl-edit__row:last-child .pl-cl-edit__btn { visibility: hidden; }       /* the empty "Add an item" line */
+@media (max-width: 480px) { .pl-cl-edit__btn[data-cl-move] { display: none; } }   /* phones: drag, or retype */

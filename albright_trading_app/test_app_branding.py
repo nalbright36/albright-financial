@@ -93,7 +93,8 @@ class HeaderTests(TestCase):
                                 'alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light">'
                                 '<span class="navbar__app-name">Planner</span>')
         self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)
-        logo = self.css.split("\n.navbar__logo {", 1)[1].split("}", 1)[0]
+        css = STYLE.read_text(encoding="utf-8")
+        logo = css.split("\n.navbar__logo {", 1)[1].split("}", 1)[0]
         for rule in ("height: 60px;", "width: auto;", "flex-shrink: 0;"):
             self.assertIn(rule, logo)
         self.assertNotIn("border-radius", logo)
@@ -101,8 +102,8 @@ class HeaderTests(TestCase):
                      ':root[data-theme="light"] .navbar__logo--on-dark { display: none; }',
                      ':root:not([data-theme]) .navbar__logo--on-light { display: block; }',
                      ".navbar__logo { height: 44px; }"):
-            self.assertIn(rule, self.css)
-        self.assertIn(".navbar__app-name { white-space: nowrap; }", self.css)
+            self.assertIn(rule, css)
+        self.assertIn(".navbar__app-name { white-space: nowrap; }", css)
         self.assertIn('<span class="navbar__app-name">Labs</span>', self.page("labs:hub"))
 
     def test_login_page_defaults_to_trading(self, _outlook):

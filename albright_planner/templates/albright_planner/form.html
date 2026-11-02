@@ -64,6 +64,17 @@ repeating item asks which occurrences the change applies to.
             <label class="pl-toggle" id="pl-checkable">{{ form.checkable }} {{ form.checkable.label }}</label>
             <div class="pl-field">{{ form.notes.label_tag }}{{ form.notes }}</div>
 
+            {# Checklist (tasks): one subtask per line - Enter adds the next, Enter on an empty one finishes; drag or the arrows to reorder (planner.js). Clearing one removes it. #}
+            {% if not item or can_edit %}<div class="pl-field pl-cl-edit" id="pl-cl-edit" data-kind-only="task">
+                <span class="pl-label" id="pl-cl-edit-h">Checklist</span>
+                <input type="hidden" name="cl_section" value="1">
+                <ol class="pl-cl-edit__rows" id="pl-cl-edit-rows" aria-labelledby="pl-cl-edit-h">
+                    {% for row in checklist_edit %}{% include "albright_planner/_checklist_edit_row.html" %}{% endfor %}
+                    {% include "albright_planner/_checklist_edit_row.html" with row=None %}
+                </ol>
+                <span class="pl-help">One item per line. {% if item.repeats %}Changes apply from {% if checklist_from %}{{ checklist_from|date:"D M j" }}{% else %}this occurrence{% endif %} on &ndash; earlier occurrences keep their own list and ticks.{% endif %}</span>
+            </div>{% endif %}
+
             {% if form.scope %}
             <div class="pl-field pl-scope" id="pl-scope-field">
                 <span class="pl-label">{{ form.scope.label }}</span>
@@ -92,17 +103,10 @@ repeating item asks which occurrences the change applies to.
 
     {% if item %}{% if checklist or can_edit and item.kind == "task" %}
     <section class="pl-section" id="checklist" aria-labelledby="pl-cl-h">
-        <h2 class="pl-section__title" id="pl-cl-h">Checklist {% if checklist_progress %}<span class="pl-muted pl-small" id="pl-cl-progress">{{ checklist_progress.label }}</span>{% endif %}</h2>
-        {% if checklist %}<ul class="pl-cl__rows pl-cl__rows--full">{% for row in checklist %}{% if can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path can_toggle=True %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path can_toggle=False %}{% endif %}{% endfor %}</ul>{% endif %}
-        {% if can_edit %}
-        <form method="post" action="{% url 'albright_planner:checklist_add' item.pk %}" class="pl-inline pl-cl-add" id="pl-cl-add">{% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <label for="pl-cl-text" class="visually-hidden">Add to the checklist</label>
-            <input type="text" name="text" id="pl-cl-text" class="pl-input" maxlength="200" placeholder="Add to the checklist" required>
-            <button type="submit" class="pl-btn">Add</button>
-        </form>
-        {% endif %}
-        <p class="pl-muted pl-small">{% if checklist.0.grocery_item_id %}These are lines on the Meals grocery list: checking one here checks it there, and the other way round. {% endif %}{% if checklist and not item.repeats %}The task checks itself off when every item is checked (Planner settings).{% endif %}</p>
+        <h2 class="pl-section__title" id="pl-cl-h">{% if item.repeats %}This occurrence&rsquo;s checklist{% else %}Checklist{% endif %} {% if checklist_progress %}<span class="pl-muted pl-small" id="pl-cl-progress" title="{{ checklist_progress.title }}" data-cl-progress>{{ checklist_progress.label }}</span>{% endif %}</h2>
+        {% if checklist %}<ul class="pl-cl__rows pl-cl__rows--full" data-cl-list>{% for row in checklist %}{% if can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=True %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=False %}{% endif %}{% endfor %}</ul>
+        {% else %}<p class="pl-muted pl-small">No checklist{% if item.repeats %} on this occurrence{% endif %}{% if can_edit %} &ndash; add items under Checklist above{% endif %}.</p>{% endif %}
+        <p class="pl-muted pl-small">{% if checklist.0.grocery_item_id %}These are lines on the Meals grocery list: checking one here checks it there, and the other way round. {% endif %}{% if checklist %}{% if item.repeats %}Ticks are for {{ occurrence|date:"D M j" }} only &ndash; every occurrence starts with all items open. {% endif %}The task checks itself off when every item is checked (Planner settings).{% endif %}</p>
     </section>
     {% endif %}{% endif %}
 

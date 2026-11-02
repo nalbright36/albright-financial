@@ -1,6 +1,6 @@
 """Grocery lines in task checklists (checklist.py): checking a line anywhere - the grocery list, a task, the Bot
 API - re-checks whether each task it's in is now complete (or should reopen). Deleting a line keeps its last
-checked state on the rows that listed it, so the task's history stays right."""
+checked state as a tick on the rows that listed it, so the task's history stays right."""
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
@@ -15,9 +15,9 @@ def grocery_saved(sender, instance, raw=False, **kwargs):
     if raw:
         return
     for row in TaskChecklistItem.objects.filter(grocery_item=instance).select_related("task__owner"):
-        checklist.reevaluate(row.task)
+        checklist.reevaluate(row.task, checklist.occurrence_for_groceries(row.task), instance.checked_by)
 
 
 @receiver(pre_delete, sender=GroceryItem, dispatch_uid="planner_grocery_deleted")
 def grocery_deleted(sender, instance, **kwargs):
-    TaskChecklistItem.objects.filter(grocery_item=instance).update(done=instance.checked)
+    checklist.keep_grocery_tick(instance)

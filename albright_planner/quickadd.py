@@ -11,7 +11,10 @@ daily, every weekday / weekdays, every <weekday(s)> or 2+ weekdays in a row,
 every week, every other week, every N weeks, every month (on the 1st),
 monthly, on the 2nd Tuesday of every month, every year / yearly / annually;
 "until <date>" and "N times". Whatever isn't understood stays in the title.
-Quick-added items are tasks (an event can be picked in the full form)."""
+Quick-added items are tasks (an event can be picked in the full form).
+
+A checklist: "Pack for camping Fri: tent; stove; lantern" -> the task "Pack for camping" (Friday) with those
+three subtasks (split_checklist - the first ": " with at least one ";" after it)."""
 import calendar
 import re
 from datetime import date, time, timedelta
@@ -28,6 +31,16 @@ MONTHS.update({m.lower(): i for i, m in enumerate(calendar.month_name) if m})
 MONTH_WORD = r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
 ORDINAL_WORDS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "last": -1}
 TIME = r"(?:(?P<{p}h>\d{{1,2}})(?::(?P<{p}m>\d{{2}}))?\s*(?P<{p}ap>am|pm|a\.m\.|p\.m\.)?|(?P<{p}word>noon|midnight))"
+
+
+def split_checklist(text):
+    """"Task name: item one; item two" -> ("Task name", ["item one", "item two"]); anything else -> (text, [])."""
+    match = re.search(r":\s", text)
+    if not match or ";" not in text[match.end():]:
+        return text, []
+    head = text[:match.start()].strip()
+    items = [i.strip() for i in text[match.end():].split(";") if i.strip()]
+    return (head, items) if head and items else (text, [])
 
 
 def _day_index(word):

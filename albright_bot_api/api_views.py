@@ -282,7 +282,8 @@ GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD&expand=all  scope: schedule:read
   "title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
   to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
   "created_by", "owner" (whose item - first name), "mine" (false for an item someone shared with the owner),
-  "done_by" (who checked it off - either person, for a shared item - or null), "one_at_a_time"}]}.
+  "done_by" (who checked it off - either person, for a shared item - or null), "one_at_a_time", "checklist":
+  [{"id", "text", "done", "done_by"}] (that occurrence's subtasks - each occurrence starts with all open)}]}.
 
 POST schedule                                          scope: schedule:write
   Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
@@ -297,12 +298,13 @@ POST schedule                                          scope: schedule:write
     BYMONTH, BYSETPOS, WKST, UNTIL, COUNT - e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR".
   End a repeat with "until": YYYY-MM-DD or "count": 1-1000 (or UNTIL/COUNT in the rrule) - not both.
   "repeat_from_completion": bool (optional, a repeating task with no end only) - see ONE AT A TIME.
+  "checklist": ["item", ...] (optional, tasks only - at most 100 items of <=200 characters): its subtasks.
   Example: {"title": "Gym", "date": "2026-11-02", "start_time": "06:00", "repeat": "weekly",
   "days": ["MO", "WE", "FR"]}
   The item belongs to the owner and shows "by <your token's name>"; it's shared the way the owner shares new
   items by default (Planner "Share with" > "Remember as my default"). Returns 201 {"id", "title", "kind",
   "date", "start_time", "end_time", "checkable", "notes", "rrule", "until", "count", "repeats" (plain
-  English), "one_at_a_time", "repeat_from_completion", "created_by", "url"}.
+  English), "one_at_a_time", "repeat_from_completion", "created_by", "checklist": [{"id", "text"}], "url"}.
 
 POST schedule/<id>/complete                            scope: schedule:write
 POST schedule/<id>/uncomplete                          scope: schedule:write
@@ -311,6 +313,14 @@ POST schedule/<id>/uncomplete                          scope: schedule:write
   (anything else is a 404 or 400). For a one-at-a-time task, completing its current occurrence makes the next
   one appear (see ONE AT A TIME) and un-completing puts it back. Returns {"item_id", "occurrence_date",
   "done"}.
+
+POST schedule/<id>/checklist/<item_id>/complete        scope: schedule:write
+POST schedule/<id>/checklist/<item_id>/uncomplete      scope: schedule:write
+  Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item). Ticks (or unticks) one subtask
+  ("checklist" ids from GET schedule) on THAT occurrence only. When every subtask of the occurrence is ticked
+  the task checks itself off (and unticking one reopens it), if the owner has "Complete task when all items
+  are checked" on. A grocery-list subtask checks the line on the Meals grocery list (the owner needs Meals).
+  Returns {"item_id", "checklist_item_id", "occurrence_date", "done", "progress" ("2/5"), "task_done"}.
 """
 
 

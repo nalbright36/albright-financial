@@ -51,4 +51,8 @@ api_urlpatterns = [
     path("schedule", schedule_api.schedule_collection, name="schedule"),
     path("schedule/<int:item_id>/complete", schedule_api.schedule_complete, name="schedule_complete"),
     path("schedule/<int:item_id>/uncomplete", schedule_api.schedule_uncomplete, name="schedule_uncomplete"),
+    path("schedule/<int:item_id>/checklist/<int:row_id>/complete", schedule_api.schedule_subtask_complete,
+         name="schedule_subtask_complete"),
+    path("schedule/<int:item_id>/checklist/<int:row_id>/uncomplete", schedule_api.schedule_subtask_uncomplete,
+         name="schedule_subtask_uncomplete"),
 ]

@@ -25,7 +25,7 @@ from django.views.decorators.http import require_POST
 
 from . import checklist, planner, quickadd, recurrence, sources
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
-from .models import ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
+from .models import ItemShare, PlannerSettings, ScheduleItem
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -196,7 +196,7 @@ def month_view(request):
     grid_start = planner.week_start(first)
     last = _add_months(first, 1) - timedelta(days=1)
     grid_end = planner.week_start(last) + timedelta(days=6)
-    occs = planner.occurrences(request.user, grid_start, grid_end, **_filters(request))
+    occs = checklist.attach(planner.occurrences(request.user, grid_start, grid_end, **_filters(request)))
     meals = sources.meals(request.user, grid_start, grid_end)
     context = _frame(request, "month", day, _add_months(first, -1), _add_months(first, 1), f"{first:%B %Y}")
     weeks, d = [], grid_start
@@ -223,8 +223,12 @@ def quick_add(request):
     if not text:
         messages.error(request, "Type what to add, e.g. “Call dentist tomorrow 3pm”.")
         return redirect(_next(request))
+    text, subtasks = quickadd.split_checklist(text)
     fields = quickadd.parse(text, planner.today())
+    if subtasks:
+        fields.update(kind=ScheduleItem.TASK, checkable=True)
     item = ScheduleItem.objects.create(owner=request.user, created_by=request.user.get_username(), **fields)
+    checklist.create_rows(item, subtasks)
     # The chip's choices when it was on the page (share_section), else the default share.
     planner.set_shares(item, planner.posted_shares(request.POST, request.user) if request.POST.get("share_section")
                        else planner.default_shares(request.user))
@@ -232,7 +236,8 @@ def quick_add(request):
         f"{item.date:%a %b} {item.date.day}"
     if item.start_time:
         when += " at " + item.start_time.strftime("%I:%M %p").lstrip("0")
-    messages.success(request, f"Added “{item.title}” – {when}.")
+    messages.success(request, f"Added “{item.title}” – {when}" + (f", with {len(subtasks)} checklist items." if subtasks
+                                                                    else "."))
     return redirect(_next(request))
 
 
@@ -247,6 +252,8 @@ def new_item(request):
         for name, value in changes.items():
             setattr(item, name, value)
         item.save()
+        if item.kind == ScheduleItem.TASK:
+            checklist.create_rows(item, [text for _pk, text in checklist.posted_rows(request.POST)])
         _save_shares(request, item)
         messages.success(request, f"Added “{item.title}”.")
         return redirect(_next(request))
@@ -254,7 +261,18 @@ def new_item(request):
         else planner.default_shares(request.user)
     return render(request, "albright_planner/form.html", {"form": form, "item": None, "next": _next(request),
                                                           "share_rows": planner.share_rows(request.user, chosen),
-                                                          "permissions": ItemShare.PERMISSIONS})
+                                                          "permissions": ItemShare.PERMISSIONS,
+                                                          "checklist_edit": _editor_rows(request, [])})
+
+
+def _editor_rows(request, rows):
+    """The form's Checklist section: what was posted (a form with errors), else the subtasks - [{"pk", "text",
+    "grocery"}]."""
+    if request.method == "POST" and request.POST.get("cl_section"):
+        by_pk = {r.pk: r for r in rows}
+        return [{"pk": pk or "", "text": text, "grocery": bool(pk in by_pk and by_pk[pk].grocery_item_id)}
+                for pk, text in checklist.posted_rows(request.POST) if text.strip() or pk in by_pk]
+    return [{"pk": r.pk, "text": r.text, "grocery": bool(r.grocery_item_id)} for r in rows]
 
 
 def _save_shares(request, *items):
@@ -284,6 +302,8 @@ def edit_item(request, pk):
         if form.is_valid():
             scope = form.cleaned_data.get("scope") or planner.ALL
             changed = planner.change(item, occurrence, scope, form.changes())
+            if request.POST.get("cl_section") and changed.kind == ScheduleItem.TASK:
+                checklist.save_rows(changed, checklist.posted_rows(request.POST))
             if is_owner:
                 _save_shares(request, item, changed if changed is not None and changed.pk != item.pk else None)
             messages.success(request, "Saved." if not item.repeats else
@@ -294,9 +314,11 @@ def edit_item(request, pk):
     taken = {s.user_id for s in shares} | {item.owner_id}
     completion = item.completions.select_related("completed_by").filter(occurrence_date=occurrence).first()
     can_note = can_edit and sources.can_open(request.user, "notes")
-    rows = list(item.checklist.select_related("grocery_item"))
+    rows = checklist.occurrence_rows(item, occurrence)
     return render(request, "albright_planner/form.html", {
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
+        "checklist_edit": _editor_rows(request, checklist.current_rows(item)),
+        "checklist_from": checklist.edit_from(item), "show_done_by": is_owner and bool(shares) or not is_owner,
         "can_check_groceries": sources.can_open(request.user, "meals"),
         "linked_note": planner.linked_note(item, request.user), "can_note": can_note,
         "note_choices": planner.attachable_notes(request.user) if can_note else [],
@@ -320,32 +342,46 @@ def toggle(request, pk):
     """Check off (or undo) one occurrence: POST date=<the occurrence's scheduled date>."""
     item = _editable(request, pk)
     occurrence = _day(request.POST.get("date"))
-    done = planner.toggle(item, occurrence, request.user) if occurrence else None
+    if occurrence and request.POST.get("all_subtasks") == "1" and planner.valid_occurrence(item, occurrence) \
+            and not item.completions.filter(occurrence_date=occurrence).exists():
+        # "Mark all subtasks done too?" - Yes (a grocery row needs Meals, as checking it anywhere does)
+        if sources.can_open(request.user, "meals") or not item.checklist.filter(grocery_item__isnull=False).exists():
+            checklist.mark_all(item, occurrence, request.user)
+    done = planner.toggle(item, occurrence, request.user, done=True if request.POST.get("all_subtasks") == "1"
+                          else None) if occurrence else None
     if done is None:
         if _wants_json(request):
             return JsonResponse({"ok": False, "error": "Not scheduled that day."}, status=400)
         messages.error(request, "That item isn't scheduled that day.")
         return redirect(_next(request))
     if _wants_json(request):
-        return JsonResponse({"ok": True, "done": done})
+        rows = checklist.occurrence_rows(item, occurrence)
+        return JsonResponse({"ok": True, "done": done, "progress": checklist.progress(rows)["label"] if rows else ""})
     return redirect(_next(request))
 
 
 @login_required
 @require_POST
 def checklist_toggle(request, pk, row_id):
-    """Check or uncheck one checklist row (task editors). A grocery row checks the line on the grocery list itself,
-    so it also needs Meals."""
+    """Tick or untick one subtask on one occurrence (task editors): POST date=<the occurrence's scheduled date>
+    (default: a one-off task's date / a one-at-a-time task's current one). A grocery row checks the line on the
+    grocery list itself, so it also needs Meals."""
     item = _editable(request, pk)
     row = get_object_or_404(item.checklist.select_related("grocery_item"), pk=row_id)
-    if row.grocery_item_id and not sources.can_open(request.user, "meals"):
+    occurrence = _day(request.POST.get("date")) or planner.current_or_first(item)
+    if (row.grocery_item_id and not sources.can_open(request.user, "meals")) or not row.applies_to(occurrence) \
+            or not planner.valid_occurrence(item, occurrence):
         raise Http404
-    checklist.set_checked(row, not row.checked, request.user)
-    row.refresh_from_db()
+    before = {r.pk: r.checked for r in checklist.occurrence_rows(item, occurrence)}
+    checklist.set_checked(row, occurrence, not before.get(row.pk), request.user)
     if _wants_json(request):
-        rows = list(item.checklist.select_related("grocery_item"))
-        return JsonResponse({"ok": True, "checked": row.checked, "progress": checklist.progress(rows)["label"],
-                             "task_done": item.completions.filter(occurrence_date=item.date).exists()})
+        rows = checklist.occurrence_rows(item, occurrence)
+        now = next(r for r in rows if r.pk == row.pk)
+        shared = item.owner_id != request.user.pk or item.shares.exists()      # "Done by <name>" only then
+        return JsonResponse({"ok": True, "checked": now.checked, "progress": checklist.progress(rows)["label"],
+                             "open": checklist.progress(rows)["open"],
+                             "done_by": planner.person(now.done_by) if now.checked and now.done_by and shared else "",
+                             "task_done": item.completions.filter(occurrence_date=occurrence).exists()})
     return redirect(_next(request))
 
 
@@ -354,11 +390,7 @@ def checklist_toggle(request, pk, row_id):
 def checklist_add(request, pk):
     """Add a row to a task's checklist (task editors - Edit sharing included)."""
     item = _editable(request, pk)
-    text = " ".join((request.POST.get("text") or "").split())[:200]
-    if text:
-        last = item.checklist.order_by("-order").values_list("order", flat=True).first()
-        TaskChecklistItem.objects.create(task=item, text=text, order=(last + 1) if last is not None else 0)
-        checklist.reevaluate(item)           # a new unchecked row reopens a finished task
+    checklist.add(item, request.POST.get("text") or "")    # a new open row reopens a finished occurrence
     return redirect(_next(request))
 
 

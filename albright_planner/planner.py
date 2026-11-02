@@ -65,6 +65,7 @@ def _mark_sharing(occ, user):
     """shared_in: someone else's item (shown with their initial); shared_out: mine, shared with others."""
     occ.shared_in = occ.item.owner_id != user.pk
     occ.shared_out = not occ.shared_in and bool(occ.item.shares.all())
+    occ.shared = occ.shared_in or occ.shared_out          # shows "Done by <name>" on it and its subtasks
 
 
 def occurrences(user, start, end, kind="", show_done=True, shared_only=False, who=EVERYONE, expand=False):
@@ -224,8 +225,9 @@ def open_tasks_today(user):
 
 def today_panel(user):
     """Home's Today panel: today's tasks (checkable) and events, and how many tasks are overdue."""
+    from . import checklist
     day = today()
-    occs = occurrences(user, day, day)
+    occs = checklist.attach(occurrences(user, day, day))
     return {"date": day, "tasks": [o for o in occs if o.item.kind == ScheduleItem.TASK],
             "events": [o for o in occs if o.item.kind == ScheduleItem.EVENT], "overdue": len(overdue(user, day))}
 
@@ -342,6 +344,8 @@ def change(item, occurrence_date, scope, changes):
                 list(item.exceptions.filter(occurrence_date__gte=occurrence_date)):
             row.item, row.occurrence_date = new, row.occurrence_date + delta
             row.save()
+        from . import checklist
+        checklist.move_with_series(item, new, occurrence_date, delta)
         return new
 
     # ALL (or "following" from the first occurrence): the whole series, its start moved by the same amount.
@@ -356,6 +360,9 @@ def change(item, occurrence_date, scope, changes):
         for row in list(item.completions.all()) + list(item.exceptions.all()):
             row.occurrence_date = row.occurrence_date + delta
             row.save()
+        if item.recurrence:
+            from . import checklist
+            checklist.shift(item, delta)
     return item
 
 

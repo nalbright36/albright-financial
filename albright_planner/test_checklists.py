@@ -1,5 +1,5 @@
 """Planner tasks made from Meals' grocery list: "Create task" from the picked lines, a checklist whose grocery rows
-ARE the lines' checked boxes (checking either side shows on the other), "3 of 7 bought" in Day / Week / the task
+ARE the lines' checked boxes (checking either side shows on the other), "3/7" in Day / Week / the task
 page, auto-complete and reopen (with the setting), "In task" chips, cleared lines still in the checklist, and who
 may check what."""
 from datetime import time
@@ -11,7 +11,7 @@ from albright_labs.testing import with_apps
 from albright_meals.models import GroceryItem
 
 from . import checklist
-from .models import ItemCompletion, ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
+from .models import ChecklistItemCompletion, ItemCompletion, ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
 from .tests import PASSWORD, TODAY, Base, url
 
 
@@ -84,12 +84,12 @@ class BothWaysTests(Fixtures):
         self.assertEqual(self.milk.checked_by, self.me)
         html = self.client.get(reverse("albright_meals:grocery_list")).json()["html"]
         self.assertIn('class="meals-item is-checked" data-item="%d"' % self.milk.pk, html)
-        self.assertFalse(TaskChecklistItem.objects.get(pk=self.rows[self.milk.pk].pk).done)   # nothing stored on the row
+        self.assertFalse(ChecklistItemCompletion.objects.exists())       # nothing stored on the row: it's the line
 
     def test_checking_on_the_grocery_list_shows_in_the_task(self):
         self.toggle_line(self.eggs)
         row = TaskChecklistItem.objects.select_related("grocery_item").get(pk=self.rows[self.eggs.pk].pk)
-        self.assertTrue(row.checked)
+        self.assertTrue({r.pk: r.checked for r in checklist.occurrence_rows(self.task_obj, TODAY)}[row.pk])
         page = self.client.get(url("edit", self.task_obj.pk)).content.decode()
         self.assertIn("1 of 3 bought", page)
         eggs_row = page.split(f'data-row="{row.pk}"', 1)[1].split("</li>", 1)[0]
@@ -132,7 +132,7 @@ class BothWaysTests(Fixtures):
         self.assertIn("1 of 3 bought", li)
         self.assertNotIn("pl-cl__rows", li)                                 # Week: just the count
         page = self.client.get(url("edit", self.task_obj.pk)).content.decode()
-        self.assertIn('id="pl-cl-progress">1 of 3 bought', page)
+        self.assertIn('id="pl-cl-progress" title="1 of 3 bought" data-cl-progress>1/3', page)
 
     def test_in_task_chip_on_the_grocery_list(self):
         html = self.client.get(reverse("albright_meals:grocery_list")).json()["html"]
@@ -161,7 +161,7 @@ class ArchiveTests(Fixtures):
         self.client.post(reverse("albright_meals:grocery_delete", args=[self.milk.pk]))
         row = TaskChecklistItem.objects.get(text="1 gal milk")
         self.assertIsNone(row.grocery_item_id)
-        self.assertTrue(row.done and row.checked)
+        self.assertTrue({r.pk: r.checked for r in checklist.occurrence_rows(row.task, TODAY)}[row.pk])   # a tick now
 
     def test_merging_a_duplicate_moves_its_checklist_row(self):
         from albright_meals import groceries
@@ -212,10 +212,12 @@ class PermissionTests(Fixtures):
 class ProgressTests(Fixtures):
     def test_progress_wording(self):
         task = ScheduleItem.objects.create(owner=self.me, title="Pack", date=TODAY)
-        rows = [TaskChecklistItem.objects.create(task=task, text="Tent", done=True),
+        rows = [TaskChecklistItem.objects.create(task=task, text="Tent"),
                 TaskChecklistItem.objects.create(task=task, text="Stove")]
-        self.assertEqual(checklist.progress(rows)["label"], "1 of 2 done")
-        checklist.set_checked(rows[1], True, self.me)
+        checklist.set_checked(rows[0], TODAY, True, self.me)
+        shown = checklist.progress(checklist.occurrence_rows(task, TODAY))
+        self.assertEqual((shown["label"], shown["title"]), ("1/2", "1 of 2 done"))
+        checklist.set_checked(rows[1], TODAY, True, self.me)
         self.assertTrue(self.done(task))
-        checklist.set_checked(rows[0], False, self.me)
+        checklist.set_checked(rows[0], TODAY, False, self.me)
         self.assertFalse(self.done(task))
