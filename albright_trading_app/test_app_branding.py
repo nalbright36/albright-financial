@@ -88,12 +88,20 @@ class HeaderTests(TestCase):
     def test_logo_mark_and_name(self, _outlook):
         content = self.page("albright_planner:day")
         brand = content.split('class="navbar__brand">', 1)[1].split("</a>", 1)[0]
-        self.assertEqual(brand, '<img src="/static/icons/icon-192.png" alt="Albright" width="30" height="30" '
-                                'class="navbar__logo"><span class="navbar__app-name">Planner</span>')
+        self.assertEqual(brand, '<img src="/static/icons/logo-mark-white.png" alt="Albright" width="121" height="60" '
+                                'class="navbar__logo navbar__logo--on-dark"><img src="/static/icons/logo-mark-dark.png" '
+                                'alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light">'
+                                '<span class="navbar__app-name">Planner</span>')
         self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)
         logo = self.css.split("\n.navbar__logo {", 1)[1].split("}", 1)[0]
-        for rule in ("width: 30px;", "height: 30px;", "border-radius: 8px;", "flex-shrink: 0;"):
+        for rule in ("height: 60px;", "width: auto;", "flex-shrink: 0;"):
             self.assertIn(rule, logo)
+        self.assertNotIn("border-radius", logo)
+        for rule in (':root[data-theme="light"] .navbar__logo--on-light { display: block; }',
+                     ':root[data-theme="light"] .navbar__logo--on-dark { display: none; }',
+                     ':root:not([data-theme]) .navbar__logo--on-light { display: block; }',
+                     ".navbar__logo { height: 44px; }"):
+            self.assertIn(rule, self.css)
         self.assertIn(".navbar__app-name { white-space: nowrap; }", self.css)
         self.assertIn('<span class="navbar__app-name">Labs</span>', self.page("labs:hub"))
 

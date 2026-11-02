@@ -437,7 +437,7 @@ a:hover { color: var(--accent-hover); }
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-2) var(--space-6);   /* a little less above and below: the 60px logo sets the height */
   min-height: 56px;
 }
 
@@ -452,14 +452,24 @@ a:hover { color: var(--accent-hover); }
   letter-spacing: -0.01em;
   color: var(--text-primary);
 }
-/* The logo mark (static/icons/icon-192.png) - the same in every app and theme. */
+/* The logo mark, transparent (484x240): white on the dark theme, dark on the light theme. Both are in
+   the brand link; the theme shows one (display: none also hides the other from screen readers). With
+   no data-theme yet, the system setting decides - dark is the site's default. */
 .navbar__logo {
   display: block;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  height: 60px;
+  width: auto;
   flex-shrink: 0;
 }
+.navbar__logo--on-light { display: none; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .navbar__logo--on-light { display: block; }
+  :root:not([data-theme]) .navbar__logo--on-dark { display: none; }
+}
+:root[data-theme="light"] .navbar__logo--on-light { display: block; }
+:root[data-theme="light"] .navbar__logo--on-dark { display: none; }
+:root[data-theme="dark"] .navbar__logo--on-light { display: none; }
+:root[data-theme="dark"] .navbar__logo--on-dark { display: block; }
 .navbar__app-name { white-space: nowrap; }
 
 .navbar__links {
@@ -1161,7 +1171,8 @@ tr.scanner-detail td {
 
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
-  .navbar__main-row { padding: var(--space-3) var(--space-4); }
+  .navbar__main-row { padding: var(--space-2) var(--space-4); }
+  .navbar__logo { height: 44px; }
   /* Phones: always collapsed (index.html's fit check) - a hamburger, not "Menu". */
   .navbar__toggle { padding: 4px 6px; border-color: transparent; background: none; }
   .navbar__toggle-bars { display: flex; }
