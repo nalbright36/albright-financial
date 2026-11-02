@@ -104,12 +104,14 @@ def _date_text(day, today=None):
     return f"{day:%b} {day.day}" + (f", {day.year}" if day.year != today.year else "")
 
 
-def summary(rule, start, until=None, count=None, today=None):
-    """ "Every Mon, Wed, Fri until Dec 31" - or "" for a one-off."""
+def summary(rule, start, until=None, count=None, today=None, long_days=False):
+    """ "Every Mon, Wed, Fri until Dec 31" - or "" for a one-off. long_days: "Every Monday, Wednesday and Friday"
+    (the view panel's plain words)."""
     if not rule:
         return ""
     d = describe(rule)
-    days = ", ".join(DAY_NAMES[WEEKDAYS.index(x)] for x in d["days"] if x in WEEKDAYS)
+    names = [(LONG_DAY_NAMES if long_days else DAY_NAMES)[WEEKDAYS.index(x)] for x in d["days"] if x in WEEKDAYS]
+    days = ", ".join(names[:-1]) + " and " + names[-1] if long_days and len(names) > 1 else ", ".join(names)
     text = {
         "daily": "Every day",
         "every_n_days": f"Every {d['interval']} days",

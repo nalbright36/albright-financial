@@ -73,6 +73,12 @@ def _owned(request, pk):
     return get_object_or_404(ScheduleItem, pk=pk, owner=request.user)
 
 
+def _view_url(item, day, back=""):
+    """The item's view panel for one occurrence: /planner/item/<id>/?date=YYYY-MM-DD[&next=...]."""
+    params = {"date": day.isoformat(), **({"next": back} if back else {})}
+    return reverse("albright_planner:item", args=[item.pk]) + "?" + urlencode(params)
+
+
 # ---------------------------------------------------------------------------
 # Day / Week / Month
 # ---------------------------------------------------------------------------
@@ -289,6 +295,58 @@ def _save_shares(request, *items):
 
 
 @login_required
+@never_cache
+def view_item(request, pk):
+    """An item's view panel for one occurrence (?date=, default its current / first one): what it is at a glance -
+    check it off and tick its checklist here, Edit opens the form. planner.js opens it in a dialog over the
+    calendar (?panel=1: just the panel); the page itself is for direct links and no JavaScript."""
+    item = _visible(request, pk)
+    occurrence = _day(request.GET.get("date"))
+    if not item.repeats:
+        occurrence = item.date
+    elif occurrence is None or not planner.valid_occurrence(item, occurrence):
+        occurrence = planner.current_or_first(item)
+    back = _next(request)
+    occ = planner.occurrence_for(item, occurrence, request.user)
+    can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
+    rows = checklist.occurrence_rows(item, occurrence)
+    shared_with = [s.user for s in item.shares.select_related("user")] if is_owner else []
+    can_skip = item.repeats and can_edit
+    can_delete = is_owner and (can_edit or item.locked)
+    template = "albright_planner/_view_panel.html" if request.GET.get("panel") == "1" else "albright_planner/item.html"
+    return render(request, template, {
+        "item": item, "o": occ, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
+        "today": planner.today(),
+        "back": back, "self_url": _view_url(item, occurrence, back),
+        "edit_url": reverse("albright_planner:edit", args=[item.pk]) + "?" + urlencode(
+            {"date": occurrence.isoformat(), "next": back, "then": "view"}) if can_edit else "",
+        "repeat_text": planner.plain_repeat(item), "shared_with": shared_with,
+        "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
+        "can_check_groceries": sources.can_open(request.user, "meals"),
+        "linked_note": planner.linked_note(item, request.user),
+        "can_skip": can_skip, "can_move": can_edit, "can_delete": can_delete,
+        "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
+    })
+
+
+def _after_edit(request, item, changes, scope, occurrence):
+    """Where saving the form goes: back to the view panel it was opened from (then=view: the panel's page;
+    then=panel: the calendar with the panel open over it - planner.js reads #pl-view=<id>-<date>), else `next`."""
+    then = request.POST.get("then") or request.GET.get("then")
+    if then not in ("view", "panel"):
+        return _next(request)
+    if not item.repeats:
+        day = item.date
+    else:
+        day = occurrence if scope == planner.THIS else (changes.get("date") or occurrence)
+        if not planner.valid_occurrence(item, day):
+            day = planner.current_or_first(item)
+    if then == "panel":
+        return _next(request) + f"#pl-view={item.pk}-{day.isoformat()}"
+    return _view_url(item, day, _next(request))
+
+
+@login_required
 def edit_item(request, pk):
     item = _visible(request, pk)
     occurrence = _day(request.GET.get("date") or request.POST.get("occurrence"))
@@ -301,7 +359,8 @@ def edit_item(request, pk):
             raise Http404
         if form.is_valid():
             scope = form.cleaned_data.get("scope") or planner.ALL
-            changed = planner.change(item, occurrence, scope, form.changes())
+            changes = form.changes()
+            changed = planner.change(item, occurrence, scope, changes)
             if request.POST.get("cl_section") and changed.kind == ScheduleItem.TASK:
                 checklist.save_rows(changed, checklist.posted_rows(request.POST))
             if is_owner:
@@ -309,7 +368,7 @@ def edit_item(request, pk):
             messages.success(request, "Saved." if not item.repeats else
                              {"this": "Saved this occurrence.", "following": "Saved this and the following occurrences.",
                               "all": "Saved every occurrence."}[scope])
-            return redirect(_next(request))
+            return redirect(_after_edit(request, changed, changes, scope, occurrence))
     shares = list(item.shares.select_related("user")) if is_owner else []
     taken = {s.user_id for s in shares} | {item.owner_id}
     completion = item.completions.select_related("completed_by").filter(occurrence_date=occurrence).first()
@@ -328,12 +387,22 @@ def edit_item(request, pk):
         "repeat_text": planner.repeat_text(item) if item.one_at_a_time else "",
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
         "done": completion is not None, "done_by": planner.person(completion.completed_by) if completion else "",
-        "owner_name": planner.person(item.owner), "next": _next(request),
+        "owner_name": planner.person(item.owner), "next": _next(request), **_then(request, item, occurrence),
         "share_rows": planner.share_rows(request.user, {s.user_id: s.permission for s in shares}) if is_owner else [],
         "shared_with": [planner.person(s.user) for s in item.shares.select_related("user")] if is_owner else [],
         "shares": shares, "permissions": ItemShare.PERMISSIONS,
         "share_choices": [u for u in planner.planner_users() if u.pk not in taken] if is_owner else [],
     })
+
+
+def _then(request, item, occurrence):
+    """The form opened from a view panel (then=view / panel): Back and Cancel return to that panel."""
+    then = request.POST.get("then") or request.GET.get("then")
+    if then == "view":
+        return {"then": then, "back_url": _view_url(item, occurrence, _next(request))}
+    if then == "panel":
+        return {"then": then, "back_url": _next(request) + f"#pl-view={item.pk}-{occurrence.isoformat()}"}
+    return {"then": "", "back_url": _next(request)}
 
 
 @login_required
@@ -356,7 +425,9 @@ def toggle(request, pk):
         return redirect(_next(request))
     if _wants_json(request):
         rows = checklist.occurrence_rows(item, occurrence)
-        return JsonResponse({"ok": True, "done": done, "progress": checklist.progress(rows)["label"] if rows else ""})
+        shown = checklist.progress(rows) if rows else None
+        return JsonResponse({"ok": True, "done": done, **({"progress": shown["label"], "progress_title": shown["title"]}
+                                                           if shown else {})})
     return redirect(_next(request))
 
 
@@ -379,7 +450,7 @@ def checklist_toggle(request, pk, row_id):
         now = next(r for r in rows if r.pk == row.pk)
         shared = item.owner_id != request.user.pk or item.shares.exists()      # "Done by <name>" only then
         return JsonResponse({"ok": True, "checked": now.checked, "progress": checklist.progress(rows)["label"],
-                             "open": checklist.progress(rows)["open"],
+                             "open": checklist.progress(rows)["open"], "progress_title": checklist.progress(rows)["title"],
                              "done_by": planner.person(now.done_by) if now.checked and now.done_by and shared else "",
                              "task_done": item.completions.filter(occurrence_date=occurrence).exists()})
     return redirect(_next(request))
@@ -422,15 +493,33 @@ def from_groceries(request):
 @login_required
 @require_POST
 def move(request, pk):
-    """Drag-to-move (JSON {date, to, scope?}): one-off items just move; a repeating one needs the scope."""
+    """Drag-to-move (JSON {date, to, scope?}): one-off items just move; a repeating one needs the scope. The view
+    panel's Move posts a plain form (date, to) - a repeating item's occurrence moves alone - and goes back to next."""
     item = _editable(request, pk)
+    as_form = request.content_type != "application/json" and not _wants_json(request)
     data = _json(request) if request.content_type == "application/json" else request.POST
     occurrence, to = _day(data.get("date")), _day(data.get("to"))
     scope = data.get("scope") or (planner.THIS if item.repeats else planner.ALL)
     if not occurrence or not to or scope not in dict(planner.SCOPES) or not planner.valid_occurrence(item, occurrence):
+        if as_form:
+            messages.error(request, "Pick the day to move it to.")
+            return redirect(_next(request))
         return JsonResponse({"ok": False, "error": "Bad move."}, status=400)
     planner.change(item, occurrence, scope, {"date": to})
+    if as_form:
+        messages.success(request, f"Moved “{item.title}” to {to:%a %b} {to.day}.")
+        return redirect(_next(request))
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def duplicate(request, pk):
+    """The view panel's Duplicate: a copy of an item you can see, owned by you (planner.duplicate)."""
+    item = _visible(request, pk)
+    copy = planner.duplicate(item, request.user)
+    messages.success(request, f"Duplicated “{copy.title}”.")
+    return redirect(_next(request))
 
 
 @login_required

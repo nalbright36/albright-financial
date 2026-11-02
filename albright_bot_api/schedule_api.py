@@ -185,7 +185,7 @@ def _item_json(request, item):
             "one_at_a_time": item.one_at_a_time, "repeat_from_completion": item.repeat_from_completion,
             "created_by": item.created_by,
             "checklist": [{"id": r.pk, "text": r.text} for r in item.checklist.all()],
-            "url": request.build_absolute_uri(reverse("albright_planner:edit", args=[item.pk]))}
+            "url": request.build_absolute_uri(reverse("albright_planner:item", args=[item.pk]))}
 
 
 @bot_endpoint("schedule:read")

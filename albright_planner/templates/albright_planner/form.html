@@ -7,7 +7,7 @@ fields for each show only when they apply (planner.js; all show without JS) -
 and the summary under them reads the choice back in plain English. Editing a
 repeating item asks which occurrences the change applies to.
 {% endcomment %}
-<a href="{{ next }}" class="pl-back">&larr; Back</a>
+<a href="{{ back_url|default:next }}" class="pl-back">&larr; Back</a>
 <div class="pl-form-wrap">
     <h1 class="pl-title">{% if item %}{% if can_edit %}Edit{% else %}View{% endif %} &ldquo;{{ item.title }}&rdquo;{% else %}New item{% endif %}</h1>
     {% if item %}
@@ -22,7 +22,7 @@ repeating item asks which occurrences the change applies to.
     {% endif %}
 
     <form method="post" class="pl-form" id="pl-form" novalidate>{% csrf_token %}
-        <input type="hidden" name="next" value="{{ next }}">
+        <input type="hidden" name="next" value="{{ next }}">{% if then %}<input type="hidden" name="then" value="{{ then }}">{% endif %}
         {% if item %}<input type="hidden" name="occurrence" value="{{ occurrence|date:'Y-m-d' }}">{% endif %}
         {% if form.non_field_errors %}<p class="pl-error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
         <fieldset class="pl-fieldset"{% if item and not can_edit %} disabled{% endif %}>
@@ -97,7 +97,7 @@ repeating item asks which occurrences the change applies to.
                 <span class="pl-help">View: they see it and its checklist. Edit: they can also change it, move it, check it off and add to its checklist. Only you can delete it or change who it's shared with.</span>
             </div>
             {% elif is_owner %}<p class="pl-muted pl-small">Nobody else can open the Planner yet - give someone access in Admin &rarr; Users to share with them.</p>{% endif %}
-            {% if not item or can_edit %}<div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">{% if item %}Save{% else %}Add{% endif %}</button> <a href="{{ next }}" class="pl-btn pl-btn--ghost">Cancel</a></div>{% endif %}
+            {% if not item or can_edit %}<div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">{% if item %}Save{% else %}Add{% endif %}</button> <a href="{{ back_url|default:next }}" class="pl-btn pl-btn--ghost">Cancel</a></div>{% endif %}
         </fieldset>
     </form>
 

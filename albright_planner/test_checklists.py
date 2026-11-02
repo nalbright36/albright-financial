@@ -138,7 +138,8 @@ class BothWaysTests(Fixtures):
         html = self.client.get(reverse("albright_meals:grocery_list")).json()["html"]
         milk = html.split(f'data-item="{self.milk.pk}"', 1)[1].split("</li>", 1)[0]
         self.assertIn("In task: Grocery run (Wed)", milk)
-        self.assertIn(url("edit", self.task_obj.pk), milk)
+        self.assertIn(url("item", self.task_obj.pk) + "?next=" + reverse("albright_meals:groceries"),
+                      milk)                                            # its view panel, Close back to the list
 
 
 class ArchiveTests(Fixtures):

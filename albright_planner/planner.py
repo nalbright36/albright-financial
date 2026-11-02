@@ -164,6 +164,52 @@ def current_or_first(item):
     return (current_occurrence(item) if item.one_at_a_time else None) or item.date
 
 
+def occurrence_for(item, day, user):
+    """One occurrence for the item's view panel: after its exception (moved / retimed / retitled), whether it's
+    done and by whom, overdue (an unchecked one-off or one-at-a-time task from before today), and how it's shared
+    with `user`."""
+    exc = item.exceptions.filter(occurrence_date=day).first() if item.recurrence else None
+    completion = item.completions.select_related("completed_by").filter(occurrence_date=day).first()
+    occ = recurrence.make(item, day, exc, completion is not None)
+    occ.done_by = completion.completed_by if completion else None
+    occ.can_edit = item.can_edit(user)
+    occ.overdue = not occ.done and item.kind == ScheduleItem.TASK and item.checkable and occ.date < today() and \
+        (not item.recurrence or item.one_at_a_time)
+    _mark_sharing(occ, user)
+    return occ
+
+
+def plain_repeat(item):
+    """The view panel's repeat line in plain words: "Every Monday", "Every 3 days after it's done" - or ""."""
+    if not item.recurrence:
+        return ""
+    if item.one_at_a_time and item.repeat_from_completion:
+        text = recurrence.from_completion_text(item.recurrence) + " after it's done"
+        return text[:1].upper() + text[1:]
+    return recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count, long_days=True)
+
+
+@transaction.atomic
+def duplicate(item, user):
+    """A copy of the item owned by `user`: the same series and details, its current checklist (nothing ticked),
+    shared as `user` shares new items. Completions, skips and moves stay with the original; a copy of an item
+    another app keeps up to date is a plain item."""
+    from . import checklist
+    copy = ScheduleItem.objects.get(pk=item.pk)
+    copy.pk = copy.id = None
+    copy.owner, copy.created_by = user, user.get_username()
+    copy.source_app = copy.source_id = copy.source_url = ""
+    copy.from_bot, copy.bot_token, copy.archived = False, None, False
+    if copy.note_id is not None:
+        from albright_notes.models import Note
+        if not Note.objects.visible_to(user).filter(pk=copy.note_id).exists():
+            copy.note = None                              # a note the new owner can't see isn't linked
+    copy.save()
+    checklist.create_rows(copy, [r.text for r in checklist.current_rows(item)])
+    apply_default_shares(copy)
+    return copy
+
+
 def repeat_text(item):
     """A one-at-a-time task's line on its page: "Repeats every Mon · next appears after this one is done"."""
     if item.repeat_from_completion:

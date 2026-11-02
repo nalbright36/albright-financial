@@ -1,0 +1,6 @@
+{% extends "albright_planner/base.html" %}
+{% block page_title %}{{ o.title }} · {% endblock %}
+{% block planner %}
+{% comment %}An item's view panel as a page (views.view_item): direct links and no JavaScript. Close goes back to next.{% endcomment %}
+<div class="pl-view-page">{% include "albright_planner/_view_panel.html" %}</div>
+{% endblock %}

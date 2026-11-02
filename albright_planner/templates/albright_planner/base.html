@@ -5,7 +5,7 @@ registry (apps_registry: Planner's stylesheet / script), which index.html
 includes on every Planner page.
 {% endcomment %}
 {% block content %}
-<div class="container pl" id="planner">
+<div class="container pl" id="planner" data-view-url="{% url 'albright_planner:item' 0 %}">
     {% block planner %}{% endblock %}
 </div>
 {% endblock %}

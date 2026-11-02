@@ -1983,3 +1983,78 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .strategy-table th, .strategy-table td { padding-left: 10px; padding-right: 10px; }
 .strategy-table thead th[data-sort-key] { white-space: normal; vertical-align: bottom; }
 .strategy-table .strategy-row__name { white-space: nowrap; }
+
+/* ---------- Planner: an item's view panel (albright_planner/_view_panel.html) ----------
+   Here rather than in planner.css so it looks the same wherever it opens - the Planner's views and Home's
+   Today panel (a <dialog> over the page; planner.js) and its own page (item.html). Always the Planner's
+   lime, whichever app's accent the page has: #A3E635 text on dark, #4D7C0F on light, #4D7C0F fills. */
+.pl-view-dialog, .pl-view-page {
+  --accent-rgb: 132, 204, 22;
+  --accent: #A3E635;
+  --accent-hover: #BEF264;
+  --accent-solid: #4D7C0F;
+  --accent-solid-hover: #3F6212;
+  --accent-soft: rgba(var(--accent-rgb), 0.14);
+  --accent-ring: rgba(var(--accent-rgb), var(--accent-ring-alpha));
+}
+[data-theme="light"] .pl-view-dialog, [data-theme="light"] .pl-view-page { --accent: #4D7C0F; --accent-hover: #3F6212; }
+.pl-view-dialog {
+  width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 48px); padding: 0; overflow: auto;
+  border: 1px solid var(--border); border-radius: 16px; color: var(--text-primary);
+  background: var(--glass-bg-dialog, var(--surface)); box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
+}
+.pl-view-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.pl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; }
+.pl-view-page .pl-view { max-width: 600px; border: 1px solid var(--border); border-radius: 16px;
+  background: var(--glass-bg-solid, var(--surface)); box-shadow: 0 0 0 1px var(--accent-soft); }
+.pl-view__head { display: flex; align-items: flex-start; gap: 10px; }
+.pl .pl-check--lg { width: 30px; height: 30px; border-radius: 8px; margin-top: 1px; }
+.pl-view__dot { margin: 11px 6px 0; }
+.pl-view__title { flex: 1; min-width: 0; margin: 3px 0 0; font-size: 1.25rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.pl-view.is-done .pl-view__title { text-decoration: line-through; color: var(--text-secondary); }
+.pl-view__close, .pl .pl-menu__btn { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0;
+  border-radius: 10px; color: var(--text-secondary); cursor: pointer; list-style: none; text-decoration: none; }
+.pl-view__close:hover, .pl .pl-menu__btn:hover, .pl-menu[open] > .pl-menu__btn { background: var(--surface-hover); color: var(--text-primary); }
+.pl-menu__btn::-webkit-details-marker, .pl-menu__item::-webkit-details-marker { display: none; }
+.pl-menu { position: relative; }
+.pl-menu__panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 230px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--glass-bg-solid, var(--surface)); box-shadow: var(--shadow-lg); }
+.pl-menu__panel form { margin: 0; }
+.pl .pl-menu__item { display: flex; align-items: center; width: 100%; min-height: 38px; padding: 6px 10px; border-radius: 8px;
+  font-size: 0.875rem; color: var(--text-primary); cursor: pointer; list-style: none; }
+.pl .pl-menu__item:hover { background: var(--surface-hover); }
+.pl .pl-menu__item--danger { color: var(--red); }
+.pl-menu__form { display: flex; flex-direction: column; gap: 6px; padding: 2px 10px 8px; }
+.pl-view__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; font-size: 0.875rem; color: var(--text-secondary); }
+.pl-view__fact { display: inline-flex; align-items: center; gap: 6px; }
+.pl-view__fact svg { color: var(--accent); flex-shrink: 0; }
+.pl-badge { display: inline-flex; padding: 1px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+  color: var(--text-secondary); border: 1px solid var(--border); }
+.pl-badge--high { color: var(--red); background: var(--red-bg); border-color: transparent; }
+.pl-badge--medium { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.pl-view__shared { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.875rem; }
+.pl-view__avatars { display: inline-flex; }
+.pl-view__avatars .pl-avatar + .pl-avatar { margin-left: -4px; box-shadow: 0 0 0 2px var(--surface); }
+.pl-view__section { border-top: 1px solid var(--border); padding-top: 12px; }
+.pl-view__label { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary); }
+.pl-view__notes { font-size: 0.9375rem; line-height: 1.55; overflow-wrap: anywhere; }
+.pl-view__notes > :first-child { margin-top: 0; }
+.pl-view__notes > :last-child { margin-bottom: 0; }
+.pl-view__notes p, .pl-view__notes ul, .pl-view__notes ol { margin: 0 0 8px; }
+.pl-view__notes ul, .pl-view__notes ol { padding-left: 1.3em; }
+.pl-view__notes.is-clamped { max-height: calc(8 * 1.55em); overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 65%, transparent); mask-image: linear-gradient(#000 65%, transparent); }
+.pl .pl-view__more { min-height: 32px; margin-top: 4px; color: var(--accent); font-size: 0.875rem; font-weight: 600; }
+.pl-view .pl-note-card { margin: 0; }
+.pl-view__open-note { margin-top: 4px; font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
+.pl-view__foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) {
+  /* Phones: a full-screen sheet; Edit and Close stay at the bottom. */
+  .pl-view-dialog { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0;
+    background: var(--glass-bg-solid, var(--surface)); }
+  .pl-view-dialog .pl-view { min-height: 100%; padding: 14px 16px 0; }
+  .pl-view-dialog .pl-view__foot { position: sticky; bottom: 0; margin-top: auto; padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+    background: var(--glass-bg-solid, var(--surface)); }
+  .pl-view__foot .pl-btn { flex: 1; }
+}

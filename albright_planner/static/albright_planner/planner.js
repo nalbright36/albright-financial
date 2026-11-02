@@ -11,6 +11,9 @@
  *   checklists  ticking a subtask saves at once, for that occurrence only; checking a task with subtasks still
  *               open asks "Mark all subtasks done too?"; the form's Checklist editor: Enter adds the next line,
  *               Enter on an empty one finishes, drag or arrows reorder, x deletes
+ *   view panel  clicking an item opens its view panel in a <dialog> over the calendar (its own URL while open);
+ *               x, Esc or the backdrop close it, "E" opens the form; checking off and ticks there show on the
+ *               calendar underneath too. #pl-view=<id>-<date> (back from the form) opens it on load.
  */
 (function () {
     "use strict";
@@ -58,6 +61,21 @@
             dialog.showModal();
         });
     }
+    // The same occurrence elsewhere on the page: the calendar under the view panel, or the panel over it.
+    function withTwins(el) {
+        if (!el || !el.dataset.item) return el ? [el] : [];
+        return [el].concat(Array.prototype.filter.call(document.querySelectorAll(
+            '[data-item="' + el.dataset.item + '"][data-date="' + el.dataset.date + '"]'), function (t) { return t !== el; }));
+    }
+    function showProgress(el, data) {
+        if (data.progress) el.querySelectorAll("[data-cl-progress]").forEach(function (p) { p.textContent = data.progress; });
+        if (data.progress_title) el.querySelectorAll("[data-cl-progress-title]").forEach(function (p) { p.textContent = data.progress_title; });
+    }
+    function showTask(el, done) {
+        var box = el.querySelector(".pl-check");
+        if (box) box.setAttribute("aria-checked", done ? "true" : "false");
+        el.classList.toggle("is-done", !!done);
+    }
     function setRows(item, checked) {
         item.querySelectorAll(".pl-cl__row").forEach(function (row) {
             row.classList.toggle("is-done", checked);
@@ -69,7 +87,7 @@
         var form = event.target;
         if (!form.matches || !form.matches(".pl-check-form") || !window.fetch) return;
         event.preventDefault();
-        var item = form.closest(".pl-item"), box = form.querySelector(".pl-check");
+        var item = form.closest(".pl-item, .pl-view"), box = form.querySelector(".pl-check");
         var was = box.getAttribute("aria-checked") === "true";
         var open = item ? parseInt(item.dataset.openSubtasks || "0", 10) : 0;
         var show = function (done) {
@@ -84,11 +102,12 @@
             return post(form.action, body).then(function (res) {
                 if (!res.ok) { show(was); return; }
                 show(res.data.done);
-                if (choice === "all" && item) { setRows(item, true); item.dataset.openSubtasks = "0"; }
-                if (res.data.progress && item) {
-                    item.querySelectorAll("[data-cl-progress]").forEach(function (el) { el.textContent = res.data.progress; });
-                }
-                if (res.data.done && item && item.classList.contains("is-overdue")) item.remove();   // done: no longer overdue
+                withTwins(item).forEach(function (el) {
+                    showTask(el, res.data.done);
+                    if (choice === "all") { setRows(el, true); el.dataset.openSubtasks = "0"; }
+                    showProgress(el, res.data);
+                    if (res.data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
+                });
             });
         }).catch(function () { show(was); });
     });
@@ -108,19 +127,124 @@
         post(form.action, new FormData(form)).then(function (res) {
             if (!res.ok) { show(was); return; }
             show(res.data.checked);
-            var by = row.querySelector("[data-cl-by]");
-            if (by) by.textContent = res.data.done_by ? "Done by " + res.data.done_by : "";   // shared tasks only
-            var scope = form.closest(".pl-item") || document;
-            scope.querySelectorAll("[data-cl-progress]").forEach(function (el) { el.textContent = res.data.progress; });
-            var item = form.closest(".pl-item");
-            if (item) {
-                item.dataset.openSubtasks = String(res.data.open);
-                var task = item.querySelector(".pl-check");
-                if (task) task.setAttribute("aria-checked", res.data.task_done ? "true" : "false");
-                item.classList.toggle("is-done", !!res.data.task_done);
+            var item = form.closest(".pl-item, .pl-view");
+            if (!item) {                                              // the edit page's list
+                showProgress(document, res.data);
+                var by = row.querySelector("[data-cl-by]");
+                if (by) by.textContent = res.data.done_by ? "Done by " + res.data.done_by : "";
+                return;
             }
+            withTwins(item).forEach(function (el) {
+                el.querySelectorAll('.pl-cl__row[data-row="' + row.dataset.row + '"]').forEach(function (r) {
+                    r.classList.toggle("is-done", !!res.data.checked);
+                    var b = r.querySelector(".pl-cl__check");
+                    if (b) b.setAttribute("aria-checked", res.data.checked ? "true" : "false");
+                    var by = r.querySelector("[data-cl-by]");
+                    if (by) by.textContent = res.data.done_by ? "Done by " + res.data.done_by : "";   // shared tasks only
+                });
+                showProgress(el, res.data);
+                el.dataset.openSubtasks = String(res.data.open);
+                showTask(el, res.data.task_done);
+            });
         }).catch(function () { show(was); });
     });
+
+    // ---------- Forms that ask first (Delete) ----------
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (form.matches && form.matches("form[data-confirm]") && !window.confirm(form.dataset.confirm)) event.preventDefault();
+    }, true);
+
+    // ---------- The view panel ----------
+    var viewDialog = null, viewOpener = null, viewPushed = false;
+    var canDialog = !!(window.fetch && document.createElement("dialog").showModal);
+    function viewBox() {
+        if (viewDialog) return viewDialog;
+        viewDialog = document.createElement("dialog");
+        viewDialog.className = "pl-view-dialog";
+        viewDialog.id = "pl-view";
+        viewDialog.setAttribute("aria-labelledby", "pl-view-title");
+        (document.querySelector(".pl") || document.body).appendChild(viewDialog);   // the Planner's control styles
+        viewDialog.addEventListener("click", function (event) {
+            if (event.target === viewDialog) { viewDialog.close(); return; }          // the backdrop
+            var close = event.target.closest("[data-view-close]");
+            if (close) { event.preventDefault(); viewDialog.close(); }
+        });
+        viewDialog.addEventListener("close", function () {
+            viewDialog.innerHTML = "";
+            if (viewPushed) { viewPushed = false; history.back(); }                  // the URL back to the calendar's
+            if (viewOpener && document.contains(viewOpener)) viewOpener.focus();
+        });
+        return viewDialog;
+    }
+    window.addEventListener("popstate", function () {                                // Back (a phone's too) closes it
+        if (viewDialog && viewDialog.open) { viewPushed = false; viewDialog.close(); }
+    });
+    function clampNotes(scope) {
+        scope.querySelectorAll("[data-clamp]").forEach(function (notes) {
+            var more = notes.parentNode.querySelector("[data-show-more]");
+            notes.classList.add("is-clamped");
+            if (!more || notes.scrollHeight <= notes.clientHeight + 2) { notes.classList.remove("is-clamped"); return; }
+            more.hidden = false;
+            more.addEventListener("click", function () {
+                var clamped = notes.classList.toggle("is-clamped");
+                more.textContent = clamped ? "Show more" : "Show less";
+                more.setAttribute("aria-expanded", clamped ? "false" : "true");
+            });
+        });
+    }
+    function openView(url, opener) {
+        var box = viewBox();
+        viewOpener = opener || null;
+        return fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "panel=1", {
+            credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}
+        }).then(function (r) {
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+        }).then(function (html) {
+            box.innerHTML = html;
+            var edit = box.querySelector("[data-view-edit]");
+            if (edit) edit.href = edit.href.replace("then=view", "then=panel");     // saving comes back to this dialog
+            if (!box.open) box.showModal();
+            clampNotes(box);
+            var close = box.querySelector(".pl-view__close");
+            if (close) close.focus();
+            if (history.pushState && !viewPushed) { history.pushState({plView: true}, "", url); viewPushed = true; }
+        }).catch(function () { window.location.href = url; });                       // the panel's own page
+    }
+    document.addEventListener("click", function (event) {
+        var link = event.target.closest && event.target.closest("a[data-view]");
+        if (!link || !canDialog || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        openView(link.getAttribute("href"), link);
+    });
+    document.addEventListener("click", function (event) {                            // a menu closes on a click outside it
+        document.querySelectorAll(".pl-menu[open]").forEach(function (menu) {
+            if (!menu.contains(event.target)) menu.open = false;
+        });
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+        var page = document.querySelector(".pl-view-page");
+        var panel = viewDialog && viewDialog.open ? viewDialog : (!document.querySelector("dialog[open]") && page);
+        if (!panel) return;
+        if (event.key === "Escape" && panel === page) {                              // the page: Esc is its Close
+            var close = page.querySelector("[data-view-close]");
+            if (close) window.location.href = close.href;
+            return;
+        }
+        if ((event.key !== "e" && event.key !== "E") || event.target.closest("input, textarea, select, [contenteditable]")) return;
+        var edit = panel.querySelector("[data-view-edit]");
+        if (edit) { event.preventDefault(); window.location.href = edit.href; }
+    });
+    var viewPage = document.querySelector(".pl-view-page");
+    if (viewPage) clampNotes(viewPage);
+    var opening = /^#pl-view=(\d+)-(\d{4}-\d{2}-\d{2})$/.exec(window.location.hash), viewBase = document.querySelector("[data-view-url]");
+    if (opening && viewBase && canDialog) {
+        var here = window.location.pathname + window.location.search;
+        history.replaceState(history.state, "", here);
+        openView(viewBase.dataset.viewUrl.replace(/0\/$/, opening[1] + "/") + "?date=" + opening[2] + "&next=" + encodeURIComponent(here));
+    }
 
     // ---------- Filters, and selects that save on change ----------
     var filters = document.getElementById("pl-filters");

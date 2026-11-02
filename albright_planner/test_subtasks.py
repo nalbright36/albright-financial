@@ -143,7 +143,7 @@ class DisplayTests(Fixtures):
         week = self.client.get(url("week")).content.decode()
         self.assertIn("data-cl-progress>1/2<", week.split(f'data-item="{task.pk}"', 1)[1].split("</li>", 1)[0])
         month = self.client.get(url("month")).content.decode()
-        self.assertIn('<span class="pl-chip__cl" title="Checklist: 1 of 2 done">1/2</span>', month)
+        self.assertIn('<span class="pl-chip__cl" title="Checklist: 1 of 2 done" data-cl-progress>1/2</span>', month)
         self.assertEqual(planner.today_panel(self.me)["tasks"][0].checklist_progress["label"], "1/2")
         page = self.client.get(url("edit", task.pk)).content.decode()
         self.assertIn('data-cl-progress>1/2</span>', page)
@@ -169,7 +169,7 @@ class CompletionTests(Fixtures):
         task = self.task(recurrence="FREQ=DAILY", recurrence_count=5)
         response = self.client.post(url("toggle", task.pk), {"date": TODAY.isoformat(), "all_subtasks": "1"},
                                     HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertEqual(response.json(), {"ok": True, "done": True, "progress": "2/2"})
+        self.assertEqual(response.json(), {"ok": True, "done": True, "progress": "2/2", "progress_title": "2 of 2 done"})
         self.assertEqual(self.rows(task, TODAY), [("Tent", True), ("Stove", True)])
         self.assertEqual(self.rows(task, d(11, 5)), [("Tent", False), ("Stove", False)])
 

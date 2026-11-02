@@ -24,7 +24,7 @@ this person can see - and the remove button.
                 {% if from_recipes|length > 1 %}<details class="meals-chip-details"><summary class="meals-chip" data-recipes-badge>{{ from_recipes|length }} recipes</summary><span class="meals-chip-details__list">{% for r in from_recipes %}<a href="{% url 'albright_meals:recipe' r.pk %}">{{ r.title }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span></details>{% endif %}
                 {% if item.possible_duplicate %}<span class="meals-chip meals-chip--warn" data-duplicate-flag title="The same ingredient is on the list in a different unit or wording">Possible duplicate</span>
                 {% if item.can_merge %}<form method="post" action="{% url 'albright_meals:grocery_merge' item.pk %}" class="meals-item__merge-form" data-list-action>{% csrf_token %}<button type="submit" class="meals-chip meals-chip--action" aria-label="Merge {{ item.name }} into {{ item.duplicate_of.name }}">Merge</button></form>{% endif %}{% endif %}
-                {% for task in item.tasks %}<a href="{% url 'albright_planner:edit' task.pk %}" class="meals-chip meals-chip--task" data-task-chip>In task: {{ task.title }} ({{ task.date|date:"D" }})</a>{% endfor %}
+                {% for task in item.tasks %}<a href="{% url 'albright_planner:item' task.pk %}?next={% filter urlencode %}{% url 'albright_meals:groceries' %}{% endfilter %}" class="meals-chip meals-chip--task" data-task-chip>In task: {{ task.title }} ({{ task.date|date:"D" }})</a>{% endfor %}
             </div>
             {% endif %}
             <form method="post" action="{% url 'albright_meals:grocery_delete' item.pk %}" class="meals-item__delete-form" data-list-action>{% csrf_token %}
