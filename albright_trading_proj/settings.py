@@ -48,8 +48,14 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "").strip() == "1"
 # Local only: serve /static/ through Django while DEBUG is off (see the end of urls.py).
 SERVE_STATIC_LOCALLY = os.environ.get("SERVE_STATIC_LOCALLY", "").strip() == "1"
 
-ALLOWED_HOSTS = ["www.sportslabalgo.com",
-                 "127.0.0.1"]
+ALLOWED_HOSTS = ["www.sportslabalgo.com", "127.0.0.1", "natealbright36.pythonanywhere.com"]
+
+# Production hardening (on whenever DEBUG is off). PythonAnywhere terminates HTTPS at its proxy and
+# passes the original scheme in X-Forwarded-Proto, so request.is_secure() needs SECURE_PROXY_SSL_HEADER.
+# HTTPS redirect and HSTS are handled by "Force HTTPS" on the PythonAnywhere Web tab, not here.
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition
@@ -235,7 +241,7 @@ REDDIT_USER_AGENT = "albright-trading-sentiment-bot/1.0 by u/sportslabalgo"
 
 # For hosting on PythonAnywhere
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-ALLOWED_HOSTS = ["www.sportslabalgo.com", "127.0.0.1", "natealbright36.pythonanywhere.com"]
+# ALLOWED_HOSTS is set once, near the top of this file.
 
 # OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
