@@ -95,7 +95,7 @@ class LauncherTilesTests(Base):
         self.assertNotIn('id="app-launcher"', week)
         self.assertNotIn("Switch app", week)
         self.assertIn('id="theme-toggle"', week)                       # the rest of the header is still there
-        self.assertIn('class="navbar__brand">Albright Meals</a>', week)
+        self.assertIn('<span class="navbar__app-name">Meals</span></a>', week)
         self.assertIn('id="nav-account-link"', week)
         # Two apps, one of them hidden: still something to switch to.
         self.set_pref(allowed_apps=["meals", "trade"], visible_apps=["meals"], app_order=["meals", "trade"])

@@ -67,7 +67,7 @@ class AccessTests(AdminTestCase):
                 response = self.client.get(reverse(f"albright_control:{name}"))
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, '<body data-app="admin">')
-                self.assertContains(response, 'class="navbar__brand">Albright Admin</a>')
+                self.assertContains(response, '<span class="navbar__app-name">Admin</span></a>')
 
     def test_admin_nav(self):
         """Every Admin page is in the nav (the groups themselves: test_header_nav)."""
@@ -103,7 +103,7 @@ class HeaderTests(AdminTestCase):
                            (reverse("albright_control:health"), "Albright Admin")):
             with self.subTest(url=url):
                 content = self.client.get(url).content.decode()
-                self.assertIn(f'class="navbar__brand">{brand}</a>', content)
+                self.assertIn(f'<span class="navbar__app-name">{brand.split()[-1]}</span></a>', content)
         admin = self.client.get(reverse("albright_control:health")).content.decode()
         self.assertIn("<title>System health · Albright Admin</title>", admin)
         self.assertIn('data-app-target="admin" title="Albright Admin" aria-current="page"', admin)

@@ -452,14 +452,15 @@ a:hover { color: var(--accent-hover); }
   letter-spacing: -0.01em;
   color: var(--text-primary);
 }
-.navbar__brand::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
+/* The logo mark (static/icons/icon-192.png) - the same in every app and theme. */
+.navbar__logo {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   flex-shrink: 0;
 }
+.navbar__app-name { white-space: nowrap; }
 
 .navbar__links {
   display: flex;
@@ -1396,16 +1397,12 @@ table.ledger-view-table .ledger-item-cell,
 table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid); }
 
 /* ---------- Nav bar: a soft tint of the app's accent, same blur, faint
-   bottom border; the brand's status dot glows in the accent. ---------- */
+   bottom border. ---------- */
 .navbar {
   background: var(--nav-tint), color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   border-bottom: 1px solid var(--nav-border);
-}
-.navbar__brand::before {
-  background: rgb(var(--accent-rgb));
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18), 0 0 10px rgba(var(--accent-rgb), 0.65);
 }
 
 /* ---------- Primary buttons: the app's accent, white text, soft glow; a little

@@ -72,7 +72,7 @@ class MealsOnlyAccountTests(Base):
         self.assertNotContains(week, 'id="app-launcher"')
         self.assertNotContains(week, "Switch app")
         self.assertContains(week, '<body data-app="meals">')
-        self.assertContains(week, 'class="navbar__brand">Albright Meals</a>')
+        self.assertContains(week, '<span class="navbar__app-name">Meals</span></a>')
         for url in (reverse("trading_home"), reverse("grok_bot"), reverse("albright_reselling_app:dashboard"),
                     reverse("albright_reselling_app:watchlist_summary"), reverse("albright_crypto_app:inbox"),
                     reverse("albright_control:overview"), reverse("albright_control:users"),

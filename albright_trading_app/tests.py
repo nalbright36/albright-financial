@@ -237,12 +237,12 @@ class AppSwitchTests(TestCase):
         self.assertEqual(landed.cookies[LAST_APP_COOKIE].value, "reseller")
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
-    def test_brand_link_stays_within_the_current_app(self, mock_outlook):
+    def test_brand_link_goes_to_the_app_picker(self, mock_outlook):
         reseller_nav = self.nav(self.client.get(reverse("albright_reselling_app:dashboard")))
         trading_nav = self.nav(self.client.get(reverse("trading_home")))
 
-        self.assertEqual(self.href(reseller_nav, "navbar__brand"), reverse("albright_reselling_app:dashboard"))
-        self.assertEqual(self.href(trading_nav, "navbar__brand"), reverse("trading_home"))
+        self.assertEqual(self.href(reseller_nav, "navbar__brand"), "/?picker=1")
+        self.assertEqual(self.href(trading_nav, "navbar__brand"), "/?picker=1")
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_no_nav_link_points_at_bare_root(self, mock_outlook):

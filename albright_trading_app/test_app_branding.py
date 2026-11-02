@@ -76,7 +76,7 @@ class HeaderTests(TestCase):
             with self.subTest(app=app):
                 content = self.page(url_name)
                 self.assertIn(f'<body data-app="{app}">', content)
-                self.assertIn(f'class="navbar__brand">{brand}</a>', content)
+                self.assertIn(f'<span class="navbar__app-name">{brand.split()[-1]}</span></a>', content)
                 self.assertRegex(content, rf"<title>([^<]* · )?{brand}</title>")
                 self.assertNotIn("Albright Financial", content)
                 self.assertNotIn("{#", content)   # no template comment leaking into the page
@@ -85,11 +85,24 @@ class HeaderTests(TestCase):
         self.assertIn("<title>Grok Bot · Albright Trading</title>", self.page("grok_bot"))
         self.assertIn("<title>Pipeline · Albright Opportunities</title>", self.page("albright_crypto_app:pipeline"))
 
+    def test_logo_mark_and_name(self, _outlook):
+        content = self.page("albright_planner:day")
+        brand = content.split('class="navbar__brand">', 1)[1].split("</a>", 1)[0]
+        self.assertEqual(brand, '<img src="/static/icons/icon-192.png" alt="Albright" width="30" height="30" '
+                                'class="navbar__logo"><span class="navbar__app-name">Planner</span>')
+        self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)
+        logo = self.css.split("\n.navbar__logo {", 1)[1].split("}", 1)[0]
+        for rule in ("width: 30px;", "height: 30px;", "border-radius: 8px;", "flex-shrink: 0;"):
+            self.assertIn(rule, logo)
+        self.assertIn(".navbar__app-name { white-space: nowrap; }", self.css)
+        self.assertIn('<span class="navbar__app-name">Labs</span>', self.page("labs:hub"))
+
     def test_login_page_defaults_to_trading(self, _outlook):
         self.client.logout()
         content = self.page("user_login")
         self.assertIn('<body data-app="trading">', content)
-        self.assertIn('class="navbar__brand">Albright Trading</a>', content)
+        self.assertIn('<span class="navbar__app-name">Trading</span></a>', content)
+        self.assertIn('<a href="/" class="navbar__brand">', content)              # signed out: plain Home
 
     def test_switch_buttons_all_three_current_highlighted(self, _outlook):
         for app, (url_name, _brand) in self.PAGES.items():
@@ -126,8 +139,7 @@ class StylesheetTests(TestCase):
 
     def test_glows_dot_and_focus_follow_the_accent(self):
         self.assertIn("--page-glow-1: rgba(var(--accent-rgb), var(--page-glow-1-alpha));", self.css)
-        brand_dot = self.css.split(".navbar__brand::before {\n  background: rgb(", 1)
-        self.assertEqual(len(brand_dot), 2)
+        self.assertNotIn(".navbar__brand::before", self.css)          # the old dot is gone - the logo replaced it
         self.assertNotRegex(self.css, r"border-color: #10B981|background: #10B981|rgba\(16, 185, 129, 0\.65\)")
         self.assertNotIn("theme-reselling", self.css)
         self.assertNotIn("theme-opportunities", self.css)

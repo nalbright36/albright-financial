@@ -59,6 +59,7 @@ h1, h2, h3 { line-height: 1.2; margin: 0; }
 .rs-logo { font-weight: 700; color: var(--text); letter-spacing: -0.01em; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 8px; }
 .rs-logo:hover { text-decoration: none; }
+.rs-logo__mark { display: block; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; }   /* the landing page's logo */
 .rs-top__nav { display: flex; gap: 18px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
 .rs-top__nav a { color: var(--text-2); font-size: 0.875rem; white-space: nowrap; }
 .rs-top__nav a:hover { color: var(--text); text-decoration: none; }

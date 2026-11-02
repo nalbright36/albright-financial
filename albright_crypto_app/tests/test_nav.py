@@ -93,7 +93,7 @@ class OpportunitiesNavTests(TestCase):
 
     def test_brand_titles_and_theme(self, _outlook):
         content = self.client.get(reverse("albright_crypto_app:pipeline")).content.decode()
-        self.assertIn(f'<a href="{reverse("albright_crypto_app:inbox")}" class="navbar__brand">', content)
+        self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)      # the logo goes to the app picker
         self.assertIn('<body data-app="opportunities">', content)
         self.assertIn("<title>Pipeline · Albright Opportunities</title>", content)
         for name, title in (("inbox", "Inbox"), ("hidden", "Hidden"), ("earnings", "Earnings"),

@@ -1,5 +1,5 @@
 """Which app (or the Admin area) the current page belongs to - drives the
-header's brand name, app-switch buttons, per-app nav, and accent color
+header's app name (beside the logo), the tab title, app-switch buttons, per-app nav, and accent color
 (templates/index.html sets <body data-app="..."> from it)."""
 from albright_labs import apps_registry
 
@@ -13,6 +13,8 @@ APP_KEYS = {ns: app.accent for ns, app in apps_registry.BY_NAMESPACE.items() if 
 APP_KEYS[apps_registry.HOME_NAMESPACE] = apps_registry.HOME_ACCENT
 APP_BRANDS = {app.accent: app.brand for app in apps_registry.APPS}
 APP_BRANDS[apps_registry.HOME_ACCENT] = apps_registry.HOME_BRAND
+APP_LABELS = {app.accent: app.label for app in apps_registry.APPS}         # "Trading" - the header's name
+APP_LABELS[apps_registry.HOME_ACCENT] = apps_registry.HOME_LABEL
 APPS_BY_ACCENT = {app.accent: app for app in apps_registry.APPS}
 
 
@@ -26,6 +28,7 @@ def current_app(request):
     return {
         "current_app": key,
         "app_brand": APP_BRANDS[key],
+        "app_label": APP_LABELS[key],
         "in_reselling_app": key == "reselling",
         "in_opportunities_app": key == "opportunities",
         "in_admin_area": key == "admin",

@@ -108,6 +108,7 @@ PAGES = {key: (app, label, url_name) for app in APPS for key, label, url_name in
 
 # Home (the Labs hub) - not an app, but it has a brand and accent of its own.
 HOME_NAMESPACE, HOME_ACCENT, HOME_BRAND = "labs", "labs", "Albright Labs"
+HOME_LABEL = "Labs"                     # the header's name beside the logo on Home and the landing page
 # Pages with no app of their own (the public resume, Django's /admin/, the Bot API pages):
 # the header shows them as the trading app, as it always has.
 DEFAULT_APP = BY_KEY["trade"]

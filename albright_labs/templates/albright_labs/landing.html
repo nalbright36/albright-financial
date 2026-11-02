@@ -18,7 +18,7 @@ PUBLISHED projects. Served with the resume app's strict security headers
 <body class="labs-landing">
 <header class="rs-top">
     <div class="rs-wrap rs-top__inner">
-        <a href="{% url 'labs:root' %}" class="rs-logo" id="labs-brand"><span class="rs-dot" aria-hidden="true"></span> Albright Labs</a>
+        <a href="{% url 'labs:root' %}" class="rs-logo" id="labs-brand"><img src="{% static 'icons/icon-192.png' %}" alt="Albright" width="30" height="30" class="rs-logo__mark"><span>Labs</span></a>
         <nav class="rs-top__nav labs-top__nav" aria-label="Site">
             {% if resume_on %}<a href="{% url 'albright_resume:page' %}">Resume</a>{% endif %}
             {% if projects %}<a href="#build">What I build</a>{% endif %}
