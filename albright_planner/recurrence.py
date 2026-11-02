@@ -6,6 +6,7 @@ The rule is stored without its end (ScheduleItem.recurrence); the end is
 recurrence_until or recurrence_count. Choices (the form never shows a raw rule):
   none          Does not repeat
   daily         FREQ=DAILY
+  every_n_days  FREQ=DAILY;INTERVAL=N
   weekdays      FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR
   weekly        FREQ=WEEKLY;BYDAY=<chosen days>
   every_n_weeks FREQ=WEEKLY;INTERVAL=N;BYDAY=<chosen days>
@@ -16,13 +17,15 @@ recurrence_until or recurrence_count. Choices (the form never shows a raw rule):
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
+from dateutil.relativedelta import relativedelta
 from dateutil.rrule import rrulestr
 
 WEEKDAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]          # date.weekday() order
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 LONG_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 ORDINALS = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", -1: "last"}
-REPEATS = [("none", "Does not repeat"), ("daily", "Daily"), ("weekdays", "Every weekday (Mon-Fri)"),
+REPEATS = [("none", "Does not repeat"), ("daily", "Daily"), ("every_n_days", "Every N days"),
+           ("weekdays", "Every weekday (Mon-Fri)"),
            ("weekly", "Weekly on chosen days"), ("every_n_weeks", "Every N weeks"),
            ("monthly_day", "Monthly on day X"), ("monthly_nth", "Monthly on the Nth weekday"), ("yearly", "Yearly")]
 NTH_CHOICES = [(1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (-1, "last")]
@@ -38,6 +41,9 @@ def build(repeat, start, days=(), interval=1, month_day=None, nth=None, nth_week
     days = [d for d in WEEKDAYS if d in set(days)] or [WEEKDAYS[start.weekday()]]
     if repeat == "daily":
         return "FREQ=DAILY"
+    if repeat == "every_n_days":
+        n = max(1, int(interval or 1))
+        return "FREQ=DAILY" if n == 1 else f"FREQ=DAILY;INTERVAL={n}"
     if repeat == "weekdays":
         return "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
     if repeat == "weekly":
@@ -77,7 +83,7 @@ def describe(rule):
     freq, byday, interval = p.get("FREQ"), [d for d in p.get("BYDAY", "").split(",") if d], int(p.get("INTERVAL", 1))
     out = {"repeat": "none", "days": [], "interval": interval, "month_day": None, "nth": None, "nth_weekday": None}
     if freq == "DAILY":
-        out["repeat"] = "daily"
+        out["repeat"] = "daily" if interval == 1 else "every_n_days"
     elif freq == "WEEKLY":
         if interval == 1 and byday == WEEKDAYS[:5]:
             out["repeat"] = "weekdays"
@@ -106,6 +112,7 @@ def summary(rule, start, until=None, count=None, today=None):
     days = ", ".join(DAY_NAMES[WEEKDAYS.index(x)] for x in d["days"] if x in WEEKDAYS)
     text = {
         "daily": "Every day",
+        "every_n_days": f"Every {d['interval']} days",
         "weekdays": "Every weekday",
         "weekly": f"Every {days}",
         "every_n_weeks": f"Every {d['interval']} weeks on {days}",
@@ -140,6 +147,57 @@ def scheduled_dates(item, start, end):
         return [item.date] if start <= item.date <= end else []
     return [d.date() for d in _rule(item).between(datetime.combine(start, time()), datetime.combine(end, time(23, 59, 59)),
                                                    inc=True)]
+
+
+def dates_from(item, day, limit=5000):
+    """The scheduled dates on or after `day`, in order (a generator - stops after `limit`)."""
+    if not item.recurrence:
+        if item.date >= day:
+            yield item.date
+        return
+    rule = _rule(item)
+    current = rule.after(datetime.combine(max(day, item.date), time()), inc=True)
+    while current is not None and limit > 0:
+        yield current.date()
+        limit -= 1
+        current = rule.after(current, inc=False)
+
+
+def first_after(item, day):
+    """The first scheduled date after `day` (None if the series has ended)."""
+    return next(dates_from(item, day + timedelta(days=1)), None)
+
+
+def step_from(item, day):
+    """"Repeat from completion date": the next date after something done on `day` - `day` plus the repeat interval
+    (every 3 days -> 3 days later; weekly -> 7 days later; monthly -> the same day next month, or the month's
+    last day). A weekly rule on several days (e.g. every weekday) -> the next of those days."""
+    p = parts(item.recurrence)
+    n = max(1, int(p.get("INTERVAL", 1) or 1))
+    freq = p.get("FREQ")
+    if freq == "WEEKLY":
+        days = [d for d in p.get("BYDAY", "").split(",") if d in WEEKDAYS]
+        if len(days) > 1:
+            return next(day + timedelta(days=i) for i in range(1, 8)
+                        if WEEKDAYS[(day + timedelta(days=i)).weekday()] in days)
+        return day + timedelta(weeks=n)
+    if freq == "MONTHLY":
+        return day + relativedelta(months=n)
+    if freq == "YEARLY":
+        return day + relativedelta(years=n)
+    return day + timedelta(days=n)
+
+
+def from_completion_text(rule):
+    """"every 3 days" - how far apart "Repeat from completion date" puts them."""
+    p = parts(rule)
+    n = max(1, int(p.get("INTERVAL", 1) or 1))
+    freq = p.get("FREQ")
+    days = [d for d in p.get("BYDAY", "").split(",") if d in WEEKDAYS]
+    if freq == "WEEKLY" and len(days) > 1:
+        return "on the next of " + ", ".join(DAY_NAMES[WEEKDAYS.index(d)] for d in days)
+    unit = {"DAILY": "day", "WEEKLY": "week", "MONTHLY": "month", "YEARLY": "year"}.get(freq, "day")
+    return f"every {unit}" if n == 1 else f"every {n} {unit}s"
 
 
 def is_scheduled(item, day):
@@ -186,6 +244,19 @@ def _shifted_end(item, new_start):
     return end.time() if end.date() == date.min else time(23, 59)
 
 
+def make(item, original, exc=None, done=False):
+    """The occurrence scheduled for `original`, after its exception (moved / retimed / retitled) if any."""
+    title, start_time, end_time, day = item.title, item.start_time, item.end_time, original
+    if exc is not None:
+        if exc.new_title:
+            title = exc.new_title
+        if exc.new_start_time:
+            start_time, end_time = exc.new_start_time, _shifted_end(item, exc.new_start_time)
+        if exc.action == "move" and exc.new_date:
+            day = exc.new_date
+    return Occurrence(item, day, original, title, start_time, end_time, done, exc)
+
+
 def occurrences(item, start, end, completed=None, exceptions=None):
     """The item's occurrences shown between start and end (inclusive): skipped ones dropped, moved ones on their
     new day (including ones moved INTO the range from outside it), edited ones retitled.
@@ -197,13 +268,9 @@ def occurrences(item, start, end, completed=None, exceptions=None):
     out = []
 
     def add(day, original, exc):
-        title, start_time, end_time = item.title, item.start_time, item.end_time
-        if exc is not None:
-            if exc.new_title:
-                title = exc.new_title
-            if exc.new_start_time:
-                start_time, end_time = exc.new_start_time, _shifted_end(item, exc.new_start_time)
-        out.append(Occurrence(item, day, original, title, start_time, end_time, original in completed, exc))
+        occ = make(item, original, exc, original in completed)
+        occ.date = day
+        out.append(occ)
 
     seen = set()
     for day in scheduled_dates(item, start, end):

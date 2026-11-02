@@ -215,7 +215,7 @@ class OverdueTests(Base):
     def test_one_off_tasks_roll_into_today_until_done_or_moved(self):
         late = self.item(title="Return library books", date=d(11, 1))
         self.item(title="Old event", date=d(11, 1), kind="event", checkable=False)
-        self.item(title="Repeating", date=d(10, 1), recurrence="FREQ=DAILY")
+        self.item(title="Repeating", date=d(10, 1), recurrence="FREQ=DAILY", recurrence_count=100)   # no end: test_one_at_a_time
         self.assertEqual([o.item for o in planner.overdue(self.me)], [late])
         page = self.client.get(url("day")).content.decode()
         self.assertIn('id="pl-overdue-h"', page)
@@ -263,7 +263,8 @@ class QuickAddTests(Base):
 
 class ViewTests(Base):
     def test_week_shows_each_item_in_its_column(self):
-        self.item(title="Gym", recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", date=d(11, 2), start_time=time(6))
+        self.item(title="Gym", recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", date=d(11, 2), start_time=time(6),
+                  recurrence_count=100)
         self.item(title="Dentist", date=d(11, 5), start_time=time(15), kind="event", checkable=False)
         self.item(title="Next week thing", date=d(11, 12))
         page = self.client.get(url("week") + "?date=2026-11-04").content.decode()
@@ -280,7 +281,7 @@ class ViewTests(Base):
     def test_month_grid_with_more_link(self):
         for i in range(5):
             self.item(title=f"Thing {i}", date=d(11, 20))
-        self.item(title="Pay rent", recurrence="FREQ=MONTHLY;BYMONTHDAY=1", date=d(11, 1))
+        self.item(title="Pay rent", recurrence="FREQ=MONTHLY;BYMONTHDAY=1", date=d(11, 1), recurrence_count=12)
         page = self.client.get(url("month") + "?date=2026-11-15").content.decode()
         cell = page.split('data-date="2026-11-20"', 1)[1].split('role="gridcell"', 1)[0]
         self.assertEqual(len(re.findall(r'class="pl-chip', cell)), 3)

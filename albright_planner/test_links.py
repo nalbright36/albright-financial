@@ -384,7 +384,8 @@ class ScheduleApiTests(Base):
         self.assertFalse(ScheduleItem.objects.filter(title="x").exists())
 
     def test_list_occurrences_with_completion_state(self):
-        gym = self.item("Gym", date=TODAY - timedelta(days=2), recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", start_time=time(6))
+        gym = self.item("Gym", date=TODAY - timedelta(days=2), recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", start_time=time(6),
+                         recurrence_count=100)        # with an end: every occurrence lists
         ItemCompletion.objects.create(item=gym, occurrence_date=TODAY)
         response = self.call("GET", self.api_url("schedule") + "?start=2026-11-02&end=2026-11-08")
         self.assertEqual(response.status_code, 200)

@@ -28,6 +28,7 @@ class ItemForm(forms.Form):
     days = forms.MultipleChoiceField(choices=list(zip(recurrence.WEEKDAYS, recurrence.DAY_NAMES)), required=False,
                                      widget=forms.CheckboxSelectMultiple, label="On")
     interval = forms.IntegerField(min_value=1, max_value=52, initial=2, required=False, label="Every N weeks")
+    day_interval = forms.IntegerField(min_value=2, max_value=365, initial=3, required=False, label="Every N days")
     month_day = forms.IntegerField(min_value=1, max_value=31, required=False, label="Day of the month")
     nth = forms.TypedChoiceField(choices=recurrence.NTH_CHOICES, coerce=int, required=False, label="Which")
     nth_weekday = forms.ChoiceField(choices=list(zip(recurrence.WEEKDAYS, recurrence.LONG_DAY_NAMES)), required=False,
@@ -35,6 +36,10 @@ class ItemForm(forms.Form):
     ends = forms.ChoiceField(choices=ENDS, initial="never", widget=forms.RadioSelect, label="Ends")
     until = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}), label="End date")
     count = forms.IntegerField(min_value=1, max_value=1000, required=False, label="Number of times")
+    repeat_from_completion = forms.BooleanField(
+        required=False, label="Repeat from completion date",
+        help_text="The next one is due that long after you check this one off, instead of on the next scheduled day. "
+                  "Tasks that never end show one at a time either way.")
     scope = forms.ChoiceField(choices=SCOPES, initial="this", widget=forms.RadioSelect, required=False,
                               label="Apply this change to")
 
@@ -55,6 +60,8 @@ class ItemForm(forms.Form):
             "end_time": item.end_time, "checkable": item.checkable, "priority": item.priority, "color": item.color,
             "notes": item.notes, "repeat": rule["repeat"], "days": rule["days"],
             "interval": rule["interval"] if rule["repeat"] == "every_n_weeks" else 2,
+            "day_interval": rule["interval"] if rule["repeat"] == "every_n_days" else 3,
+            "repeat_from_completion": item.repeat_from_completion,
             "month_day": rule["month_day"], "nth": rule["nth"], "nth_weekday": rule["nth_weekday"],
             "ends": "on" if item.recurrence_until else "after" if item.recurrence_count else "never",
             "until": item.recurrence_until, "count": item.recurrence_count, "scope": "this",
@@ -80,7 +87,8 @@ class ItemForm(forms.Form):
     def changes(self):
         """The cleaned form as planner.change()'s changes."""
         d = self.cleaned_data
-        rule = recurrence.build(d["repeat"], d["date"], days=d.get("days") or (), interval=d.get("interval") or 1,
+        interval = (d.get("day_interval") or 3) if d["repeat"] == "every_n_days" else d.get("interval") or 1
+        rule = recurrence.build(d["repeat"], d["date"], days=d.get("days") or (), interval=interval,
                                 month_day=d.get("month_day"), nth=d.get("nth"), nth_weekday=d.get("nth_weekday"))
         kind = d["kind"]
         return {
@@ -91,6 +99,8 @@ class ItemForm(forms.Form):
             "recurrence": rule,
             "recurrence_until": d.get("until") if rule and d.get("ends") == "on" else None,
             "recurrence_count": d.get("count") if rule and d.get("ends") == "after" else None,
+            "repeat_from_completion": bool(rule and kind == ScheduleItem.TASK and d.get("ends") == "never"
+                                           and d.get("repeat_from_completion")),
         }
 
 

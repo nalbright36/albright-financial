@@ -273,9 +273,9 @@ def _save_shares(request, *items):
 @login_required
 def edit_item(request, pk):
     item = _visible(request, pk)
-    occurrence = _day(request.GET.get("date") or request.POST.get("occurrence"), item.date)
-    if item.repeats and not recurrence.is_scheduled(item, occurrence):
-        occurrence = item.date
+    occurrence = _day(request.GET.get("date") or request.POST.get("occurrence"))
+    if occurrence is None or (item.repeats and not planner.valid_occurrence(item, occurrence)):
+        occurrence = planner.current_or_first(item)
     can_edit, is_owner = item.can_edit(request.user), item.owner_id == request.user.pk
     form = ItemForm(request.POST or None, initial=ItemForm.initial_for(item, occurrence), show_scope=item.repeats)
     if request.method == "POST":
@@ -303,6 +303,8 @@ def edit_item(request, pk):
         "form": form, "item": item, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
         "can_remove": can_edit or (is_owner and item.locked),
         "summary": recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count),
+        "repeat_text": planner.repeat_text(item) if item.one_at_a_time else "",
+        "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
         "done": completion is not None, "done_by": planner.person(completion.completed_by) if completion else "",
         "owner_name": planner.person(item.owner), "next": _next(request),
         "share_rows": planner.share_rows(request.user, {s.user_id: s.permission for s in shares}) if is_owner else [],
@@ -393,7 +395,7 @@ def move(request, pk):
     data = _json(request) if request.content_type == "application/json" else request.POST
     occurrence, to = _day(data.get("date")), _day(data.get("to"))
     scope = data.get("scope") or (planner.THIS if item.repeats else planner.ALL)
-    if not occurrence or not to or scope not in dict(planner.SCOPES) or not recurrence.is_scheduled(item, occurrence):
+    if not occurrence or not to or scope not in dict(planner.SCOPES) or not planner.valid_occurrence(item, occurrence):
         return JsonResponse({"ok": False, "error": "Bad move."}, status=400)
     planner.change(item, occurrence, scope, {"date": to})
     return JsonResponse({"ok": True})
@@ -410,10 +412,14 @@ def remove(request, pk):
     if scope not in dict(planner.SCOPES) or not (item.can_edit(request.user) or (owner and item.locked)) or \
             (not owner and not (item.repeats and scope == planner.THIS)):
         raise Http404
-    title = item.title
+    title, one_at_a_time = item.title, item.one_at_a_time
     planner.remove(item, occurrence, scope)
-    messages.success(request, f"Skipped “{title}” on {occurrence:%b} {occurrence.day}." if item.repeats and scope == planner.THIS
-                     else f"Deleted “{title}”.")
+    if one_at_a_time and scope == planner.THIS:
+        nxt = planner.current_occurrence(item)
+        messages.success(request, f"Skipped “{title}”" + (f" – next: {nxt:%a %b} {nxt.day}." if nxt else "."))
+    else:
+        messages.success(request, f"Skipped “{title}” on {occurrence:%b} {occurrence.day}." if item.repeats
+                         and scope == planner.THIS else f"Deleted “{title}”.")
     return redirect(_next(request))
 
 

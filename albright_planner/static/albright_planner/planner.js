@@ -154,6 +154,7 @@
         var names = days.map(function (d) { return DAY_NAMES[d]; }).join(", ");
         var text = {
             daily: "Every day",
+            every_n_days: "Every " + (value("day_interval") || 3) + " days",
             weekdays: "Every weekday",
             weekly: "Every " + names,
             every_n_weeks: "Every " + (value("interval") || 2) + " weeks on " + names,
@@ -165,6 +166,7 @@
         var ends = value("ends"), until = parseDate(value("until")), count = value("count");
         if (ends === "on" && until) text += " until " + shortDate(until);
         else if (ends === "after" && count) text += ", " + count + " time" + (count === "1" ? "" : "s");
+        else if (value("kind") === "task") text += " \u00b7 one at a time";
         return text;
     }
     function refresh() {
@@ -173,7 +175,9 @@
             el.hidden = el.dataset.showFor.split(" ").indexOf(repeat) === -1;
         });
         var ends = value("ends");
-        form.querySelectorAll("[data-ends]").forEach(function (el) { el.hidden = el.dataset.ends !== ends; });
+        form.querySelectorAll("[data-ends]").forEach(function (el) {
+            el.hidden = el.dataset.ends !== ends || (el.dataset.kind && el.dataset.kind !== value("kind"));
+        });
         var out = document.getElementById("pl-summary");
         if (out) out.textContent = summary();
         var checkable = document.getElementById("pl-checkable"), box = form.elements.checkable;

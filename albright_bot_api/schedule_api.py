@@ -158,7 +158,8 @@ def _occurrence_json(o):
     return {"item_id": o.item.pk, "title": o.title, "date": o.date.isoformat(),
             "occurrence_date": o.occurrence_date.isoformat(), "start_time": o.start_time.strftime("%H:%M") if o.start_time else None,
             "end_time": o.end_time.strftime("%H:%M") if o.end_time else None, "kind": o.item.kind,
-            "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats, "created_by": o.item.created_by,
+            "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats,
+            "one_at_a_time": o.item.one_at_a_time, "created_by": o.item.created_by,
             "owner": _person(o.item.owner), "mine": not getattr(o, "shared_in", False),
             "done_by": _person(o.done_by) if getattr(o, "done_by", None) else None}
 
@@ -177,6 +178,7 @@ def _item_json(request, item):
             "until": item.recurrence_until.isoformat() if item.recurrence_until else None,
             "count": item.recurrence_count,
             "repeats": recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count) or None,
+            "one_at_a_time": item.one_at_a_time, "repeat_from_completion": item.repeat_from_completion,
             "created_by": item.created_by,
             "url": request.build_absolute_uri(reverse("albright_planner:edit", args=[item.pk]))}
 
@@ -191,9 +193,12 @@ def schedule_list(request, token):
         raise ApiError(400, '"end" is before "start".', "rejected: end before start")
     if (end - start).days >= MAX_RANGE_DAYS:
         raise ApiError(400, f"The range can be at most {MAX_RANGE_DAYS} days.", "rejected: range too long")
-    rows = [_occurrence_json(o) for o in planner.occurrences(token.owner, start, end)]
+    expand = request.GET.get("expand", "")
+    if expand not in ("", "all"):
+        raise ApiError(400, '"expand" must be "all" (or left out).', "rejected: bad expand")
+    rows = [_occurrence_json(o) for o in planner.occurrences(token.owner, start, end, expand=expand == "all")]
     return ({"start": start.isoformat(), "end": end.isoformat(), "occurrences": rows}, 200,
-            f"listed {len(rows)} occurrences {start}..{end}")
+            f"listed {len(rows)} occurrences {start}..{end}" + (" (expand=all)" if expand else ""))
 
 
 @bot_endpoint("schedule:write", methods=("POST",))
@@ -215,10 +220,16 @@ def schedule_create(request, token):
     if not isinstance(checkable, bool):
         raise ApiError(400, '"checkable" must be true or false.', "rejected: bad checkable")
     rule, until, count = _repeat(data, start)
+    from_completion = data.get("repeat_from_completion", False)
+    if not isinstance(from_completion, bool):
+        raise ApiError(400, '"repeat_from_completion" must be true or false.', "rejected: bad repeat_from_completion")
+    if from_completion and not (rule and kind == ScheduleItem.TASK and not until and not count):
+        raise ApiError(400, '"repeat_from_completion" is for a repeating task with no end.',
+                       "rejected: repeat_from_completion without an open-ended task")
     item = ScheduleItem.objects.create(
         owner=token.owner, title=title, date=start, start_time=start_time, end_time=end_time, kind=kind,
         checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", 1000),
-        recurrence=rule, recurrence_until=until, recurrence_count=count,
+        recurrence=rule, recurrence_until=until, recurrence_count=count, repeat_from_completion=from_completion,
         created_by=token.name[:150], from_bot=True, bot_token=token)
     from albright_planner.planner import apply_default_shares
     apply_default_shares(item)                       # shared as the owner chose by default

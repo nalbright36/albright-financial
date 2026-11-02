@@ -1,6 +1,17 @@
 """Planner logic shared by the views, Home's Today panel and the launcher:
 what's on in a date range, overdue tasks, check-off, and changing a repeating
-item for "this occurrence only", "this and following" or "all occurrences"."""
+item for "this occurrence only", "this and following" or "all occurrences".
+
+One at a time: a repeating task that never ends (ScheduleItem.one_at_a_time)
+shows only its current occurrence - the earliest not done or skipped - plus
+the ones already done, on their days. A past one stays on Today as overdue
+(no new copy appears). Checking it off or skipping it moves it on:
+  - on schedule (default): the first scheduled date after the later of its
+    date and today - missed ones are skipped, not stacked up;
+  - repeat_from_completion: today plus the repeat interval (step_from), and
+    the chain counts on from each check-off (repeat_anchor).
+Unchecking puts it back. next_due is on the item, so a check-off on a
+shared task moves it on for everyone."""
 from datetime import time, timedelta
 
 from django.db import transaction
@@ -16,6 +27,7 @@ EVERYONE, MINE, SHARED = "", "mine", "shared"
 WHO = [(EVERYONE, "All"), (MINE, "Mine"), (SHARED, "Shared with me")]
 SCOPES = [(THIS, "This occurrence only"), (FOLLOWING, "This and following"), (ALL, "All occurrences")]
 SERIES_FIELDS = ("notes", "kind", "checkable", "priority", "color", "end_time")
+MAX_PAST_SCAN_DAYS = 3660          # how far back a never-checked one-at-a-time task looks for its current one
 
 
 def today():
@@ -55,10 +67,11 @@ def _mark_sharing(occ, user):
     occ.shared_out = not occ.shared_in and bool(occ.item.shares.all())
 
 
-def occurrences(user, start, end, kind="", show_done=True, shared_only=False, who=EVERYONE):
+def occurrences(user, start, end, kind="", show_done=True, shared_only=False, who=EVERYONE, expand=False):
     """Every occurrence the user can see - their own items and ones shared with them - between start and end
     (inclusive), sorted by day and time. A check-off is the item's, so it shows for everyone who can see it, with
-    who did it (occ.done_by)."""
+    who did it (occ.done_by). A one-at-a-time task shows only its current occurrence (and the done ones) unless
+    expand (the Bot API's ?expand=all): every scheduled one."""
     items = list(_candidates(user, start, end))
     if kind in (ScheduleItem.TASK, ScheduleItem.EVENT):
         items = [i for i in items if i.kind == kind]
@@ -68,7 +81,11 @@ def occurrences(user, start, end, kind="", show_done=True, shared_only=False, wh
     for item in items:
         completions = {c.occurrence_date: c for c in item.completions.all()}
         exceptions = {e.occurrence_date: e for e in item.exceptions.all()}
-        for occ in recurrence.occurrences(item, start, end, set(completions), exceptions):
+        if item.one_at_a_time and not expand:
+            found = _one_at_a_time(item, start, end, completions, exceptions)
+        else:
+            found = recurrence.occurrences(item, start, end, set(completions), exceptions)
+        for occ in found:
             occ.can_edit = item.pk in editable
             completion = completions.get(occ.occurrence_date)
             occ.done_by = completion.completed_by if completion else None
@@ -79,9 +96,87 @@ def occurrences(user, start, end, kind="", show_done=True, shared_only=False, wh
     return out
 
 
+def _one_at_a_time(item, start, end, completions, exceptions):
+    """A one-at-a-time task's occurrences between start and end: the done ones, and its current one."""
+    key = current_occurrence(item, set(completions), _skipped(exceptions))
+    keys = sorted(set(completions)) + ([key] if key and key not in completions else [])
+    occs = [recurrence.make(item, d, exceptions.get(d), d in completions) for d in keys]
+    return [o for o in occs if start <= o.date <= end]
+
+
+def _skipped(exceptions):
+    return {d for d, e in exceptions.items() if e.action == ItemException.SKIP}
+
+
+def current_occurrence(item, completed=None, skipped=None):
+    """A one-at-a-time task's current occurrence: the date it was scheduled for (its completions and exceptions are
+    keyed by it) - the earliest one not done or skipped, from where it last moved on (next_due). Never moved on
+    here: from after its latest check-off, else its first date. completed / skipped: sets of dates (else queried)."""
+    if completed is None:
+        completed = set(item.completions.values_list("occurrence_date", flat=True))
+    if skipped is None:
+        skipped = set(item.exceptions.filter(action=ItemException.SKIP).values_list("occurrence_date", flat=True))
+    if item.repeat_from_completion and item.next_due and item.next_due not in completed | skipped:
+        return item.next_due                         # off the rule's dates: due N days/weeks/months after the last
+    floor = item.next_due
+    if floor is None:
+        floor = max(completed) + timedelta(days=1) if completed else item.date
+    floor = max(floor, item.date, today() - timedelta(days=MAX_PAST_SCAN_DAYS))
+    for day in recurrence.dates_from(item, floor):
+        if day not in completed and day not in skipped:
+            return day
+    return None
+
+
+def _move_on(item, occurrence_date, on_day):
+    """After the current occurrence was checked off or skipped on `on_day`: where the next one is."""
+    if item.repeat_from_completion:
+        item.repeat_anchor = on_day
+        item.next_due = recurrence.step_from(item, on_day)
+    else:
+        later = max(occurrence_date, on_day)
+        item.next_due = recurrence.first_after(item, later) or later + timedelta(days=1)
+    item.save(update_fields=["next_due", "repeat_anchor", "updated_at"])
+
+
+def _put_back(item, occurrence_date):
+    """Unchecking: that occurrence is the current one again (the next one it made goes away)."""
+    item.next_due = occurrence_date
+    if item.repeat_from_completion:
+        last = item.completions.order_by("-completed_at").first()
+        item.repeat_anchor = timezone.localdate(last.completed_at) if last else None
+    item.save(update_fields=["next_due", "repeat_anchor", "updated_at"])
+
+
+def valid_occurrence(item, day):
+    """Whether `day` names one of the item's occurrences: scheduled that day, or (one at a time) its current one or
+    one already done."""
+    if recurrence.is_scheduled(item, day):
+        return True
+    if item.one_at_a_time:
+        return day == current_occurrence(item) or item.completions.filter(occurrence_date=day).exists()
+    return False
+
+
+def current_or_first(item):
+    """The occurrence the item page opens on when none is given: a one-at-a-time task's current one."""
+    return (current_occurrence(item) if item.one_at_a_time else None) or item.date
+
+
+def repeat_text(item):
+    """A one-at-a-time task's line on its page: "Repeats every Mon · next appears after this one is done"."""
+    if item.repeat_from_completion:
+        how = recurrence.from_completion_text(item.recurrence) + " after it's done"
+    else:
+        text = recurrence.summary(item.recurrence, item.date)
+        how = text[:1].lower() + text[1:]
+    return f"Repeats {how} \u00b7 next appears after this one is done"
+
+
 def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
-    """One-off tasks from before `day` that aren't checked off - they roll into Today until done or moved. Includes
-    tasks shared with the user."""
+    """One-off tasks from before `day` that aren't checked off - they roll into Today until done or moved - and
+    one-at-a-time tasks whose current occurrence is before `day` (shown once, "due Mon, Nov 3"). Includes tasks
+    shared with the user."""
     day = day or today()
     if kind == ScheduleItem.EVENT:
         return []
@@ -94,14 +189,30 @@ def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
         qs = qs.exclude(owner=user)
     elif who == MINE:
         qs = qs.filter(owner=user)
-    editable = set(ScheduleItem.objects.editable_by(user).filter(pk__in=[i.pk for i in qs]).values_list("pk", flat=True))
-    out = []
-    for item in qs:
-        occ = recurrence.Occurrence(item, item.date, item.date, item.title, item.start_time, item.end_time)
-        occ.overdue, occ.can_edit, occ.done_by = True, item.pk in editable, None
+    series = ScheduleItem.objects.visible_to(user).filter(
+        archived=False, kind=ScheduleItem.TASK, checkable=True, date__lt=day, recurrence_until__isnull=True,
+        recurrence_count__isnull=True).exclude(recurrence="").select_related("owner").prefetch_related(
+        "shares__user", "exceptions", "completions")
+    if who == SHARED:
+        series = series.exclude(owner=user)
+    elif who == MINE:
+        series = series.filter(owner=user)
+    occs = [recurrence.Occurrence(item, item.date, item.date, item.title, item.start_time, item.end_time)
+            for item in qs]
+    for item in series:
+        exceptions = {e.occurrence_date: e for e in item.exceptions.all()}
+        key = current_occurrence(item, {c.occurrence_date for c in item.completions.all()}, _skipped(exceptions))
+        if key is not None:
+            occ = recurrence.make(item, key, exceptions.get(key))
+            if occ.date < day:
+                occs.append(occ)
+    editable = set(ScheduleItem.objects.editable_by(user).filter(pk__in=[o.item.pk for o in occs])
+                   .values_list("pk", flat=True))
+    for occ in occs:
+        occ.overdue, occ.can_edit, occ.done_by = True, occ.item.pk in editable, None
         _mark_sharing(occ, user)
-        out.append(occ)
-    return out
+    occs.sort(key=lambda o: (o.date, o.start_time is not None, o.start_time or time.min, o.item.pk))
+    return occs
 
 
 def open_tasks_today(user):
@@ -123,8 +234,12 @@ def today_panel(user):
 # Check-off
 # ---------------------------------------------------------------------------
 
+@transaction.atomic
 def toggle(item, occurrence_date, user, done=None):
-    """Check off (or undo) one occurrence. Returns whether it's now done, or None if it isn't scheduled that day."""
+    """Check off (or undo) one occurrence. Returns whether it's now done, or None if it isn't scheduled that day.
+    A one-at-a-time task's current occurrence moves it on to the next; unchecking one puts it back."""
+    if item.one_at_a_time:
+        return _toggle_one_at_a_time(item, occurrence_date, user, done)
     if not recurrence.is_scheduled(item, occurrence_date):
         return None
     existing = ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date)
@@ -137,12 +252,30 @@ def toggle(item, occurrence_date, user, done=None):
     return want
 
 
+def _toggle_one_at_a_time(item, occurrence_date, user, done):
+    completed = set(item.completions.values_list("occurrence_date", flat=True))
+    current = current_occurrence(item, completed)
+    is_done = occurrence_date in completed
+    if not (is_done or occurrence_date == current or recurrence.is_scheduled(item, occurrence_date)):
+        return None
+    want = (not is_done) if done is None else done
+    if want and not is_done:
+        ItemCompletion.objects.get_or_create(item=item, occurrence_date=occurrence_date, defaults={"completed_by": user})
+        if occurrence_date == current:
+            _move_on(item, occurrence_date, today())
+    elif not want and is_done:
+        ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).delete()
+        _put_back(item, occurrence_date)
+    return want
+
+
 # ---------------------------------------------------------------------------
 # Changing items
 # ---------------------------------------------------------------------------
 
 def _apply(item, changes):
-    for name in ("title", "notes", "kind", "start_time", "end_time", "checkable", "priority", "color"):
+    for name in ("title", "notes", "kind", "start_time", "end_time", "checkable", "priority", "color",
+                 "repeat_from_completion"):
         if name in changes:
             setattr(item, name, changes[name])
     if item.kind == ScheduleItem.TASK:
@@ -215,6 +348,8 @@ def change(item, occurrence_date, scope, changes):
     old_start = item.date
     _apply(item, changes)
     item.date = item.date + delta
+    if item.next_due:
+        item.next_due = item.next_due + delta
     _set_rule(item, changes, moved_from=old_start)
     item.save()
     if delta:
@@ -232,9 +367,12 @@ def remove(item, occurrence_date, scope):
         item.delete()
         return
     if scope == THIS:
+        current = current_occurrence(item) if item.one_at_a_time else None
         ItemException.objects.update_or_create(item=item, occurrence_date=occurrence_date, defaults={
             "action": ItemException.SKIP, "new_date": None, "new_start_time": None, "new_title": ""})
         ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).delete()
+        if current is not None and occurrence_date == current:
+            _move_on(item, occurrence_date, today())        # "Skip this one": on to the next, by the same rules
         return
     item.recurrence_until, item.recurrence_count = occurrence_date - timedelta(days=1), None
     item.save()

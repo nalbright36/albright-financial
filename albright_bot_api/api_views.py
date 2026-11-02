@@ -269,39 +269,48 @@ SCHEDULE (the owner's Planner - tasks and events, one-off or repeating)
 -----------------------------------------------------------------------
 Every call is a 403 if the owner can't open the Planner. Dates are YYYY-MM-DD, times HH:MM (24-hour, the
 owner's local time). A repeating item is one item; each date it happens is an "occurrence".
+ONE AT A TIME: a repeating TASK with no end ("one_at_a_time": true) has only one current occurrence - the
+earliest not done or skipped. Completing it makes the next one appear: on schedule, the first scheduled date
+after the later of its date and today (missed ones are skipped, not stacked up); with
+"repeat_from_completion", today plus the repeat interval. Un-completing it puts it back.
 
-GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD          scope: schedule:read
+GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD&expand=all  scope: schedule:read
   Occurrences between start and end, inclusive (default: the 7 days from today; at most 366 days), by day
-  and time. Includes items shared with the owner. Returns {"start", "end", "occurrences": [{"item_id",
+  and time. Includes items shared with the owner. A one-at-a-time task lists only its current occurrence
+  (on its date - which may be in the past if it's overdue) and the ones already done; expand=all (optional)
+  lists every scheduled occurrence in the range instead. Returns {"start", "end", "occurrences": [{"item_id",
   "title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
   to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
   "created_by", "owner" (whose item - first name), "mine" (false for an item someone shared with the owner),
-  "done_by" (who checked it off - either person, for a shared item - or null)}]}.
+  "done_by" (who checked it off - either person, for a shared item - or null), "one_at_a_time"}]}.
 
 POST schedule                                          scope: schedule:write
   Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
   (optional; none = all day), "end_time": HH:MM (optional), "kind": "task"|"event" (default "task"),
   "checkable": bool (events only; tasks always can be checked off), "notes": str (optional, <=1000),
   and optionally a repeat - EITHER the Planner's simple choices:
-    "repeat": "daily"|"weekdays"|"weekly"|"every_n_weeks"|"monthly_day"|"monthly_nth"|"yearly",
+    "repeat": "daily"|"every_n_days"|"weekdays"|"weekly"|"every_n_weeks"|"monthly_day"|"monthly_nth"|"yearly",
     "days": ["MO","WE","FR"] (weekly / every_n_weeks; default the date's weekday), "interval": 1-52
-    (every_n_weeks), "month_day": 1-31 (monthly_day), "nth": 1|2|3|4|-1 and "nth_weekday": "TU"
+    (every_n_days, every_n_weeks), "month_day": 1-31 (monthly_day), "nth": 1|2|3|4|-1 and "nth_weekday": "TU"
     (monthly_nth - e.g. the 2nd Tuesday)
   OR "rrule": an RFC 5545 rule using FREQ (DAILY|WEEKLY|MONTHLY|YEARLY), INTERVAL, BYDAY, BYMONTHDAY,
     BYMONTH, BYSETPOS, WKST, UNTIL, COUNT - e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR".
   End a repeat with "until": YYYY-MM-DD or "count": 1-1000 (or UNTIL/COUNT in the rrule) - not both.
+  "repeat_from_completion": bool (optional, a repeating task with no end only) - see ONE AT A TIME.
   Example: {"title": "Gym", "date": "2026-11-02", "start_time": "06:00", "repeat": "weekly",
   "days": ["MO", "WE", "FR"]}
   The item belongs to the owner and shows "by <your token's name>"; it's shared the way the owner shares new
   items by default (Planner "Share with" > "Remember as my default"). Returns 201 {"id", "title", "kind",
   "date", "start_time", "end_time", "checkable", "notes", "rrule", "until", "count", "repeats" (plain
-  English), "created_by", "url"}.
+  English), "one_at_a_time", "repeat_from_completion", "created_by", "url"}.
 
 POST schedule/<id>/complete                            scope: schedule:write
 POST schedule/<id>/uncomplete                          scope: schedule:write
   Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item; a one-off item's own date otherwise).
   Checks off (or un-checks) THAT occurrence only. Only items the owner may edit and that can be checked off
-  (anything else is a 404 or 400). Returns {"item_id", "occurrence_date", "done"}.
+  (anything else is a 404 or 400). For a one-at-a-time task, completing its current occurrence makes the next
+  one appear (see ONE AT A TIME) and un-completing puts it back. Returns {"item_id", "occurrence_date",
+  "done"}.
 """
 
 

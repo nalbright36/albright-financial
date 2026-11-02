@@ -47,7 +47,7 @@ class SharedItemsEverywhereTests(SharedBase):
                 self.assertIn(SAM_ITEM, self.page(view))
 
     def test_a_repeating_shared_item_expands(self):
-        self.hers(title="Gym", date=d(2), recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR")
+        self.hers(title="Gym", date=d(2), recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", recurrence_count=100)
         self.assertIn("Gym", self.page("week"))
         self.assertEqual([o.date for o in planner.occurrences(self.me, d(2), d(8))], [d(2), d(4), d(6)])   # Mon, Wed, Fri
         day_items = lambda day: self.page("day", day).split('id="pl-day"', 1)[1]     # not the quick-add placeholder
@@ -98,7 +98,7 @@ class SharedCompletionTests(SharedBase):
         self.assertIn("Done by Sam", self.page("day"))
 
     def test_repeating_completion_is_per_occurrence_and_shared(self):
-        item = self.hers(title="Walk", permission="edit", date=d(2), recurrence="FREQ=DAILY")
+        item = self.hers(title="Walk", permission="edit", date=d(2), recurrence="FREQ=DAILY", recurrence_count=100)
         self.wife_client.post(url("toggle", item.pk), {"date": TODAY.isoformat()})
         mine = {o.date: (o.done, planner.person(o.done_by) if o.done_by else "") for o in
                 planner.occurrences(self.me, d(3), d(5))}

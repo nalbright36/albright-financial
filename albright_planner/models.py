@@ -8,6 +8,9 @@ stored per occurrence:
     nothing is ever created ahead of time);
   - ItemException: a "this occurrence only" change - skipped, moved to another
     day/time, or retitled.
+A repeating task with no end (ScheduleItem.one_at_a_time) shows only its
+current occurrence - the earliest not done or skipped - and the next appears
+once that one is done (next_due / repeat_anchor; planner.current_occurrence).
 Items are private to their owner unless shared (ItemShare: view or edit);
 everyone else gets a 404 (ScheduleItem.objects.visible_to).
 
@@ -73,6 +76,13 @@ class ScheduleItem(models.Model):
     recurrence = models.CharField(max_length=500, blank=True)
     recurrence_until = models.DateField(null=True, blank=True)
     recurrence_count = models.PositiveIntegerField(null=True, blank=True)
+    # A repeating TASK with no end shows one occurrence at a time (planner.current_occurrence): the earliest one
+    # not done or skipped. next_due: where it stands after the last check-off or skip (empty = never advanced).
+    # repeat_from_completion: the next one is the check-off day plus the repeat interval (repeat_anchor = that
+    # day) instead of the next scheduled date.
+    repeat_from_completion = models.BooleanField(default=False)
+    next_due = models.DateField(null=True, blank=True)
+    repeat_anchor = models.DateField(null=True, blank=True)
     # Set when another app keeps it up to date (sources.SOURCES key, e.g. "watchlist"); empty = added by hand.
     source_app = models.CharField(max_length=20, blank=True)
     source_id = models.CharField(max_length=64, blank=True)
@@ -108,6 +118,12 @@ class ScheduleItem(models.Model):
     @property
     def repeats(self):
         return bool(self.recurrence)
+
+    @property
+    def one_at_a_time(self):
+        """A repeating task that never ends ("Ends: Never"): only its current occurrence shows."""
+        return (self.kind == self.TASK and self.checkable and bool(self.recurrence)
+                and self.recurrence_until is None and self.recurrence_count is None)
 
     @property
     def all_day(self):
