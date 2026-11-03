@@ -29,6 +29,7 @@ urlpatterns = [
     path("recipes/<int:pk>/", views.recipe, name="recipe"),
     path("recipes/<int:pk>/edit/", views.recipe_edit, name="recipe_edit"),
     path("recipes/<int:pk>/plan/", views.recipe_plan, name="recipe_plan"),
+    path("recipes/<int:pk>/rate/", views.recipe_rate, name="recipe_rate"),
     path("recipes/<int:pk>/groceries/", views.recipe_groceries, name="recipe_groceries"),
     path("recipes/<int:pk>/reimport/", views.recipe_reimport, name="recipe_reimport"),
 ]

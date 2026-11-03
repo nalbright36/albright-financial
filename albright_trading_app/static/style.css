@@ -1953,6 +1953,29 @@ a.meals-chip:hover { text-decoration: none; border-color: var(--border-strong); 
   color: var(--text-secondary); }
 a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-tag.is-active { color: var(--accent-hover); border-color: var(--accent); background: var(--accent-soft); }
+.meals-tag--standard { color: var(--text-primary); background: var(--surface-hover); }
+/* The recipe form's shared tags: tappable chips (the checkbox inside each). */
+.meals-tag-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.meals-tag-pick label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--radius-full);
+  border: 1px solid var(--border); font-size: var(--text-sm); cursor: pointer; }
+.meals-tag-pick label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text-primary); }
+.meals-tag-pick input { accent-color: var(--accent-solid); }
+
+/* The recipe's Rating drop-down - this person's own; its border takes the level's color. */
+.meals-rating { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 var(--space-3); }
+.meals-rating__label { font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); }
+.meals-rating__select { min-height: 40px; min-width: 200px; flex: 0 1 260px; border-width: 1px; border-left-width: 4px; }
+.meals-rating__select[data-level="1"] { border-left-color: var(--red); }
+.meals-rating__select[data-level="2"] { border-left-color: var(--text-tertiary); }
+.meals-rating__select[data-level="3"] { border-left-color: var(--amber); }
+.meals-rating__select[data-level="4"] { border-left-color: var(--text-secondary); }
+.meals-rating__select[data-level="5"] { border-left-color: var(--gain); }
+.meals-rating__select[data-level="6"] { border-left-color: #EAB308; }
+.meals-rating.is-live .meals-rating__save { display: none; }
+.meals-rating__status { font-size: var(--text-sm); color: var(--text-secondary); }
+.meals-rating__meaning { flex-basis: 100%; margin: 0; }
+.meals-rating__note { flex-basis: 100%; margin: 0; }
+.meals-rating__note[hidden] { display: none; }
 .meals-recipe-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: var(--space-3); }
 @media (min-width: 700px) { .meals-recipe-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); } }
 .meals-recipe-card { display: flex; flex-direction: column; gap: 6px; height: 100%; color: inherit; text-decoration: none;

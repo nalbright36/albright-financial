@@ -1,7 +1,7 @@
 from django import forms
 
 from . import groceries, importer
-from .models import SLOTS, MealIdea, MealPlanEntry, MealsSettings, Recipe
+from .models import MealIdea, MealPlanEntry, MealsSettings, Recipe, SLOTS, STANDARD_TAGS
 
 INPUT = {"class": "ledger-input"}
 DATE = {"class": "ledger-input", "type": "date"}
@@ -52,6 +52,9 @@ class RecipeForm(forms.ModelForm):
     steps_text = forms.CharField(label='Steps (one per line; "## Sauce" starts a section)', required=False,
                                  widget=forms.Textarea(attrs={**INPUT, "rows": 8}))
     tags_text = forms.CharField(label="Tags (comma-separated)", required=False, widget=forms.TextInput(attrs=INPUT))
+    # The shared set (models.STANDARD_TAGS) - anyone who can edit the recipe can change them.
+    standard_tags = forms.MultipleChoiceField(choices=STANDARD_TAGS, required=False, label="Good for",
+                                              widget=forms.CheckboxSelectMultiple(attrs={"class": "meals-tag-pick"}))
 
     class Meta:
         model = Recipe
@@ -73,6 +76,7 @@ class RecipeForm(forms.ModelForm):
             self.fields["ingredients_text"].initial = "\n".join(ingredient_line(i) for i in recipe.ingredients)
             self.fields["steps_text"].initial = "\n".join(str(s) for s in recipe.steps)
             self.fields["tags_text"].initial = ", ".join(recipe.tags)
+            self.fields["standard_tags"].initial = list(recipe.standard_tags or [])
 
     def save(self, commit=True):
         # An imported line left as it was keeps its parts and its original text.
@@ -83,6 +87,8 @@ class RecipeForm(forms.ModelForm):
         recipe.steps = [line.strip() for line in self.cleaned_data["steps_text"].splitlines() if line.strip()]
         recipe.tags = list(dict.fromkeys(t.strip().lower() for t in self.cleaned_data["tags_text"].split(",")
                                          if t.strip()))[:20]
+        chosen = set(self.cleaned_data.get("standard_tags") or [])
+        recipe.standard_tags = [key for key, _label in STANDARD_TAGS if key in chosen]
         if commit:
             recipe.save()
         return recipe

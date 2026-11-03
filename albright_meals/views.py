@@ -19,7 +19,7 @@ from django.views.decorators.http import require_POST
 from . import groceries, importer, plan
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
-from .models import SLOTS, GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe
+from .models import GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe, RecipeRating, SLOTS, STANDARD_TAGS
 
 
 def _week_url(day):
@@ -327,7 +327,11 @@ def recipe(request, pk):
                                 "unit": unit, "note": note, "original": original, "on_list": on_list})
     source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
     host = (urlsplit(source_link).hostname or "") if source_link else ""
+    mine = RecipeRating.objects.filter(recipe=obj, user=request.user).first()
+    labels = dict(STANDARD_TAGS)
     return render(request, "albright_meals/recipe.html", {
+        "my_rating": mine, "rating_levels": RecipeRating.choices(), "needs_tweaks": RecipeRating.NEEDS_TWEAKS,
+        "standard_tags": [labels[key] for key in obj.standard_tags or [] if key in labels],
         "recipe": obj, "ingredients": ingredients, "step_groups": importer.step_groups(obj.steps),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
@@ -346,6 +350,32 @@ def recipe_edit(request, pk=None):
         messages.success(request, f"Saved {saved.title}.")
         return redirect("albright_meals:recipe", pk=saved.pk)
     return render(request, "albright_meals/recipe_form.html", {"form": form, "recipe": obj})
+
+
+@login_required
+@require_POST
+def recipe_rate(request, pk):
+    """The recipe's Rating drop-down: this person's own level (blank removes it) and, optionally, a note."""
+    obj = get_object_or_404(Recipe, pk=pk)
+    raw = request.POST.get("level", "")
+    level = int(raw) if raw.isdigit() and int(raw) in dict(RecipeRating.LEVELS) else None
+    if raw and level is None:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": False, "error": "Pick one of the ratings."}, status=400)
+        messages.error(request, "Pick one of the ratings.")
+        return redirect("albright_meals:recipe", pk=pk)
+    if level is None:
+        RecipeRating.objects.filter(recipe=obj, user=request.user).delete()
+        rating = None
+    else:
+        rating, _ = RecipeRating.objects.update_or_create(recipe=obj, user=request.user, defaults={
+            "level": level, "note": request.POST.get("note", "").strip()[:500]})
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "level": rating.level if rating else None,
+                             "label": rating.get_level_display() if rating else "",
+                             "meaning": rating.meaning if rating else ""})
+    messages.success(request, f"Rated {rating.emoji} {rating.get_level_display()}." if rating else "Rating cleared.")
+    return redirect("albright_meals:recipe", pk=pk)
 
 
 @login_required

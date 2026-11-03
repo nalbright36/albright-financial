@@ -11,6 +11,7 @@ recipe data, or - when it has none - the AI reading the page's text, which
 marks the recipe "needs review".
 """
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 BOT_LABEL = "Recipe Bot"
@@ -45,6 +46,13 @@ def _user_fk(related_name):
                              related_name=related_name)
 
 
+# The shared recipe tags (Recipe.standard_tags) - a fixed set, separate from ratings and from the free-form `tags`
+# that imports and the Recipe Bot write.
+STANDARD_TAGS = [("quick_weeknight", "Quick weeknight"), ("good_leftovers", "Good leftovers"),
+                 ("meal_prep", "Meal-prep friendly"), ("special_occasion", "Special occasion"),
+                 ("company", "Company-worthy"), ("kid_friendly", "Kid-friendly"), ("budget", "Budget-friendly")]
+
+
 class Recipe(_Authored):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -59,6 +67,7 @@ class Recipe(_Authored):
                                                      help_text="As the source states it; else prep + cook.")
     servings = models.PositiveSmallIntegerField(null=True, blank=True)
     tags = models.JSONField(default=list, blank=True)           # ["quick", "chicken"]
+    standard_tags = models.JSONField(default=list, blank=True)  # keys of STANDARD_TAGS, any number
     source_url = models.URLField(max_length=500, blank=True)
     # source_url normalized (importer.normalize_url) - how a link that's already saved is recognized.
     source_key = models.CharField(max_length=500, blank=True, db_index=True, editable=False)
@@ -87,6 +96,59 @@ class Recipe(_Authored):
     def total_minutes(self):
         total = (self.prep_minutes or 0) + (self.cook_minutes or 0)
         return self.total_time_minutes or total or None
+
+
+class RecipeRating(models.Model):
+    """One person's "stamp" on a recipe - a text level, not a number. Stored as an ordered integer (1-6) so it
+    sorts and filters; re-rating updates the same row (one per recipe and person)."""
+    WONT_EAT, NOT_FOR_ME, NEEDS_TWEAKS, WILL_EAT, FAVORITE, STAPLE = 1, 2, 3, 4, 5, 6
+    LEVELS = [(WONT_EAT, "Won't eat again"), (NOT_FOR_ME, "Not for me"), (NEEDS_TWEAKS, "Needs tweaks"),
+              (WILL_EAT, "Will eat again"), (FAVORITE, "Favorite"), (STAPLE, "Staple")]
+    # level -> (emoji, color token, what it means) - the badge and its tooltip / help text.
+    INFO = {
+        WONT_EAT: ("🚫", "red", "Didn't like it; skip it in future plans."),
+        NOT_FOR_ME: ("😐", "muted", "Edible, but not worth making again."),
+        NEEDS_TWEAKS: ("🔧", "amber", "Has potential; try again with changes."),
+        WILL_EAT: ("👍", "neutral", "Good; happy to have it again sometime."),
+        FAVORITE: ("❤️", "green", "Really loved it; make it often."),
+        STAPLE: ("⭐", "gold", "Part of the regular rotation; our go-to."),
+    }
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="ratings")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="meal_ratings")
+    level = models.PositiveSmallIntegerField(choices=LEVELS, validators=[MinValueValidator(1), MaxValueValidator(6)])
+    # Optional - for "Needs tweaks" the form asks "What would you change?"
+    note = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-level", "pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["recipe", "user"], name="meals_one_rating_per_person"),
+            models.CheckConstraint(condition=models.Q(level__gte=1, level__lte=6), name="meals_rating_level_1_to_6"),
+        ]
+        indexes = [models.Index(fields=["recipe", "level"])]
+
+    def __str__(self):
+        return f"{self.user} - {self.recipe}: {self.get_level_display()}"
+
+    @classmethod
+    def choices(cls):
+        """[{"value", "label", "emoji", "color", "meaning"}] in order - the Rating drop-down."""
+        return [{"value": value, "label": label, "emoji": cls.INFO[value][0], "color": cls.INFO[value][1],
+                 "meaning": cls.INFO[value][2]} for value, label in cls.LEVELS]
+
+    @property
+    def emoji(self):
+        return self.INFO[self.level][0]
+
+    @property
+    def color(self):
+        return self.INFO[self.level][1]
+
+    @property
+    def meaning(self):
+        return self.INFO[self.level][2]
 
 
 class MealPlanEntry(_Authored):

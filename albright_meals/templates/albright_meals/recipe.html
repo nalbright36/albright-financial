@@ -5,6 +5,21 @@
 <div class="container meals-page meals-narrow">
     <a href="{% url 'albright_meals:recipes' %}" class="meals-back">&larr; Recipes</a>
     <article class="meals-recipe">
+        {# Rating: this person's own (others never see it here); blank until they pick one. Saves on change (static/meals/recipe.js); without JS, Save. #}
+        <form method="post" action="{% url 'albright_meals:recipe_rate' recipe.pk %}" class="meals-rating" id="recipe-rating" data-needs-tweaks="{{ needs_tweaks }}">{% csrf_token %}
+            <label for="recipe-rating-level" class="meals-rating__label">Rating</label>
+            <select name="level" id="recipe-rating-level" class="ledger-input meals-rating__select" data-level="{{ my_rating.level|default:'' }}" aria-describedby="recipe-rating-meaning">
+                <option value=""{% if not my_rating %} selected{% endif %}>&mdash;</option>
+                {% for r in rating_levels %}<option value="{{ r.value }}" title="{{ r.meaning }}" data-meaning="{{ r.meaning }}"{% if my_rating.level == r.value %} selected{% endif %}>{{ r.emoji }} {{ r.label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm meals-rating__save">Save</button>
+            <span class="meals-rating__status" id="recipe-rating-status" role="status" aria-live="polite"></span>
+            <p class="meals-hint meals-rating__meaning" id="recipe-rating-meaning">{% if my_rating %}{{ my_rating.meaning }}{% else %}Only you see your rating.{% endif %}</p>
+            <div class="field meals-rating__note"{% if my_rating.level != needs_tweaks %} hidden{% endif %} id="recipe-rating-note-field">
+                <label for="recipe-rating-note">What would you change?</label>
+                <input type="text" name="note" id="recipe-rating-note" class="ledger-input" maxlength="500" value="{{ my_rating.note|default:'' }}" placeholder="Less salt, add lime&hellip;">
+            </div>
+        </form>
         <h1 class="meals-head__title">{{ recipe.title }}{% if recipe.needs_review %} <span class="badge warn meals-review-badge" title="The AI read this from the page's text - check it against the original">Needs review</span>{% endif %}</h1>
         <p class="meals-head__sub">
             {% if recipe.prep_minutes %}Prep {{ recipe.prep_minutes }} min &middot; {% endif %}{% if recipe.cook_minutes %}Cook {{ recipe.cook_minutes }} min &middot; {% endif %}{% if recipe.total_time_minutes %}Total {{ recipe.total_time_minutes }} min &middot; {% endif %}{% if recipe.servings %}Serves {{ recipe.servings }} &middot; {% endif %}Added by <span class="meals-by">{{ recipe.author_label|default:"someone" }}</span>
@@ -13,6 +28,7 @@
         {% if recipe.needs_review %}<p class="meals-hint">The AI read this recipe from the page's text because the page had no recipe data - check it against the original, then untick "Needs review" in Edit.</p>{% endif %}
         {% if recipe.image_url %}<img src="{{ recipe.image_url }}" alt="" class="meals-recipe__image" loading="lazy" referrerpolicy="no-referrer">{% endif %}
         {% if recipe.description %}<p>{{ recipe.description|linebreaksbr }}</p>{% endif %}
+        {% if standard_tags %}<div class="meals-tags meals-tags--standard" id="recipe-standard-tags">{% for label in standard_tags %}<span class="meals-tag meals-tag--standard">{{ label }}</span>{% endfor %}</div>{% endif %}
         {% if recipe.tags %}<div class="meals-tags">{% for t in recipe.tags %}<a href="{% url 'albright_meals:recipes' %}?tag={{ t|urlencode }}" class="meals-tag">{{ t }}</a>{% endfor %}</div>{% endif %}
 
         <div class="meals-recipe__actions">
