@@ -40,7 +40,8 @@ static/labs/nav_settings.js moves the rows in place instead, saved with Save.
     <p style="margin: 10px 0 0; font-size: 0.75rem; color: var(--text-secondary);">"App picker (Home)" shows your app tiles. "Last used app" reopens whichever app you were in last. Only apps in your navigation are offered; if yours is hidden or no longer available, you get the app picker. A link that sent you to sign in (e.g. a bookmarked page) always wins, and the Home tile in the app menu always opens the picker.</p>
     {% if today_setting %}
     <input type="hidden" name="today_panel" value="1">
-    <label class="labs-choice" style="margin-top: 12px;"><input type="checkbox" name="show_today" value="1" id="show-today"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel on Home <span style="font-size: 0.75rem; color: var(--text-secondary);">(the Planner's tasks for today, above the app tiles)</span></label>
+    <label class="labs-choice" style="margin-top: 12px;"><input type="checkbox" name="show_today" value="1" id="show-today" aria-controls="show-completed-row"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel on Home <span style="font-size: 0.75rem; color: var(--text-secondary);">(the Planner's tasks for today, above the app tiles)</span></label>
+    <label class="labs-choice labs-choice--sub" id="show-completed-row" data-today-sub{% if not pref.show_today_panel %} hidden{% endif %}><input type="checkbox" name="show_completed" value="1" id="show-completed"{% if pref.show_completed_today %} checked{% endif %}> Show completed tasks <span style="font-size: 0.75rem; color: var(--text-secondary);">(struck through, at the bottom)</span></label>
     {% endif %}
     <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save</button>
 </form>

@@ -62,7 +62,7 @@ class SharedItemsEverywhereTests(SharedBase):
         todays, overdue = planner.open_tasks_today(self.me)
         self.assertEqual(([o.title for o in todays], [o.title for o in overdue]), (["Today one"], ["Late one"]))
         panel = planner.today_panel(self.me)
-        self.assertEqual((panel["overdue"], [o.title for o in panel["tasks"]]), (1, ["Today one"]))
+        self.assertEqual((panel["overdue"], [o.title for o in panel["tasks"]]), (1, ["Late one", "Today one"]))
         from albright_labs import launcher
         self.assertEqual(launcher.planner(self.me), "2 tasks today")
 

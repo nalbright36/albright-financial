@@ -52,7 +52,9 @@ the buttons submit the form.
             </div>
             {% if today_setting %}
             <input type="hidden" name="today_panel" value="1">
-            <label class="labs-choice"><input type="checkbox" name="show_today" value="1" id="show-today"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel <span class="labs-picker__note">(the Planner's tasks for today, above the tiles)</span></label>
+            <label class="labs-choice"><input type="checkbox" name="show_today" value="1" id="show-today" aria-controls="show-completed-row"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel <span class="labs-picker__note">(the Planner's tasks for today, above the tiles)</span></label>
+            {# Only while "Show Today panel" is ticked (labs/hub.js; My account: labs/nav_settings.js). #}
+            <label class="labs-choice labs-choice--sub" id="show-completed-row" data-today-sub{% if not pref.show_today_panel %} hidden{% endif %}><input type="checkbox" name="show_completed" value="1" id="show-completed"{% if pref.show_completed_today %} checked{% endif %}> Show completed tasks <span class="labs-picker__note">(struck through, at the bottom)</span></label>
             {% endif %}
         </div>
         <div class="labs-picker__actions" data-edit-only>

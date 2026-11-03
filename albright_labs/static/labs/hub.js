@@ -12,6 +12,10 @@
 
     var root = document.getElementById("labs-picker");
     if (!root) return;
+    // "Show completed tasks" only while "Show Today panel" is ticked.
+    var showToday = document.getElementById("show-today"), todaySub = document.getElementById("show-completed-row");
+    if (showToday && todaySub) showToday.addEventListener("change", function () { todaySub.hidden = !showToday.checked; });
+
     var form = document.getElementById("picker-form");
     var favorites = root.querySelector('[data-list="favorites"]');
     var others = root.querySelector('[data-list="others"]');

@@ -277,6 +277,13 @@ html.js .pl .pl-nojs { display: none; }
 .pl-today__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 @media (min-width: 760px) { .pl-today__cols { grid-template-columns: 1fr 1fr; } }
 .pl-today .pl-label { margin-bottom: 6px; }
+.pl-today__count { margin: 0 0 10px; color: var(--pl-muted); }
+/* "Done · Undo" after checking a task off (planner.js) - it stays a few seconds. */
+.pl-today__toast { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; padding: 6px 12px; border-radius: 10px;
+  border: 1px solid var(--pl-line); background: var(--surface-hover); color: var(--text-primary); }
+.pl-today__toast[hidden] { display: none; }
+.pl .pl-today__undo { min-height: 30px; padding: 0 4px; color: var(--accent); font-weight: 600; text-decoration: underline; }
+.pl .pl-today__undo[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) { .pl * { transition: none !important; } }
 

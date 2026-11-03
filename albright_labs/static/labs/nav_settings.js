@@ -3,6 +3,10 @@
 // inputs follow the rows, so Save keeps the new order), and the last
 // ticked app can't be unticked - at least one app stays in the nav.
 (function () {
+    // "Show completed tasks" only while "Show Today panel on Home" is ticked.
+    var showToday = document.getElementById('show-today'), todaySub = document.getElementById('show-completed-row');
+    if (showToday && todaySub) showToday.addEventListener('change', function () { todaySub.hidden = !showToday.checked; });
+
     var list = document.getElementById('nav-order');
     if (!list) return;
     var note = document.getElementById('nav-form-note');

@@ -1,18 +1,24 @@
 {% comment %}
 Home's "Today" panel (albright_labs.views.hub, for people who can open the
-Planner): today's tasks with their checkboxes, today's events, and how many
-tasks are overdue. Styles and check-off: the Planner's planner.css / planner.js.
+Planner): the open tasks - overdue ones first, then today's - with their checkboxes,
+and today's events. With Home's "Show completed tasks" on, today's finished tasks
+follow, struck through. The count line says what's shown ("3 open today").
+Checking a task off here takes it out of the list at once, with "Done · Undo"
+(planner.js); with completed tasks shown it moves to the bottom instead.
+Styles and check-off: the Planner's planner.css / planner.js.
 {% endcomment %}
-<section class="card pl pl-today" id="planner-today" aria-labelledby="planner-today-h" data-view-url="{% url 'albright_planner:item' 0 %}">
+<section class="card pl pl-today" id="planner-today" aria-labelledby="planner-today-h" data-view-url="{% url 'albright_planner:item' 0 %}"
+         data-show-completed="{{ planner_today.show_completed|yesno:'1,0' }}">
     <div class="pl-today__head">
         <h2 class="pl-section__title" id="planner-today-h">Today <span class="pl-muted pl-small">{{ planner_today.date|date:"l, F j" }}</span></h2>
         <a href="{% url 'albright_planner:day' %}" class="pl-small">Open Planner &rarr;</a>
     </div>
-    {% if planner_today.overdue %}<p class="pl-overdue pl-small"><a href="{% url 'albright_planner:day' %}">{{ planner_today.overdue }} overdue task{{ planner_today.overdue|pluralize }}</a></p>{% endif %}
+    <p class="pl-today__count pl-small" id="planner-today-count" data-open="{{ planner_today.open }}" data-overdue="{{ planner_today.overdue }}" data-done="{{ planner_today.done }}">{% if planner_today.open %}{{ planner_today.open }} open today{% else %}Nothing open today{% endif %}{% if planner_today.overdue %} &middot; {{ planner_today.overdue }} overdue{% endif %}{% if planner_today.done %} &middot; {{ planner_today.done }} done{% endif %}</p>
     <div class="pl-today__cols">
         <div>
             <h3 class="pl-label">Tasks</h3>
-            <ul class="pl-list">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
+            <ul class="pl-list" id="planner-today-tasks">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
+            <p class="pl-today__toast pl-small" id="planner-today-toast" role="status" aria-live="polite" hidden><span id="planner-today-toast-text">Done</span> &middot; <button type="button" class="pl-today__undo" id="planner-today-undo">Undo</button></p>
         </div>
         <div>
             <h3 class="pl-label">Events</h3>

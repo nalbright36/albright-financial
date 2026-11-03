@@ -44,6 +44,8 @@ class UserPreference(models.Model):
     # Home's Favorites row (app keys, shown first) and whether Home shows the Planner's Today panel.
     pinned_apps = models.JSONField(default=list, blank=True)
     show_today_panel = models.BooleanField(default=False)
+    # ...and whether that panel also lists today's completed tasks (struck through, at the bottom). Off: open ones only.
+    show_completed_today = models.BooleanField(default=False)
     # Admin > Users "Allow API keys": may this person make their own Bot API keys (My account > My API keys)?
     # Superusers always may. Turning it off stops their keys working (albright_bot_api.scopes).
     api_keys_allowed = models.BooleanField(default=False)

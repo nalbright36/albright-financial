@@ -420,7 +420,8 @@ class HomeTests(Base):
         panel = page.split('id="planner-today"', 1)[1].split("</section>", 1)[0]
         self.assertIn("Water plants", panel.split(">Tasks<", 1)[1].split(">Events<", 1)[0])
         self.assertIn("Standup", panel.split(">Events<", 1)[1])
-        self.assertIn("1 overdue task", panel)
+        self.assertIn("Late task", panel.split(">Tasks<", 1)[1].split(">Events<", 1)[0])   # overdue: in the list
+        self.assertIn(">2 open today &middot; 1 overdue</p>", panel)
         self.assertIn('class="pl-check-form"', panel)
         self.assertRegex(page, r'<link rel="stylesheet" href="/static/albright_planner/planner\.css\?v=\d+">')
 

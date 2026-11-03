@@ -2,7 +2,9 @@
  * Albright Planner - included on every Planner page by templates/index.html (apps_registry: Planner's script)
  * and by Home for its Today panel. Vanilla JS; everything also works without it (forms post normally).
  *
- *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through
+ *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through.
+ *               In Home's Today panel a checked-off task leaves the list at once with "Done · Undo" (or, with
+ *               "Show completed tasks" on, drops to the bottom struck through); the count line follows.
  *   toolbar     the date range, "‹ Today ›", View options and New item. View options (a <dialog>; a bottom sheet
  *               on phones): the view, the filters, Show meals and default sharing apply live while it's open (the
  *               page underneath is fetched with them), Save posts them to the account, Cancel / Esc / the
@@ -113,11 +115,81 @@
                     showTask(el, res.data.done);
                     if (choice === "all") { setRows(el, true); el.dataset.openSubtasks = "0"; }
                     showProgress(el, res.data);
+                    if (todayBox && todayBox.contains(el)) { todayChecked(el, res.data.done); return; }
                     if (res.data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
                 });
             });
         }).catch(function () { show(was); });
     });
+
+    // ---------- Home's Today panel: a checked-off task leaves the list ("Done · Undo"), or drops to the bottom ----------
+    var todayBox = document.getElementById("planner-today"), lastDone = null, toastTimer = null;
+    function todayCount(change) {
+        var c = document.getElementById("planner-today-count");
+        if (!c) return;
+        ["open", "overdue", "done"].forEach(function (k) {
+            c.dataset[k] = Math.max(0, parseInt(c.dataset[k] || "0", 10) + (change[k] || 0));
+        });
+        var open = +c.dataset.open, overdue = +c.dataset.overdue, done = +c.dataset.done;
+        c.textContent = (open ? open + " open today" : "Nothing open today") + (overdue ? " · " + overdue + " overdue" : "") +
+            (done ? " · " + done + " done" : "");
+    }
+    function todayEmpty(list) {
+        var empty = list.querySelector(".pl-empty"), any = list.querySelector(".pl-item");
+        if (any && empty) empty.parentNode.removeChild(empty);
+        if (!any && !empty) {
+            empty = document.createElement("li");
+            empty.className = "pl-empty";
+            empty.textContent = "No tasks today.";
+            list.appendChild(empty);
+        }
+    }
+    function todayToast(text, undo) {
+        var toast = document.getElementById("planner-today-toast");
+        document.getElementById("planner-today-toast-text").textContent = text;
+        document.getElementById("planner-today-undo").hidden = !undo;
+        toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.hidden = true; lastDone = null; }, 6000);
+    }
+    function todayChecked(el, done) {
+        var list = el.parentNode, overdue = el.classList.contains("is-overdue");
+        var keep = todayBox.getAttribute("data-show-completed") === "1";
+        if (done) {
+            todayCount({open: -1, overdue: overdue ? -1 : 0, done: keep ? 1 : 0});
+            if (keep) list.appendChild(el);                                   // struck through, at the bottom
+            else {
+                lastDone = {el: el, list: list, next: el.nextSibling, overdue: overdue};
+                list.removeChild(el);
+                todayToast("Done", true);
+            }
+        } else if (keep) {
+            todayCount({open: 1, done: -1});                                  // a finished one, open again
+        }
+        todayEmpty(list);
+    }
+    if (todayBox) {
+        document.getElementById("planner-today-undo").addEventListener("click", function () {
+            var d = lastDone, form = d && d.el.querySelector(".pl-check-form");
+            if (!d || !form) return;
+            lastDone = null;
+            document.getElementById("planner-today-toast").hidden = true;
+            d.list.insertBefore(d.el, d.next && d.next.parentNode === d.list ? d.next : null);
+            showTask(d.el, false);
+            todayCount({open: 1, overdue: d.overdue ? 1 : 0});
+            todayEmpty(d.list);
+            post(form.action, new FormData(form)).then(function (res) {      // the box toggles it back to open
+                if (res.ok && !res.data.done) return;
+                throw new Error("not undone");
+            }).catch(function () {
+                showTask(d.el, true);
+                d.list.removeChild(d.el);
+                todayCount({open: -1, overdue: d.overdue ? -1 : 0});
+                todayEmpty(d.list);
+                todayToast("Couldn't undo – it's still done.", false);
+            });
+        });
+    }
 
     // ---------- Checklist rows: a tick saves at once (that occurrence only) ----------
     document.addEventListener("submit", function (event) {

@@ -269,13 +269,28 @@ def open_tasks_today(user):
     return todays, overdue(user, day)
 
 
-def today_panel(user):
-    """Home's Today panel: today's tasks (checkable) and events, and how many tasks are overdue."""
+def is_completed(occ):
+    """A task occurrence that's finished: checked off, or every checklist row ticked (its owner may have "Complete
+    task when all items are checked" off, so the box itself can still be open)."""
+    progress = getattr(occ, "checklist_progress", None)
+    return bool(occ.done or (progress and progress["total"] and not progress["open"]))
+
+
+def today_panel(user, show_completed=False):
+    """Home's Today panel: the open tasks - overdue ones first, then today's - and today's events. show_completed
+    (Home's "Show completed tasks"): today's finished tasks too, at the bottom. "open" / "overdue" / "done": the
+    count line's numbers for what's shown."""
     from . import checklist
     day = today()
-    occs = checklist.attach(occurrences(user, day, day))
-    return {"date": day, "tasks": [o for o in occs if o.item.kind == ScheduleItem.TASK],
-            "events": [o for o in occs if o.item.kind == ScheduleItem.EVENT], "overdue": len(overdue(user, day))}
+    late = overdue(user, day)
+    occs = checklist.attach(occurrences(user, day, day) + late)
+    todays = [o for o in occs if o.item.kind == ScheduleItem.TASK and not getattr(o, "overdue", False)]
+    open_tasks = late + [o for o in todays if not is_completed(o)]
+    done = [o for o in todays if is_completed(o)] if show_completed else []
+    for o in done:
+        o.done = True                                  # struck through, even if only its checklist is finished
+    return {"date": day, "tasks": open_tasks + done, "events": [o for o in occs if o.item.kind == ScheduleItem.EVENT],
+            "open": len(open_tasks), "overdue": len(late), "done": len(done), "show_completed": show_completed}
 
 
 # ---------------------------------------------------------------------------

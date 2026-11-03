@@ -150,7 +150,7 @@ def _planner_today(request, pref):
         return None
     try:
         from albright_planner.planner import today_panel
-        return {**today_panel(request.user), "here": request.get_full_path()}
+        return {**today_panel(request.user, show_completed=pref.show_completed_today), "here": request.get_full_path()}
     except Exception:  # noqa: BLE001 - the panel must never break Home
         log.exception("Home's Today panel failed")
         return None
@@ -196,6 +196,7 @@ def _set_open_after(request, pref, reset=False):
     hidden), it goes back to the picker."""
     if "today_panel" in request.POST:
         pref.show_today_panel = request.POST.get("show_today") == "1"
+        pref.show_completed_today = request.POST.get("show_completed") == "1"
     try:
         pref.landing, pref.landing_page = landing.parse_open_after(request.user, request.POST.get("open_after"), pref)
         return True

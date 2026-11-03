@@ -1630,6 +1630,8 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-tile.is-unavailable .labs-tile__value { color: var(--text-secondary); }
 .labs-landing-form__choices { display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .labs-choice { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
+.labs-choice[hidden] { display: none; }
+.labs-choice--sub { margin-top: 6px; padding-left: 24px; }            /* a sub-option, under the one it belongs to */
 @media (prefers-reduced-motion: reduce) { .labs-tile { transition: none; } }
 
 /* ===== Albright Labs: Home, the app picker (albright_labs/hub.html, labs/hub.js) ===== */

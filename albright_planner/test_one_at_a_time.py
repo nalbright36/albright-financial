@@ -116,7 +116,7 @@ class OneShowsTests(Base):
         todays, overdue = planner.open_tasks_today(self.me)
         self.assertEqual((len(todays), len(overdue)), (0, 1))
         self.assertEqual(planner.today_panel(self.me)["overdue"], 1)
-        self.assertEqual(planner.today_panel(self.me)["tasks"], [])
+        self.assertEqual([(o.item.pk, o.date) for o in planner.today_panel(self.me)["tasks"]], [(item.pk, d(10, 5))])
 
     def test_detail_says_one_at_a_time(self):
         item = self.task(start=d(11, 9))
