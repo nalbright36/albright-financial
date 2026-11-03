@@ -52,6 +52,7 @@
 .app-launcher__tile[data-app-target="notes"] { --app-color: var(--app-notes); }
 .app-launcher__tile[data-app-target="planner"] { --app-color: var(--app-planner); }
 .app-launcher__tile[data-app-target="money"] { --app-color: var(--app-money); }
+.app-launcher__tile[data-app-target="fitness"] { --app-color: var(--app-fitness); }
 .app-launcher__tile[data-app-target="admin"] { --app-color: var(--app-admin); }
 .app-launcher__icon {
   width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0;
@@ -85,6 +86,7 @@
 .app-launcher__recent-item[data-app-target="notes"] { --app-color: var(--app-notes); }
 .app-launcher__recent-item[data-app-target="planner"] { --app-color: var(--app-planner); }
 .app-launcher__recent-item[data-app-target="money"] { --app-color: var(--app-money); }
+.app-launcher__recent-item[data-app-target="fitness"] { --app-color: var(--app-fitness); }
 .app-launcher__recent-item[data-app-target="admin"] { --app-color: var(--app-admin); }
 .app-launcher__recent-item:hover, .app-launcher__recent-item:focus-visible {
   background: var(--surface-hover); outline: none; text-decoration: none; color: var(--text-primary); box-shadow: none;

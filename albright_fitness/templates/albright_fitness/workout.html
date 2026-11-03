@@ -1,0 +1,79 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}{{ w.title }} · {% endblock %}
+{% block fitness %}
+{% comment %}
+The logging screen (views.workout) - built for one hand at the gym: each exercise with "Last time" and the
+suggested target, its sets (big inputs, the done box), "+ Set" (a copy of the set before), and at the bottom a
+rest timer that starts when a set is checked (fitness.js: 90 s by default, ±15 s, remembered on this device;
+vibrates where the phone can). Someone it's shared with sees it read-only.
+{% endcomment %}
+<div class="fx-head">
+    <div>
+        <h1 class="fx-head__title">{{ w.title }}</h1>
+        <p class="fx-head__sub">{{ w.date|date:"l, M j" }}{% if w.start_time %} &middot; started {{ w.start_time|time:"g:i A" }}{% endif %}{% if not editable %} &middot; {{ owner_name }}'s workout (view only){% endif %}{% if w.planner_item_id %} &middot; from your Planner{% endif %}{% if w.finished %} &middot; finished{% endif %}</p>
+    </div>
+    {% if editable and w.finished %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="btn btn-secondary btn-sm">Summary</a>{% endif %}
+</div>
+
+{% for b in blocks %}
+<section class="card fx-ex" id="ex-{{ b.we.pk }}" aria-labelledby="ex-{{ b.we.pk }}-h">
+    <div class="fx-ex__head">
+        <h2 class="fx-ex__name" id="ex-{{ b.we.pk }}-h"><a href="{% url 'albright_fitness:exercise' b.we.exercise.pk %}">{{ b.we.exercise.name }}</a></h2>
+        {% if b.we.target_reps or b.we.target_sets %}<span class="fx-target">Target {{ b.we.target_sets|default:"" }}{% if b.we.target_reps %} &times; {{ b.we.target_reps }}{% endif %}</span>{% endif %}
+        {% if editable %}<form method="post" action="{% url 'albright_fitness:remove_exercise' w.pk b.we.pk %}" class="fx-ex__remove" data-confirm="Remove {{ b.we.exercise.name }} and its sets?">{% csrf_token %}<button type="submit" class="fx-icon-btn" aria-label="Remove {{ b.we.exercise.name }}">&times;</button></form>{% endif %}
+    </div>
+    {% if b.tip %}<p class="fx-last"><span class="fx-muted">Last time:</span> {{ b.last|default:"-" }}<br><span class="fx-tip{% if b.tip.increase %} is-up{% endif %}">Try {{ b.tip.text }}</span></p>
+    {% elif editable %}<p class="fx-last fx-muted">First time - this sets your baseline.</p>{% endif %}
+    <ol class="fx-sets" data-sets>{% for s in b.sets %}{% include "albright_fitness/_set_row.html" with we=b.we n=forloop.counter %}{% endfor %}</ol>
+    {% if editable %}<form method="post" action="{% url 'albright_fitness:add_set' b.we.pk %}" class="fx-add-set" data-add-set>{% csrf_token %}<button type="submit" class="btn btn-secondary fx-add-set__btn">+ Set</button></form>{% endif %}
+</section>
+{% empty %}
+<div class="card fx-card"><p class="fx-empty">No exercises yet{% if editable %} - add one below{% endif %}.</p></div>
+{% endfor %}
+
+{% if editable %}
+<form method="post" action="{% url 'albright_fitness:add_exercise' w.pk %}" class="card fx-card fx-add-ex">{% csrf_token %}
+    <label for="fx-add-exercise" class="fx-label">Add an exercise</label>
+    <div class="fx-row-form">
+        <select name="exercise" id="fx-add-exercise" class="ledger-input fx-select" required>
+            <option value="">Choose&hellip;</option>
+            {% regroup library|dictsort:"kind" by get_kind_display as groups %}{% for g in groups %}<optgroup label="{{ g.grouper }}">{% for e in g.list %}<option value="{{ e.pk }}">{{ e.name }}</option>{% endfor %}</optgroup>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary">Add</button>
+    </div>
+</form>
+
+<details class="card fx-card">
+    <summary class="fx-label">Name, notes and sharing</summary>
+    <form method="post" action="{% url 'albright_fitness:edit_workout' w.pk %}" class="fx-form">{% csrf_token %}
+        <div class="field"><label for="fx-w-name">Name</label><input type="text" name="name" id="fx-w-name" class="ledger-input" maxlength="100" value="{{ w.name }}"></div>
+        <div class="field"><label for="fx-w-notes">Notes</label><textarea name="notes" id="fx-w-notes" class="ledger-input" rows="3" maxlength="4000">{{ w.notes }}</textarea></div>
+        <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+    </form>
+    <h3 class="fx-label">Shared with (view only)</h3>
+    {% for sh in shares %}<form method="post" action="{% url 'albright_fitness:share' w.pk %}" class="fx-share-row">{% csrf_token %}<input type="hidden" name="user" value="{{ sh.user.pk }}"><input type="hidden" name="action" value="remove"><span>{{ sh.user.first_name|default:sh.user.username }}</span><button type="submit" class="btn btn-secondary btn-sm">Stop sharing</button></form>
+    {% empty %}<p class="fx-muted fx-small">Only you.</p>{% endfor %}
+    {% if share_choices %}<form method="post" action="{% url 'albright_fitness:share' w.pk %}" class="fx-row-form">{% csrf_token %}
+        <label for="fx-share-user" class="visually-hidden">Share with</label>
+        <select name="user" id="fx-share-user" class="ledger-input fx-select">{% for u in share_choices %}<option value="{{ u.pk }}">{{ u.first_name|default:u.username }}</option>{% endfor %}</select>
+        <button type="submit" class="btn btn-secondary btn-sm">Share</button></form>{% endif %}
+    <form method="post" action="{% url 'albright_fitness:delete_workout' w.pk %}" class="fx-delete" data-confirm="Delete this workout and its sets?">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm fx-danger">Delete workout</button></form>
+</details>
+
+{% if not w.finished %}
+<div class="fx-bar" id="fx-bar">
+    <div class="fx-timer" id="fx-timer" hidden role="timer" aria-live="off">
+        <span class="fx-timer__label">Rest</span>
+        <span class="fx-timer__time" id="fx-timer-time">1:30</span>
+        <button type="button" class="fx-icon-btn" data-timer="-15" aria-label="15 seconds less">&minus;15</button>
+        <button type="button" class="fx-icon-btn" data-timer="15" aria-label="15 seconds more">+15</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-timer="skip">Skip</button>
+    </div>
+    <p class="visually-hidden" id="fx-timer-done" role="status" aria-live="assertive"></p>
+    <form method="post" action="{% url 'albright_fitness:finish' w.pk %}" class="fx-finish">{% csrf_token %}
+        <button type="submit" class="btn btn-primary fx-finish__btn">Finish workout</button>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

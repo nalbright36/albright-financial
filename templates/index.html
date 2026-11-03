@@ -116,6 +116,13 @@
                         <a href="{% url 'albright_money:accounts' %}"{% if page in 'accounts account import' %} class="active" aria-current="page"{% endif %}>Accounts</a>
                         <a href="{% url 'albright_money:categories' %}"{% if page in 'categories rules' %} class="active" aria-current="page"{% endif %}>Categories</a>
                         {% endwith %}
+                        {% elif in_fitness_app %}
+                        {% with page=request.resolver_match.url_name %}
+                        <a href="{% url 'albright_fitness:dashboard' %}"{% if page == 'dashboard' %} class="active" aria-current="page"{% endif %}>Today</a>
+                        <a href="{% url 'albright_fitness:history' %}"{% if page in 'history summary workout' %} class="active" aria-current="page"{% endif %}>History</a>
+                        <a href="{% url 'albright_fitness:programs' %}"{% if page in 'programs program start' %} class="active" aria-current="page"{% endif %}>Programs</a>
+                        <a href="{% url 'albright_fitness:exercises' %}"{% if page in 'exercises exercise' %} class="active" aria-current="page"{% endif %}>Exercises</a>
+                        {% endwith %}
                         {% elif in_opportunities_app %}
                         <a href="{% url 'albright_crypto_app:inbox' %}">Inbox</a>
                         <a href="{% url 'albright_crypto_app:pipeline' %}">Pipeline</a>

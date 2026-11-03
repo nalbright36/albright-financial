@@ -10,7 +10,7 @@ watchlist's auctions) opens its record directly. data-open-subtasks lets checkin
 done too?" (planner.js).{% endcomment %}
 {% load planner_extras %}{% if o.is_meal %}{% include "albright_planner/_meal.html" %}{% else %}
 <li class="pl-item{% if o.done %} is-done{% endif %}{% if o.overdue %} is-overdue{% endif %}{% if o.item.kind == 'event' %} is-event{% endif %}{% if o.shared_in %} is-shared-in{% endif %}"
-    data-item="{{ o.item.pk }}" data-date="{{ o.occurrence_date|date:'Y-m-d' }}" data-repeats="{{ o.item.repeats|yesno:'1,0' }}"{% if o.checklist_progress %} data-open-subtasks="{{ o.checklist_progress.open }}"{% endif %}
+    data-item="{{ o.item.pk }}" data-date="{{ o.occurrence_date|date:'Y-m-d' }}" data-repeats="{{ o.item.repeats|yesno:'1,0' }}"{% if o.item.source_app == "fitness" and o.item.source_url %} data-log-url="{{ o.item.source_url }}&amp;date={{ o.occurrence_date|date:'Y-m-d' }}"{% endif %}{% if o.checklist_progress %} data-open-subtasks="{{ o.checklist_progress.open }}"{% endif %}
     {% if o.can_edit and drag %}draggable="true" data-move-url="{% url 'albright_planner:move' o.item.pk %}" {% endif %}{% if o.item.color %}style="--pl-color: {{ o.item.color }};"{% endif %}>
     {% if o.item.checkable %}{% if o.can_edit %}
     <form method="post" action="{% url 'albright_planner:toggle' o.item.pk %}" class="pl-check-form">{% csrf_token %}

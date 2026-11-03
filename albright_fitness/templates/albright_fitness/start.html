@@ -1,0 +1,14 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Start {{ day.name|default:"a workout" }} · {% endblock %}
+{% block fitness %}
+{% comment %}Start a workout from a program day (views.start): what's in it, then Start (a POST) - pre-filled with the day's exercises, targets and last time's progression. From a Planner task, finishing it checks that occurrence off.{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">{{ day.name|default:"Workout" }}</h1>
+    <p class="fx-head__sub">{% if day %}{{ day.program.name }}{% endif %}{% if planner_date %} &middot; for your Planner task on {{ planner_date|date:"D M j" }}{% endif %}</p></div></div>
+{% if rows %}<div class="card fx-card"><ul class="fx-list">{% for pe in rows %}<li class="fx-row"><span class="fx-row__title">{{ pe.exercise.name }}</span><span class="fx-row__ind">{{ pe.target_text }}</span></li>{% endfor %}</ul></div>{% endif %}
+<form method="post" class="fx-start-form">{% csrf_token %}
+    {% if day %}<input type="hidden" name="day" value="{{ day.pk }}">{% endif %}{% if requested %}<input type="hidden" name="date" value="{{ requested|date:'Y-m-d' }}">{% endif %}
+    <button type="submit" class="btn btn-primary fx-start fx-start--big">Start workout</button>
+</form>
+</div>
+{% endblock %}

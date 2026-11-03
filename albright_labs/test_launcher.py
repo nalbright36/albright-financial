@@ -71,9 +71,10 @@ class LauncherTilesTests(Base):
         self.assertNotIn("Admin", self.labels())
         self.user.is_superuser = True
         self.user.save()
-        self.set_pref(app_order=["admin", "meals", "trade", "resell", "opps", "notes", "planner", "money"],
-                      visible_apps=["admin", "meals", "trade", "resell", "opps", "notes", "planner", "money"])
-        self.assertEqual(self.labels(), ["Home", "Meals", "Trade", "Resell", "Opps", "Notes", "Plan", "Money", "Admin"])
+        self.set_pref(app_order=["admin", "meals", "trade", "resell", "opps", "notes", "planner", "money", "fitness"],
+                      visible_apps=["admin", "meals", "trade", "resell", "opps", "notes", "planner", "money", "fitness"])
+        self.assertEqual(self.labels(), ["Home", "Meals", "Trade", "Resell", "Opps", "Notes", "Plan", "Money", "Fitness",
+                                         "Admin"])
 
     def test_current_app_is_highlighted(self):
         self.user.is_superuser = True
@@ -253,10 +254,18 @@ class MealsAccentTests(TestCase):
         self.assertIn('.labs-tile[data-app-accent="meals"] { --labs-tile-color: var(--app-meals); }', self.css)
 
     def test_warnings_stay_clearly_amber(self):
-        """Amber leans yellow (hue ~40-50°) so a warning badge never reads as Meals orange (~25°)."""
-        self.assertIn("--amber: #FACC15;", self.css)     # dark
-        self.assertIn("--amber: #865E00;", self.css)     # light
-        self.assertNotIn("--amber: #A64B08;", self.css)
+        """Warning amber sits between Meals orange and Fitness yellow in both themes (at least 8° of hue from
+        each), so a warning badge reads as neither app."""
+        import colorsys
+
+        def hue(color):
+            r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+            return colorsys.rgb_to_hls(r, g, b)[0] * 360
+        self.assertIn("--amber: #F59E0B;", self.css)     # dark
+        self.assertIn("--amber: #B45309;", self.css)     # light
+        for meals, amber, fitness in (("#FB923C", "#F59E0B", "#FACC15"), ("#C2410C", "#B45309", "#9C5F06")):
+            self.assertGreaterEqual(hue(amber) - hue(meals), 8)
+            self.assertGreaterEqual(hue(fitness) - hue(amber), 8)
 
 
 class LauncherRenderingTests(Base):
@@ -289,12 +298,12 @@ class LauncherRenderingTests(Base):
                 self.assertIn('aria-expanded="false"', re.search(r'<button[^>]*id="app-launcher-button"[^>]*>', content).group(0))
                 nav = content[content.index('<nav class="navbar">'):content.index("</nav>")]
                 svgs = re.findall(r"<svg\b[^>]*>", nav)
-                self.assertGreaterEqual(len(svgs), 9 + 4)   # nine tiles, the grid button, theme toggle (2), account
+                self.assertGreaterEqual(len(svgs), 10 + 4)  # ten tiles, the grid button, theme toggle (2), account
                 for svg in svgs:
                     self.assertRegex(svg, r'\swidth="\d+"')
                     self.assertRegex(svg, r'\sheight="\d+"')
                 self.assertIn('<svg width="16" height="16" viewBox="0 0 16 16"', nav)   # the 3x3 grid icon
-                self.assertEqual(nav.count('<svg width="19" height="19"'), 9)        # one per tile
+                self.assertEqual(nav.count('<svg width="19" height="19"'), 10)       # one per tile
 
     def test_css_and_js_are_on_every_page_with_the_header(self):
         for url in self.app_pages():

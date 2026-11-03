@@ -1,0 +1,23 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}{{ w.title }} · Summary · {% endblock %}
+{% block fitness %}
+{% comment %}The finished-workout summary (views.summary): new personal records first - celebrated - then what was done.{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">{{ w.title }}</h1>
+    <p class="fx-head__sub">{{ w.date|date:"l, M j" }}{% if minutes %} &middot; {{ minutes }} min{% endif %} &middot; {{ sets_done }} set{{ sets_done|pluralize }}{% if pounds %} &middot; {{ pounds|floatformat:0 }} lb moved{% endif %}</p></div>
+    {% if editable %}<a href="{% url 'albright_fitness:workout' w.pk %}" class="btn btn-secondary btn-sm">Edit</a>{% endif %}</div>
+
+{% if records %}
+<section class="card fx-card fx-prs" id="fx-prs" aria-labelledby="fx-prs-h">
+    <h2 class="fx-prs__title" id="fx-prs-h"><span aria-hidden="true">&#x1F389;</span> {{ records|length }} new personal record{{ records|length|pluralize }}!</h2>
+    <ul class="fx-list">{% for r, text in records %}<li class="fx-row fx-row--wrap"><span class="fx-row__title"><span aria-hidden="true">&#x1F3C6;</span> {{ r.exercise.name }}</span><span class="fx-row__ind fx-prs__what">{{ text }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<div class="card fx-card"><ul class="fx-list">{% for we, text in lines %}
+    <li class="fx-row"><a href="{% url 'albright_fitness:exercise' we.exercise.pk %}" class="fx-row__title">{{ we.exercise.name }}</a><span class="fx-row__ind" title="{{ text }}">{{ text|default:"-" }}</span></li>
+{% empty %}<li class="fx-empty">Nothing logged.</li>{% endfor %}</ul></div>
+{% if w.notes %}<p class="fx-notes">{{ w.notes|linebreaksbr }}</p>{% endif %}
+<a href="{% url 'albright_fitness:dashboard' %}" class="btn btn-primary">Done</a>
+</div>
+{% endblock %}

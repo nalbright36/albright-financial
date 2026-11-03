@@ -1,0 +1,73 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}Today · {% endblock %}
+{% block fitness %}
+{% comment %}
+The dashboard (views.dashboard, stats.py): today's planned workout with Start, this week's done vs planned, the
+streak (weeks with every planned workout done), this week's working sets by muscle group, recent records, and the
+quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
+{% endcomment %}
+<div class="fx-head">
+    <div><h1 class="fx-head__title">{% now "l" %}</h1><p class="fx-head__sub">{% now "F j" %}</p></div>
+    <form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Blank workout</button></form>
+</div>
+
+{% if open_workout %}<a href="{% url 'albright_fitness:workout' open_workout.pk %}" class="card fx-resume" id="fx-resume"><strong>Continue {{ open_workout.title }}</strong> <span class="fx-muted">started {{ open_workout.date|date:"M j" }}</span> &rarr;</a>{% endif %}
+
+<section class="card fx-card fx-today" id="fx-today" aria-labelledby="fx-today-h">
+    <h2 class="fx-card__title" id="fx-today-h">Today</h2>
+    {% for day, done in today %}
+    <div class="fx-row">
+        <span class="fx-row__title">{{ day.name }} <span class="fx-muted fx-small">{{ day.program.name }}</span></span>
+        {% if done %}<a href="{% url 'albright_fitness:summary' done.pk %}" class="fx-pill fx-pill--done">Done &#x2713;</a>
+        {% else %}<form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="btn btn-primary fx-start">Start</button></form>{% endif %}
+    </div>
+    {% empty %}
+    <p class="fx-empty">Rest day.{% if not programs %} <a href="{% url 'albright_fitness:programs' %}">Pick a program</a> to plan your week.{% endif %}</p>
+    {% endfor %}
+</section>
+
+<section class="fx-stats" aria-label="This week">
+    <div class="card fx-stat" id="fx-week"><span class="card__label">This week</span>
+        <span class="fx-stat__value">{{ done }}<span class="fx-stat__of"> / {{ planned }}</span></span>
+        <span class="fx-stat__note">workouts done{% if planned %} of planned{% endif %}</span></div>
+    <div class="card fx-stat" id="fx-streak"><span class="card__label">Streak</span>
+        <span class="fx-stat__value">{{ streak }}</span>
+        <span class="fx-stat__note">week{{ streak|pluralize }} with every planned workout done</span></div>
+</section>
+
+<section class="card fx-card" aria-labelledby="fx-quick-h">
+    <h2 class="fx-card__title" id="fx-quick-h">Quick log</h2>
+    <form method="post" action="{% url 'albright_fitness:quick' %}" class="fx-row-form" id="fx-quick">{% csrf_token %}
+        <label for="fx-quick-text" class="visually-hidden">What you did</label>
+        <input type="text" name="text" id="fx-quick-text" class="ledger-input fx-input-wide" maxlength="2000" required placeholder="squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30" autocomplete="off">
+        <button type="submit" class="btn btn-primary">Log</button>
+    </form>
+    <p class="fx-help">Weight × reps × sets, or reps per set (8,8,7). Cardio: a distance and/or a time. Saved as today's workout.</p>
+</section>
+
+<section class="card fx-card" aria-labelledby="fx-volume-h">
+    <h2 class="fx-card__title" id="fx-volume-h">Working sets this week, by muscle group</h2>
+    {% if volume %}
+    <ul class="fx-bars" role="list">{% for r in volume %}
+        <li class="fx-bars__row" title="{{ r.label }}: {{ r.sets }} working set{{ r.sets|pluralize }}{% if r.pounds %}, {{ r.pounds|floatformat:0 }} lb moved{% endif %}">
+            <span class="fx-bars__label">{{ r.label }}</span>
+            <span class="fx-bars__track" aria-hidden="true"><span class="fx-bars__bar" style="width: {% widthratio r.sets volume_max 100 %}%;"></span></span>
+            <span class="fx-bars__value">{{ r.sets }}</span>
+        </li>{% endfor %}</ul>
+    {% else %}<p class="fx-empty">No working sets yet this week.</p>{% endif %}
+</section>
+
+<div class="fx-grid">
+    <section class="card fx-card" aria-labelledby="fx-prs-h">
+        <h2 class="fx-card__title" id="fx-prs-h">Recent records</h2>
+        {% for r, text in records_text %}<div class="fx-row fx-row--wrap"><span class="fx-row__title"><span aria-hidden="true">&#x1F3C6;</span> {{ r.exercise.name }}</span><span class="fx-row__ind" title="{{ text }}">{{ text }}</span></div>
+        {% empty %}<p class="fx-empty">New bests show up here.</p>{% endfor %}
+    </section>
+    <section class="card fx-card" aria-labelledby="fx-recent-h">
+        <h2 class="fx-card__title" id="fx-recent-h">Recent workouts</h2>
+        {% for w in recent %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ w.title }}</span><span class="fx-row__ind">{{ w.date|date:"D M j" }}</span></a>
+        {% empty %}<p class="fx-empty">Nothing logged yet.</p>{% endfor %}
+        <a href="{% url 'albright_fitness:history' %}" class="fx-more">History &rarr;</a>
+    </section>
+</div>
+{% endblock %}

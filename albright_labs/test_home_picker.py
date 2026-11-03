@@ -20,7 +20,7 @@ from .tests import OUTLOOK
 
 PASSWORD = "pw-not-real-12345"
 PICKER = "/?picker=1"
-ALL_APPS = ["trade", "resell", "opps", "meals", "notes", "planner", "money"]
+ALL_APPS = ["trade", "resell", "opps", "meals", "notes", "planner", "money", "fitness"]
 
 
 class Base(TestCase):
@@ -87,7 +87,7 @@ class PickerTests(Base):
         self.pref(pinned_apps=["planner", "resell"])
         page = self.page()
         self.assertEqual(favorite_tiles(page), ["resell", "planner"])            # in their order
-        self.assertEqual(home_tiles(page), ["resell", "planner", "trade", "opps", "meals", "notes", "money"])
+        self.assertEqual(home_tiles(page), ["resell", "planner", "trade", "opps", "meals", "notes", "money", "fitness"])
         self.assertIn(">Favorites</h2>", page)
         self.assertNotIn('id="picker-favorites" hidden', page)
 

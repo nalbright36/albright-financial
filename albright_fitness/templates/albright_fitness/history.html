@@ -1,0 +1,27 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}History · {{ month|date:"F Y" }} · {% endblock %}
+{% block fitness %}
+{% comment %}History (views.history): the month's calendar of workouts (yours, and ones shared with you), the list, and each exercise you've logged - its page has the progress chart.{% endcomment %}
+<div class="fx-head">
+    <div><h1 class="fx-head__title">{{ month|date:"F Y" }}</h1></div>
+    <nav class="fx-monthnav" aria-label="Month"><a href="?month={{ prev|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Previous month">&lsaquo;</a><a href="?" class="btn btn-secondary btn-sm">This month</a><a href="?month={{ next|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Next month">&rsaquo;</a></nav>
+</div>
+<div class="fx-cal" role="grid" aria-label="{{ month|date:'F Y' }}">
+    <div class="fx-cal__row fx-cal__dows" role="row">{% for n in weekdays %}<span role="columnheader">{{ n }}</span>{% endfor %}</div>
+    {% for week in weeks %}<div class="fx-cal__row" role="row">{% for d in week %}
+        <div class="fx-cal__cell{% if not d.in_month %} is-out{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.workouts %} has-workout{% endif %}" role="gridcell">
+            <span class="fx-cal__num">{{ d.date.day }}</span>
+            {% for w in d.workouts %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="fx-cal__w" title="{{ w.title }}{% if w.owner != request.user %} ({{ w.owner.first_name|default:w.owner.username }}){% endif %}"><span class="fx-cal__wname">{{ w.title }}</span></a>{% endfor %}
+        </div>{% endfor %}</div>{% endfor %}
+</div>
+
+<section class="card fx-card" aria-labelledby="fx-list-h">
+    <h2 class="fx-card__title" id="fx-list-h">Workouts</h2>
+    {% for w in workouts %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ w.title }}{% if w.owner != request.user %} <span class="fx-muted fx-small">&middot; {{ w.owner.first_name|default:w.owner.username }}</span>{% endif %}</span><span class="fx-row__ind">{% if not w.finished %}<span class="fx-pill">In progress</span> {% endif %}{{ w.date|date:"D M j" }}</span></a>
+    {% empty %}<p class="fx-empty">No workouts this month.</p>{% endfor %}
+</section>
+{% if charted %}<section class="card fx-card" aria-labelledby="fx-charts-h">
+    <h2 class="fx-card__title" id="fx-charts-h">Progress by exercise</h2>
+    {% for e in charted %}<a href="{% url 'albright_fitness:exercise' e.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ e.name }}</span><span class="fx-row__ind">Chart &rarr;</span></a>{% endfor %}
+</section>{% endif %}
+{% endblock %}

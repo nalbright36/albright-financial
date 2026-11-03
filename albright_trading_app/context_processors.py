@@ -54,6 +54,7 @@ def current_app(request):
         "in_notes_app": key == "notes",
         "in_planner_app": key == "planner",
         "in_money_app": key == "money",
+        "in_fitness_app": key == "fitness",
         # The app's own CSS/JS (apps_registry.App.stylesheet / script) - on every one of its pages.
         "app_stylesheet": getattr(APPS_BY_ACCENT.get(key), "stylesheet", ""),
         "app_script": getattr(APPS_BY_ACCENT.get(key), "script", ""),

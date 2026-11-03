@@ -96,8 +96,8 @@
 
   --red: #FB7185;
   --red-bg: rgba(244, 63, 94, 0.14);
-  --amber: #FACC15;
-  --amber-bg: rgba(234, 179, 8, 0.14);
+  --amber: #F59E0B;
+  --amber-bg: rgba(245, 158, 11, 0.14);
   --blue: #60A5FA;
   --blue-bg: rgba(59, 130, 246, 0.14);
   --emerald: #34D399;
@@ -119,6 +119,7 @@
   --app-notes: #F472B6;
   --app-planner: #A3E635;
   --app-money: #34D399;
+  --app-fitness: #FACC15;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -129,7 +130,7 @@
   --nav-border: rgba(255, 255, 255, 0.06);
   --glow-gain: rgba(52, 211, 153, 0.22);
   --glow-loss: rgba(251, 113, 133, 0.22);
-  --glow-warn: rgba(250, 204, 21, 0.20);
+  --glow-warn: rgba(245, 158, 11, 0.20);
   --money-gradient: linear-gradient(90deg, #34D399, #60A5FA);
   --chart-grid: rgba(255, 255, 255, 0.06);
   --chart-text: var(--text-secondary);
@@ -159,8 +160,8 @@
      WCAG AA (4.5:1) on the translucent cards, even over the page glows. */
   --red: #C2143C;
   --red-bg: rgba(244, 63, 94, 0.10);
-  --amber: #865E00;
-  --amber-bg: rgba(234, 179, 8, 0.14);
+  --amber: #B45309;
+  --amber-bg: rgba(245, 158, 11, 0.12);
   --blue: #2563EB;
   --blue-bg: rgba(59, 130, 246, 0.10);
   --emerald: #047857;
@@ -179,6 +180,7 @@
   --app-notes: #EC4899;
   --app-planner: #84CC16;
   --app-money: #10B981;
+  --app-fitness: #CA8A04;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -188,7 +190,7 @@
   --nav-border: rgba(15, 23, 42, 0.06);
   --glow-gain: rgba(16, 185, 129, 0.20);
   --glow-loss: rgba(244, 63, 94, 0.18);
-  --glow-warn: rgba(234, 179, 8, 0.18);
+  --glow-warn: rgba(245, 158, 11, 0.18);
   --money-gradient: linear-gradient(90deg, #047857, #1D4ED8);
   --chart-grid: rgba(15, 23, 42, 0.08);
   --chart-text: var(--text-secondary);
@@ -357,6 +359,27 @@ body[data-app="money"] {
 [data-theme="light"] body[data-app="money"] {
   --accent: #047857;
   --accent-hover: #065F46;
+}
+/* Albright Fitness: yellow - #FACC15 in dark mode (12:1 on the dark surfaces), deep gold #CA8A04 in light mode.
+   Text and links in light mode use #9C5F06 (#CA8A04 is only 2.9:1 on white; #9C5F06 is 5.2:1 on white, 4.7:1 on
+   the page). Solid buttons are yellow with DARK text (--accent-contrast #1C1917: 11.4:1 on #FACC15, 6.0:1 on
+   #CA8A04). Warnings (--amber: #F59E0B / #B45309) lean orange so they never read as Fitness. */
+body[data-app="fitness"] {
+  --accent-rgb: 250, 204, 21;
+  --accent: #FACC15;
+  --accent-hover: #FDE047;
+  --accent-solid: #FACC15;
+  --accent-solid-hover: #FDE047;
+  --accent-contrast: #1C1917;
+  --accent-soft: rgba(250, 204, 21, 0.15);
+}
+[data-theme="light"] body[data-app="fitness"] {
+  --accent-rgb: 202, 138, 4;
+  --accent: #9C5F06;
+  --accent-hover: #854D0E;
+  --accent-solid: #CA8A04;
+  --accent-solid-hover: #EAB308;
+  --accent-soft: rgba(202, 138, 4, 0.15);
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1642,6 +1665,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-tile[data-app-accent="notes"] { --labs-tile-color: var(--app-notes); }
 .labs-tile[data-app-accent="planner"] { --labs-tile-color: var(--app-planner); }
 .labs-tile[data-app-accent="money"] { --labs-tile-color: var(--app-money); }
+.labs-tile[data-app-accent="fitness"] { --labs-tile-color: var(--app-fitness); }
 .labs-tile__head { display: flex; align-items: center; gap: 8px; }
 .labs-tile__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--labs-tile-color); flex-shrink: 0; }
 .labs-tile__name { font-weight: 700; font-size: 1.0625rem; color: var(--text-primary); }
@@ -1682,6 +1706,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-pick[data-app-accent="notes"] { --pick-color: var(--app-notes); }
 .labs-pick[data-app-accent="planner"] { --pick-color: var(--app-planner); }
 .labs-pick[data-app-accent="money"] { --pick-color: var(--app-money); }
+.labs-pick[data-app-accent="fitness"] { --pick-color: var(--app-fitness); }
 .labs-pick[data-app-accent="admin"] { --pick-color: var(--app-admin); }
 .labs-pick__link { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 148px; padding: var(--space-5);
   border-radius: var(--radius-card, 14px); border: 1px solid var(--border); background: var(--glass-bg, var(--surface));

@@ -1,0 +1,68 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}{{ p.name }} · {% endblock %}
+{% block fitness %}
+{% comment %}
+One program (views.program): its days (name, weekdays) and each day's exercises with their targets; on / off;
+"Schedule this program" puts each day on your Planner as a private repeating task with its exercises as the
+checklist (programs.schedule) - changes here follow it there; turning it off ends those tasks after today.
+{% endcomment %}
+<div class="fx-narrow fx-narrow--wide">
+<div class="fx-head">
+    <div><h1 class="fx-head__title">{{ p.name }}</h1>
+        <p class="fx-head__sub">{% if p.weeks %}{{ p.weeks }} weeks{% else %}No end{% endif %}{% if p.scheduled_from %} &middot; on your Planner since {{ p.scheduled_from|date:"M j" }}{% endif %}{% if not p.active %} &middot; off{% endif %}</p></div>
+</div>
+
+<div class="card fx-card fx-planner">
+    {% if p.scheduled_from and p.active %}
+    <p class="fx-small">On your Planner: {{ on_planner|length }} repeating task{{ on_planner|length|pluralize }}, private, each with its exercises as the checklist. Finishing a workout started from one checks it off.</p>
+    <form method="post" class="fx-row-form">{% csrf_token %}<input type="hidden" name="action" value="schedule"><button type="submit" class="btn btn-secondary btn-sm">Update the Planner</button></form>
+    <form method="post" class="fx-row-form" data-confirm="Take {{ p.name }} off your Planner after today? Earlier ones stay.">{% csrf_token %}<input type="hidden" name="action" value="unschedule"><button type="submit" class="btn btn-secondary btn-sm">Remove from Planner</button></form>
+    {% else %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="schedule"><button type="submit" class="btn btn-primary" id="fx-schedule">Schedule this program</button></form>
+    <p class="fx-help">Each day becomes a private repeating task on your Planner on its weekdays{% if p.weeks %} for {{ p.weeks }} weeks{% else %} (for a year - schedule again to go on){% endif %}, with its exercises as the checklist.</p>
+    {% endif %}
+    <form method="post" class="fx-toggle-form">{% csrf_token %}<input type="hidden" name="action" value="active"><input type="hidden" name="active" value="{{ p.active|yesno:'0,1' }}">
+        <button type="submit" class="btn btn-secondary btn-sm" role="switch" aria-checked="{{ p.active|yesno:'true,false' }}">{% if p.active %}Turn off{% else %}Turn on{% endif %}</button>
+        <span class="fx-help">{% if p.active %}On: it plans your week here.{% else %}Off: not planned{% if p.scheduled_from %}{% endif %}.{% endif %}</span></form>
+</div>
+
+{% for day in days %}
+<section class="card fx-card fx-day" id="day-{{ day.pk }}" aria-labelledby="day-{{ day.pk }}-h">
+    <form method="post" class="fx-day__head">{% csrf_token %}<input type="hidden" name="action" value="edit_day"><input type="hidden" name="day" value="{{ day.pk }}"><input type="hidden" name="anchor" value="#day-{{ day.pk }}">
+        <label class="visually-hidden" for="day-{{ day.pk }}-name">Day name</label>
+        <input type="text" name="name" id="day-{{ day.pk }}-name" class="ledger-input fx-day__name" value="{{ day.name }}" maxlength="60" aria-describedby="day-{{ day.pk }}-h">
+        <fieldset class="fx-weekdays"><legend class="visually-hidden" id="day-{{ day.pk }}-h">{{ day.name }}: weekdays</legend>{% for n, label in weekday_names %}<label class="fx-weekday"><input type="checkbox" name="weekdays" value="{{ n }}"{% if n in day.weekdays %} checked{% endif %}><span>{{ label|slice:":2" }}</span></label>{% endfor %}</fieldset>
+        <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+    </form>
+    <ul class="fx-list">{% for pe in day.exercises.all %}<li class="fx-row"><span class="fx-row__title">{{ pe.exercise.name }}</span><span class="fx-row__ind">{{ pe.target_text }}</span>
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="remove_exercise"><input type="hidden" name="pe" value="{{ pe.pk }}"><input type="hidden" name="anchor" value="#day-{{ day.pk }}"><button type="submit" class="fx-icon-btn" aria-label="Remove {{ pe.exercise.name }}">&times;</button></form></li>
+    {% empty %}<li class="fx-empty">No exercises yet.</li>{% endfor %}</ul>
+    <form method="post" class="fx-add-pe">{% csrf_token %}<input type="hidden" name="action" value="add_exercise"><input type="hidden" name="day" value="{{ day.pk }}"><input type="hidden" name="anchor" value="#day-{{ day.pk }}">
+        <label class="visually-hidden" for="day-{{ day.pk }}-ex">Exercise</label>
+        <select name="exercise" id="day-{{ day.pk }}-ex" class="ledger-input fx-select" required><option value="">Add an exercise&hellip;</option>{% regroup library|dictsort:"kind" by get_kind_display as groups %}{% for g in groups %}<optgroup label="{{ g.grouper }}">{% for e in g.list %}<option value="{{ e.pk }}">{{ e.name }}</option>{% endfor %}</optgroup>{% endfor %}</select>
+        <label class="fx-mini"><span>Sets</span><input type="text" name="sets" inputmode="numeric" value="3" class="ledger-input"></label>
+        <label class="fx-mini"><span>Reps</span><input type="text" name="reps" inputmode="numeric" placeholder="-" class="ledger-input"></label>
+        <label class="fx-mini"><span>Min</span><input type="text" name="minutes" inputmode="decimal" placeholder="-" class="ledger-input"></label>
+        <label class="fx-mini"><span>Mi</span><input type="text" name="miles" inputmode="decimal" placeholder="-" class="ledger-input"></label>
+        <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+    </form>
+    <form method="post" class="fx-delete" data-confirm="Delete the day {{ day.name }}?">{% csrf_token %}<input type="hidden" name="action" value="delete_day"><input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="fx-link-btn fx-danger">Delete this day</button></form>
+</section>
+{% endfor %}
+
+<form method="post" class="card fx-card fx-add-day">{% csrf_token %}<input type="hidden" name="action" value="add_day">
+    <label for="fx-day-new" class="fx-label">Add a day</label>
+    <div class="fx-row-form"><input type="text" name="name" id="fx-day-new" class="ledger-input fx-input-wide" maxlength="60" placeholder="e.g. Upper A" required>
+        <button type="submit" class="btn btn-secondary">Add day</button></div>
+    <fieldset class="fx-weekdays"><legend class="visually-hidden">Weekdays</legend>{% for n, label in weekday_names %}<label class="fx-weekday"><input type="checkbox" name="weekdays" value="{{ n }}"><span>{{ label|slice:":2" }}</span></label>{% endfor %}</fieldset>
+</form>
+
+<details class="card fx-card"><summary class="fx-label">Name and length</summary>
+    <form method="post" class="fx-form">{% csrf_token %}<input type="hidden" name="action" value="rename">
+        <div class="fx-form__grid"><div class="field"><label for="fx-p-name">Name</label><input type="text" name="name" id="fx-p-name" class="ledger-input" maxlength="100" value="{{ p.name }}"></div>
+            <div class="field"><label for="fx-p-weeks">Weeks (empty: no end)</label><input type="text" name="weeks" id="fx-p-weeks" inputmode="numeric" class="ledger-input" value="{{ p.weeks|default_if_none:'' }}"></div></div>
+        <button type="submit" class="btn btn-secondary btn-sm">Save</button></form>
+    <form method="post" action="{% url 'albright_fitness:program_delete' p.pk %}" class="fx-delete" data-confirm="Delete {{ p.name }}? Your logged workouts stay.">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm fx-danger">Delete program</button></form>
+</details>
+</div>
+{% endblock %}

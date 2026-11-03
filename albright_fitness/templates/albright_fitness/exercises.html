@@ -1,0 +1,31 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}Exercises · {% endblock %}
+{% block fitness %}
+{% comment %}The exercise library (views.exercises): the built-in ones and your own, searchable and filtered by muscle group and equipment; add your own at the bottom.{% endcomment %}
+<div class="fx-head"><div><h1 class="fx-head__title">Exercises</h1><p class="fx-head__sub">{{ exercises|length }} shown</p></div></div>
+<form method="get" class="fx-filters" role="search">
+    <label class="fx-filters__q"><span class="visually-hidden">Search</span><input type="search" name="q" value="{{ q }}" class="ledger-input" placeholder="Search exercises"></label>
+    <label><span class="visually-hidden">Muscle group</span><select name="muscle" class="ledger-input" data-autosubmit><option value="">All muscles</option>{% for key, label in muscles %}<option value="{{ key }}"{% if muscle == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label><span class="visually-hidden">Equipment</span><select name="equipment" class="ledger-input" data-autosubmit><option value="">All equipment</option>{% for key, label in equipment_choices %}<option value="{{ key }}"{% if equipment == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+</form>
+<div class="card fx-card"><ul class="fx-list">{% for e in exercises %}
+    <li><a href="{% url 'albright_fitness:exercise' e.pk %}" class="fx-row fx-row--link" title="{{ e.name }}">
+        <span class="fx-row__title">{{ e.name }}{% if e.owner_id %} <span class="fx-pill">Mine</span>{% endif %}</span>
+        <span class="fx-row__ind">{% for m in e.primary_muscles %}{{ muscle_names|get_item:m }}{% if not forloop.last %}, {% endif %}{% endfor %} &middot; {{ e.get_equipment_display }}</span></a></li>
+{% empty %}<li class="fx-empty">Nothing matches.</li>{% endfor %}</ul></div>
+
+<details class="card fx-card" id="fx-add-exercise">
+    <summary class="fx-card__title">Add your own exercise</summary>
+    <form method="post" class="fx-form">{% csrf_token %}
+        <div class="field"><label for="fx-ex-name">Name</label><input type="text" name="name" id="fx-ex-name" class="ledger-input" maxlength="100" required></div>
+        <div class="fx-form__grid">
+            <div class="field"><label for="fx-ex-kind">Type</label><select name="kind" id="fx-ex-kind" class="ledger-input">{% for key, label in kinds %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
+            <div class="field"><label for="fx-ex-eq">Equipment</label><select name="equipment" id="fx-ex-eq" class="ledger-input">{% for key, label in equipment_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
+        </div>
+        <fieldset class="fx-chips"><legend class="fx-label">Main muscles</legend>{% for key, label in muscles %}<label class="fx-chip"><input type="checkbox" name="primary" value="{{ key }}"> {{ label }}</label>{% endfor %}</fieldset>
+        <div class="field"><label for="fx-ex-how">How to do it (optional)</label><textarea name="instructions" id="fx-ex-how" class="ledger-input" rows="3" maxlength="4000"></textarea></div>
+        <button type="submit" class="btn btn-primary">Add exercise</button>
+    </form>
+</details>
+{% endblock %}

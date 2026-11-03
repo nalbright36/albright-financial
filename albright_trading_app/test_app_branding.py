@@ -119,8 +119,8 @@ class HeaderTests(TestCase):
                 content = self.page(url_name)
                 tiles = launcher_tiles(content)
                 self.assertEqual([label for _target, label in tiles],
-                                 ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan", "Money"])   # short labels; no Admin for a regular user
-                self.assertEqual([target for target, _label in tiles], ["labs", "trading", "reselling", "opportunities", "meals", "notes", "planner", "money"])
+                                 ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan", "Money", "Fitness"])   # short labels; no Admin for a regular user
+                self.assertEqual([target for target, _label in tiles], ["labs", "trading", "reselling", "opportunities", "meals", "notes", "planner", "money", "fitness"])
                 self.assertEqual(current_tiles(content), [app])
                 self.assertRegex(launcher_panel(content), rf'data-app-target="{app}" title="[^"]+" aria-current="page"')
 

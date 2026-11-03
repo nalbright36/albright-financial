@@ -48,7 +48,8 @@ class OpportunitiesNavTests(TestCase):
                                    "Resell": reverse("albright_reselling_app:dashboard"),
                                    "Opps": reverse("albright_crypto_app:inbox"), "Meals": reverse("albright_meals:week"),
                                    "Notes": reverse("albright_notes:list"), "Plan": reverse("albright_planner:home"),
-                                   "Money": reverse("albright_money:dashboard")})
+                                   "Money": reverse("albright_money:dashboard"),
+                                   "Fitness": reverse("albright_fitness:dashboard")})
         self.assertIn('class="app-launcher__tile is-current" role="menuitem" tabindex="-1" data-app-key="opps" '
                       'data-app-target="opportunities" title="Albright Opportunities" aria-current="page"', content)
 

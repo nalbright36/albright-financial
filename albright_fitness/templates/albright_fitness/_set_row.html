@@ -1,0 +1,29 @@
+{% load fitness_extras %}{% comment %}
+One set on the logging screen - one line, big inputs for one hand: its number (tap to switch warm-up / working /
+drop: "W", "1", "D"), weight and reps (cardio: time and distance), RPE, and the done box (checking it starts the rest
+timer - fitness.js). Every change saves at once; without JS, Save posts the row.
+{% endcomment %}
+<li class="fx-set{% if s.done %} is-done{% endif %}{% if s.set_type != 'working' %} is-{{ s.set_type }}{% endif %}" data-set="{{ s.pk }}">
+    {% if editable %}
+    <form method="post" action="{% url 'albright_fitness:update_set' s.pk %}" class="fx-set__form" data-set-form>{% csrf_token %}
+        <button type="button" class="fx-set__type" data-set-type="{{ s.set_type }}" aria-label="Set {{ n }}: {{ s.get_set_type_display }} - tap to change"
+                title="Warm-up / working / drop">{% if s.set_type == "warmup" %}W{% elif s.set_type == "drop" %}D{% else %}{{ n }}{% endif %}</button>
+        <input type="hidden" name="set_type" value="{{ s.set_type }}">
+        {% if we.exercise.is_cardio %}
+        <label class="fx-field"><span class="visually-hidden">Time</span><input type="text" name="duration" inputmode="numeric" placeholder="mm:ss" value="{{ s.duration_seconds|clock }}" class="fx-input" autocomplete="off"></label>
+        <label class="fx-field"><span class="visually-hidden">Distance ({{ s.distance_unit }})</span><input type="text" name="distance" inputmode="decimal" placeholder="{{ s.distance_unit }}" value="{{ s.distance|weight }}" class="fx-input" autocomplete="off"><span class="fx-unit" aria-hidden="true">{{ s.distance_unit }}</span></label>
+        {% else %}
+        <label class="fx-field"><span class="visually-hidden">Weight ({{ s.unit }})</span><input type="text" name="weight" inputmode="decimal" placeholder="{% if we.exercise.kind == 'bodyweight' %}BW{% else %}{{ s.unit }}{% endif %}" value="{{ s.weight|weight }}" class="fx-input" autocomplete="off"><span class="fx-unit" aria-hidden="true">{{ s.unit }}</span></label>
+        <span class="fx-x" aria-hidden="true">&times;</span>
+        <label class="fx-field fx-field--reps"><span class="visually-hidden">Reps</span><input type="text" name="reps" inputmode="numeric" placeholder="reps" value="{{ s.reps|default_if_none:'' }}" class="fx-input" autocomplete="off"></label>
+        {% endif %}
+        <label class="fx-field fx-field--rpe"><span class="visually-hidden">RPE (optional)</span><input type="text" name="rpe" inputmode="decimal" placeholder="RPE" value="{{ s.rpe|default_if_none:'' }}" class="fx-input" autocomplete="off"></label>
+        <input type="hidden" name="done" value="{{ s.done|yesno:'1,0' }}">
+        <button type="submit" name="toggle_done" value="1" class="fx-done" role="checkbox" aria-checked="{{ s.done|yesno:'true,false' }}" aria-label="Done: set {{ n }}" data-done><svg width="20" height="20" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </form>
+    {% else %}
+    <span class="fx-set__type">{% if s.set_type == "warmup" %}W{% elif s.set_type == "drop" %}D{% else %}{{ n }}{% endif %}</span>
+    <span class="fx-set__text">{% if we.exercise.is_cardio %}{% if s.distance %}{{ s.distance|weight }} {{ s.distance_unit }}{% endif %} {{ s.duration_seconds|clock }}{% else %}{% if s.weight is not None %}{{ s.weight|weight }} {{ s.unit }} &times; {% endif %}{{ s.reps|default_if_none:"-" }}{% endif %}{% if s.rpe %} <span class="fx-muted">@{{ s.rpe }}</span>{% endif %}</span>
+    <span class="fx-done is-readonly" role="checkbox" aria-checked="{{ s.done|yesno:'true,false' }}" aria-disabled="true"><svg width="20" height="20" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    {% endif %}
+</li>

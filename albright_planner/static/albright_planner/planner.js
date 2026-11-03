@@ -2,6 +2,8 @@
  * Albright Planner - included on every Planner page by templates/index.html (apps_registry: Planner's script)
  * and by Home for its Today panel. Vanilla JS; everything also works without it (forms post normally).
  *
+ *   workouts    checking off a Fitness workout task (data-log-url) without logging it first asks "Log the
+ *               workout?" - Log opens Fitness for that occurrence (finishing it there checks it off)
  *   rows        every item is one line; its checklist chevron opens the subtasks under it (and closes them) - kept
  *               open only while you stay on the page; a click anywhere else on the row opens it like its title does
  *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through.
@@ -44,6 +46,34 @@
     }
 
     // ---------- Check-off ----------
+    // A Fitness workout task, checked without logging: "Log the workout?" - "log" / "task" / null (cancelled).
+    function askLog(near) {
+        if (!document.createElement("dialog").showModal) {
+            return Promise.resolve(window.confirm("Log the workout in Fitness? (Cancel just checks it off.)") ? "log" : "task");
+        }
+        var dialog = document.getElementById("pl-log-workout");
+        if (!dialog) {
+            dialog = document.createElement("dialog");
+            dialog.className = "pl-dialog";
+            dialog.id = "pl-log-workout";
+            dialog.setAttribute("aria-labelledby", "pl-log-workout-h");
+            dialog.innerHTML = '<form method="dialog"><h2 id="pl-log-workout-h">Log the workout?</h2>' +
+                '<p class="pl-muted">Logging it in Fitness keeps your sets and records - and checks this off when you finish.</p>' +
+                '<div class="pl-dialog__actions">' +
+                '<button type="submit" class="pl-btn pl-btn--primary" value="log">Log workout</button>' +
+                '<button type="submit" class="pl-btn" value="task">Just check it off</button>' +
+                '<button type="submit" class="pl-btn pl-btn--ghost" value="cancel">Cancel</button></div></form>';
+            ((near && near.closest(".pl")) || document.querySelector(".pl") || document.body).appendChild(dialog);
+        }
+        return new Promise(function (resolve) {
+            dialog.returnValue = "";
+            dialog.addEventListener("close", function done() {
+                dialog.removeEventListener("close", done);
+                resolve(dialog.returnValue === "log" ? "log" : dialog.returnValue === "task" ? "task" : null);
+            });
+            dialog.showModal();
+        });
+    }
     // "Mark all subtasks done too?" - Yes / Just the task (null: cancelled). Without <dialog>: confirm().
     function askSubtasks(open, near) {
         if (!document.createElement("dialog").showModal) {
@@ -106,7 +136,13 @@
             box.setAttribute("aria-checked", done ? "true" : "false");
             if (item) item.classList.toggle("is-done", done);
         };
-        (was || !open ? Promise.resolve("task") : askSubtasks(open, form)).then(function (choice) {
+        var logUrl = item && item.getAttribute("data-log-url");
+        var first = !was && logUrl ? askLog(form) : Promise.resolve("task");
+        first.then(function (logChoice) {
+            if (logChoice === "log") { window.location.href = logUrl; return null; }
+            if (!logChoice) return null;
+            return was || !open ? "task" : askSubtasks(open, form);
+        }).then(function (choice) {
             if (!choice) return;
             var body = new FormData(form);
             if (choice === "all") body.append("all_subtasks", "1");

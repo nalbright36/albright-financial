@@ -72,10 +72,10 @@ class RegistryTests(Base):
         hub = self.page(reverse("labs:hub"))
         self.assertEqual(buttons(hub), [("labs", "Home")] + [(a.accent, a.short_label) for a in apps_registry.APPS
                                                       if not a.superuser_only])
-        self.assertEqual(home_tiles(hub), ["trade", "resell", "opps", "meals", "notes", "planner", "money"])
+        self.assertEqual(home_tiles(hub), ["trade", "resell", "opps", "meals", "notes", "planner", "money", "fitness"])
         groups = self.client.get(reverse("labs:hub")).context["open_after_groups"]
         self.assertEqual([group for group, _ in groups], ["Trading", "Reselling", "Opportunities", "Meals", "Notes",
-                                                          "Planner", "Money"])
+                                                          "Planner", "Money", "Fitness"])
         self.assertEqual([k for k, _ in groups[1][1]],
                          ["app:resell"] + [f"page:{k}" for k, _l, _u in apps_registry.BY_KEY["resell"].pages])
 
@@ -84,7 +84,7 @@ class RegistryTests(Base):
         hub = self.page(reverse("labs:hub"))
         self.assertEqual(buttons(hub), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
                                         ("opportunities", "Opps"), ("meals", "Meals"), ("notes", "Notes"), ("planner", "Plan"),
-                                        ("money", "Money"), ("garden", "Garden")])
+                                        ("money", "Money"), ("fitness", "Fitness"), ("garden", "Garden")])
         self.assertIn('style="--app-dot: var(--app-garden, #F59E0B);"', hub)
         self.assertIn("garden", home_tiles(hub))
         groups = dict(self.client.get(reverse("labs:hub")).context["open_after_groups"])
@@ -176,9 +176,9 @@ class SuperuserTests(Base):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
         hub = self.page(reverse("labs:hub"))
-        self.assertEqual(home_tiles(hub), ["trade", "resell", "opps", "meals", "notes", "planner", "money", "admin"])
+        self.assertEqual(home_tiles(hub), ["trade", "resell", "opps", "meals", "notes", "planner", "money", "fitness", "admin"])
         self.assertEqual([label for _, label in buttons(hub)],
-                         ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan", "Money", "Admin"])
+                         ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan", "Money", "Fitness", "Admin"])
         admin = self.page(reverse("albright_control:overview"))
         self.assertEqual(current_tiles(admin), ["admin"])
         self.assertIn('data-app-target="admin" title="Albright Admin" aria-current="page"', admin)
@@ -186,7 +186,7 @@ class SuperuserTests(Base):
     def test_admin_is_always_last_and_only_for_superusers(self):
         self.user.is_superuser = True
         self.user.save()
-        self.set_pref(visible_apps=["admin", "opps", "trade"], app_order=["admin", "opps", "trade", "resell", "meals", "notes", "planner", "money"])
+        self.set_pref(visible_apps=["admin", "opps", "trade"], app_order=["admin", "opps", "trade", "resell", "meals", "notes", "planner", "money", "fitness"])
         self.assertEqual([label for _, label in buttons(self.page(reverse("labs:hub")))], ["Home", "Opps", "Trade", "Admin"])
         self.user.is_superuser = False
         self.user.save()
@@ -223,7 +223,7 @@ class VisibilityTests(Base):
     def test_at_least_one_app_stays_visible(self):
         response = self.client.post(reverse("labs:save_nav"), {"order": ["trade", "resell", "opps"]}, follow=True)
         self.assertContains(response, "Keep at least one app in your navigation.")
-        self.assertEqual(len(buttons(self.page(reverse("labs:hub")))), 8)        # unchanged (Home + 7)
+        self.assertEqual(len(buttons(self.page(reverse("labs:hub")))), 9)        # unchanged (Home + 8)
         # Access removed from the only shown app: the first remaining one still shows.
         self.set_pref(visible_apps=["opps"], allowed_apps=["trade", "resell"])
         self.assertEqual(buttons(self.page(reverse("labs:hub"))), [("labs", "Home"), ("trading", "Trade")])
@@ -260,7 +260,7 @@ class OrderTests(Base):
         self.assertEqual([label for _, label in buttons(hub)], ["Home", "Opps", "Trade", "Resell"])
         self.assertEqual(home_tiles(hub), ["opps", "trade", "resell"])
         self.assertEqual([r["key"] for r in self.client.get(reverse("labs:account")).context["nav_rows"]],
-                         ["opps", "trade", "resell", "meals", "notes", "planner", "money"])
+                         ["opps", "trade", "resell", "meals", "notes", "planner", "money", "fitness"])
         groups = self.client.get(reverse("labs:hub")).context["open_after_groups"]
         self.assertEqual([group for group, _ in groups], ["Opportunities", "Trading", "Reselling"])
 
@@ -399,7 +399,7 @@ class ExistingUsersTests(Base):
         UserPreference.objects.create(user=self.user, visible_apps=["trade", "opps", "admin"],
                                       app_order=["opps", "trade", "resell", "admin"])
         labels = [label for _, label in buttons(self.page(reverse("labs:hub")))]
-        self.assertEqual(labels, ["Home", "Opps", "Trade", "Meals", "Notes", "Plan", "Money", "Admin"])  # Resell stays hidden
+        self.assertEqual(labels, ["Home", "Opps", "Trade", "Meals", "Notes", "Plan", "Money", "Fitness", "Admin"])  # Resell stays hidden
 
     def test_the_registry_entries_are_complete(self):
         for app in apps_registry.APPS:

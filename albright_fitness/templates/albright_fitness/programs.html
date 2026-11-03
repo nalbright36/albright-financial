@@ -1,0 +1,26 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}Programs · {% endblock %}
+{% block fitness %}
+{% comment %}Programs (views.program_list): yours, and the built-in templates to copy (programs.TEMPLATES) - or start one from scratch.{% endcomment %}
+<div class="fx-head"><div><h1 class="fx-head__title">Programs</h1><p class="fx-head__sub">Copy a template, then change anything.</p></div></div>
+<section class="card fx-card" aria-labelledby="fx-mine-h">
+    <h2 class="fx-card__title" id="fx-mine-h">Yours</h2>
+    {% for p in programs %}<a href="{% url 'albright_fitness:program' p.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ p.name }}</span>
+        <span class="fx-row__ind">{% if p.scheduled_from %}<span class="fx-pill">On Planner</span> {% endif %}{% if not p.active %}<span class="fx-pill fx-pill--off">Off</span> {% endif %}{{ p.days.all|length }} day{{ p.days.all|length|pluralize }}</span></a>
+    {% empty %}<p class="fx-empty">None yet - copy one below.</p>{% endfor %}
+    <form method="post" class="fx-row-form fx-new-program">{% csrf_token %}
+        <label for="fx-new-program" class="visually-hidden">New program name</label>
+        <input type="text" name="name" id="fx-new-program" class="ledger-input fx-input-wide" maxlength="100" placeholder="New program from scratch" required>
+        <button type="submit" class="btn btn-secondary">Create</button></form>
+</section>
+<section class="fx-templates" aria-labelledby="fx-templates-h">
+    <h2 class="fx-card__title" id="fx-templates-h">Templates</h2>
+    {% for key, name, weeks, days in templates %}
+    <div class="card fx-card fx-template">
+        <div class="fx-template__head"><h3 class="fx-template__name">{{ name }}</h3>{% if weeks %}<span class="fx-pill">{{ weeks }} weeks</span>{% endif %}</div>
+        <ul class="fx-list">{% for day_name, weekdays, rows in days %}<li class="fx-row"><span class="fx-row__title">{{ day_name }}</span><span class="fx-row__ind">{{ weekdays|days }} &middot; {{ rows|length }} exercise{{ rows|length|pluralize }}</span></li>{% endfor %}</ul>
+        <form method="post">{% csrf_token %}<input type="hidden" name="template" value="{{ key }}"><button type="submit" class="btn btn-secondary btn-sm">Copy to my programs</button></form>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

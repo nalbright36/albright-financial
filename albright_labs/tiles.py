@@ -107,6 +107,17 @@ def money(user):
             "tone": "" if left >= 0 else "loss"}
 
 
+def fitness(user):
+    """Today's planned workout (or a rest day), and this week's done vs planned."""
+    from albright_fitness import stats
+    line = stats.status_line(user)
+    monday = stats.week_start(timezone.localdate())
+    done, planned = stats.done_in_week(user, monday), stats.planned_in_week(user, monday)
+    week = f"{done} of {planned} this week" if planned else f"{done} this week"
+    return {"value": line.split(": ", 1)[-1] if ": " in line else line, "note": week, "size": "text",
+            "tone": "" if planned and done >= planned else ""}
+
+
 def admin(user):
     """Scheduled jobs that are late or failing (Admin > System health)."""
     from albright_control import jobs

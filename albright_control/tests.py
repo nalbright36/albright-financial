@@ -88,12 +88,12 @@ class HeaderTests(AdminTestCase):
         page = self.client.get(reverse("trading_home")).content.decode()
         self.assertEqual(self.buttons(page), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
                                               ("opportunities", "Opps"), ("meals", "Meals"), ("notes", "Notes"),
-                                              ("planner", "Plan"), ("money", "Money"), ("admin", "Admin")])
+                                              ("planner", "Plan"), ("money", "Money"), ("fitness", "Fitness"), ("admin", "Admin")])
         self.assertIn('title="Albright Trading"', page)
         regular = Client()
         regular.force_login(self.user)
         page = regular.get(reverse("trading_home")).content.decode()
-        self.assertEqual([t for t, _l in self.buttons(page)], ["labs", "trading", "reselling", "opportunities", "meals", "notes", "planner", "money"])
+        self.assertEqual([t for t, _l in self.buttons(page)], ["labs", "trading", "reselling", "opportunities", "meals", "notes", "planner", "money", "fitness"])
         self.assertNotIn(reverse("albright_control:overview"), page)
 
     def test_brand_names_stay_full(self, _outlook):
