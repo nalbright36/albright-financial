@@ -3,7 +3,12 @@
  * and by Home for its Today panel. Vanilla JS; everything also works without it (forms post normally).
  *
  *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through
- *   filters     apply as soon as one changes
+ *   toolbar     the date range, "‹ Today ›", View options and New item. View options (a <dialog>; a bottom sheet
+ *               on phones): the view, the filters, Show meals and default sharing apply live while it's open (the
+ *               page underneath is fetched with them), Save posts them to the account, Cancel / Esc / the
+ *               backdrop put the page back; its button's dot shows while something is filtered out. New item: a
+ *               <dialog> with quick add first and "More options" bringing in the full form (new/?panel=1).
+ *               Keys: D / W / M switch views, T today, N New item (not while typing or with a dialog open).
  *   Week        drag an item onto another day; a repeating one asks "This occurrence only / This and
  *               following / All occurrences" first
  *   the form    shows only the repeat fields that apply, reads the choice back in plain English, and ties
@@ -272,23 +277,10 @@
         openView(viewBase.dataset.viewUrl.replace(/0\/$/, opening[1] + "/") + "?date=" + opening[2] + "&next=" + encodeURIComponent(here));
     }
 
-    // ---------- Filters, and selects that save on change ----------
-    var filters = document.getElementById("pl-filters");
-    if (filters) filters.addEventListener("change", function () { filters.submit(); });
+    // ---------- Selects that save on change ----------
     document.addEventListener("change", function (event) {
         if (event.target.matches && event.target.matches("select[data-autosubmit]")) event.target.form.submit();
     });
-
-    // ---------- Quick add: the "Shared with <name>" chip follows its choices ----------
-    var quickShare = document.getElementById("pl-quick-share");
-    if (quickShare) {
-        quickShare.addEventListener("change", function () {
-            var names = Array.prototype.filter.call(quickShare.querySelectorAll("select[data-share-name]"),
-                function (sel) { return sel.value; }).map(function (sel) { return sel.dataset.shareName; });
-            document.getElementById("pl-quick-share-label").textContent = names.length
-                ? "Shared with " + names[0] + (names.length > 1 ? " +" + (names.length - 1) : "") : "Only me";
-        });
-    }
 
     // ---------- Week: drag to another day ----------
     var week = document.getElementById("pl-week"), dialog = document.getElementById("pl-scope"), dragged = null;
@@ -344,164 +336,317 @@
         });
     }
 
-    // ---------- The item form ----------
-    var form = document.getElementById("pl-form");
-    if (!form) return;
+    // ---------- The toolbar: View options ----------
+    var head = document.getElementById("pl-head"), plannerBox = document.getElementById("planner");
+    var options = document.getElementById("pl-options"), optionsForm = document.getElementById("pl-options-form");
+    var optionsBtn = document.getElementById("pl-options-btn"), dot = document.getElementById("pl-options-dot");
+    var saved = null, previewing = 0;
+    // The page under the toolbar: everything in the Planner box but the toolbar and the dialogs.
+    function content(box) {
+        return Array.prototype.filter.call(box.children, function (n) { return n !== head && n.id !== "pl-head" && n.tagName !== "DIALOG"; });
+    }
+    function chosen(name) {
+        var el = optionsForm.querySelector("input[name=" + name + "]:checked");
+        return el ? el.value : "";
+    }
+    // The dot: anything filtered out compared with the defaults (views.is_filtered).
+    function filtered() {
+        var meals = optionsForm.elements.show_meals;
+        return !!(optionsForm.elements.kind.value || optionsForm.elements.hide_done.checked || chosen("who") ||
+                  (meals && !meals.checked));
+    }
+    function previewUrl() {
+        var view = optionsForm.querySelector("input[name=view]:checked");
+        var url = new URL(view.getAttribute("data-url"), window.location.origin);
+        url.searchParams.set("kind", optionsForm.elements.kind.value);
+        url.searchParams.set("done", optionsForm.elements.hide_done.checked ? "0" : "1");
+        url.searchParams.set("who", chosen("who"));
+        if (optionsForm.elements.show_meals) url.searchParams.set("meals", optionsForm.elements.show_meals.checked ? "1" : "0");
+        return url.pathname + url.search;
+    }
+    function headLinks(doc) {
+        return {title: doc.getElementById("pl-title").textContent, prev: doc.getElementById("pl-prev").getAttribute("href"),
+                today: doc.getElementById("pl-today").getAttribute("href"), next: doc.getElementById("pl-next").getAttribute("href"),
+                page: doc.title};
+    }
+    function showHead(links) {
+        document.getElementById("pl-title").textContent = links.title;
+        ["prev", "today", "next"].forEach(function (k) { document.getElementById("pl-" + k).setAttribute("href", links[k]); });
+        document.title = links.page;
+    }
+    function putContent(nodes) {
+        content(plannerBox).forEach(function (n) { n.parentNode.removeChild(n); });
+        var after = head;
+        nodes.forEach(function (n) { after.parentNode.insertBefore(n, after.nextSibling); after = n; });
+        window.dispatchEvent(new Event("navfit"));                  // the layout changed without a reload
+    }
+    // Live: the page underneath, fetched with the choices so far (nothing is saved until Save).
+    function preview() {
+        dot.hidden = !filtered();
+        var n = ++previewing;
+        plannerBox.setAttribute("aria-busy", "true");
+        fetch(previewUrl(), {credentials: "same-origin"}).then(function (r) {
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+        }).then(function (html) {
+            if (n !== previewing || !options.open) return;
+            var doc = new DOMParser().parseFromString(html, "text/html"), box = doc.getElementById("planner");
+            if (!box || !doc.getElementById("pl-head")) return;
+            showHead(headLinks(doc));
+            putContent(content(box).map(function (node) { return document.adoptNode(node); }));
+        }).catch(function () { /* the page stays as it was; Save still stores the choices */ }).then(function () {
+            if (n === previewing) plannerBox.removeAttribute("aria-busy");
+        });
+    }
+    function cancelOptions() {
+        previewing++;
+        if (saved) {
+            if (saved.changed) { putContent(saved.nodes); showHead(saved.links); }
+            dot.hidden = saved.dot;
+        }
+        optionsForm.reset();
+        plannerBox.removeAttribute("aria-busy");
+        if (options.open) options.close();
+        saved = null;
+    }
+    if (options && optionsForm && options.showModal) {
+        optionsBtn.addEventListener("click", function (event) {
+            event.preventDefault();
+            saved = {nodes: content(plannerBox), links: headLinks(document), dot: dot.hidden, changed: false};
+            options.showModal();
+        });
+        optionsForm.addEventListener("change", function (event) {
+            if (event.target.name === "share") return;              // a saved default, not part of the page
+            saved.changed = true;
+            preview();
+        });
+        optionsForm.addEventListener("click", function (event) {
+            if (event.target.closest("[data-options-cancel]")) cancelOptions();
+        });
+        options.addEventListener("cancel", function (event) { event.preventDefault(); cancelOptions(); });   // Esc
+        options.addEventListener("click", function (event) { if (event.target === options) cancelOptions(); });  // backdrop
+        optionsForm.addEventListener("submit", function () { previewing++; });
+    }
 
-    // The Checklist editor: one subtask per line.
-    var clRows = document.getElementById("pl-cl-edit-rows");
-    if (clRows) {
-        var blankRow = function () {
-            var last = clRows.lastElementChild, copy = last.cloneNode(true);
-            copy.querySelector("input[name=cl_id]").value = "";
-            var text = copy.querySelector("input[name=cl_text]");
-            text.value = "";
-            text.readOnly = false;
-            text.removeAttribute("title");
-            text.placeholder = "Add an item";
-            return copy;
-        };
-        var rowOf = function (el) { return el.closest(".pl-cl-edit__row"); };
-        var keepBlankLast = function () {
-            var last = clRows.lastElementChild;
-            if (!last || last.querySelector("input[name=cl_text]").value.trim()) clRows.appendChild(blankRow());
-        };
-        clRows.addEventListener("keydown", function (event) {
-            if (event.key !== "Enter" || !event.target.matches("input[name=cl_text]")) return;
-            event.preventDefault();                                   // never submits the form from here
-            var row = rowOf(event.target);
-            if (!event.target.value.trim()) {                         // Enter on an empty line: done
-                if (row !== clRows.lastElementChild) row.remove();
-                var after = form.querySelector("#pl-scope-field input, #pl-share-with select, .pl-actions button");
-                if (after) after.focus();
+    // ---------- The toolbar: New item (quick add, then "More options") ----------
+    var newDialog = document.getElementById("pl-new-dialog"), newBtn = document.getElementById("pl-new");
+    var more = document.getElementById("pl-new-more"), full = document.getElementById("pl-new-full");
+    function openNew() {
+        if (!newDialog || !newDialog.showModal) { if (newBtn) window.location.href = newBtn.href; return; }
+        newDialog.showModal();
+        document.getElementById("pl-quick-text").focus();
+    }
+    if (newDialog && newDialog.showModal && newBtn) {
+        newBtn.addEventListener("click", function (event) { event.preventDefault(); openNew(); });
+        newDialog.addEventListener("click", function (event) {
+            if (event.target === newDialog || event.target.closest("[data-new-close]")) { newDialog.close(); return; }
+            if (event.target.closest("#pl-new-full [data-form-cancel]")) { event.preventDefault(); newDialog.close(); }
+        });
+        more.addEventListener("click", function (event) {
+            event.preventDefault();
+            if (full.firstElementChild) {                                // already here: show / hide it
+                full.hidden = !full.hidden;
+                more.setAttribute("aria-expanded", String(!full.hidden));
                 return;
             }
-            var next = row.nextElementSibling;
-            if (!next || next.querySelector("input[name=cl_text]").value.trim()) {
-                next = blankRow();
-                row.after(next);
-            }
-            next.querySelector("input[name=cl_text]").focus();
-        });
-        clRows.addEventListener("input", keepBlankLast);
-        clRows.addEventListener("click", function (event) {
-            var button = event.target.closest("button");
-            if (!button) return;
-            var row = rowOf(button);
-            if (button.hasAttribute("data-cl-delete")) {
-                var focusTo = row.nextElementSibling || row.previousElementSibling;
-                row.remove();
-                keepBlankLast();
-                if (focusTo) focusTo.querySelector("input[name=cl_text]").focus();
-            } else if (button.dataset.clMove === "-1" && row.previousElementSibling) {
-                row.previousElementSibling.before(row);
-                button.focus();
-            } else if (button.dataset.clMove === "1" && row.nextElementSibling &&
-                       row.nextElementSibling !== clRows.lastElementChild) {
-                row.nextElementSibling.after(row);
-                button.focus();
-            }
-        });
-        var draggedRow = null;
-        clRows.addEventListener("dragstart", function (event) {
-            draggedRow = rowOf(event.target);
-            if (!draggedRow || draggedRow === clRows.lastElementChild) { draggedRow = null; event.preventDefault(); return; }
-            draggedRow.classList.add("is-dragging");
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", "");
-        });
-        clRows.addEventListener("dragover", function (event) {
-            var over = draggedRow && rowOf(event.target);
-            if (!over || over === draggedRow) return;
-            event.preventDefault();
-            var box = over.getBoundingClientRect();
-            if (event.clientY < box.top + box.height / 2) over.before(draggedRow);
-            else if (over !== clRows.lastElementChild) over.after(draggedRow);
-        });
-        clRows.addEventListener("dragend", function () {
-            if (draggedRow) draggedRow.classList.remove("is-dragging");
-            draggedRow = null;
+            var url = more.getAttribute("href");
+            fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "panel=1", {credentials: "same-origin"}).then(function (r) {
+                if (!r.ok) throw new Error(r.status);
+                return r.text();
+            }).then(function (html) {
+                if (html.indexOf('id="pl-form"') < 0) throw new Error("not the form");
+                full.innerHTML = html;
+                var form = full.querySelector("#pl-form"), typed = document.getElementById("pl-quick-text").value.trim();
+                form.setAttribute("action", url);                       // posts to the New item page, like the page itself
+                if (typed && form.elements.title && !form.elements.title.value) form.elements.title.value = typed;
+                initForm(form);
+                if (window.MdEditor && window.MdEditor.init) full.querySelectorAll("[data-md-editor]").forEach(window.MdEditor.init);
+                full.hidden = false;
+                more.setAttribute("aria-expanded", "true");
+                form.elements.title.focus();
+            }).catch(function () { window.location.href = url; });       // the New item page
         });
     }
-    var DAY_NAMES = {MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat", SU: "Sun"};
-    var LONG = {MO: "Monday", TU: "Tuesday", WE: "Wednesday", TH: "Thursday", FR: "Friday", SA: "Saturday", SU: "Sunday"};
-    var ORD = {"1": "1st", "2": "2nd", "3": "3rd", "4": "4th", "-1": "last"};
-    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];        // Date.getDay() order
 
-    function value(name) {
-        var el = form.elements[name];
-        if (!el) return "";
-        if (el.length !== undefined && el.tagName !== "SELECT") {
-            var picked = Array.prototype.filter.call(el, function (e) { return e.checked; });
-            return picked.length ? picked[0].value : "";
+    // ---------- Keys (desktop): D / W / M views, T today, N New item ----------
+    document.addEventListener("keydown", function (event) {
+        if (!head || !optionsForm || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+        if (event.target.closest && event.target.closest("input, textarea, select, [contenteditable]")) return;
+        if (document.querySelector("dialog[open]")) return;
+        var key = (event.key || "").toLowerCase(), views = {d: "day", w: "week", m: "month"};
+        if (views[key]) {
+            var radio = optionsForm.querySelector('input[name=view][value="' + views[key] + '"]');
+            if (radio && !radio.checked) { event.preventDefault(); window.location.href = radio.getAttribute("data-url"); }
+        } else if (key === "t") {
+            event.preventDefault();
+            window.location.href = document.getElementById("pl-today").getAttribute("href");
+        } else if (key === "n") {
+            event.preventDefault();
+            openNew();
         }
-        return el.value;
-    }
-    function chosenDays() {
-        return Array.prototype.filter.call(form.querySelectorAll("input[name=days]"), function (e) { return e.checked; })
-            .map(function (e) { return e.value; });
-    }
-    function parseDate(text) {
-        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text || "");
-        return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
-    }
-    function shortDate(d) {
-        return MONTHS[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== new Date().getFullYear() ? ", " + d.getFullYear() : "");
-    }
-    function summary() {
-        var repeat = value("repeat"), start = parseDate(value("date"));
-        if (repeat === "none" || !start) return "";
-        var days = chosenDays();
-        if (!days.length) days = [CODES[start.getDay()]];
-        var names = days.map(function (d) { return DAY_NAMES[d]; }).join(", ");
-        var text = {
-            daily: "Every day",
-            every_n_days: "Every " + (value("day_interval") || 3) + " days",
-            weekdays: "Every weekday",
-            weekly: "Every " + names,
-            every_n_weeks: "Every " + (value("interval") || 2) + " weeks on " + names,
-            monthly_day: "Monthly on day " + (value("month_day") || start.getDate()),
-            monthly_nth: "Monthly on the " + (ORD[value("nth")] || ORD[String(Math.min(4, Math.ceil(start.getDate() / 7)))]) + " " +
-                (LONG[value("nth_weekday")] || LONG[CODES[start.getDay()]]),
-            yearly: "Every year on " + MONTHS[start.getMonth()] + " " + start.getDate()
-        }[repeat] || "";
-        var ends = value("ends"), until = parseDate(value("until")), count = value("count");
-        if (ends === "on" && until) text += " until " + shortDate(until);
-        else if (ends === "after" && count) text += ", " + count + " time" + (count === "1" ? "" : "s");
-        else if (value("kind") === "task") text += " \u00b7 one at a time";
-        return text;
-    }
-    function refresh() {
-        var repeat = value("repeat");
-        form.querySelectorAll("[data-show-for]").forEach(function (el) {
-            el.hidden = el.dataset.showFor.split(" ").indexOf(repeat) === -1;
-        });
-        var ends = value("ends");
-        form.querySelectorAll("[data-kind-only]").forEach(function (el) { el.hidden = el.dataset.kindOnly !== value("kind"); });
-        form.querySelectorAll("[data-ends]").forEach(function (el) {
-            el.hidden = el.dataset.ends !== ends || (el.dataset.kind && el.dataset.kind !== value("kind"));
-        });
-        var out = document.getElementById("pl-summary");
-        if (out) out.textContent = summary();
-        var checkable = document.getElementById("pl-checkable"), box = form.elements.checkable;
-        if (checkable && box) {
-            var task = value("kind") === "task";
-            if (task) box.checked = true;
-            box.disabled = task || form.querySelector("fieldset").disabled;
+    });
+
+    // ---------- The item form (its page, and the New item dialog's "More options") ----------
+    var pageForm = document.getElementById("pl-form");
+    if (pageForm) initForm(pageForm);
+
+    function initForm(form) {
+
+        // The Checklist editor: one subtask per line.
+        var clRows = document.getElementById("pl-cl-edit-rows");
+        if (clRows) {
+            var blankRow = function () {
+                var last = clRows.lastElementChild, copy = last.cloneNode(true);
+                copy.querySelector("input[name=cl_id]").value = "";
+                var text = copy.querySelector("input[name=cl_text]");
+                text.value = "";
+                text.readOnly = false;
+                text.removeAttribute("title");
+                text.placeholder = "Add an item";
+                return copy;
+            };
+            var rowOf = function (el) { return el.closest(".pl-cl-edit__row"); };
+            var keepBlankLast = function () {
+                var last = clRows.lastElementChild;
+                if (!last || last.querySelector("input[name=cl_text]").value.trim()) clRows.appendChild(blankRow());
+            };
+            clRows.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter" || !event.target.matches("input[name=cl_text]")) return;
+                event.preventDefault();                                   // never submits the form from here
+                var row = rowOf(event.target);
+                if (!event.target.value.trim()) {                         // Enter on an empty line: done
+                    if (row !== clRows.lastElementChild) row.remove();
+                    var after = form.querySelector("#pl-scope-field input, #pl-share-with select, .pl-actions button");
+                    if (after) after.focus();
+                    return;
+                }
+                var next = row.nextElementSibling;
+                if (!next || next.querySelector("input[name=cl_text]").value.trim()) {
+                    next = blankRow();
+                    row.after(next);
+                }
+                next.querySelector("input[name=cl_text]").focus();
+            });
+            clRows.addEventListener("input", keepBlankLast);
+            clRows.addEventListener("click", function (event) {
+                var button = event.target.closest("button");
+                if (!button) return;
+                var row = rowOf(button);
+                if (button.hasAttribute("data-cl-delete")) {
+                    var focusTo = row.nextElementSibling || row.previousElementSibling;
+                    row.remove();
+                    keepBlankLast();
+                    if (focusTo) focusTo.querySelector("input[name=cl_text]").focus();
+                } else if (button.dataset.clMove === "-1" && row.previousElementSibling) {
+                    row.previousElementSibling.before(row);
+                    button.focus();
+                } else if (button.dataset.clMove === "1" && row.nextElementSibling &&
+                           row.nextElementSibling !== clRows.lastElementChild) {
+                    row.nextElementSibling.after(row);
+                    button.focus();
+                }
+            });
+            var draggedRow = null;
+            clRows.addEventListener("dragstart", function (event) {
+                draggedRow = rowOf(event.target);
+                if (!draggedRow || draggedRow === clRows.lastElementChild) { draggedRow = null; event.preventDefault(); return; }
+                draggedRow.classList.add("is-dragging");
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", "");
+            });
+            clRows.addEventListener("dragover", function (event) {
+                var over = draggedRow && rowOf(event.target);
+                if (!over || over === draggedRow) return;
+                event.preventDefault();
+                var box = over.getBoundingClientRect();
+                if (event.clientY < box.top + box.height / 2) over.before(draggedRow);
+                else if (over !== clRows.lastElementChild) over.after(draggedRow);
+            });
+            clRows.addEventListener("dragend", function () {
+                if (draggedRow) draggedRow.classList.remove("is-dragging");
+                draggedRow = null;
+            });
         }
-    }
-    form.addEventListener("change", refresh);
-    form.addEventListener("input", refresh);
-    // A disabled box isn't submitted: re-enable it on submit so a task stays checkable.
-    form.addEventListener("submit", function () { if (form.elements.checkable) form.elements.checkable.disabled = false; });
-    refresh();
-    // Not saved (the server said why): bring the first problem into view with its field focused - what you typed is
-    // still in the form.
-    var problem = form.querySelector(".pl-field .pl-error");
-    if (problem) {
-        var field = problem.closest(".pl-field").querySelector("input:not([type=hidden]), select, textarea");
-        problem.scrollIntoView({block: "center"});
-        if (field) field.focus({preventScroll: true});
+        var DAY_NAMES = {MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat", SU: "Sun"};
+        var LONG = {MO: "Monday", TU: "Tuesday", WE: "Wednesday", TH: "Thursday", FR: "Friday", SA: "Saturday", SU: "Sunday"};
+        var ORD = {"1": "1st", "2": "2nd", "3": "3rd", "4": "4th", "-1": "last"};
+        var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        var CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];        // Date.getDay() order
+
+        function value(name) {
+            var el = form.elements[name];
+            if (!el) return "";
+            if (el.length !== undefined && el.tagName !== "SELECT") {
+                var picked = Array.prototype.filter.call(el, function (e) { return e.checked; });
+                return picked.length ? picked[0].value : "";
+            }
+            return el.value;
+        }
+        function chosenDays() {
+            return Array.prototype.filter.call(form.querySelectorAll("input[name=days]"), function (e) { return e.checked; })
+                .map(function (e) { return e.value; });
+        }
+        function parseDate(text) {
+            var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text || "");
+            return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+        }
+        function shortDate(d) {
+            return MONTHS[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== new Date().getFullYear() ? ", " + d.getFullYear() : "");
+        }
+        function summary() {
+            var repeat = value("repeat"), start = parseDate(value("date"));
+            if (repeat === "none" || !start) return "";
+            var days = chosenDays();
+            if (!days.length) days = [CODES[start.getDay()]];
+            var names = days.map(function (d) { return DAY_NAMES[d]; }).join(", ");
+            var text = {
+                daily: "Every day",
+                every_n_days: "Every " + (value("day_interval") || 3) + " days",
+                weekdays: "Every weekday",
+                weekly: "Every " + names,
+                every_n_weeks: "Every " + (value("interval") || 2) + " weeks on " + names,
+                monthly_day: "Monthly on day " + (value("month_day") || start.getDate()),
+                monthly_nth: "Monthly on the " + (ORD[value("nth")] || ORD[String(Math.min(4, Math.ceil(start.getDate() / 7)))]) + " " +
+                    (LONG[value("nth_weekday")] || LONG[CODES[start.getDay()]]),
+                yearly: "Every year on " + MONTHS[start.getMonth()] + " " + start.getDate()
+            }[repeat] || "";
+            var ends = value("ends"), until = parseDate(value("until")), count = value("count");
+            if (ends === "on" && until) text += " until " + shortDate(until);
+            else if (ends === "after" && count) text += ", " + count + " time" + (count === "1" ? "" : "s");
+            else if (value("kind") === "task") text += " \u00b7 one at a time";
+            return text;
+        }
+        function refresh() {
+            var repeat = value("repeat");
+            form.querySelectorAll("[data-show-for]").forEach(function (el) {
+                el.hidden = el.dataset.showFor.split(" ").indexOf(repeat) === -1;
+            });
+            var ends = value("ends");
+            form.querySelectorAll("[data-kind-only]").forEach(function (el) { el.hidden = el.dataset.kindOnly !== value("kind"); });
+            form.querySelectorAll("[data-ends]").forEach(function (el) {
+                el.hidden = el.dataset.ends !== ends || (el.dataset.kind && el.dataset.kind !== value("kind"));
+            });
+            var out = document.getElementById("pl-summary");
+            if (out) out.textContent = summary();
+            var checkable = document.getElementById("pl-checkable"), box = form.elements.checkable;
+            if (checkable && box) {
+                var task = value("kind") === "task";
+                if (task) box.checked = true;
+                box.disabled = task || form.querySelector("fieldset").disabled;
+            }
+        }
+        form.addEventListener("change", refresh);
+        form.addEventListener("input", refresh);
+        // A disabled box isn't submitted: re-enable it on submit so a task stays checkable.
+        form.addEventListener("submit", function () { if (form.elements.checkable) form.elements.checkable.disabled = false; });
+        refresh();
+        // Not saved (the server said why): bring the first problem into view with its field focused - what you typed is
+        // still in the form.
+        var problem = form.querySelector(".pl-field .pl-error");
+        if (problem) {
+            var field = problem.closest(".pl-field").querySelector("input:not([type=hidden]), select, textarea");
+            problem.scrollIntoView({block: "center"});
+            if (field) field.focus({preventScroll: true});
+        }
     }
 })();

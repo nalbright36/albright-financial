@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.cache import cache
 from django.test import Client, TestCase
+from django.test.html import parse_html
 from django.urls import reverse
 
 from albright_notes.models import Note
@@ -24,7 +25,7 @@ def static(path):
 
 
 def back_button(page):
-    match = re.search(r'<a href="([^"]*)" class="back-row__back" id="nav-back" data-main-paths="([^"]*)" data-no-return hidden>', page)
+    match = re.search(r'<a href="([^"]*)" class="back-chip" id="nav-back" data-main-paths="([^"]*)" data-no-return>', page)
     return match and {"href": match.group(1), "mains": match.group(2).split()}
 
 
@@ -64,44 +65,84 @@ class BackButtonTests(Base):
         login = Client().get(reverse("user_login")).content.decode()
         self.assertNotIn('id="nav-back"', login)
         self.assertNotIn("data-nav-user", login)
-        self.assertNotIn('id="return-chip-row"', login)
+        self.assertNotIn('id="back-row"', login)
 
     def test_it_sits_in_its_own_row_under_the_header_and_shows_on_phones_and_home_screen_apps(self):
         page = self.page(reverse("albright_planner:day"))
         nav = page[page.index('<nav class="navbar">'):page.index("</nav>")]
         self.assertNotIn('id="nav-back"', nav)                              # not in the header bar
-        row = page.index('<div class="back-row container" id="back-row">')
+        row = page.index('<div class="back-row container" id="back-row" data-mode="back" hidden>')
         self.assertLess(page.index("</nav>"), row)
         self.assertLess(row, page.index('id="nav-back"'))
         self.assertLess(row, page.index('class="container pl"'))           # above the page's content
         css = static("style.css")
         self.assertIn(".back-row { display: none;", css)                    # takes no space until something shows
-        self.assertIn("@media (max-width: 640px), (display-mode: standalone) {\n  .back-row__back:not([hidden]) "
-                      "{ display: inline-flex; }", css)
-        self.assertIn("html.is-standalone .back-row__back:not([hidden])", css)
-        self.assertNotIn("navbar__back", css + page)
+        self.assertIn('@media (max-width: 640px), (display-mode: standalone) { .back-row[data-mode="back"]:not([hidden]) '
+                      '{ display: flex; } }', css)                            # plain Back: phones and home screen apps
+        self.assertIn('html.is-standalone .back-row[data-mode="back"]:not([hidden])', css)
+        self.assertIn('.back-row[data-mode="return"]:not([hidden]) { display: flex; }', css)   # Back to <app>: anywhere
         self.assertIn("window.navigator.standalone", page)                  # iOS's home screen flag -> is-standalone
         js = static("js/app_nav.js")
         self.assertIn("window.history.back()", js)
-        self.assertIn('back.hidden = mains.indexOf(window.location.pathname) >= 0 && !hasPrevious', js)
+        self.assertIn("backHidden = mains.indexOf(window.location.pathname) >= 0 && !hasPrevious", js)
+        self.assertIn("row.hidden = backHidden;", js)
+
+
+class OneBackControlTests(Base):
+    """One back control on every page: a chip with the accent arrow - "← Back to <app>" (with its x) after coming
+    from another app, else "← Back". The old plain button and its CSS are gone."""
+
+    CHIP = re.compile(r'<div class="back-row container" id="back-row" data-mode="back" hidden>\s*'
+                      r'<a href="(/[^"]*)" class="back-chip" id="nav-back" data-main-paths="[^"]*" data-no-return>'
+                      r'<span class="back-chip__arrow" aria-hidden="true">&larr;</span> <span id="nav-back-label">Back</span></a>\s*'
+                      r'<button type="button" class="back-chip__close" id="nav-back-close" aria-label="Dismiss" hidden>&times;</button>\s*</div>')
+
+    def test_every_app_renders_exactly_one_back_control_in_chip_style(self):
+        note = Note.objects.create(owner=self.me, title="Groceries", body="")
+        for path in (reverse("albright_planner:day"), reverse("albright_planner:week"), reverse("albright_planner:month"),
+                     reverse("albright_planner:new"), "/notes/", f"/notes/{note.pk}/", reverse("albright_meals:week"),
+                     reverse("labs:hub"), reverse("albright_reselling_app:dashboard"), reverse("albright_crypto_app:inbox")):
+            page = self.page(path)
+            self.assertEqual(len(self.CHIP.findall(page)), 1, path)
+            self.assertEqual(page.count('id="nav-back"'), 1, path)
+            self.assertEqual(page.count("back-chip__arrow"), 1, path)
+            for gone in ("return-chip", "back-row__back", "navbar__back"):
+                self.assertNotIn(gone, page, path)
+            parse_html(page)                                                  # balanced: no stray tags around it
+
+    def test_the_old_plain_button_and_its_css_are_gone(self):
+        css, js = static("style.css"), static("js/app_nav.js")
+        for gone in (".back-row__back", ".return-chip", "navbar__back"):
+            self.assertNotIn(gone, css)
+        for gone in ("return-chip", "back-row__back"):
+            self.assertNotIn(gone, js)
+        self.assertIn(".back-chip__arrow { color: var(--accent); }", css)   # the accent arrow
+        self.assertIn("border-radius: 999px;", css[css.index(".back-chip {"):css.index(".back-chip__arrow")])   # a pill
+
+    def test_coming_from_another_app_it_says_back_to_that_app_otherwise_back(self):
+        js = static("js/app_nav.js")
+        show = js[js.index("function showBack(chip) {"):js.index("if (backLink) {")]
+        # From another app: its exact page (same-site only), "Back to <app>", the x.
+        self.assertIn('row.setAttribute("data-mode", "return");', show)
+        self.assertIn('backLink.setAttribute("href", chip.url);', show)
+        self.assertIn('backLabel.textContent = "Back to " + chip.label;', show)
+        self.assertIn("if (backClose) backClose.hidden = !chip;", show)
+        # Otherwise: "Back" - history back on this site, else the app's main page (the link's own href).
+        self.assertIn('row.setAttribute("data-mode", "back");', show)
+        self.assertIn('backLink.setAttribute("href", mainPage);', show)
+        self.assertIn('backLabel.textContent = "Back";', show)
+        self.assertIn('if (chip && (chip.key !== KEY || !sameSite(chip.url))) { chip = null;', js)
+        # The x: the plain "Back" again.
+        self.assertIn("showBack(null);                                             // plain \"← Back\" again", js)
+
+    def test_the_fallback_is_the_apps_own_main_page(self):
+        cases = {reverse("albright_planner:day"): "/planner/", "/notes/": "/notes/",
+                 reverse("albright_meals:groceries"): reverse("albright_meals:week")}
+        for path, home in cases.items():
+            self.assertEqual(self.CHIP.search(self.page(path)).group(1), home, path)
 
 
 class ReturnChipTests(Base):
-    def test_the_chip_is_on_every_signed_in_page_ready_to_fill(self):
-        for path in (reverse("albright_planner:day"), "/notes/", reverse("albright_meals:week")):
-            page = self.page(path)
-            # In the same row as Back.
-            self.assertRegex(page, r'<div class="back-row container" id="back-row">\s*<a [^>]*id="nav-back"[^>]*>.*?</a>\s*'
-                                   r'<div class="return-chip-row" id="return-chip-row" hidden>\s*'
-                                   r'<a href="/[^"]*" class="return-chip" id="return-chip" data-no-return>')
-            self.assertIn('id="return-chip-label"', page)
-
-    def test_with_the_chip_showing_plain_back_hides(self):
-        css = static("style.css")
-        self.assertIn(".back-row:has(> .return-chip-row:not([hidden])) > .back-row__back { display: none; }", css)
-        js = static("js/app_nav.js")
-        self.assertIn('document.getElementById("return-chip-row").hidden = true;', js)   # the x: Back shows again
-
     def test_body_tells_the_script_which_app_and_user(self):
         page = self.page(reverse("albright_planner:day"))
         self.assertIn(f'data-app-key="planner" data-app-label="Planner" data-nav-user="{self.me.pk}"', page)

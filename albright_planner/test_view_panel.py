@@ -230,7 +230,8 @@ class EditTests(Fixtures):
         self.assertIn('id="pl-form"', form)
         self.assertIn('name="then" value="view"', form)
         back = view(item, d(11, 6), next="/planner/week/").replace("&", "&amp;")
-        self.assertIn(f'href="{back}" class="pl-back"', form.replace("%2F", "/"))          # Back / Cancel return to the panel
+        self.assertIn(f'href="{back}" class="pl-btn pl-btn--ghost" data-form-cancel>Cancel', form.replace("%2F", "/"))   # Cancel returns to the panel
+        self.assertNotIn('class="pl-back">&larr; Back', form)        # the header's back chip is the one back control
 
     def test_e_shortcut_targets_the_edit_button(self):
         """planner.js: "E" (outside a text field) follows the panel's [data-view-edit] link."""

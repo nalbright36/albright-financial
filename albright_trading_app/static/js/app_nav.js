@@ -2,12 +2,13 @@
  * Getting around - above all in the iPhone home screen app, which has no browser Back / Forward. On every page
  * (templates/index.html), for someone signed in. Vanilla JS.
  *
- *   Back          "‹ Back" left of the logo (shown on phones and in a home screen app - style.css): goes back
- *                 when the previous page was on this site, else to this app's main page (its href). Hidden on
- *                 one of the app's main pages when there's nothing of this site to go back to.
- *   return chip   following a link from one app into another ("Open in Notes" from the Planner) shows
- *                 "← Back to Planner" at the top - back to the exact page you came from - for as long as you
- *                 stay in that app. Not for the launcher, the logo, Home's tiles or Back.
+ *   back          ONE back control, a chip in its own row under the header (index.html, style.css):
+ *                 - "← Back to Planner" after following a link from one app into another ("Open in Notes" from
+ *                   the Planner): back to the exact page you came from, for as long as you stay in that app; x
+ *                   dismisses it. Not for the launcher, the logo, Home's tiles or the back chip itself.
+ *                 - otherwise "← Back" (phones and the home screen app - style.css): back when the previous page
+ *                   was on this site, else this app's main page (its href); hidden on one of the app's main pages
+ *                   when there's nothing of this site to go back to.
  *   resume        the launcher's tiles and Home's app tiles open each app at the last page you visited in it;
  *                 the launcher's "Recent" row lists your last 4 pages across apps (app icon + page name).
  *
@@ -53,7 +54,7 @@
     }
 
     // ---------- This tab's trail, and Back ----------
-    var hasPrevious = false;
+    var hasPrevious = false, backHidden = false;
     function visit() {
         var trail = read("sessionStorage", "nav_trail", []).filter(sameSite), url = here();
         if (trail[trail.length - 1] === url) { /* a reload */ }
@@ -68,18 +69,8 @@
         } catch (e) { /* none */ }
         hasPrevious = window.history.length > 1 && (trail.length > 1 || !!referrer);
         var back = document.getElementById("nav-back");
-        if (back) {
-            var mains = (back.getAttribute("data-main-paths") || "").split(" ");
-            back.hidden = mains.indexOf(window.location.pathname) >= 0 && !hasPrevious;
-        }
-    }
-    var backButton = document.getElementById("nav-back");
-    if (backButton) {
-        backButton.addEventListener("click", function (event) {
-            if (!hasPrevious) return;                               // the app's main page (the link itself)
-            event.preventDefault();
-            window.history.back();
-        });
+        var mains = back ? (back.getAttribute("data-main-paths") || "").split(" ") : [];
+        backHidden = mains.indexOf(window.location.pathname) >= 0 && !hasPrevious;
     }
 
     // ---------- The return chip ----------
@@ -94,7 +85,7 @@
         write("sessionStorage", "nav_from", {url: here() + window.location.hash, key: KEY, label: LABEL, at: Date.now()});
     }, true);
 
-    function showChip() {
+    function returnTo() {
         var from = read("sessionStorage", "nav_from", null);
         write("sessionStorage", "nav_from", null);
         var chip = read("sessionStorage", "nav_return", null);
@@ -103,19 +94,39 @@
             write("sessionStorage", "nav_return", chip);
         }
         if (chip && (chip.key !== KEY || !sameSite(chip.url))) { chip = null; write("sessionStorage", "nav_return", null); }
-        var row = document.getElementById("return-chip-row");
-        if (!row) return;
-        row.hidden = !chip;
-        if (!chip) return;
-        var link = document.getElementById("return-chip");
-        link.setAttribute("href", chip.url);
-        document.getElementById("return-chip-label").textContent = chip.label;
+        return chip;
     }
-    var chipLink = document.getElementById("return-chip"), chipClose = document.getElementById("return-chip-close");
-    if (chipLink) chipLink.addEventListener("click", function () { write("sessionStorage", "nav_return", null); });
-    if (chipClose) chipClose.addEventListener("click", function () {
+
+    // ---------- The back chip: "← Back to <app>" or "← Back" - never both ----------
+    var row = document.getElementById("back-row"), backLink = document.getElementById("nav-back");
+    var backLabel = document.getElementById("nav-back-label"), backClose = document.getElementById("nav-back-close");
+    var mainPage = backLink ? backLink.getAttribute("href") : "/";
+    function showBack(chip) {
+        if (!row || !backLink) return;
+        if (chip) {
+            row.setAttribute("data-mode", "return");
+            backLink.setAttribute("href", chip.url);
+            backLabel.textContent = "Back to " + chip.label;
+            row.hidden = false;
+        } else {
+            row.setAttribute("data-mode", "back");
+            backLink.setAttribute("href", mainPage);
+            backLabel.textContent = "Back";
+            row.hidden = backHidden;
+        }
+        if (backClose) backClose.hidden = !chip;
+    }
+    if (backLink) {
+        backLink.addEventListener("click", function (event) {
+            if (row.getAttribute("data-mode") === "return") { write("sessionStorage", "nav_return", null); return; }
+            if (!hasPrevious) return;                               // the app's main page (the link itself)
+            event.preventDefault();
+            window.history.back();
+        });
+    }
+    if (backClose) backClose.addEventListener("click", function () {
         write("sessionStorage", "nav_return", null);
-        document.getElementById("return-chip-row").hidden = true;
+        showBack(null);                                             // plain "← Back" again
     });
 
     // ---------- Resume each app where you were, and Recent ----------
@@ -177,7 +188,7 @@
 
     function run() {
         visit();
-        showChip();
+        showBack(returnTo());
         var memory = remember();
         resumeLinks(memory.last);
         showRecent(memory.recent);

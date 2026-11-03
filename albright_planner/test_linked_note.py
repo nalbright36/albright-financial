@@ -136,11 +136,11 @@ class LinkedNoteTests(Base):
         self.assertNotIn("height: 100%", phone)                         # no longer a full-screen sheet
         self.assertNotIn("margin-top: auto", phone)                     # Edit / Close sit right under the content
 
-    def test_the_tabs_are_page_links_not_view_panel_links(self):
+    def test_switching_views_never_opens_the_view_panel(self):
+        # Day / Week / Month are View options' radios (data-url - page addresses), never data-view links.
         page = self.client.get(url("day")).content.decode()
-        tabs = re.findall(r'<a href="[^"]*" class="pl-tab[^"]*"[^>]*>', page)
-        self.assertEqual(len(tabs), 3)
-        for tab in tabs:
-            self.assertIn("data-tab=", tab)
-            self.assertNotIn("data-view", tab)
+        views = re.findall(r'<input type="radio" name="view" value="(\w+)" data-url="([^"]*)"', page)
+        self.assertEqual([v for v, _url in views], ["day", "week", "month"])
+        self.assertNotIn("pl-tab", page)
+        self.assertEqual(re.findall(r'<a [^>]*data-view[^>]*>', page.split('id="pl-head"', 1)[1].split("</dialog>", 2)[0]), [])
         self.assertRegex(page, r'class="pl-item__body" data-view>')

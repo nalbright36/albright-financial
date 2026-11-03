@@ -139,7 +139,7 @@ class OwnerBadgeAndFilterTests(SharedBase):
     def test_all_mine_shared_filter(self):
         self.item(title="My task")
         self.hers()
-        self.assertIn('<option value="shared">Shared with me</option>', self.page("day"))
+        self.assertRegex(self.page("day"), r'<input type="radio" name="who" value="shared"><span>Shared with me</span>')
         everything, mine, shared = (self.page("day", query=q) for q in ("", "&who=mine", "&who=shared"))
         self.assertIn("My task", everything)
         self.assertIn(SAM_ITEM, everything)
@@ -147,7 +147,7 @@ class OwnerBadgeAndFilterTests(SharedBase):
         self.assertNotIn(SAM_ITEM, mine)
         self.assertIn(SAM_ITEM, shared)
         self.assertNotIn("My task", shared.split('id="pl-day"')[1])
-        self.assertIn('<option value="mine" selected>', mine)
+        self.assertIn('<input type="radio" name="who" value="mine" checked>', mine)       # View options shows it
         self.assertIn("who=mine", mine.split('id="pl-next"')[0].rsplit("href=", 1)[1])   # the filter follows the arrows
 
 
@@ -208,16 +208,19 @@ class DefaultShareTests(SharedBase):
     def test_quick_add_uses_the_default_with_a_chip(self):
         self.remember()
         day = self.page("day")
-        self.assertIn('id="pl-quick-share-label">Shared with Sam</summary>', day)
+        self.assertIn("Shared with Sam.</p>", day.split('id="pl-quick-help"', 1)[1])        # New item's quick add
+        self.assertIn(f'<option value="{self.wife.pk}" selected>Shared with Sam</option>', day)   # View options
         self.client.post(url("quick_add"), {"text": "Call plumber tomorrow"})          # no chip fields: the default
         item = ScheduleItem.objects.get(title__icontains="plumber")
         self.assertEqual(list(item.shares.values_list("user", "permission")), [(self.wife.pk, "edit")])
-        # Changed on the chip before saving: not shared this time.
+        # A post that says otherwise (the full form's Share with): not shared this time.
         self.client.post(url("quick_add"), {"text": "Buy gift", "share_section": "1", f"share_{self.wife.pk}": ""})
         self.assertFalse(ScheduleItem.objects.get(title__icontains="gift").shares.exists())
 
     def test_quick_add_without_a_default_is_private(self):
-        self.assertIn('id="pl-quick-share-label">Only me</summary>', self.page("day"))
+        day = self.page("day")
+        self.assertIn("Only me.</p>", day.split('id="pl-quick-help"', 1)[1])
+        self.assertIn('<option value="" selected>Only me</option>', day)
         self.client.post(url("quick_add"), {"text": "Read book"})
         self.assertFalse(ItemShare.objects.exists())
 

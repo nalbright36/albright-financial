@@ -248,16 +248,13 @@
         </script>
 
         {% if user.is_authenticated %}
-        {% comment %}Its own small row under the header (style.css shows it only when something in it is showing; js/app_nav.js):
-           "‹ Back" - phones and the home screen app - back when the previous page was on this site, else this app's main
-           page (its href), hidden on a main page with nothing to go back to; and "← Back to Planner" after following a
-           link from another app, back to the exact page you came from.{% endcomment %}
-        <div class="back-row container" id="back-row">
-            <a href="{{ app_home_url }}" class="back-row__back" id="nav-back" data-main-paths="{{ app_main_paths }}" data-no-return hidden><span aria-hidden="true">&lsaquo;</span> Back</a>
-            <div class="return-chip-row" id="return-chip-row" hidden>
-                <a href="{{ app_home_url }}" class="return-chip" id="return-chip" data-no-return><span aria-hidden="true">&larr;</span> Back to <span id="return-chip-label"></span></a>
-                <button type="button" class="return-chip__close" id="return-chip-close" aria-label="Dismiss">&times;</button>
-            </div>
+        {% comment %}The one back control, in its own row under the header (js/app_nav.js; style.css):
+           "← Back to Planner" after following a link from another app - back to the exact page you came from, x to
+           dismiss it - and otherwise "← Back" on phones and in the home screen app: back when the previous page was on
+           this site, else this app's main page (its href); hidden on a main page with nothing to go back to.{% endcomment %}
+        <div class="back-row container" id="back-row" data-mode="back" hidden>
+            <a href="{{ app_home_url }}" class="back-chip" id="nav-back" data-main-paths="{{ app_main_paths }}" data-no-return><span class="back-chip__arrow" aria-hidden="true">&larr;</span> <span id="nav-back-label">Back</span></a>
+            <button type="button" class="back-chip__close" id="nav-back-close" aria-label="Dismiss" hidden>&times;</button>
         </div>
         {% endif %}
 

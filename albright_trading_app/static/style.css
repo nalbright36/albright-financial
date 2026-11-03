@@ -576,44 +576,28 @@ html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 }
 .navbar--collapsed .navbar__links .navbar__dropdown-menu a { padding: var(--space-2); }
 
-/* The row under the header (index.html, js/app_nav.js): "‹ Back" on phones and in the home screen app (a desktop
-   browser has its own Back), and the "← Back to Planner" chip. Outside the header, so the header's height and
-   layout never change; the row only takes space when something in it is showing. */
-.back-row { display: none; align-items: center; gap: var(--space-2); min-height: 36px; }
-.back-row:has(> .return-chip-row:not([hidden])) { display: flex; }
-.back-row__back {
-  display: none; align-items: center; gap: 4px; min-height: 36px; padding: 0 8px 0 0; border: 0;
-  color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; text-decoration: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.back-row__back > span { font-size: 1.5em; line-height: 1; margin-top: -2px; }
-.back-row__back:hover { color: var(--text-primary); text-decoration: none; }
-.back-row__back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
-@media (max-width: 640px), (display-mode: standalone) {
-  .back-row__back:not([hidden]) { display: inline-flex; }
-  .back-row:has(> .back-row__back:not([hidden])) { display: flex; }
-}
-html.is-standalone .back-row__back:not([hidden]) { display: inline-flex; }
-html.is-standalone .back-row:has(> .back-row__back:not([hidden])) { display: flex; }
-/* With the "← Back to Planner" chip showing, only the chip - dismissing it (its ✕) brings plain Back back. */
-.back-row:has(> .return-chip-row:not([hidden])) > .back-row__back { display: none; }
-
-/* "← Back to Planner" (in .back-row): at the top of a page you reached from another app. */
-.return-chip-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.return-chip-row[hidden] { display: none; }
-.return-chip {
+/* The one back control (index.html, js/app_nav.js), in its own row under the header - so the header's height and
+   layout never change. "← Back to Planner" (data-mode="return", with its x) shows wherever you are; plain "← Back"
+   (data-mode="back") only on phones and in the home screen app - a desktop browser has its own Back. Hidden
+   (the hidden attribute) when there's nothing to go back to. */
+.back-row { display: none; align-items: center; gap: 4px; min-height: 36px; padding-top: 4px; }
+.back-row[data-mode="return"]:not([hidden]) { display: flex; }
+@media (max-width: 640px), (display-mode: standalone) { .back-row[data-mode="back"]:not([hidden]) { display: flex; } }
+html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
+.back-chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 2px 12px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--surface); color: var(--text-primary);
-  font-size: var(--text-sm); font-weight: 600; text-decoration: none;
+  font-size: var(--text-sm); font-weight: 600; text-decoration: none; -webkit-tap-highlight-color: transparent;
 }
-.return-chip > span[aria-hidden] { color: var(--accent); }
-.return-chip:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
-.return-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.return-chip__close {
+.back-chip__arrow { color: var(--accent); }
+.back-chip:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.back-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.back-chip__close {
   width: 34px; height: 34px; padding: 0; border: 0; border-radius: 999px; background: none; cursor: pointer;
   color: var(--text-secondary); font: inherit; font-size: 1.25rem; line-height: 1;
 }
-.return-chip__close:hover { background: var(--surface-hover); color: var(--text-primary); }
+.back-chip__close[hidden] { display: none; }
+.back-chip__close:hover { background: var(--surface-hover); color: var(--text-primary); }
 
 /* Far right in every app: the theme toggle, the app launcher, the account menu (My account, Logout). */
 .navbar__tools { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-left: var(--space-6); }

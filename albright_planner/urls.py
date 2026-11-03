@@ -14,6 +14,7 @@ urlpatterns = [
     path("notes-preview/", views.notes_preview, name="notes_preview"),
     path("settings/", views.settings_view, name="settings"),
     path("meals/", views.toggle_meals, name="toggle_meals"),
+    path("view-options/", views.view_options, name="view_options"),
     path("from-note/<int:note_id>/", views.from_note, name="from_note"),
     path("item/<int:pk>/", views.view_item, name="item"),
     path("<int:pk>/", views.edit_item, name="edit"),

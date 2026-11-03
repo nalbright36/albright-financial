@@ -179,7 +179,7 @@
     }
 
     window.MdEditor = {format: format, continueList: continueList, shortcut: shortcut, autogrow: autogrow,
-                       replaceText: replaceText};
+                       replaceText: replaceText, init: init};          // init: an editor added later (planner.js)
     function start() { document.querySelectorAll("[data-md-editor]").forEach(init); }
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
     else start();

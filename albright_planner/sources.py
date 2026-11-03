@@ -157,9 +157,10 @@ def show_meals(user):
     return can_open(user, "meals") and PlannerSettings.for_user(user).show_meals
 
 
-def meals(user, start, end):
-    """Planned (and cooked) meals between start and end for someone who can open Meals - else none."""
-    if not show_meals(user):
+def meals(user, start, end, show=None):
+    """Planned (and cooked) meals between start and end for someone who can open Meals - else none. show: the
+    views' choice for this page (View options, live before it's saved); None = the saved setting."""
+    if not (show_meals(user) if show is None else show and can_open(user, "meals")):
         return []
     from albright_meals.models import MealPlanEntry
     entries = MealPlanEntry.objects.filter(date__gte=start, date__lte=end).exclude(status="skipped") \

@@ -199,9 +199,13 @@ class ItemException(models.Model):
 
 
 class PlannerSettings(models.Model):
-    """Per-user Planner preferences: the Meals overlay, and which apps may add items (sources.SOURCES)."""
+    """Per-user Planner preferences: the Meals overlay, which apps may add items (sources.SOURCES), and the views'
+    saved filters (View options - the same on every device; a link's ?kind= / ?done= / ?who= still overrides)."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_settings")
     show_meals = models.BooleanField(default=True)
+    filter_kind = models.CharField(max_length=10, blank=True, default="")     # "" | "task" | "event"
+    hide_done = models.BooleanField(default=False)
+    filter_who = models.CharField(max_length=10, blank=True, default="")      # planner.WHO: "" | "mine" | "shared"
     sources_on = models.JSONField(default=list, blank=True)      # source keys turned ON; everything else is off
     # A task with a checklist checks itself off when every row is checked (and reopens when one is unchecked).
     complete_when_checklist_done = models.BooleanField(default=True,

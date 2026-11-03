@@ -83,45 +83,93 @@ def _view_url(item, day, back=""):
 # Day / Week / Month
 # ---------------------------------------------------------------------------
 
+def _options(request):
+    """The views' filters and the Meals overlay: View options' saved choices (PlannerSettings - the same on every
+    device), unless this request says otherwise (?kind= / ?done= / ?who= / ?meals= - links that carry a filter,
+    and View options' live preview before Save)."""
+    if not hasattr(request, "_planner_options"):
+        prefs, get = PlannerSettings.for_user(request.user), request.GET
+        kind = get["kind"] if "kind" in get else prefs.filter_kind
+        who = get["who"] if "who" in get else prefs.filter_who
+        if get.get("shared") == "1":                # the old "Shared with me" checkbox's links
+            who = planner.SHARED
+        request._planner_options = {
+            "kind": kind if kind in (ScheduleItem.TASK, ScheduleItem.EVENT) else "",
+            "show_done": get["done"] != "0" if "done" in get else not prefs.hide_done,
+            "who": who if who in dict(planner.WHO) else "",
+            "meals": get["meals"] == "1" if "meals" in get else prefs.show_meals,
+            "prefs": prefs}
+    return request._planner_options
+
+
 def _filters(request):
-    kind = request.GET.get("kind", "")
-    who = request.GET.get("who", "")
-    if request.GET.get("shared") == "1":            # the old "Shared with me" checkbox's links
-        who = planner.SHARED
-    return {"kind": kind if kind in (ScheduleItem.TASK, ScheduleItem.EVENT) else "",
-            "show_done": request.GET.get("done") != "0", "who": who if who in dict(planner.WHO) else ""}
+    """planner.occurrences()'s filters for this request."""
+    o = _options(request)
+    return {"kind": o["kind"], "show_done": o["show_done"], "who": o["who"]}
 
 
-def _filter_params(f):
-    return {k: v for k, v in (("kind", f["kind"]), ("done", "" if f["show_done"] else "0"), ("who", f["who"])) if v}
+def _filter_params(o):
+    """The query that keeps this page's filters on its links: only what differs from the saved choices."""
+    prefs, out = o["prefs"], {}
+    if o["kind"] != prefs.filter_kind:
+        out["kind"] = o["kind"]
+    if o["show_done"] == prefs.hide_done:
+        out["done"] = "1" if o["show_done"] else "0"
+    if o["who"] != prefs.filter_who:
+        out["who"] = o["who"]
+    if o["meals"] != prefs.show_meals:
+        out["meals"] = "1" if o["meals"] else "0"
+    return out
+
+
+def is_filtered(options, meals_toggle):
+    """View options' dot: something is filtered out compared with the defaults (everything, done items shown, all
+    people, meals shown)."""
+    return bool(options["kind"] or not options["show_done"] or options["who"] or (meals_toggle and not options["meals"]))
+
+
+KIND_CHOICES = [("", "Tasks and events"), (ScheduleItem.TASK, "Tasks only"), (ScheduleItem.EVENT, "Events only")]
 
 
 def _frame(request, view, day, prev_day, next_day, title):
-    """What every view's header needs: tabs, Today / arrows, quick add, filters."""
-    f = _filters(request)
-    keep = _filter_params(f)
+    """What every view's header needs: the title, Today / arrows, View options (with its dot) and New item."""
+    o = _options(request)
+    keep = _filter_params(o)
     query = urlencode(keep)
 
     def link(name, when):
         params = {**({"date": when.isoformat()} if when else {}), **keep}
         return reverse(f"albright_planner:{name}") + ("?" + urlencode(params) if params else "")
+    meals_toggle = sources.can_open(request.user, "meals")
+    here = request.get_full_path()
     return {
-        "view": view, "day": day, "today": planner.today(), "title": title, "filters": f, "query": query,
+        "view": view, "day": day, "today": planner.today(), "title": title, "filters": o, "query": query,
         "tabs": [(v, v.title(), link(v, day)) for v in VIEWS],
         "prev_url": link(view, prev_day), "next_url": link(view, next_day), "today_url": link(view, None),
-        "here": request.get_full_path(),
+        "here": here,
         "day_url": lambda d: link("day", d),
-        "meals_toggle": sources.can_open(request.user, "meals"),
-        "can_check_groceries": sources.can_open(request.user, "meals"),     # checklist rows linked to the list
-        "meals_on": PlannerSettings.for_user(request.user).show_meals,
-        "who_choices": planner.WHO, **_quick_share(request.user),
+        "meals_toggle": meals_toggle,
+        "can_check_groceries": meals_toggle,                               # checklist rows linked to the list
+        "meals_on": o["meals"], "filtered": is_filtered(o, meals_toggle),
+        "who_choices": planner.WHO, "kind_choices": KIND_CHOICES,
+        "new_url": reverse("albright_planner:new") + "?" + urlencode({"date": day.isoformat(), "next": here}),
+        **_default_sharing(request.user),
     }
 
 
-def _quick_share(user):
-    """Quick add's "Shared with <name>" chip: the user's default share, changeable before saving."""
+def _default_sharing(user):
+    """View options' "Default sharing for new items": Only me, or Shared with one person (a default saved with
+    several people - the form's "Remember as my default" - shows as itself and is kept unless changed). Quick add
+    uses it as is."""
     rows = planner.share_rows(user, planner.default_shares(user))
-    return {"quick_share": rows, "quick_share_label": planner.share_summary(rows), "permissions": ItemShare.PERMISSIONS}
+    chosen = [r for r in rows if r["perm"]]
+    choices = [("", "Only me")] + [(str(r["user"].pk), f"Shared with {r['name']}") for r in rows]
+    current = str(chosen[0]["user"].pk) if len(chosen) == 1 else ""
+    if len(chosen) > 1:
+        choices.append(("keep", "Shared with " + ", ".join(r["name"] for r in chosen)))
+        current = "keep"
+    return {"share_choices": choices if rows else [], "share_current": current,
+            "quick_share_label": planner.share_summary(rows)}
 
 
 def _remember(response, view):
@@ -153,7 +201,7 @@ def day_view(request):
     overdue_occs = planner.overdue(request.user, day, kind=f["kind"], who=f["who"]) if day == today else []
     checklist.attach(occs + overdue_occs)
     top, timed = _split(occs)
-    meals = sources.meals(request.user, day, day)
+    meals = sources.meals(request.user, day, day, show=_options(request)["meals"])
     top = meals + top
     overdue = overdue_occs
     first = min([FIRST_HOUR] + [o.start_time.hour for o in timed])
@@ -175,7 +223,7 @@ def week_view(request):
     start = planner.week_start(day)
     end = start + timedelta(days=6)
     occs = checklist.attach(planner.occurrences(request.user, start, end, **_filters(request)))
-    meals = sources.meals(request.user, start, end)
+    meals = sources.meals(request.user, start, end, show=_options(request)["meals"])
     days = []
     for i in range(7):
         d = start + timedelta(days=i)
@@ -203,7 +251,7 @@ def month_view(request):
     last = _add_months(first, 1) - timedelta(days=1)
     grid_end = planner.week_start(last) + timedelta(days=6)
     occs = checklist.attach(planner.occurrences(request.user, grid_start, grid_end, **_filters(request)))
-    meals = sources.meals(request.user, grid_start, grid_end)
+    meals = sources.meals(request.user, grid_start, grid_end, show=_options(request)["meals"])
     context = _frame(request, "month", day, _add_months(first, -1), _add_months(first, 1), f"{first:%B %Y}")
     weeks, d = [], grid_start
     while d <= grid_end:
@@ -265,10 +313,13 @@ def new_item(request):
         return redirect(_next(request))
     chosen = planner.posted_shares(request.POST, request.user) if request.method == "POST" \
         else planner.default_shares(request.user)
-    return render(request, "albright_planner/form.html", {"form": form, "item": None, "next": _next(request),
-                                                          "share_rows": planner.share_rows(request.user, chosen),
-                                                          "permissions": ItemShare.PERMISSIONS,
-                                                          "checklist_edit": _editor_rows(request, [])})
+    # ?panel=1: just the form - the New item dialog's "More options" (planner.js); it posts here like the page.
+    template = "albright_planner/_item_form.html" if request.method == "GET" and request.GET.get("panel") == "1" \
+        else "albright_planner/form.html"
+    return render(request, template, {"form": form, "item": None, "next": _next(request),
+                                      "share_rows": planner.share_rows(request.user, chosen),
+                                      "permissions": ItemShare.PERMISSIONS,
+                                      "checklist_edit": _editor_rows(request, [])})
 
 
 def _editor_rows(request, rows):
@@ -654,6 +705,36 @@ def toggle_meals(request):
     prefs.show_meals = request.POST.get("show") == "1"
     prefs.save(update_fields=["show_meals"])
     return redirect(_next(request))
+
+
+@login_required
+@require_POST
+def view_options(request):
+    """View options' Save: the filters, Show meals and the default sharing for new items - stored for the account,
+    so they're the same on phone and computer - then the chosen view (remembered like any other visit)."""
+    prefs = PlannerSettings.for_user(request.user)
+    kind, who = request.POST.get("kind", ""), request.POST.get("who", "")
+    prefs.filter_kind = kind if kind in (ScheduleItem.TASK, ScheduleItem.EVENT) else ""
+    prefs.filter_who = who if who in dict(planner.WHO) else ""
+    prefs.hide_done = request.POST.get("hide_done") == "1"
+    fields = ["filter_kind", "filter_who", "hide_done"]
+    if sources.can_open(request.user, "meals"):
+        prefs.show_meals = request.POST.get("show_meals") == "1"
+        fields.append("show_meals")
+    prefs.save(update_fields=fields)
+    share = request.POST.get("share", "keep")
+    if share == "":
+        planner.save_default_shares(request.user, {})
+    elif share in {str(p.pk) for p in planner.share_people(request.user)}:
+        current = planner.default_shares(request.user)
+        planner.save_default_shares(request.user, {int(share): current.get(int(share)) or ItemShare.EDIT})
+    view = request.POST.get("view")
+    view = view if view in VIEWS else "day"
+    day = _day(request.POST.get("date"), planner.today())
+    target = reverse(f"albright_planner:{view}") + ("" if day == planner.today() else f"?date={day.isoformat()}")
+    if _wants_json(request):
+        return _remember(JsonResponse({"ok": True, "url": target}), view)
+    return _remember(redirect(target), view)
 
 
 @login_required
