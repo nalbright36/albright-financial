@@ -595,6 +595,8 @@ html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 }
 html.is-standalone .back-row__back:not([hidden]) { display: inline-flex; }
 html.is-standalone .back-row:has(> .back-row__back:not([hidden])) { display: flex; }
+/* With the "← Back to Planner" chip showing, only the chip - dismissing it (its ✕) brings plain Back back. */
+.back-row:has(> .return-chip-row:not([hidden])) > .back-row__back { display: none; }
 
 /* "← Back to Planner" (in .back-row): at the top of a page you reached from another app. */
 .return-chip-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -940,6 +942,7 @@ html.is-standalone .back-row:has(> .back-row__back:not([hidden])) { display: fle
 .scanner-controls input[type="text"] { flex: 1 1 240px; }
 .scanner-controls input[type="number"] { flex: 0 1 140px; }
 .scanner-controls select { flex: 0 1 200px; }
+.scanner-controls input[type="date"] { flex: 0 1 180px; width: auto; }   /* a filter in the row, not a full-width field */
 .scanner-controls input::placeholder { color: var(--text-tertiary); }
 .scanner-controls input:focus, .scanner-controls select:focus {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none;
@@ -1490,6 +1493,24 @@ textarea:focus-visible {
 input[type="checkbox"],
 input[type="radio"],
 input[type="range"] { accent-color: var(--accent-solid); }
+
+/* ---------- Date and time inputs: iOS Safari draws them at their own native width, so they stuck out of
+   narrow cards (Meals' plan form). Every form: the field's full width and no wider, the native look off, the
+   value left-aligned like a text input. :where() keeps the fallback border/background below every form's own
+   input class (.ledger-input, .field input, ...), so each form still looks like itself. ---------- */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+  -webkit-appearance: none; appearance: none; text-align: left;
+}
+:where(input[type="date"], input[type="time"], input[type="datetime-local"]) {
+  min-height: 2.5em; padding: var(--space-1) var(--space-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font: inherit;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 
 /* ---------- Status pills / badges: tinted background (unchanged
    tokens) plus a faint glow in the same hue. ---------- */

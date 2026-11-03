@@ -96,6 +96,12 @@ class ReturnChipTests(Base):
                                    r'<a href="/[^"]*" class="return-chip" id="return-chip" data-no-return>')
             self.assertIn('id="return-chip-label"', page)
 
+    def test_with_the_chip_showing_plain_back_hides(self):
+        css = static("style.css")
+        self.assertIn(".back-row:has(> .return-chip-row:not([hidden])) > .back-row__back { display: none; }", css)
+        js = static("js/app_nav.js")
+        self.assertIn('document.getElementById("return-chip-row").hidden = true;', js)   # the x: Back shows again
+
     def test_body_tells_the_script_which_app_and_user(self):
         page = self.page(reverse("albright_planner:day"))
         self.assertIn(f'data-app-key="planner" data-app-label="Planner" data-nav-user="{self.me.pk}"', page)
@@ -195,3 +201,16 @@ class HamburgerTests(Base):
         self.assertIn("if (html.indexOf('id=\"pl-view-panel\"') < 0) throw", planner_js)
         page = self.page(reverse("albright_planner:week"))
         self.assertNotRegex(page, r'class="pl-tab[^"]*" data-view=')
+
+
+class DateInputTests(Base):
+    def test_date_and_time_inputs_fit_their_container_everywhere(self):
+        css = static("style.css")
+        rule = css[css.index('input[type="date"],\ninput[type="time"],\ninput[type="datetime-local"] {'):]
+        rule = rule[:rule.index("}")]
+        for part in ("width: 100%", "max-width: 100%", "min-width: 0", "box-sizing: border-box",
+                     "-webkit-appearance: none", "text-align: left"):
+            self.assertIn(part, rule)
+        self.assertIn(':where(input[type="date"], input[type="time"], input[type="datetime-local"]) {', css)
+        self.assertIn("::-webkit-date-and-time-value { text-align: left;", css)
+        self.assertIn('.scanner-controls input[type="date"] { flex: 0 1 180px; width: auto; }', css)
