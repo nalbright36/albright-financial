@@ -13,7 +13,9 @@
  *               Enter on an empty one finishes, drag or arrows reorder, x deletes
  *   view panel  clicking an item opens its view panel in a <dialog> over the calendar (its own URL while open);
  *               x, Esc or the backdrop close it, "E" opens the form; checking off and ticks there show on the
- *               calendar underneath too. #pl-view=<id>-<date> (back from the form) opens it on load.
+ *               calendar underneath too. #pl-view=<id>-<date> (back from the form) opens it on load. Only item links
+ *               (data-view) open it - the Day / Week / Month tabs (data-tab) are ordinary page links. Its linked
+ *               note shows in full; ticking a box there saves to the note (Notes' check endpoint).
  */
 (function () {
     "use strict";
@@ -202,6 +204,8 @@
             if (!r.ok) throw new Error(r.status);
             return r.text();
         }).then(function (html) {
+            // Only ever an item's view panel - anything else (a whole page) is followed as a link instead.
+            if (html.indexOf('id="pl-view-panel"') < 0) throw new Error("not a view panel");
             box.innerHTML = html;
             var edit = box.querySelector("[data-view-edit]");
             if (edit) edit.href = edit.href.replace("then=view", "then=panel");     // saving comes back to this dialog
@@ -213,10 +217,32 @@
         }).catch(function () { window.location.href = url; });                       // the panel's own page
     }
     document.addEventListener("click", function (event) {
-        var link = event.target.closest && event.target.closest("a[data-view]");
+        // An item's link (data-view, no value) - not the Day / Week / Month tabs (data-tab), which are page links.
+        var link = event.target.closest && event.target.closest('a[data-view=""]');
         if (!link || !canDialog || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         openView(link.getAttribute("href"), link);
+    });
+    // The linked note's checklist (the panel shows the whole note): a box ticks that "- [ ]" line in the note
+    // itself - Notes' check endpoint, with the version the panel shows - and the note's fresh HTML comes back. If
+    // someone changed the note meanwhile, their version shows and nothing is overwritten.
+    document.addEventListener("change", function (event) {
+        var box = event.target;
+        var note = box.matches && box.matches("input.nt-check[data-task]") && box.closest("[data-note-check-url]");
+        if (!note) return;
+        var status = note.parentNode.querySelector(".pl-view__note-status"), item = box.closest("li"), checked = box.checked;
+        function say(text) { if (status) status.textContent = text; }
+        function undo(text) { box.checked = !checked; if (item) item.classList.toggle("done", !checked); say(text); }
+        if (item) item.classList.toggle("done", checked);
+        say("Saving…");
+        post(note.dataset.noteCheckUrl, {index: parseInt(box.dataset.task, 10), checked: checked,
+                                         version: parseInt(note.dataset.noteVersion, 10)}, true).then(function (res) {
+            var d = res.data || {};
+            if (typeof d.html === "string" && d.version) { note.innerHTML = d.html; note.dataset.noteVersion = d.version; }
+            if (res.ok) say("Saved to the note");
+            else if (d.conflict) say("The note was changed elsewhere – this is the latest. Tick again if you still need to.");
+            else undo("Not saved – try again.");
+        }).catch(function () { undo("Offline – not saved."); });
     });
     document.addEventListener("click", function (event) {                            // a menu closes on a click outside it
         document.querySelectorAll(".pl-menu[open]").forEach(function (menu) {

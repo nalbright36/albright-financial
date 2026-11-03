@@ -1,7 +1,9 @@
 {% comment %}
 An item's view panel for one occurrence (views.view_item): read-only at a glance. Check it off and tick its
 checklist here (that occurrence only); Edit (or "E") opens the form. planner.js shows it in a <dialog> over the
-calendar; item.html is the same panel as a page. Every empty section is left out.
+calendar; item.html is the same panel as a page. Every empty section is left out. In the dialog the header and
+the footer stay put and the middle (.pl-view__body) scrolls. A linked note shows in full - its checklist boxes
+tick right here (saved to the note) for someone who can edit it.
 {% endcomment %}{% load planner_extras %}
 <article class="pl-view{% if o.done %} is-done{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
     <header class="pl-view__head">
@@ -33,6 +35,7 @@ calendar; item.html is the same panel as a page. Every empty section is left out
         <a href="{{ back }}" class="pl-view__close" data-view-close aria-label="Close" title="Close (Esc)"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></a>
     </header>
 
+    <div class="pl-view__body">
     <p class="pl-view__facts" id="pl-view-facts">
         <span class="pl-view__fact"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg> {{ o.date|date:"D, M j" }}{% if o.date.year != today.year %}, {{ o.date|date:"Y" }}{% endif %} &middot; {% if o.start_time %}<span class="pl-time">{{ o.start_time|time:"g:i A" }}{% if o.end_time %}&ndash;{{ o.end_time|time:"g:i A" }}{% endif %}</span>{% else %}All day{% endif %}</span>
         {% if o.overdue %}<span class="pl-view__fact pl-overdue">Overdue</span>{% endif %}
@@ -63,14 +66,15 @@ calendar; item.html is the same panel as a page. Every empty section is left out
 
     {% if linked_note.title %}
     <section class="pl-view__section" id="pl-view-note" aria-labelledby="pl-view-note-h">
-        <h3 class="pl-view__label" id="pl-view-note-h">Linked note</h3>
-        <div class="pl-note-card">
-            <span class="pl-note-card__title">{{ linked_note.title }}</span>
-            {% if linked_note.preview %}<span class="pl-note-card__preview">{{ linked_note.preview }}</span>{% endif %}
-            <a href="{{ linked_note.url }}" class="pl-view__open-note">Open in Notes &rarr;</a>
-        </div>
+        <h3 class="pl-view__label">Linked note</h3>
+        <h4 class="pl-view__note-title" id="pl-view-note-h">{{ linked_note.title }}</h4>
+        {% if linked_note.html %}<div class="pl-view__note md-body" id="pl-view-note-body"{% if linked_note.can_tick %} data-note-check-url="{{ linked_note.check_url }}" data-note-version="{{ linked_note.version }}"{% endif %}>{{ linked_note.html }}</div>
+        {% else %}<p class="pl-muted pl-small">This note is empty.</p>{% endif %}
+        <p class="pl-view__note-status pl-small" id="pl-view-note-status" role="status" aria-live="polite"></p>
+        <a href="{{ linked_note.url }}" class="pl-view__open-note">Open in Notes &rarr;</a>
     </section>
     {% endif %}
+    </div>
 
     <footer class="pl-view__foot">
         {% if edit_url %}<a href="{{ edit_url }}" class="pl-btn pl-btn--primary" id="pl-view-edit" data-view-edit title="Edit (E)">Edit</a>{% endif %}

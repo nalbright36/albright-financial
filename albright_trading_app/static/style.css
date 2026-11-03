@@ -576,6 +576,42 @@ html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 }
 .navbar--collapsed .navbar__links .navbar__dropdown-menu a { padding: var(--space-2); }
 
+/* "‹ Back" left of the logo (index.html, js/app_nav.js): phones and the home screen app only - a desktop browser
+   has its own Back. The script un-hides it; it stays hidden on an app's main page with nothing to go back to. */
+.navbar__back {
+  display: none; align-items: center; gap: 2px; min-height: 40px; padding: 0 6px 0 0; margin-right: calc(-1 * var(--space-2));
+  flex-shrink: 0; color: var(--accent); font-size: var(--text-sm); font-weight: 600; text-decoration: none;
+  border-radius: var(--radius-sm); -webkit-tap-highlight-color: transparent;
+}
+.navbar__back > span { font-size: 1.75em; line-height: 1; margin-top: -3px; }
+.navbar__back:hover { color: var(--accent-hover); text-decoration: none; }
+.navbar__back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px), (display-mode: standalone) { .navbar__back:not([hidden]) { display: inline-flex; } }
+html.is-standalone .navbar__back:not([hidden]) { display: inline-flex; }
+/* Small phones: just the chevron (still named "Back") and a smaller logo, so the header stays one row. */
+@media (max-width: 420px) {
+  .navbar__back-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .navbar__back { padding: 0 4px; margin-right: calc(-1 * var(--space-1)); }
+  .navbar__main-row:has(.navbar__back:not([hidden])) .navbar__logo { height: 36px; width: auto; }
+}
+
+/* "← Back to Planner" (index.html, js/app_nav.js): at the top of a page you reached from another app. */
+.return-chip-row { display: flex; align-items: center; gap: 4px; padding-top: var(--space-3); }
+.return-chip-row[hidden] { display: none; }
+.return-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-primary);
+  font-size: var(--text-sm); font-weight: 600; text-decoration: none;
+}
+.return-chip > span[aria-hidden] { color: var(--accent); }
+.return-chip:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.return-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.return-chip__close {
+  width: 34px; height: 34px; padding: 0; border: 0; border-radius: 999px; background: none; cursor: pointer;
+  color: var(--text-secondary); font: inherit; font-size: 1.25rem; line-height: 1;
+}
+.return-chip__close:hover { background: var(--surface-hover); color: var(--text-primary); }
+
 /* Far right in every app: the theme toggle, the app launcher, the account menu (My account, Logout). */
 .navbar__tools { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-left: var(--space-6); }
 .navbar--collapsed .navbar__tools { margin-left: var(--space-3); }
@@ -2008,6 +2044,14 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 }
 .pl-view-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .pl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; }
+.pl-view__body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* In the dialog: the header (title, menu, x) stays at the top and Edit / Close at the bottom - only the middle
+   scrolls, however long the notes or the linked note. */
+.pl-view-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.pl-view-dialog .pl-view { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.pl-view-dialog .pl-view__head, .pl-view-dialog .pl-view__foot { flex-shrink: 0; }
+.pl-view-dialog .pl-view__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0 -20px; padding: 0 20px 2px; }
 .pl-view-page .pl-view { max-width: 600px; border: 1px solid var(--border); border-radius: 16px;
   background: var(--glass-bg-solid, var(--surface)); box-shadow: 0 0 0 1px var(--accent-soft); }
 .pl-view__head { display: flex; align-items: flex-start; gap: 10px; }
@@ -2050,14 +2094,20 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   -webkit-mask-image: linear-gradient(#000 65%, transparent); mask-image: linear-gradient(#000 65%, transparent); }
 .pl .pl-view__more { min-height: 32px; margin-top: 4px; color: var(--accent); font-size: 0.875rem; font-weight: 600; }
 .pl-view .pl-note-card { margin: 0; }
-.pl-view__open-note { margin-top: 4px; font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
+.pl-view__note-title { margin: 0 0 8px; font-size: 1.0625rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.pl-view__note { font-size: 0.9375rem; line-height: 1.55; }
+.pl-view__note .nt-check[data-task] { cursor: pointer; }
+.pl-view__note-status { margin: 6px 0 0; color: var(--text-secondary); }
+.pl-view__note-status:empty { display: none; }
+.pl-view__open-note { display: inline-block; margin-top: 8px; font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
 .pl-view__foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
 @media (max-width: 640px) {
   /* Phones: a full-screen sheet; Edit and Close stay at the bottom. */
   .pl-view-dialog { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0;
     background: var(--glass-bg-solid, var(--surface)); }
-  .pl-view-dialog .pl-view { min-height: 100%; padding: 14px 16px 0; }
-  .pl-view-dialog .pl-view__foot { position: sticky; bottom: 0; margin-top: auto; padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+  .pl-view-dialog .pl-view { padding: calc(14px + env(safe-area-inset-top)) 16px 0; }
+  .pl-view-dialog .pl-view__body { margin: 0 -16px; padding: 0 16px 2px; }
+  .pl-view-dialog .pl-view__foot { margin-top: auto; padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
     background: var(--glass-bg-solid, var(--surface)); }
   .pl-view__foot .pl-btn { flex: 1; }
 }

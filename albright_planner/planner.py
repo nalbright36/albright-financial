@@ -514,9 +514,12 @@ def share_summary(rows):
 # Linked notes (ScheduleItem.note - the note's id; the note lives in Notes)
 # ---------------------------------------------------------------------------
 
-def linked_note(item, user):
+def linked_note(item, user, full=False):
     """What an item page shows about its note: {"title", "preview", "url"}; {"hidden": True} for a note this user
-    can't see; {"deleted": True} once the note was deleted; None when there's none."""
+    can't see; {"deleted": True} once the note was deleted; None when there's none.
+    full (the view panel): also the whole note as safe HTML (albright_notes.render), and - for someone who may
+    edit the note and open Notes - tickable checklist boxes that save to the note (Notes' check endpoint, with
+    the version it was rendered at)."""
     if item.note_id is None:
         return {"deleted": True} if item.note_deleted else None
     from albright_notes.models import Note
@@ -525,8 +528,16 @@ def linked_note(item, user):
     note = Note.objects.visible_to(user).filter(pk=item.note_id).first()
     if note is None:
         return {"hidden": True}
-    return {"title": note.title, "preview": preview(note.body), "url": reverse("albright_notes:note", args=[note.pk]),
-            "id": note.pk}
+    out = {"title": note.title, "preview": preview(note.body), "url": reverse("albright_notes:note", args=[note.pk]),
+           "id": note.pk}
+    if full:
+        from albright_notes.render import render
+        from .sources import can_open
+        can_tick = note.can_edit(user) and can_open(user, "notes")
+        out.update({"html": render(note.body, editable=can_tick) if note.body.strip() else "", "can_tick": can_tick,
+                    "check_url": reverse("albright_notes:check", args=[note.pk]) if can_tick else "",
+                    "version": note.version})
+    return out
 
 
 def attachable_notes(user, limit=200):

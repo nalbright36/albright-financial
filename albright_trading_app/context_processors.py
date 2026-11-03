@@ -22,10 +22,27 @@ def app_key_for(app_name):
     return APP_KEYS.get(app_name, apps_registry.DEFAULT_APP.accent)
 
 
+def _main_pages(key):
+    """(the app's main page, every path that counts as one of its main pages) - the header's Back button goes to
+    the first when there's no page of this site to go back to, and hides on the others then."""
+    from django.urls import reverse
+    if key == apps_registry.HOME_ACCENT:
+        return reverse("labs:root"), [reverse("labs:root"), reverse("labs:hub")]
+    app = APPS_BY_ACCENT[key]
+    paths = [reverse(app.landing_url_name)] + [reverse(url_name) for _key, _label, url_name in app.pages]
+    return paths[0], list(dict.fromkeys(paths))
+
+
 def current_app(request):
     resolved = getattr(request, "resolver_match", None)
     key = app_key_for(resolved.app_name if resolved else None)
+    home, mains = _main_pages(key)
     return {
+        # For the header's navigation (js/app_nav.js): the app's registry key ("planner"; "home" for Home), its
+        # main page and its main pages' paths.
+        "current_app_key": APPS_BY_ACCENT[key].key if key in APPS_BY_ACCENT else "home",
+        "app_home_url": home,
+        "app_main_paths": " ".join(mains),
         "current_app": key,
         "app_brand": APP_BRANDS[key],
         "app_label": APP_LABELS[key],

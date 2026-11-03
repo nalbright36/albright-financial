@@ -332,7 +332,7 @@ def view_item(request, pk):
         "repeat_text": planner.plain_repeat(item), "shared_with": shared_with,
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "can_check_groceries": sources.can_open(request.user, "meals"),
-        "linked_note": planner.linked_note(item, request.user),
+        "linked_note": planner.linked_note(item, request.user, full=True),
         "can_skip": can_skip, "can_move": can_edit, "can_delete": can_delete,
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
     })

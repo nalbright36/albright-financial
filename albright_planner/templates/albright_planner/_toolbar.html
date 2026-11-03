@@ -15,7 +15,7 @@ meals" (people who can open Meals) is remembered - it's saved, not a filter.
     </div>
     <div class="pl-head__row">
         <nav class="pl-tabs" aria-label="View">
-            {% for key, label, url in tabs %}<a href="{{ url }}" class="pl-tab{% if key == view %} is-on{% endif %}" data-view="{{ key }}"{% if key == view %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+            {% for key, label, url in tabs %}<a href="{{ url }}" class="pl-tab{% if key == view %} is-on{% endif %}" data-tab="{{ key }}"{% if key == view %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
         </nav>
         <form method="get" class="pl-filters" id="pl-filters">
             <input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}">

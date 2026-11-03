@@ -1,6 +1,7 @@
 {% load static cache_bust %}
 <!DOCTYPE html>
-<html>
+{# data-app-key / data-app-label / data-nav-user: js/app_nav.js (Back, the return chip, resume and Recent - signed in only). #}
+<html data-app-key="{{ current_app_key }}" data-app-label="{% if current_app_key == 'home' %}Home{% else %}{{ app_label }}{% endif %}"{% if user.is_authenticated %} data-nav-user="{{ user.pk }}"{% endif %}>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,6 +25,10 @@
                     ? stored
                     : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
                 document.documentElement.setAttribute('data-theme', theme);
+                // Running as a home screen app (no browser Back / Forward): the header shows its own Back button.
+                if (window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) {
+                    document.documentElement.classList.add('is-standalone');
+                }
                 // The header's dropdowns open on click (the script at the bottom);
                 // without JS they still open on hover (style.css: html:not(.js)).
                 document.documentElement.classList.add('js');
@@ -35,6 +40,10 @@
 
         <nav class="navbar">
             <div class="navbar__main-row">
+                {% if user.is_authenticated %}
+                {# "‹ Back" (phones and the home screen app - style.css; js/app_nav.js): back when the previous page was on this site, else this app's main page (its href). Hidden until the script decides - and on a main page with nothing to go back to. #}
+                <a href="{{ app_home_url }}" class="navbar__back" id="nav-back" data-main-paths="{{ app_main_paths }}" data-no-return hidden><span aria-hidden="true">&lsaquo;</span> <span class="navbar__back-text">Back</span></a>
+                {% endif %}
                 {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). #}
                 <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__app-name">{{ app_label|default:"Trading" }}</span></a>
 
@@ -143,8 +152,14 @@
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="3" cy="3" r="1.6"/><circle cx="8" cy="3" r="1.6"/><circle cx="13" cy="3" r="1.6"/><circle cx="3" cy="8" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="13" cy="8" r="1.6"/><circle cx="3" cy="13" r="1.6"/><circle cx="8" cy="13" r="1.6"/><circle cx="13" cy="13" r="1.6"/></svg>
                         </button>
                         <div class="app-launcher__menu" id="app-launcher-panel" role="menu" aria-label="Apps" hidden>
+                            {# Recent: your last 4 pages across apps (js/app_nav.js fills it; it stays hidden until there are some). #}
+                            <div class="app-launcher__recent" id="app-launcher-recent" hidden>
+                                <p class="app-launcher__heading" id="app-launcher-recent-h">Recent</p>
+                                <div class="app-launcher__recent-list" id="app-launcher-recent-list" aria-labelledby="app-launcher-recent-h"></div>
+                                <div class="app-launcher__sep" aria-hidden="true"></div>
+                            </div>
                             <div class="app-launcher__grid">
-                                {% for app in launcher_apps %}<a href="{% if app.href %}{{ app.href }}{% else %}{% url app.url_name %}{% endif %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %}>
+                                {% for app in launcher_apps %}<a href="{% if app.href %}{{ app.href }}{% else %}{% url app.url_name %}{% endif %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %} data-no-return>
                                     <span class="app-launcher__icon" aria-hidden="true">{% include "_app_icon.html" with key=app.key %}</span>
                                     <span class="app-launcher__label">{{ app.short_label }}</span>
                                     <span class="app-launcher__line" data-line-for="{{ app.key }}">{{ app.line|default:"" }}</span>
@@ -171,6 +186,78 @@
                 </div>
             </div>
         </nav>
+        <script>
+            // When the app's links don't fit beside the brand on one line - and always on phones (640px or less) -
+            // the whole nav collapses into one "Menu" button (a hamburger on phones) instead of wrapping. The same
+            // rule on every page of every app. Checked right here, as soon as the header exists (so it never shows
+            // wide first), then again on load, resize, rotation, a page shown from the back/forward cache, once
+            // fonts load, whenever the header's row or links change size (ResizeObserver - a layout change without
+            // a reload), and on a "navfit" event (document.dispatchEvent(new Event('navfit'))). If even the
+            // collapsed row doesn't fit (a long brand on a small phone), the theme toggle, launcher and account
+            // menu move up to a slim row of their own.
+            (function () {
+                var nav = document.querySelector('.navbar');
+                var row = nav && nav.querySelector('.navbar__main-row');
+                var toggle = document.getElementById('nav-toggle');
+                var links = document.getElementById('navbar-links');
+                if (!row || !toggle || !links) return;
+                var phone = window.matchMedia('(max-width: 640px)');
+                function setOpen(open) {
+                    nav.classList.toggle('navbar--menu-open', open);
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                }
+                function overflows() { return row.scrollWidth > row.clientWidth + 1; }
+                function fit() {
+                    var was = nav.classList.contains('navbar--collapsed');
+                    nav.classList.remove('navbar--collapsed', 'navbar--stacked');
+                    var collapse = phone.matches || overflows();
+                    nav.classList.toggle('navbar--collapsed', collapse);
+                    if (collapse && overflows()) nav.classList.add('navbar--stacked');
+                    if (collapse !== was) setOpen(false);
+                }
+                fit();
+                var pending = false;
+                function refit() {
+                    if (pending) return;
+                    pending = true;
+                    window.requestAnimationFrame(function () { pending = false; fit(); });
+                }
+                window.addEventListener('resize', refit);
+                window.addEventListener('orientationchange', refit);
+                window.addEventListener('load', refit);
+                window.addEventListener('pageshow', refit);
+                document.addEventListener('navfit', refit);
+                if (phone.addEventListener) phone.addEventListener('change', refit);
+                if (window.ResizeObserver) {
+                    var observer = new ResizeObserver(refit);
+                    observer.observe(row);
+                    observer.observe(links);
+                }
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    setOpen(!nav.classList.contains('navbar--menu-open'));
+                });
+                nav.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape' && nav.classList.contains('navbar--menu-open')) { setOpen(false); toggle.focus(); }
+                });
+                document.addEventListener('click', function (e) {
+                    if (!nav.contains(e.target)) setOpen(false);
+                });
+                links.addEventListener('focusout', function (e) {
+                    if (e.relatedTarget && !links.contains(e.relatedTarget) && e.relatedTarget !== toggle) setOpen(false);
+                });
+            })();
+        </script>
+
+        {% if user.is_authenticated %}
+        {# "← Back to Planner": after following a link from another app (js/app_nav.js), back to the exact page you came from. #}
+        <div class="return-chip-row container" id="return-chip-row" hidden>
+            <a href="{{ app_home_url }}" class="return-chip" id="return-chip" data-no-return><span aria-hidden="true">&larr;</span> Back to <span id="return-chip-label"></span></a>
+            <button type="button" class="return-chip__close" id="return-chip-close" aria-label="Dismiss">&times;</button>
+        </div>
+        {% endif %}
 
         {% if nav_hidden_app %}
         {# A page of an app this user can open but has hidden from their nav (My account). #}
@@ -247,55 +334,6 @@
                 });
             });
 
-            // When the app's links don't fit beside the brand on one line, the
-            // whole nav collapses into one "Menu" button (a hamburger on phones)
-            // instead of wrapping - rechecked on resize and once fonts load. If
-            // even that doesn't fit (a long brand on a small phone), the theme
-            // toggle, launcher and account menu move up to a slim row of their own.
-            (function () {
-                var nav = document.querySelector('.navbar');
-                var row = nav && nav.querySelector('.navbar__main-row');
-                var toggle = document.getElementById('nav-toggle');
-                var links = document.getElementById('navbar-links');
-                if (!row || !toggle || !links) return;
-                var phone = window.matchMedia('(max-width: 640px)');
-                function setOpen(open) {
-                    nav.classList.toggle('navbar--menu-open', open);
-                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-                }
-                function overflows() { return row.scrollWidth > row.clientWidth + 1; }
-                function fit() {
-                    var was = nav.classList.contains('navbar--collapsed');
-                    nav.classList.remove('navbar--collapsed', 'navbar--stacked');
-                    var collapse = phone.matches || overflows();
-                    nav.classList.toggle('navbar--collapsed', collapse);
-                    if (collapse && overflows()) nav.classList.add('navbar--stacked');
-                    if (collapse !== was) setOpen(false);
-                }
-                fit();
-                var pending = false;
-                window.addEventListener('resize', function () {
-                    if (pending) return;
-                    pending = true;
-                    window.requestAnimationFrame(function () { pending = false; fit(); });
-                });
-                if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
-
-                toggle.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    setOpen(!nav.classList.contains('navbar--menu-open'));
-                });
-                nav.addEventListener('keydown', function (e) {
-                    if (e.key === 'Escape' && nav.classList.contains('navbar--menu-open')) { setOpen(false); toggle.focus(); }
-                });
-                document.addEventListener('click', function (e) {
-                    if (!nav.contains(e.target)) setOpen(false);
-                });
-                links.addEventListener('focusout', function (e) {
-                    if (e.relatedTarget && !links.contains(e.relatedTarget) && e.relatedTarget !== toggle) setOpen(false);
-                });
-            })();
-
             document.getElementById('theme-toggle').addEventListener('click', function () {
                 var current = document.documentElement.getAttribute('data-theme');
                 var next = current === 'light' ? 'dark' : 'light';
@@ -346,6 +384,7 @@
             })();
         </script>
         <script src="{% static_version 'labs/launcher.js' %}"></script>
+        <script src="{% static_version 'js/app_nav.js' %}"></script>
         {# The shared Markdown editor (templates/_md_editor.html; Notes' notes.js uses it too) - before the app's script. #}
         <script src="{% static_version 'js/md_editor.js' %}"></script>
         {# The current app's own script (apps_registry.App.script), then anything else a page adds. #}
