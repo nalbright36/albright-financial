@@ -40,10 +40,6 @@
 
         <nav class="navbar">
             <div class="navbar__main-row">
-                {% if user.is_authenticated %}
-                {# "‹ Back" (phones and the home screen app - style.css; js/app_nav.js): back when the previous page was on this site, else this app's main page (its href). Hidden until the script decides - and on a main page with nothing to go back to. #}
-                <a href="{{ app_home_url }}" class="navbar__back" id="nav-back" data-main-paths="{{ app_main_paths }}" data-no-return hidden><span aria-hidden="true">&lsaquo;</span> <span class="navbar__back-text">Back</span></a>
-                {% endif %}
                 {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). #}
                 <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__app-name">{{ app_label|default:"Trading" }}</span></a>
 
@@ -252,10 +248,16 @@
         </script>
 
         {% if user.is_authenticated %}
-        {# "← Back to Planner": after following a link from another app (js/app_nav.js), back to the exact page you came from. #}
-        <div class="return-chip-row container" id="return-chip-row" hidden>
-            <a href="{{ app_home_url }}" class="return-chip" id="return-chip" data-no-return><span aria-hidden="true">&larr;</span> Back to <span id="return-chip-label"></span></a>
-            <button type="button" class="return-chip__close" id="return-chip-close" aria-label="Dismiss">&times;</button>
+        {% comment %}Its own small row under the header (style.css shows it only when something in it is showing; js/app_nav.js):
+           "‹ Back" - phones and the home screen app - back when the previous page was on this site, else this app's main
+           page (its href), hidden on a main page with nothing to go back to; and "← Back to Planner" after following a
+           link from another app, back to the exact page you came from.{% endcomment %}
+        <div class="back-row container" id="back-row">
+            <a href="{{ app_home_url }}" class="back-row__back" id="nav-back" data-main-paths="{{ app_main_paths }}" data-no-return hidden><span aria-hidden="true">&lsaquo;</span> Back</a>
+            <div class="return-chip-row" id="return-chip-row" hidden>
+                <a href="{{ app_home_url }}" class="return-chip" id="return-chip" data-no-return><span aria-hidden="true">&larr;</span> Back to <span id="return-chip-label"></span></a>
+                <button type="button" class="return-chip__close" id="return-chip-close" aria-label="Dismiss">&times;</button>
+            </div>
         </div>
         {% endif %}
 

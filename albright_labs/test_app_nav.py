@@ -24,7 +24,7 @@ def static(path):
 
 
 def back_button(page):
-    match = re.search(r'<a href="([^"]*)" class="navbar__back" id="nav-back" data-main-paths="([^"]*)" data-no-return hidden>', page)
+    match = re.search(r'<a href="([^"]*)" class="back-row__back" id="nav-back" data-main-paths="([^"]*)" data-no-return hidden>', page)
     return match and {"href": match.group(1), "mains": match.group(2).split()}
 
 
@@ -66,13 +66,20 @@ class BackButtonTests(Base):
         self.assertNotIn("data-nav-user", login)
         self.assertNotIn('id="return-chip-row"', login)
 
-    def test_it_sits_left_of_the_logo_and_shows_on_phones_and_home_screen_apps(self):
+    def test_it_sits_in_its_own_row_under_the_header_and_shows_on_phones_and_home_screen_apps(self):
         page = self.page(reverse("albright_planner:day"))
-        self.assertLess(page.index('id="nav-back"'), page.index('class="navbar__brand"'))
+        nav = page[page.index('<nav class="navbar">'):page.index("</nav>")]
+        self.assertNotIn('id="nav-back"', nav)                              # not in the header bar
+        row = page.index('<div class="back-row container" id="back-row">')
+        self.assertLess(page.index("</nav>"), row)
+        self.assertLess(row, page.index('id="nav-back"'))
+        self.assertLess(row, page.index('class="container pl"'))           # above the page's content
         css = static("style.css")
-        self.assertIn("@media (max-width: 640px), (display-mode: standalone) { .navbar__back:not([hidden]) "
-                      "{ display: inline-flex; } }", css)
-        self.assertIn("html.is-standalone .navbar__back:not([hidden])", css)
+        self.assertIn(".back-row { display: none;", css)                    # takes no space until something shows
+        self.assertIn("@media (max-width: 640px), (display-mode: standalone) {\n  .back-row__back:not([hidden]) "
+                      "{ display: inline-flex; }", css)
+        self.assertIn("html.is-standalone .back-row__back:not([hidden])", css)
+        self.assertNotIn("navbar__back", css + page)
         self.assertIn("window.navigator.standalone", page)                  # iOS's home screen flag -> is-standalone
         js = static("js/app_nav.js")
         self.assertIn("window.history.back()", js)
@@ -83,7 +90,9 @@ class ReturnChipTests(Base):
     def test_the_chip_is_on_every_signed_in_page_ready_to_fill(self):
         for path in (reverse("albright_planner:day"), "/notes/", reverse("albright_meals:week")):
             page = self.page(path)
-            self.assertRegex(page, r'<div class="return-chip-row container" id="return-chip-row" hidden>\s*'
+            # In the same row as Back.
+            self.assertRegex(page, r'<div class="back-row container" id="back-row">\s*<a [^>]*id="nav-back"[^>]*>.*?</a>\s*'
+                                   r'<div class="return-chip-row" id="return-chip-row" hidden>\s*'
                                    r'<a href="/[^"]*" class="return-chip" id="return-chip" data-no-return>')
             self.assertIn('id="return-chip-label"', page)
 

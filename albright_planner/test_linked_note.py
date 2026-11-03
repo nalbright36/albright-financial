@@ -122,6 +122,20 @@ class LinkedNoteTests(Base):
         self.assertEqual(middle.count("<div") - middle.count("</div>"), 0)   # the body closes before the footer
         self.assertNotIn("pl-view__close", middle)
 
+    def test_on_phones_the_panel_is_a_centered_card_sized_to_its_content(self):
+        import pathlib
+        from django.contrib.staticfiles import finders
+        css = pathlib.Path(finders.find("style.css")).read_text(encoding="utf-8")
+        phone = css[css.index("/* Phones: a centered card"):]
+        phone = phone[:phone.index("\n}")]
+        rule = re.search(r"\.pl-view-dialog \{(.*?)\}", phone, re.S).group(1)
+        for part in ("width: 92%", "height: fit-content", "margin: auto", "border-radius: 16px",
+                     "top: env(safe-area-inset-top)", "bottom: env(safe-area-inset-bottom)",
+                     "max-height: min(90dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)"):
+            self.assertIn(part, rule)
+        self.assertNotIn("height: 100%", phone)                         # no longer a full-screen sheet
+        self.assertNotIn("margin-top: auto", phone)                     # Edit / Close sit right under the content
+
     def test_the_tabs_are_page_links_not_view_panel_links(self):
         page = self.client.get(url("day")).content.decode()
         tabs = re.findall(r'<a href="[^"]*" class="pl-tab[^"]*"[^>]*>', page)
