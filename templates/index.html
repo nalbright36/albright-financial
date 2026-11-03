@@ -108,6 +108,14 @@
                         <a href="{% url 'albright_planner:month' %}"{% if page == 'month' %} class="active" aria-current="page"{% endif %}>Month</a>
                         <a href="{% url 'albright_planner:new' %}"{% if page == 'new' %} class="active" aria-current="page"{% endif %}>New item</a>
                         {% endwith %}
+                        {% elif in_money_app %}
+                        {% with page=request.resolver_match.url_name %}
+                        <a href="{% url 'albright_money:dashboard' %}"{% if page == 'dashboard' %} class="active" aria-current="page"{% endif %}>Dashboard</a>
+                        <a href="{% url 'albright_money:transactions' %}"{% if page in 'transactions transaction transfer' %} class="active" aria-current="page"{% endif %}>Transactions</a>
+                        <a href="{% url 'albright_money:budget' %}"{% if page == 'budget' %} class="active" aria-current="page"{% endif %}>Budget</a>
+                        <a href="{% url 'albright_money:accounts' %}"{% if page in 'accounts account import' %} class="active" aria-current="page"{% endif %}>Accounts</a>
+                        <a href="{% url 'albright_money:categories' %}"{% if page in 'categories rules' %} class="active" aria-current="page"{% endif %}>Categories</a>
+                        {% endwith %}
                         {% elif in_opportunities_app %}
                         <a href="{% url 'albright_crypto_app:inbox' %}">Inbox</a>
                         <a href="{% url 'albright_crypto_app:pipeline' %}">Pipeline</a>

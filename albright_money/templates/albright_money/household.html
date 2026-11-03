@@ -1,0 +1,39 @@
+{% extends "albright_money/base.html" %}
+{% block page_title %}Household · {% endblock %}
+{% block money %}
+{% comment %}
+The household (views.household): its name and members - people with Money access. Members see its shared
+accounts (and their transactions), categories, rules and budget; everyone's personal ones stay their own.
+{% endcomment %}
+<div class="mn-narrow">
+<div class="mn-head"><div><h1 class="mn-head__title">Household</h1><p class="mn-head__sub">Shared accounts and a shared budget - personal ones stay yours.</p></div></div>
+{% if household %}
+<section class="card mn-card" aria-labelledby="mn-hh-h">
+    <form method="post" class="mn-inline-form">{% csrf_token %}<input type="hidden" name="action" value="rename">
+        <label for="mn-hh-name" class="mn-label" id="mn-hh-h">Name</label>
+        <input type="text" name="name" id="mn-hh-name" class="ledger-input" maxlength="100" value="{{ household.name }}">
+        <button type="submit" class="btn btn-secondary btn-sm">Save</button></form>
+    <h2 class="mn-card__title">Members</h2>
+    <ul class="mn-list">{% for m in members %}
+        <li class="mn-list__row"><span class="mn-list__main">{{ m.first_name|default:m.username }} <span class="mn-muted mn-small">{{ m.username }}</span>{% if m == request.user %} <span class="mn-tag mn-tag--quiet">You</span>{% endif %}</span>
+            {% if m != request.user %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ m.pk }}">
+                <button type="submit" class="btn btn-secondary btn-sm" data-confirm="Remove {{ m.first_name|default:m.username }}? They'll no longer see the shared money.">Remove</button></form>{% endif %}</li>
+    {% endfor %}</ul>
+    <form method="post" class="mn-inline-form">{% csrf_token %}<input type="hidden" name="action" value="add">
+        <label for="mn-hh-add" class="mn-label">Add someone</label>
+        <input type="text" name="username" id="mn-hh-add" class="ledger-input" list="mn-hh-people" autocomplete="off" placeholder="Their username" required>
+        <datalist id="mn-hh-people">{% for p in candidates %}<option value="{{ p.username }}">{{ p.first_name }}</option>{% endfor %}</datalist>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button></form>
+    <p class="mn-help">Only people with Money access (Admin &rarr; Users) can join.</p>
+</section>
+<form method="post" class="mn-delete">{% csrf_token %}<input type="hidden" name="action" value="leave">
+    <button type="submit" class="btn btn-secondary btn-sm mn-danger" data-confirm="Leave {{ household.name }}? You'll stop seeing its shared accounts and budget.">Leave household</button></form>
+{% else %}
+<form method="post" class="card mn-form">{% csrf_token %}<input type="hidden" name="action" value="create">
+    <div class="field"><label for="mn-hh-new">Household name</label><input type="text" name="name" id="mn-hh-new" class="ledger-input" maxlength="100" placeholder="The Albrights"></div>
+    <div class="mn-actions"><button type="submit" class="btn btn-primary">Create household</button></div>
+    <p class="mn-help">Then add someone and mark accounts as shared. Your personal accounts never show to anyone else.</p>
+</form>
+{% endif %}
+</div>
+{% endblock %}

@@ -93,6 +93,20 @@ def planner(user):
             + (f" · {len(overdue)} overdue" if overdue else ""), "tone": "warn" if overdue else ""}
 
 
+def money(user):
+    """What's left of this month's budget (spending categories, household and personal), and how many
+    transactions need a look."""
+    from albright_money.budget import left_this_month
+    from albright_money.models import Transaction
+    left = left_this_month(user)
+    review = Transaction.objects.visible_to(user).filter(needs_review=True).count()
+    note = f"{review} to review" if review else "nothing to review"
+    if left is None:
+        return {"value": "No budget", "note": f"this month · {note}", "size": "text", "tone": "warn"}
+    return {"value": f"${abs(left):,.0f}", "note": ("left" if left >= 0 else "over") + f" this month · {note}",
+            "tone": "" if left >= 0 else "loss"}
+
+
 def admin(user):
     """Scheduled jobs that are late or failing (Admin > System health)."""
     from albright_control import jobs

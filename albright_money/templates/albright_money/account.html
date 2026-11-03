@@ -1,0 +1,17 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}{{ a.name }} · {% endblock %}
+{% block money %}
+{% comment %}One account (views.account): its balance and settings. Moving it between personal and shared moves its transactions' categories to the same-named ones in the other set.{% endcomment %}
+<div class="mn-narrow">
+<div class="mn-head">
+    <div><h1 class="mn-head__title">{{ a.name }}</h1>
+        <p class="mn-head__sub">{{ label }} <strong class="mn-amount">{{ shown|usd }}</strong> &middot; {{ count }} transaction{{ count|pluralize }}</p></div>
+    <div class="mn-head__actions"><a href="{% url 'albright_money:transactions' %}?account={{ a.pk }}" class="btn btn-secondary btn-sm">Transactions</a></div>
+</div>
+<form method="post" class="card mn-form" novalidate>{% csrf_token %}
+    {% include "albright_money/_account_form.html" %}
+    {% if a.csv_mapping %}<p class="mn-help">CSV columns saved for imports: date &ldquo;{{ a.csv_mapping.date }}&rdquo;, description &ldquo;{{ a.csv_mapping.description }}&rdquo;{% if a.csv_mapping.amount %}, amount &ldquo;{{ a.csv_mapping.amount }}&rdquo;{% else %}, debit &ldquo;{{ a.csv_mapping.debit }}&rdquo; / credit &ldquo;{{ a.csv_mapping.credit }}&rdquo;{% endif %}.</p>{% endif %}
+    <div class="mn-actions"><button type="submit" class="btn btn-primary">Save</button> <a href="{% url 'albright_money:accounts' %}" class="btn btn-secondary">Cancel</a></div>
+</form>
+</div>
+{% endblock %}

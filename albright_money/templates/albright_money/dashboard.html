@@ -1,0 +1,90 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Dashboard · {% endblock %}
+{% block money %}
+{% comment %}
+The dashboard (views.dashboard): this month's spending vs budget, "safe to spend" (what's left across the
+spending categories of your budgets - budget.left_this_month, also the launcher's line), account balances, what
+needs review, the top 5 categories this month and the latest transactions.
+{% endcomment %}
+<div class="mn-head">
+    <div>
+        <h1 class="mn-head__title">{{ month|date:"F Y" }}</h1>
+        <p class="mn-head__sub">{% if household %}{{ household.name }} and your own{% else %}Your money{% endif %}</p>
+    </div>
+    <div class="mn-head__actions">
+        <a href="{% url 'albright_money:transactions' %}#mn-quick" class="btn btn-primary btn-sm">Add</a>
+        <a href="{% url 'albright_money:import' %}" class="btn btn-secondary btn-sm">Import CSV</a>
+    </div>
+</div>
+
+<section class="mn-stats" aria-label="This month">
+    <div class="card mn-stat" id="mn-safe">
+        <span class="card__label">Safe to spend</span>
+        {% if safe_to_spend is None %}
+        <span class="mn-stat__value">&ndash;</span>
+        <span class="mn-stat__note"><a href="{% url 'albright_money:budget' %}">Set this month's budget</a></span>
+        {% else %}
+        <span class="mn-stat__value{% if safe_to_spend < 0 %} is-over{% endif %}">{{ safe_to_spend|usd }}</span>
+        <span class="mn-stat__note">{% if safe_to_spend < 0 %}over budget{% else %}left this month{% endif %}</span>
+        {% endif %}
+    </div>
+    <div class="card mn-stat" id="mn-spent">
+        <span class="card__label">Spent this month</span>
+        <span class="mn-stat__value">{{ spent|usd }}</span>
+        <span class="mn-stat__note">{% if budgets %}of {{ available|usd }} budgeted{% else %}no budget yet{% endif %}</span>
+        {% if budgets %}<div class="mn-bar mn-bar--{{ spent_status }}" aria-hidden="true"><span style="width: {{ spent_pct }}%;"></span></div>{% endif %}
+    </div>
+    <div class="card mn-stat" id="mn-review-stat">
+        <span class="card__label">Needs review</span>
+        <span class="mn-stat__value{% if review_count %} is-warn{% endif %}">{{ review_count }}</span>
+        <span class="mn-stat__note">{% if review_count %}<a href="{% url 'albright_money:transactions' %}?review=1">Categorize them</a>{% else %}all categorized{% endif %}</span>
+    </div>
+</section>
+
+{% for label, h, v in budgets %}
+<section class="card mn-card" aria-labelledby="mn-b-{{ forloop.counter }}">
+    <div class="card__header"><h2 class="mn-card__title" id="mn-b-{{ forloop.counter }}">{{ label }} budget</h2>
+        <a href="{% url 'albright_money:budget' %}?scope={% if h %}household{% else %}personal{% endif %}" class="mn-small">Open &rarr;</a></div>
+    <p class="mn-line"><strong>{{ v.spent|usd }}</strong> spent of {{ v.available|usd }} &middot; <span class="{% if v.remaining < 0 %}mn-over{% endif %}">{{ v.remaining|usd }} {% if v.remaining < 0 %}over{% else %}left{% endif %}</span></p>
+</section>
+{% endfor %}
+
+<div class="mn-grid">
+    <section class="card mn-card" aria-labelledby="mn-accounts-h">
+        <div class="card__header"><h2 class="mn-card__title" id="mn-accounts-h">Accounts</h2><a href="{% url 'albright_money:accounts' %}" class="mn-small">All &rarr;</a></div>
+        {% if accounts %}<ul class="mn-list">{% for r in accounts %}
+            <li class="mn-list__row"><a href="{% url 'albright_money:transactions' %}?account={{ r.account.pk }}" class="mn-list__main">{{ r.account.name }}{% if r.account.last4 %} <span class="mn-muted">&middot;&middot;{{ r.account.last4 }}</span>{% endif %}{% if r.account.household_id %} <span class="mn-tag">Shared</span>{% endif %}</a>
+                <span class="mn-amount{% if r.account.is_credit and r.label == 'Owed' %} mn-owed{% endif %}">{% if r.label != "Balance" %}<span class="mn-muted mn-small">{{ r.label }}</span> {% endif %}{{ r.shown|usd }}</span></li>
+        {% endfor %}</ul>
+        {% else %}<p class="mn-empty">No accounts yet. <a href="{% url 'albright_money:accounts' %}">Add one</a> to start.</p>{% endif %}
+    </section>
+
+    <section class="card mn-card" aria-labelledby="mn-top-h">
+        <div class="card__header"><h2 class="mn-card__title" id="mn-top-h">Top categories this month</h2></div>
+        {% if top %}<ol class="mn-top">{% for r in top %}
+            <li><span class="mn-top__name">{{ r.category.name }}</span><span class="mn-amount">{{ r.spent|usd }}</span>
+                <span class="mn-top__bar" aria-hidden="true"><span style="width: {% widthratio r.spent top_max 100 %}%;"></span></span></li>
+        {% endfor %}</ol>
+        {% else %}<p class="mn-empty">No spending yet this month.</p>{% endif %}
+    </section>
+</div>
+
+{% if review %}
+<section class="card mn-card" id="mn-review" aria-labelledby="mn-review-h">
+    <div class="card__header"><h2 class="mn-card__title" id="mn-review-h">Needs review <span class="mn-count">{{ review_count }}</span></h2><a href="{% url 'albright_money:transactions' %}?review=1" class="mn-small">All &rarr;</a></div>
+    <ul class="mn-list">{% for t in review %}
+        <li class="mn-list__row"><a href="{% url 'albright_money:transaction' t.pk %}" class="mn-list__main">{{ t.payee|default:"(no payee)" }} <span class="mn-muted mn-small">{{ t.date|date:"M j" }} &middot; {{ t.account.name }}</span></a><span class="mn-amount{% if t.amount > 0 %} mn-in{% endif %}">{{ t.amount|signed }}</span></li>
+    {% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="card mn-card" aria-labelledby="mn-latest-h">
+    <div class="card__header"><h2 class="mn-card__title" id="mn-latest-h">Latest transactions</h2><a href="{% url 'albright_money:transactions' %}" class="mn-small">All &rarr;</a></div>
+    {% if latest %}<ul class="mn-list">{% for t in latest %}
+        <li class="mn-list__row"><a href="{% url 'albright_money:transaction' t.pk %}" class="mn-list__main">{{ t.payee|default:"(no payee)" }}
+            <span class="mn-muted mn-small">{{ t.date|date:"M j" }} &middot; {% if t.is_transfer %}Transfer{% elif t.splits.all %}Split{% else %}{{ t.category.name|default:"Uncategorized" }}{% endif %}</span></a>
+            <span class="mn-amount{% if t.amount > 0 %} mn-in{% endif %}">{{ t.amount|signed }}</span></li>
+    {% endfor %}</ul>
+    {% else %}<p class="mn-empty">Nothing yet - add one, or import your bank's CSV.</p>{% endif %}
+</section>
+{% endblock %}

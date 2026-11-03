@@ -110,7 +110,7 @@
   --accent-ring-alpha: 0.3;
   /* Each app's own color (the app launcher's tiles, Home's tiles) - fixed per app,
      whichever app you're in. */
-  --app-trading: #34D399;
+  --app-trading: #38BDF8;
   --app-reselling: #60A5FA;
   --app-opportunities: #A78BFA;
   --app-admin: #94A3B8;
@@ -118,6 +118,7 @@
   --app-meals: #FB923C;
   --app-notes: #F472B6;
   --app-planner: #A3E635;
+  --app-money: #34D399;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
   --on-semantic: #0B0D10;
   --glass-bg: rgba(18, 21, 26, 0.6);
@@ -169,7 +170,7 @@
   --page-glow-1-alpha: 0.18;
   --page-glow-2-alpha: 0.14;
   --accent-ring-alpha: 0.18;
-  --app-trading: #10B981;
+  --app-trading: #0284C7;
   --app-reselling: #3B82F6;
   --app-opportunities: #8B5CF6;
   --app-admin: #64748B;
@@ -177,6 +178,7 @@
   --app-meals: #F97316;
   --app-notes: #EC4899;
   --app-planner: #84CC16;
+  --app-money: #10B981;
   --on-semantic: #FFFFFF;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-solid: #FAFBFC;
@@ -196,7 +198,9 @@
    Each app has its own accent, switched by <body data-app="trading |
    reselling | opportunities"> (context_processors.current_app; pages
    outside the three apps are "trading"):
-     Trading = green #10B981, Reselling = blue #3B82F6, Opportunities = purple #8B5CF6.
+     Trading = sky blue #0284C7, Reselling = blue #3B82F6, Opportunities = purple #8B5CF6
+     (Money = green #10B981 - Trading's color until it moved to sky blue).
+   Trading's sky (hue ~199) sits well apart from Reselling's blue (~217): lighter and more cyan.
    --accent-rgb is that brand hue; everything that glows is built from it.
    --accent is the shade used as TEXT (links, active tabs, counts): the
    lighter #34D399 / #60A5FA / #A78BFA in dark mode, and in light mode a
@@ -227,14 +231,18 @@ body {
   --page-glow-2: rgba(var(--accent-rgb), var(--page-glow-2-alpha));
   --nav-tint: linear-gradient(90deg, rgba(var(--accent-rgb), 0.10), rgba(var(--accent-rgb), 0.04));
 }
-/* Dark (default). Trading is also the default for a body without data-app. */
+/* Dark (default). Trading is also the default for a body without data-app.
+   Albright Trading: sky blue - #38BDF8 text in dark mode, #0284C7 in light mode; white-text fills (primary
+   buttons) use the deeper #0369A1 (5.9:1 with white) in both. Its gains / losses stay green / red (--gain /
+   --loss) - only the brand color changed. */
 body,
 body[data-app="trading"] {
-  --accent-rgb: 16, 185, 129;
-  --accent: #34D399;
-  --accent-hover: #6EE7B7;
-  --accent-solid: #047857;
-  --accent-solid-hover: #065F46;
+  --accent-rgb: 56, 189, 248;
+  --accent: #38BDF8;
+  --accent-hover: #7DD3FC;
+  --accent-solid: #0369A1;
+  --accent-solid-hover: #075985;
+  --accent-contrast: #FFFFFF;
 }
 body[data-app="reselling"] {
   --accent-rgb: 59, 130, 246;
@@ -300,12 +308,24 @@ body[data-app="planner"] {
   --accent-solid: #4D7C0F;
   --accent-solid-hover: #3F6212;
 }
+/* Albright Money: green #10B981 (Trading's old color). Text: the lighter #34D399 in dark mode, the deeper
+   #047857 in light mode (#10B981 is only ~2.5:1 on white); white-text fills use #047857 (5.5:1). */
+body[data-app="money"] {
+  --accent-rgb: 16, 185, 129;
+  --accent: #34D399;
+  --accent-hover: #6EE7B7;
+  --accent-solid: #047857;
+  --accent-solid-hover: #065F46;
+}
 /* Light: text shades one step deeper (hover goes darker, not lighter). */
 [data-theme="light"] body,
 [data-theme="light"] body[data-app="trading"] {
-  --accent: #047857;
-  --accent-hover: #065F46;
+  --accent: #0284C7;
+  --accent-hover: #0369A1;
 }
+/* Trading's glow hue in light mode (only Trading's - every other app keeps its own --accent-rgb). */
+[data-theme="light"] body:not([data-app]),
+[data-theme="light"] body[data-app="trading"] { --accent-rgb: 2, 132, 199; }
 [data-theme="light"] body[data-app="reselling"] {
   --accent: #1D4ED8;
   --accent-hover: #1E40AF;
@@ -333,6 +353,10 @@ body[data-app="planner"] {
 [data-theme="light"] body[data-app="planner"] {
   --accent: #4D7C0F;
   --accent-hover: #3F6212;
+}
+[data-theme="light"] body[data-app="money"] {
+  --accent: #047857;
+  --accent-hover: #065F46;
 }
 
 /* Aliases kept for the existing gain/loss/warn vocabulary used
@@ -1617,6 +1641,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-tile[data-app-accent="meals"] { --labs-tile-color: var(--app-meals); }
 .labs-tile[data-app-accent="notes"] { --labs-tile-color: var(--app-notes); }
 .labs-tile[data-app-accent="planner"] { --labs-tile-color: var(--app-planner); }
+.labs-tile[data-app-accent="money"] { --labs-tile-color: var(--app-money); }
 .labs-tile__head { display: flex; align-items: center; gap: 8px; }
 .labs-tile__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--labs-tile-color); flex-shrink: 0; }
 .labs-tile__name { font-weight: 700; font-size: 1.0625rem; color: var(--text-primary); }
@@ -1656,6 +1681,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-pick[data-app-accent="meals"] { --pick-color: var(--app-meals); }
 .labs-pick[data-app-accent="notes"] { --pick-color: var(--app-notes); }
 .labs-pick[data-app-accent="planner"] { --pick-color: var(--app-planner); }
+.labs-pick[data-app-accent="money"] { --pick-color: var(--app-money); }
 .labs-pick[data-app-accent="admin"] { --pick-color: var(--app-admin); }
 .labs-pick__link { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 148px; padding: var(--space-5);
   border-radius: var(--radius-card, 14px); border: 1px solid var(--border); background: var(--glass-bg, var(--surface));

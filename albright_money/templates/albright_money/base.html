@@ -1,0 +1,10 @@
+{% extends "index.html" %}
+{% comment %}
+Albright Money's base template. Its stylesheet and script (albright_money/money.css, money.js) come from the app
+registry, which index.html includes on every Money page - like the header, the back chip and the theme.
+{% endcomment %}
+{% block content %}
+<div class="container mn" id="money">
+    {% block money %}{% endblock %}
+</div>
+{% endblock %}

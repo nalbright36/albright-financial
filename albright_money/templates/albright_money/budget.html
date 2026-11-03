@@ -1,0 +1,58 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Budget · {{ v.month|date:"F Y" }} · {% endblock %}
+{% block money %}
+{% comment %}
+The month's budget (views.budget, budget.month_view) - the household's or your personal one. Income first:
+planned vs received, and "left to budget" (planned income minus planned spending). Then each spending category:
+planned, spent and what's left (rollover adds last month's leftover - or takes its overspend), with a bar: green
+under 90%, amber 90-100%, red over. "Copy last month" fills in last month's amounts.
+{% endcomment %}
+<div class="mn-head">
+    <div><h1 class="mn-head__title">{{ v.month|date:"F Y" }}</h1><p class="mn-head__sub">{% if scope == "household" %}{{ household.name }}'s budget{% else %}Your personal budget{% endif %}</p></div>
+    <nav class="mn-monthnav" aria-label="Month">
+        <a href="?scope={{ scope }}&amp;month={{ prev|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Previous month">&lsaquo;</a>
+        {% if not is_this_month %}<a href="?scope={{ scope }}" class="btn btn-secondary btn-sm">This month</a>{% endif %}
+        <a href="?scope={{ scope }}&amp;month={{ next|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Next month">&rsaquo;</a>
+    </nav>
+</div>
+{% if household %}<nav class="mn-seg" aria-label="Which budget">
+    <a href="?scope=household&amp;month={{ v.month|date:'Y-m' }}" class="mn-seg__item{% if scope == 'household' %} is-on{% endif %}"{% if scope == "household" %} aria-current="page"{% endif %}>{{ household.name }}</a>
+    <a href="?scope=personal&amp;month={{ v.month|date:'Y-m' }}" class="mn-seg__item{% if scope == 'personal' %} is-on{% endif %}"{% if scope == "personal" %} aria-current="page"{% endif %}>Personal</a>
+</nav>{% endif %}
+
+<section class="mn-stats" aria-label="Totals">
+    <div class="card mn-stat" id="mn-income"><span class="card__label">Income</span>
+        <span class="mn-stat__value">{{ v.income_received|usd }}</span><span class="mn-stat__note">received of {{ v.income_planned|usd }} planned</span></div>
+    <div class="card mn-stat" id="mn-left-to-budget"><span class="card__label">Left to budget</span>
+        <span class="mn-stat__value{% if v.left_to_budget < 0 %} is-over{% endif %}">{{ v.left_to_budget|usd }}</span><span class="mn-stat__note">income minus planned spending</span></div>
+    <div class="card mn-stat" id="mn-remaining"><span class="card__label">Left this month</span>
+        <span class="mn-stat__value{% if v.remaining < 0 %} is-over{% endif %}">{{ v.remaining|usd }}</span><span class="mn-stat__note">{{ v.spent|usd }} spent of {{ v.available|usd }}</span></div>
+</section>
+
+<form method="post" class="mn-budget" id="mn-budget">{% csrf_token %}
+    <input type="hidden" name="scope" value="{{ scope }}"><input type="hidden" name="month" value="{{ v.month|date:'Y-m' }}">
+    {% if v.income %}<section class="card mn-card" aria-labelledby="mn-inc-h">
+        <h2 class="mn-card__title" id="mn-inc-h">Income</h2>
+        {% for r in v.income %}<div class="mn-bline">
+            <label for="mn-plan-{{ r.category.pk }}" class="mn-bline__name">{{ r.category.name }}</label>
+            <span class="mn-bline__input"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned_{{ r.category.pk }}" id="mn-plan-{{ r.category.pk }}" class="ledger-input" value="{{ r.planned }}"></span>
+            <span class="mn-bline__nums"><span class="mn-in">{{ r.received|usd }}</span> received</span>
+        </div>{% endfor %}
+    </section>{% endif %}
+
+    <section class="card mn-card" aria-labelledby="mn-sp-h">
+        <h2 class="mn-card__title" id="mn-sp-h">Spending</h2>
+        {% for r in v.rows %}<div class="mn-bline mn-bline--{{ r.status }}" data-category="{{ r.category.pk }}">
+            <label for="mn-plan-{{ r.category.pk }}" class="mn-bline__name">{{ r.category.name }}</label>
+            <span class="mn-bline__input"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned_{{ r.category.pk }}" id="mn-plan-{{ r.category.pk }}" class="ledger-input" value="{{ r.planned }}"></span>
+            <span class="mn-bline__nums">{{ r.spent|usd }} spent &middot; <strong class="mn-bline__left">{{ r.remaining|usd }} {% if r.remaining < 0 %}over{% else %}left{% endif %}</strong>{% if r.carry %} <span class="mn-muted mn-small">({{ r.carry|signed }} rolled over)</span>{% endif %}</span>
+            <div class="mn-bar mn-bar--{{ r.status }}" role="img" aria-label="{{ r.pct }}% of {{ r.available|usd }} used"><span style="width: {{ r.pct }}%;"></span></div>
+            <label class="mn-check mn-bline__roll"><input type="checkbox" name="rollover" value="{{ r.category.pk }}"{% if r.category.rollover %} checked{% endif %}> Roll over</label>
+        </div>{% endfor %}
+    </section>
+    <div class="mn-actions mn-actions--sticky">
+        <button type="submit" class="btn btn-primary">Save budget</button>
+        <button type="submit" name="action" value="copy" class="btn btn-secondary">Copy last month's budget</button>
+    </div>
+</form>
+{% endblock %}

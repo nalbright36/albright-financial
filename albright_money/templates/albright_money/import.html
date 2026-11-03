@@ -1,0 +1,73 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Import CSV · {% endblock %}
+{% block money %}
+{% comment %}
+CSV import (views.import_csv, imports.py), one page in three steps:
+  upload   pick the account and the bank's CSV (1 MB at most; read in memory, never stored);
+  map      the first time for an account: which column is the date, the description and the amount (or debit
+           and credit) and how dates are written - saved on the account, so next time goes straight to preview;
+  preview  every row: new (with the category a rule gives it) or "already there" (skipped); Import adds the new
+           ones - anything uncategorized is marked "needs review".
+The rows travel between steps in a signed field (payload), never in a file.
+{% endcomment %}
+<div class="mn-narrow mn-narrow--wide">
+<div class="mn-head"><div><h1 class="mn-head__title">Import CSV</h1>
+    <p class="mn-head__sub">{% if step == "upload" %}From your bank's website: download transactions as CSV.{% elif step == "map" %}{{ account.name }} &middot; which column is which (saved for next time){% else %}{{ account.name }} &middot; check before importing{% endif %}</p></div></div>
+
+{% if step == "upload" %}
+<form method="post" enctype="multipart/form-data" class="card mn-form" id="mn-upload" novalidate>{% csrf_token %}
+    <input type="hidden" name="step" value="upload">
+    {% if form.non_field_errors %}<p class="mn-error" role="alert">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+    <div class="field">{{ form.account.label_tag }}{{ form.account }}{% for e in form.account.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}</div>
+    <div class="field">{{ form.file.label_tag }}{{ form.file }}{% for e in form.file.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}
+        <span class="mn-help">A .csv file up to 1 MB. It's read once and not kept.</span></div>
+    <div class="mn-actions"><button type="submit" class="btn btn-primary">Next</button></div>
+</form>
+
+{% elif step == "map" %}
+<form method="post" class="card mn-form" id="mn-map" novalidate>{% csrf_token %}
+    <input type="hidden" name="step" value="map"><input type="hidden" name="payload" value="{{ payload }}">
+    <div class="mn-table-wrap"><table class="mn-table mn-sample">
+        <caption class="mn-help">The first rows of your file ({{ count }} in all)</caption>
+        <thead><tr>{% for h in headers %}<th scope="col">{{ h|default:"(blank)" }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in sample %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table></div>
+    {% if mapping.non_field_errors %}<p class="mn-error" role="alert">{{ mapping.non_field_errors|join:" " }}</p>{% endif %}
+    <div class="mn-form__grid">
+        <div class="field">{{ mapping.date.label_tag }}{{ mapping.date }}</div>
+        <div class="field">{{ mapping.date_format.label_tag }}{{ mapping.date_format }}</div>
+        <div class="field">{{ mapping.description.label_tag }}{{ mapping.description }}</div>
+    </div>
+    <fieldset class="mn-radios"><legend class="mn-label">Amounts</legend>{% for r in mapping.style %}<label class="mn-check">{{ r.tag }} {{ r.choice_label }}</label>{% endfor %}</fieldset>
+    <div class="mn-form__grid" data-style="amount">
+        <div class="field">{{ mapping.amount.label_tag }}{{ mapping.amount }}{% for e in mapping.amount.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}</div>
+        <label class="mn-check">{{ mapping.negate }} {{ mapping.negate.label }}</label>
+    </div>
+    <div class="mn-form__grid" data-style="split">
+        <div class="field">{{ mapping.debit.label_tag }}{{ mapping.debit }}{% for e in mapping.debit.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}</div>
+        <div class="field">{{ mapping.credit.label_tag }}{{ mapping.credit }}</div>
+    </div>
+    <div class="mn-actions"><button type="submit" class="btn btn-primary">Preview</button> <a href="{% url 'albright_money:import' %}" class="btn btn-secondary">Start over</a></div>
+</form>
+
+{% else %}
+<div class="card mn-card" id="mn-preview">
+    <p class="mn-line"><strong>{{ new_count }}</strong> new{% if dup_count %} &middot; <strong>{{ dup_count }}</strong> already there (skipped){% endif %}{% if problem_count %} &middot; <strong>{{ problem_count }}</strong> row{{ problem_count|pluralize }} couldn't be read{% endif %}</p>
+    {% if problems %}<ul class="mn-problems">{% for line, message in problems %}<li>Line {{ line }}: {{ message }}</li>{% endfor %}</ul>{% endif %}
+    {% if rows %}<div class="mn-table-wrap"><table class="mn-table">
+        <thead><tr><th scope="col">Date</th><th scope="col">Description</th><th scope="col" class="mn-num">Amount</th><th scope="col">Category</th></tr></thead>
+        <tbody>{% for r in rows %}<tr class="{% if r.duplicate %}is-dup{% endif %}">
+            <td>{{ r.date }}</td><td>{{ r.payee }}</td><td class="mn-num mn-amount">{{ r.amount|signed }}</td>
+            <td>{% if r.duplicate %}<span class="mn-muted">already there</span>{% elif r.category %}{{ r.category }}{% else %}<span class="mn-flag">needs review</span>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>{% endif %}
+    <form method="post" class="mn-actions">{% csrf_token %}
+        <input type="hidden" name="step" value="import"><input type="hidden" name="payload" value="{{ payload }}">
+        <button type="submit" class="btn btn-primary"{% if not new_count %} disabled{% endif %} id="mn-import-go">Import {{ new_count }} transaction{{ new_count|pluralize }}</button>
+        <a href="{% url 'albright_money:import' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+    <form method="post" class="mn-remap">{% csrf_token %}<input type="hidden" name="step" value="remap"><input type="hidden" name="payload" value="{{ remap_payload }}">
+        <button type="submit" class="mn-link-btn">Columns look wrong? Change the mapping</button></form>
+</div>
+{% endif %}
+</div>
+{% endblock %}

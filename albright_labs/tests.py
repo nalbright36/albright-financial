@@ -106,7 +106,7 @@ class HomeTests(TestCase):
         response = self.client.get("/")
         self.assertTemplateUsed(response, "albright_labs/hub.html")
         page = response.content.decode()
-        self.assertEqual(home_tiles(page), ["trade", "resell", "opps", "meals", "notes", "planner"])
+        self.assertEqual(home_tiles(page), ["trade", "resell", "opps", "meals", "notes", "planner", "money"])
         self.assertIn('<body data-app="labs">', page)
         self.assertIn('<span class="navbar__app-name">Labs</span></a>', page)
         self.assertEqual(self.client.get(reverse("labs:hub")).status_code, 200)

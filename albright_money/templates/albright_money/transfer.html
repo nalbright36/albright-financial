@@ -1,0 +1,15 @@
+{% extends "albright_money/base.html" %}
+{% block page_title %}Transfer · {% endblock %}
+{% block money %}
+{% comment %}Money moved between your own accounts (views.transfer): out of one, into the other - both marked as transfers, so neither is spending or income.{% endcomment %}
+<div class="mn-narrow">
+<div class="mn-head"><div><h1 class="mn-head__title">Transfer</h1><p class="mn-head__sub">Between your own accounts - not counted as spending.</p></div></div>
+<form method="post" class="card mn-form" novalidate>{% csrf_token %}
+    {% if form.non_field_errors %}<p class="mn-error" role="alert">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+    <div class="mn-form__grid">{% for field in form %}
+        <div class="field">{{ field.label_tag }}{{ field }}{% for e in field.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}</div>
+    {% endfor %}</div>
+    <div class="mn-actions"><button type="submit" class="btn btn-primary">Move money</button> <a href="{% url 'albright_money:transactions' %}" class="btn btn-secondary">Cancel</a></div>
+</form>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% comment %}The account form's fields (accounts.html, account.html). Never a full account number - last 4 digits only.{% endcomment %}
+{% if form.non_field_errors %}<p class="mn-error" role="alert">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+<div class="mn-form__grid">
+    {% for field in form %}{% if field.name != "shared" and field.name != "archived" %}
+    <div class="field">{{ field.label_tag }}{{ field }}{% if field.help_text %}<span class="mn-help">{{ field.help_text }}</span>{% endif %}{% for e in field.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}</div>
+    {% endif %}{% endfor %}
+</div>
+{% if form.shared %}<label class="mn-check">{{ form.shared }} {{ form.shared.label }} <span class="mn-help">(everyone in {{ household.name }} sees it and its transactions)</span></label>{% endif %}
+{% if form.archived %}<label class="mn-check">{{ form.archived }} Archived <span class="mn-help">(hidden from menus; its history stays)</span></label>{% endif %}
+<p class="mn-help">Albright Money never asks for bank logins or full account numbers.</p>

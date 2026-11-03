@@ -81,13 +81,22 @@ def planner(user):
     return f"{_plural(count, 'task')} today" if count else "Nothing due today"
 
 
+def money(user):
+    from albright_money.budget import left_this_month
+    left = left_this_month(user)
+    if left is None:
+        return "No budget this month"
+    return f"${left:,.0f} left this month" if left >= 0 else f"${-left:,.0f} over this month"
+
+
 def admin(user):
     from albright_control import jobs
     problems = sum(1 for row in jobs.health_rows() if row["status"] in ("failing", "late"))
     return _plural(problems, "problem") if problems else "All good"
 
 
-LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "notes": notes, "planner": planner, "admin": admin}
+LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "notes": notes, "planner": planner, "money": money,
+         "admin": admin}
 
 
 def _line(key, user):

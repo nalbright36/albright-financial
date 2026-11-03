@@ -1,0 +1,92 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Transactions · {% endblock %}
+{% block money %}
+{% comment %}
+Transactions (views.transactions): quick add at the top ("42.18 Publix groceries" - quickadd.py), search and
+filters (account, category, month, needs review), the list grouped by date, and each row's category menu - its
+account's own set. Changing one saves at once (money.js) and offers "Always categorize <payee> as <category>?"
+(views.always: a rule). Without JS the menu has a Save button and the offer comes back as a form (?offer=).
+{% endcomment %}
+<div class="mn-head">
+    <div><h1 class="mn-head__title">Transactions</h1></div>
+    <div class="mn-head__actions">
+        <a href="{% url 'albright_money:transfer' %}" class="btn btn-secondary btn-sm">Transfer</a>
+        <a href="{% url 'albright_money:import' %}" class="btn btn-secondary btn-sm">Import CSV</a>
+    </div>
+</div>
+
+{% if accounts %}
+<form method="post" action="{% url 'albright_money:quick_add' %}" class="card mn-quick" id="mn-quick" autocomplete="off">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ here }}">
+    <label for="mn-quick-text" class="mn-label">Quick add</label>
+    <div class="mn-quick__row">
+        <input type="text" name="text" id="mn-quick-text" class="ledger-input mn-quick__text" maxlength="300" required
+               placeholder="42.18 Publix groceries" aria-describedby="mn-quick-help">
+        <button type="submit" class="btn btn-primary">Add</button>
+    </div>
+    <div class="mn-quick__row mn-quick__row--opts">
+        <label class="mn-inline"><span class="visually-hidden">Account</span>
+            <select name="account" class="ledger-input" id="mn-quick-account">{% for a in accounts %}<option value="{{ a.pk }}"{% if filters.account == a.pk|stringformat:"d" %} selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></label>
+        <label class="mn-inline"><span class="visually-hidden">Date</span><input type="date" name="date" class="ledger-input" id="mn-quick-date" aria-label="Date (today if empty)"></label>
+    </div>
+    <p class="mn-help" id="mn-quick-help">Amount, payee, then a category. Money out unless it starts with + (or the category is Income).</p>
+</form>
+{% else %}
+<div class="card mn-card"><p class="mn-empty">Add an account first - <a href="{% url 'albright_money:accounts' %}">Accounts</a>.</p></div>
+{% endif %}
+
+<form method="get" class="mn-filters" id="mn-filters" role="search">
+    <label class="mn-inline mn-filters__q"><span class="visually-hidden">Search</span><input type="search" name="q" value="{{ filters.q }}" class="ledger-input" placeholder="Search payee, notes, tags"></label>
+    <label class="mn-inline"><span class="visually-hidden">Account</span><select name="account" class="ledger-input" data-autosubmit>
+        <option value="">All accounts</option>{% for a in all_accounts %}<option value="{{ a.pk }}"{% if filters.account == a.pk|stringformat:"d" %} selected{% endif %}>{{ a.name }}{% if a.archived %} (archived){% endif %}</option>{% endfor %}</select></label>
+    <label class="mn-inline"><span class="visually-hidden">Category</span><select name="category" class="ledger-input" data-autosubmit>
+        <option value="">All categories</option><option value="none"{% if filters.category == "none" %} selected{% endif %}>Uncategorized</option>
+        {% for c in categories %}<option value="{{ c.pk }}"{% if filters.category == c.pk|stringformat:"d" %} selected{% endif %}>{{ c.name }}{% if c.household_id %} (shared){% endif %}</option>{% endfor %}</select></label>
+    <label class="mn-inline"><span class="visually-hidden">Month</span><select name="month" class="ledger-input" data-autosubmit>
+        <option value="">Any month</option>{% for m in months %}<option value="{{ m|date:'Y-m' }}"{% if filters.month == m|date:'Y-m' %} selected{% endif %}>{{ m|date:"F Y" }}</option>{% endfor %}</select></label>
+    <label class="mn-check"><input type="checkbox" name="review" value="1" data-autosubmit{% if filters.review %} checked{% endif %}> Needs review</label>
+    <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+</form>
+
+<div class="mn-offer" id="mn-offer" role="status" aria-live="polite"{% if not offer %} hidden{% endif %}>
+    {% if offer %}<form method="post" action="{% url 'albright_money:always' offer.transaction.pk %}" class="mn-offer__form">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ here }}">
+        <span>Always categorize <strong>{{ offer.payee }}</strong> as <strong>{{ offer.category.name }}</strong>?</span>
+        <button type="submit" class="btn btn-primary btn-sm">Yes</button> <a href="?" class="btn btn-secondary btn-sm" data-offer-no>No</a>
+    </form>{% endif %}
+</div>
+
+{% for g in groups %}
+<section class="mn-day" aria-labelledby="mn-day-{{ forloop.counter }}">
+    <h2 class="mn-day__date" id="mn-day-{{ forloop.counter }}">{{ g.date|date:"l, F j" }}{% if g.date.year != months.0.year %}, {{ g.date.year }}{% endif %}</h2>
+    <ul class="mn-txns">{% for t in g.items %}
+        <li class="mn-txn{% if t.needs_review %} is-review{% endif %}{% if t.is_transfer %} is-transfer{% endif %}" id="t-{{ t.pk }}" data-txn="{{ t.pk }}">
+            <a href="{% url 'albright_money:transaction' t.pk %}?next={{ here|urlencode }}" class="mn-txn__main">
+                <span class="mn-txn__payee">{{ t.payee|default:"(no payee)" }}</span>
+                <span class="mn-txn__meta">{{ t.account.name }}{% if t.tag_list %} &middot; {{ t.tags }}{% endif %}{% if t.source == "import" %} &middot; imported{% endif %}{% if t.needs_review %} &middot; <span class="mn-flag">needs review</span>{% endif %}</span>
+            </a>
+            <div class="mn-txn__cat">
+                {% if t.is_transfer %}<span class="mn-tag">Transfer</span>
+                {% elif t.splits.all %}<span class="mn-tag" title="{% for s in t.splits.all %}{{ s.category.name|default:'Uncategorized' }} {{ s.amount|usd }}{% if not forloop.last %}, {% endif %}{% endfor %}">Split &middot; {{ t.splits.all|length }}</span>
+                {% else %}
+                <form method="post" action="{% url 'albright_money:set_category' t.pk %}" class="mn-cat-form" data-cat-form>{% csrf_token %}
+                    <input type="hidden" name="next" value="{{ here }}">
+                    <label for="mn-cat-{{ t.pk }}" class="visually-hidden">Category for {{ t.payee|default:"this transaction" }}</label>
+                    <select name="category" id="mn-cat-{{ t.pk }}" class="ledger-input mn-cat">
+                        <option value="">Uncategorized</option>
+                        {% if t.account.household_id %}{% for c in by_scope.shared %}<option value="{{ c.pk }}"{% if c.pk == t.category_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                        {% else %}{% for c in by_scope.personal %}<option value="{{ c.pk }}"{% if c.pk == t.category_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}{% endif %}
+                    </select>
+                    <button type="submit" class="btn btn-secondary btn-sm mn-nojs">Save</button>
+                </form>
+                {% endif %}
+            </div>
+            <span class="mn-amount mn-txn__amount{% if t.amount > 0 %} mn-in{% endif %}">{{ t.amount|signed }}</span>
+        </li>
+    {% endfor %}</ul>
+</section>
+{% empty %}
+<div class="card mn-card"><p class="mn-empty">{% if filters.q or filters.account or filters.category or filters.month or filters.review %}Nothing matches those filters.{% else %}No transactions yet.{% endif %}</p></div>
+{% endfor %}
+{% if more %}<p class="mn-help">Showing the latest 300 - narrow it down with a month, an account or a search.</p>{% endif %}
+{% endblock %}

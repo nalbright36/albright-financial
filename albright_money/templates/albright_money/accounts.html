@@ -1,0 +1,31 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Accounts · {% endblock %}
+{% block money %}
+{% comment %}Accounts (views.accounts): each one's current balance (starting balance + its transactions; a credit card shows what's owed), personal or shared, and the form to add one.{% endcomment %}
+<div class="mn-head">
+    <div><h1 class="mn-head__title">Accounts</h1>
+        <p class="mn-head__sub">{% if household %}Shared ones are {{ household.name }}'s{% else %}<a href="{% url 'albright_money:household' %}">Set up a household</a> to share accounts{% endif %}</p></div>
+    <div class="mn-head__actions"><a href="{% url 'albright_money:household' %}" class="btn btn-secondary btn-sm">Household</a></div>
+</div>
+
+{% if rows %}
+<div class="card mn-card">
+    <ul class="mn-list">{% for r in rows %}
+        <li class="mn-list__row{% if r.account.archived %} is-archived{% endif %}">
+            <a href="{% url 'albright_money:account' r.account.pk %}" class="mn-list__main">{{ r.account.name }}
+                <span class="mn-muted mn-small">{{ r.account.get_kind_display }}{% if r.account.institution %} &middot; {{ r.account.institution }}{% endif %}{% if r.account.last4 %} &middot; &middot;&middot;{{ r.account.last4 }}{% endif %}{% if r.account.archived %} &middot; archived{% endif %}</span>
+                {% if r.account.household_id %}<span class="mn-tag">Shared</span>{% else %}<span class="mn-tag mn-tag--quiet">Personal</span>{% endif %}</a>
+            <span class="mn-amount{% if r.label == 'Owed' %} mn-owed{% endif %}">{% if r.label != "Balance" %}<span class="mn-muted mn-small">{{ r.label }}</span> {% endif %}{{ r.shown|usd }}</span>
+        </li>
+    {% endfor %}</ul>
+</div>
+{% endif %}
+
+<details class="card mn-card mn-add"{% if open_form %} open{% endif %} id="mn-account-add">
+    <summary class="mn-card__title">Add an account</summary>
+    <form method="post" class="mn-form" novalidate>{% csrf_token %}
+        {% include "albright_money/_account_form.html" %}
+        <div class="mn-actions"><button type="submit" class="btn btn-primary">Add account</button></div>
+    </form>
+</details>
+{% endblock %}

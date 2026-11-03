@@ -1,0 +1,200 @@
+"""Albright Money's core: who's in a household, each scope's categories (with the default set), rules, balances,
+and spending / income totals (splits counted by their own categories, transfers never).
+
+A "scope" is (owner, household): household None = the owner's personal set; set = the household's shared set.
+Categories, rules and budgets live in a scope; an account's transactions use its scope's categories.
+"""
+import re
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.db.models import Q, Sum
+
+from .models import ZERO, Account, Category, HouseholdMember, Rule, Split, Transaction, household_of
+
+DEFAULT_CATEGORIES = ("Housing", "Utilities", "Groceries", "Dining", "Transportation", "Health", "Insurance",
+                      "Subscriptions", "Shopping", "Entertainment", "Travel", "Gifts", "Pets", "Personal care",
+                      "Income", "Savings", "Other")
+
+
+# ---------------------------------------------------------------------------
+# People and households
+# ---------------------------------------------------------------------------
+
+def money_users():
+    """Everyone who can open Money (Admin > Users) - who can be in a household."""
+    return get_user_model().objects.filter(is_active=True).filter(
+        Q(is_superuser=True) | Q(labs_preference__allowed_apps__contains=["money"])).order_by("username")
+
+
+def can_open(user):
+    return money_users().filter(pk=user.pk).exists()
+
+
+def person(user):
+    return (user.first_name or user.get_username()).strip() if user else ""
+
+
+def members(household):
+    return [m.user for m in HouseholdMember.objects.filter(household=household).select_related("user")] \
+        if household else []
+
+
+# ---------------------------------------------------------------------------
+# Scopes and categories
+# ---------------------------------------------------------------------------
+
+def scope_filter(owner, household):
+    return Q(household=household) if household else Q(household__isnull=True, owner=owner)
+
+
+def ensure_categories(owner, household=None):
+    """The scope's categories - the default set the first time it has none."""
+    qs = Category.objects.filter(scope_filter(owner, household))
+    if not qs.exists():
+        Category.objects.bulk_create([
+            Category(owner=owner, household=household, name=name, order=i,
+                     kind=Category.INCOME if name == "Income" else Category.EXPENSE)
+            for i, name in enumerate(DEFAULT_CATEGORIES)])
+    return qs.filter(archived=False)
+
+
+def categories_for_account(account):
+    """The categories a transaction on this account can use: the account's own scope's."""
+    return ensure_categories(account.owner, account.household)
+
+
+def scopes(user):
+    """[(label, household or None)] - the household's first (when the user has one), then "Personal"."""
+    household = household_of(user)
+    return ([(household.name, household)] if household else []) + [("Personal", None)]
+
+
+# ---------------------------------------------------------------------------
+# Rules
+# ---------------------------------------------------------------------------
+
+def norm(text):
+    """Lower case, punctuation as spaces: "SQ *BLUE BOTTLE" -> "sq blue bottle", "NETFLIX.COM" -> "netflix com"."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).split())
+
+
+def rule_key(payee):
+    """What "Always categorize <payee>" matches on: the payee's words before the first store number or reference
+    code ("PUBLIX #1234 TAMPA FL" -> "publix"; "SQ *BLUE BOTTLE 2231" -> "sq blue bottle"), so another branch
+    or another day matches too."""
+    words = []
+    for word in norm(payee).split():
+        if any(ch.isdigit() for ch in word):
+            break
+        words.append(word)
+    return " ".join(words[:4]) or norm(payee)[:100]
+
+
+def rule_for(transaction, rules=None):
+    """The rule that categorizes this transaction, or None: its scope's rules whose text is in the payee (any
+    case), within the amount range (by size) and for the account if they name one - the longest text wins."""
+    account = transaction.account
+    if rules is None:
+        rules = Rule.objects.filter(scope_filter(account.owner, account.household)).select_related("category")
+    payee, size = norm(transaction.payee), abs(transaction.amount)
+    best = None
+    for rule in rules:
+        key = norm(rule.payee_contains)
+        if not key or key not in payee or rule.category.archived:
+            continue
+        if rule.account_id and rule.account_id != account.pk:
+            continue
+        if rule.min_amount is not None and size < rule.min_amount:
+            continue
+        if rule.max_amount is not None and size > rule.max_amount:
+            continue
+        if best is None or (len(key), rule.pk) > (len(norm(best.payee_contains)), best.pk):
+            best = rule
+    return best
+
+
+def categorize(transaction, rules=None):
+    """Give an uncategorized transaction its rule's category. Still uncategorized: "needs review"."""
+    if transaction.category_id is None and not transaction.is_transfer:
+        rule = rule_for(transaction, rules)
+        if rule:
+            transaction.category = rule.category
+    transaction.needs_review = transaction.category_id is None and not transaction.is_transfer
+    return transaction
+
+
+def create_rule_from(transaction, category, user):
+    """"Always categorize <payee> as <category>": a rule in the account's scope, and the same category for the
+    scope's other uncategorized (or needs-review) transactions it matches. Returns (rule, how many others)."""
+    account = transaction.account
+    rule, _created = Rule.objects.get_or_create(
+        owner=user if account.household_id else account.owner, household=account.household,
+        payee_contains=rule_key(transaction.payee), account=None, min_amount=None, max_amount=None,
+        defaults={"category": category})
+    if rule.category_id != category.pk:
+        rule.category = category
+        rule.save(update_fields=["category"])
+    accounts = Account.objects.filter(scope_filter(account.owner, account.household))
+    others = Transaction.objects.filter(account__in=accounts, is_transfer=False).filter(
+        Q(category__isnull=True) | Q(needs_review=True)).exclude(pk=transaction.pk).exclude(splits__isnull=False)
+    changed = 0
+    for other in others.select_related("account"):
+        if rule_for(other, [rule]):
+            other.category, other.needs_review = category, False
+            other.save(update_fields=["category", "needs_review"])
+            changed += 1
+    return rule, changed
+
+
+# ---------------------------------------------------------------------------
+# Balances and totals
+# ---------------------------------------------------------------------------
+
+def balances(accounts):
+    """{account pk: current balance}."""
+    return {a.pk: balance(a) for a in accounts}
+
+
+def _since(account):
+    return Transaction.objects.filter(account=account, date__gte=account.starting_date)         .aggregate(total=Sum("amount"))["total"] or ZERO
+
+
+def balance(account):
+    """Its starting balance plus every transaction from its starting date on."""
+    return account.starting_balance + _since(account)
+
+
+def shown_balance(account, value):
+    """(label, amount) for the page: a credit card shows what's owed (a positive number), else the balance."""
+    if account.is_credit:
+        return ("Owed", -value) if value <= 0 else ("Credit", value)
+    return ("Balance", value)
+
+
+def category_totals(categories, start, end):
+    """{category pk: net amount} between start and end (inclusive): each transaction in its category, or a split
+    transaction's parts in theirs - transfers left out. Negative = money out."""
+    ids = [c.pk for c in categories]
+    out = {}
+    if not ids:
+        return out
+    whole = Transaction.objects.filter(is_transfer=False, category_id__in=ids, date__gte=start, date__lte=end) \
+        .exclude(splits__isnull=False).values_list("category").annotate(total=Sum("amount"))
+    parts = Split.objects.filter(transaction__is_transfer=False, category_id__in=ids, transaction__date__gte=start,
+                                 transaction__date__lte=end).values_list("category").annotate(total=Sum("amount"))
+    for pk, total in list(whole) + list(parts):
+        out[pk] = out.get(pk, ZERO) + (total or ZERO)
+    return out
+
+
+def spent(category, net):
+    """Spending in a spending category = money out (refunds bring it down); income = money in."""
+    return net if category.is_income else -net
+
+
+def to_decimal(value):
+    try:
+        return Decimal(str(value).replace(",", "").replace("$", "").strip()).quantize(Decimal("0.01"))
+    except Exception:  # noqa: BLE001 - any bad input is just "no amount"
+        return None

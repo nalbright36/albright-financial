@@ -119,8 +119,8 @@ class HeaderTests(TestCase):
                 content = self.page(url_name)
                 tiles = launcher_tiles(content)
                 self.assertEqual([label for _target, label in tiles],
-                                 ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan"])   # short labels; no Admin for a regular user
-                self.assertEqual([target for target, _label in tiles], ["labs", "trading", "reselling", "opportunities", "meals", "notes", "planner"])
+                                 ["Home", "Trade", "Resell", "Opps", "Meals", "Notes", "Plan", "Money"])   # short labels; no Admin for a regular user
+                self.assertEqual([target for target, _label in tiles], ["labs", "trading", "reselling", "opportunities", "meals", "notes", "planner", "money"])
                 self.assertEqual(current_tiles(content), [app])
                 self.assertRegex(launcher_panel(content), rf'data-app-target="{app}" title="[^"]+" aria-current="page"')
 
@@ -133,15 +133,16 @@ class StylesheetTests(TestCase):
         self.css = STYLE.read_text(encoding="utf-8")
 
     def test_each_app_and_theme_has_its_accent(self):
-        for selector, accent in (('body[data-app="trading"] {', "#34D399"), ('body[data-app="reselling"] {', "#60A5FA"),
-                                 ('body[data-app="opportunities"] {', "#A78BFA"),
-                                 ('[data-theme="light"] body[data-app="trading"] {', "#047857"),
+        for selector, accent in (('body[data-app="trading"] {', "#38BDF8"), ('body[data-app="reselling"] {', "#60A5FA"),
+                                 ('body[data-app="opportunities"] {', "#A78BFA"), ('body[data-app="money"] {', "#34D399"),
+                                 ('[data-theme="light"] body[data-app="trading"] {', "#0284C7"),
+                                 ('[data-theme="light"] body[data-app="money"] {', "#047857"),
                                  ('[data-theme="light"] body[data-app="reselling"] {', "#1D4ED8"),
                                  ('[data-theme="light"] body[data-app="opportunities"] {', "#6D28D9")):
             with self.subTest(selector=selector):
                 block = self.css.split(f"\n{selector}", 1)[1].split("}", 1)[0]
                 self.assertIn(f"--accent: {accent};", block)
-        for rgb in ("16, 185, 129", "59, 130, 246", "139, 92, 246"):
+        for rgb in ("56, 189, 248", "16, 185, 129", "59, 130, 246", "139, 92, 246"):
             self.assertIn(f"--accent-rgb: {rgb};", self.css)
         for token in ("--accent-soft:", "--accent-glow:", "--accent-contrast: #FFFFFF;"):
             self.assertIn(token, self.css)

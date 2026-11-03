@@ -1,0 +1,51 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}{{ t.payee|default:"Transaction" }} · {% endblock %}
+{% block money %}
+{% comment %}
+One transaction (views.transaction): every field, and splits - fill two or more rows to split it across
+categories (they must add up to the amount; the transaction's own category is then cleared). A transfer is
+money between your own accounts: never spending or income. Delete removes a transfer's other side too.
+{% endcomment %}
+<div class="mn-narrow">
+<div class="mn-head"><div><h1 class="mn-head__title">{{ t.payee|default:"Transaction" }}</h1>
+    <p class="mn-head__sub">{{ t.get_source_display }}{% if t.entered_by %} by {{ t.entered_by.first_name|default:t.entered_by.username }}{% endif %} &middot; {{ t.created_at|date:"M j, Y" }}</p></div></div>
+
+<form method="post" class="card mn-form" id="mn-txn-form" novalidate>{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {% if form.non_field_errors %}<p class="mn-error" role="alert">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+    <div class="mn-form__grid">
+        {% for field in form %}{% if field.name != "is_transfer" and field.name != "needs_review" and field.name != "notes" %}
+        <div class="field">{{ field.label_tag }}{{ field }}{% if field.help_text %}<span class="mn-help">{{ field.help_text }}</span>{% endif %}{% for e in field.errors %}<span class="mn-error">{{ e }}</span>{% endfor %}</div>
+        {% endif %}{% endfor %}
+    </div>
+    <div class="field">{{ form.notes.label_tag }}{{ form.notes }}</div>
+    <label class="mn-check">{{ form.is_transfer }} {{ form.is_transfer.label }}</label>
+    <label class="mn-check">{{ form.needs_review }} {{ form.needs_review.label }}</label>
+
+    <fieldset class="mn-splits" id="mn-splits">
+        <legend class="mn-label">Split across categories <span class="mn-help">(optional - two or more parts that add up to the amount)</span></legend>
+        {% for e in split_errors %}<p class="mn-error" role="alert">{{ e }}</p>{% endfor %}
+        <div class="mn-splits__rows" id="mn-split-rows">
+        {% for row in split_rows %}
+            <div class="mn-split">
+                <label class="mn-inline"><span class="visually-hidden">Category {{ forloop.counter }}</span>
+                    <select name="split_category" class="ledger-input">
+                        <option value="">Uncategorized</option>
+                        {% if t.account.household_id %}{% for c in by_scope.shared %}<option value="{{ c.pk }}"{% if row.category.pk == c.pk %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                        {% else %}{% for c in by_scope.personal %}<option value="{{ c.pk }}"{% if row.category.pk == c.pk %} selected{% endif %}>{{ c.name }}</option>{% endfor %}{% endif %}
+                    </select></label>
+                <label class="mn-inline"><span class="visually-hidden">Amount {{ forloop.counter }}</span><input type="text" name="split_amount" class="ledger-input mn-split__amount" inputmode="decimal" placeholder="-0.00" value="{% if row %}{{ row.amount }}{% endif %}"></label>
+                <label class="mn-inline mn-split__note"><span class="visually-hidden">Note {{ forloop.counter }}</span><input type="text" name="split_note" class="ledger-input" maxlength="200" placeholder="Note" value="{% if row %}{{ row.note }}{% endif %}"></label>
+            </div>
+        {% endfor %}
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="mn-split-add" hidden>Add a part</button>
+        <p class="mn-help" id="mn-split-sum" aria-live="polite"></p>
+    </fieldset>
+
+    <div class="mn-actions"><button type="submit" class="btn btn-primary">Save</button> <a href="{{ next }}" class="btn btn-secondary">Cancel</a></div>
+</form>
+<form method="post" action="{% url 'albright_money:transaction_delete' t.pk %}" class="mn-delete" data-confirm="Delete this transaction{% if t.transfer_pair_id %} and the other side of the transfer{% endif %}?">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}"><button type="submit" class="btn btn-secondary btn-sm mn-danger">Delete</button></form>
+</div>
+{% endblock %}

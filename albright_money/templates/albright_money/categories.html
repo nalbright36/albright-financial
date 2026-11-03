@@ -1,0 +1,51 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Categories · {% endblock %}
+{% block money %}
+{% comment %}
+Categories and rules (views.categories), for one set at a time: the household's (shared) or your personal one.
+A category in use is archived rather than deleted, so its history stays. Rules: "payee contains X" (optionally an
+amount range or one account) gets a category - imports and quick add use them; the longest match wins.
+{% endcomment %}
+<div class="mn-head">
+    <div><h1 class="mn-head__title">Categories</h1><p class="mn-head__sub">{% if scope == "household" %}{{ household.name }}'s shared set{% else %}Your personal set{% endif %}</p></div>
+</div>
+{% if household %}<nav class="mn-seg" aria-label="Which set">
+    <a href="?scope=household" class="mn-seg__item{% if scope == 'household' %} is-on{% endif %}"{% if scope == "household" %} aria-current="page"{% endif %}>{{ household.name }}</a>
+    <a href="?scope=personal" class="mn-seg__item{% if scope == 'personal' %} is-on{% endif %}"{% if scope == "personal" %} aria-current="page"{% endif %}>Personal</a>
+</nav>{% endif %}
+
+<section class="card mn-card" aria-labelledby="mn-cats-h">
+    <h2 class="mn-card__title" id="mn-cats-h">Categories</h2>
+    <ul class="mn-cats">{% for c in cats %}
+        <li class="mn-cats__row{% if c.archived %} is-archived{% endif %}">
+            <form method="post" action="{% url 'albright_money:category' c.pk %}" class="mn-cats__form">{% csrf_token %}
+                <label class="mn-inline mn-cats__name"><span class="visually-hidden">Name</span><input type="text" name="name" value="{{ c.name }}" class="ledger-input" maxlength="60" required></label>
+                <label class="mn-inline"><span class="visually-hidden">Kind</span><select name="kind" class="ledger-input"><option value="expense"{% if c.kind == "expense" %} selected{% endif %}>Spending</option><option value="income"{% if c.kind == "income" %} selected{% endif %}>Income</option></select></label>
+                <label class="mn-check"><input type="checkbox" name="rollover"{% if c.rollover %} checked{% endif %}> Rollover</label>
+                <label class="mn-check"><input type="checkbox" name="archived"{% if c.archived %} checked{% endif %}> Archived</label>
+                <span class="mn-muted mn-small">{{ c.uses }} use{{ c.uses|pluralize }}</span>
+                <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+                <button type="submit" name="action" value="delete" class="btn btn-secondary btn-sm mn-danger" data-confirm="{% if c.uses %}Archive {{ c.name }}? It's in use, so it's archived, not deleted.{% else %}Delete {{ c.name }}?{% endif %}">{% if c.uses %}Archive{% else %}Delete{% endif %}</button>
+            </form>
+        </li>
+    {% endfor %}</ul>
+    <form method="post" class="mn-cats__add">{% csrf_token %}<input type="hidden" name="scope" value="{{ scope }}">
+        <label class="mn-inline mn-cats__name"><span class="visually-hidden">New category</span><input type="text" name="name" class="ledger-input" maxlength="60" placeholder="New category" required></label>
+        <label class="mn-inline"><span class="visually-hidden">Kind</span><select name="kind" class="ledger-input"><option value="expense">Spending</option><option value="income">Income</option></select></label>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </form>
+</section>
+
+<section class="card mn-card" aria-labelledby="mn-rules-h" id="rules">
+    <h2 class="mn-card__title" id="mn-rules-h">Rules</h2>
+    <p class="mn-help">Imports and quick add use these to pick a category. Changing a transaction's category also offers to make one.</p>
+    {% if rules %}<ul class="mn-list">{% for r in rules %}
+        <li class="mn-list__row"><span class="mn-list__main">Payee contains &ldquo;{{ r.payee_contains }}&rdquo;{% if r.min_amount is not None or r.max_amount is not None %} <span class="mn-muted mn-small">{% if r.min_amount is not None %}from {{ r.min_amount|usd }} {% endif %}{% if r.max_amount is not None %}to {{ r.max_amount|usd }}{% endif %}</span>{% endif %}{% if r.account %} <span class="mn-muted mn-small">&middot; {{ r.account.name }} only</span>{% endif %} &rarr; <strong>{{ r.category.name }}</strong></span>
+            <form method="post" action="{% url 'albright_money:rule_delete' r.pk %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" aria-label="Delete the rule for {{ r.payee_contains }}">Delete</button></form></li>
+    {% endfor %}</ul>{% else %}<p class="mn-empty">No rules yet.</p>{% endif %}
+    <form method="post" action="{% url 'albright_money:rules' %}" class="mn-form mn-rule-add">{% csrf_token %}<input type="hidden" name="scope" value="{{ scope }}">
+        <div class="mn-form__grid">{% for field in rule_form %}<div class="field">{{ field.label_tag }}{{ field }}</div>{% endfor %}</div>
+        <div class="mn-actions"><button type="submit" class="btn btn-primary btn-sm">Add rule</button></div>
+    </form>
+</section>
+{% endblock %}
