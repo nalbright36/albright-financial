@@ -284,7 +284,7 @@ class ViewTests(Base):
         self.item(title="Pay rent", recurrence="FREQ=MONTHLY;BYMONTHDAY=1", date=d(11, 1), recurrence_count=12)
         page = self.client.get(url("month") + "?date=2026-11-15").content.decode()
         cell = page.split('data-date="2026-11-20"', 1)[1].split('role="gridcell"', 1)[0]
-        self.assertEqual(len(re.findall(r'class="pl-chip', cell)), 3)
+        self.assertEqual(len(re.findall(r'class="pl-chip[ "]', cell)), 3)
         self.assertIn("+2 more", cell)
         self.assertIn(f'href="{url("day")}?date=2026-11-20"', cell)
         self.assertIn("Pay rent", page.split('data-date="2026-11-01"', 1)[1].split('role="gridcell"', 1)[0])

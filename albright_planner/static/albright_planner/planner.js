@@ -2,6 +2,8 @@
  * Albright Planner - included on every Planner page by templates/index.html (apps_registry: Planner's script)
  * and by Home for its Today panel. Vanilla JS; everything also works without it (forms post normally).
  *
+ *   rows        every item is one line; its checklist chevron opens the subtasks under it (and closes them) - kept
+ *               open only while you stay on the page; a click anywhere else on the row opens it like its title does
  *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through.
  *               In Home's Today panel a checked-off task leaves the list at once with "Done · Undo" (or, with
  *               "Show completed tasks" on, drops to the bottom struck through); the count line follows.
@@ -79,6 +81,7 @@
     function showProgress(el, data) {
         if (data.progress) el.querySelectorAll("[data-cl-progress]").forEach(function (p) { p.textContent = data.progress; });
         if (data.progress_title) el.querySelectorAll("[data-cl-progress-title]").forEach(function (p) { p.textContent = data.progress_title; });
+        if (data.progress_title) el.querySelectorAll("[data-cl-toggle], .pl-cl-count").forEach(function (b) { b.title = "Checklist: " + data.progress_title; });
     }
     function showTask(el, done) {
         var box = el.querySelector(".pl-check");
@@ -120,6 +123,22 @@
                 });
             });
         }).catch(function () { show(was); });
+    });
+
+    // ---------- One-line rows: the checklist chevron, and the whole row as a target ----------
+    document.addEventListener("click", function (event) {
+        var toggle = event.target.closest && event.target.closest("[data-cl-toggle]");
+        if (toggle) {
+            var list = document.getElementById(toggle.getAttribute("aria-controls"));
+            if (!list) return;
+            list.hidden = !list.hidden;
+            toggle.setAttribute("aria-expanded", String(!list.hidden));
+            return;
+        }
+        var row = event.target.closest && event.target.closest(".pl-item");
+        if (!row || event.defaultPrevented || event.target.closest("a, button, form, input, label, select, .pl-item__cl")) return;
+        var link = row.querySelector(".pl-item__body");
+        if (link) link.click();                       // the view panel (or the meal / record it links to)
     });
 
     // ---------- Home's Today panel: a checked-off task leaves the list ("Done · Undo"), or drops to the bottom ----------

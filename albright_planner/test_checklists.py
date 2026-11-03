@@ -130,7 +130,8 @@ class BothWaysTests(Fixtures):
         week = self.client.get(url("week") + f"?date={TODAY}").content.decode()
         li = week.split(f'data-item="{self.task_obj.pk}"', 1)[1].split("</li>", 1)[0]
         self.assertIn("1 of 3 bought", li)
-        self.assertNotIn("pl-cl__rows", li)                                 # Week: just the count
+        self.assertIn('data-cl-toggle aria-expanded="false"', li)        # Week too: the count, its chevron...
+        self.assertRegex(li, r'<ul class="pl-cl__rows pl-item__cl" id="pl-cl-\d+-\d+" hidden>')   # ...rows folded away
         page = self.client.get(url("edit", self.task_obj.pk)).content.decode()
         self.assertIn('id="pl-cl-progress" title="1 of 3 bought" data-cl-progress>1/3', page)
 

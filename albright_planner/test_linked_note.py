@@ -143,4 +143,4 @@ class LinkedNoteTests(Base):
         self.assertEqual([v for v, _url in views], ["day", "week", "month"])
         self.assertNotIn("pl-tab", page)
         self.assertEqual(re.findall(r'<a [^>]*data-view[^>]*>', page.split('id="pl-head"', 1)[1].split("</dialog>", 2)[0]), [])
-        self.assertRegex(page, r'class="pl-item__body" data-view>')
+        self.assertRegex(page, r'class="pl-item__body" data-view\s')

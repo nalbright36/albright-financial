@@ -160,31 +160,51 @@ html.js .pl .pl-nojs { display: none; }
 .pl-section--overdue .pl-section__title { color: var(--red); }
 .pl-count { font-size: 0.75rem; background: var(--red-bg); color: var(--red); border-radius: 999px; padding: 1px 8px; }
 .pl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* One line per item, the same height everywhere (Day, Week, Home's Today panel): box or dot, the title (cut off with
+   "…", full title in the tooltip), then small indicators that never wrap - time, ↻, checklist (its chevron opens
+   the subtasks under the row: the only time a row grows), shared, note, the app it comes from. 44px tall, 48px on
+   phones for tapping. */
 .pl-item {
-  --pl-color: var(--accent); display: flex; align-items: flex-start; gap: 10px; padding: 9px 11px; min-width: 0;
+  --pl-color: var(--accent); display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; min-height: 44px;
+  padding: 0 10px 0 11px; min-width: 0; font-size: 0.9375rem; line-height: 1.25; cursor: pointer;
   background: var(--pl-card); border: 1px solid var(--pl-line); border-left: 3px solid var(--pl-color); border-radius: 10px;
 }
+@media (max-width: 640px) { .pl-item { min-height: 48px; } }
 .pl-item.is-event { background: color-mix(in srgb, var(--pl-color) 9%, var(--pl-card)); }
 .pl-item.is-overdue { border-left-color: var(--red); }
 .pl-item[draggable="true"] { cursor: grab; }
 .pl-item.is-dragging { opacity: .45; }
-.pl-check-form { margin: 0; display: inline-flex; }
+.pl-check-form { margin: 0; display: inline-flex; flex-shrink: 0; }
 .pl .pl-check {
-  width: 22px; height: 22px; flex-shrink: 0; display: grid; place-items: center; margin-top: 1px;
+  width: 22px; height: 22px; flex-shrink: 0; display: grid; place-items: center;
   border: 2px solid var(--pl-muted); border-radius: 6px; color: transparent; background: transparent;
 }
 .pl .pl-check:hover { border-color: var(--accent); }
 .pl .pl-check[aria-checked="true"] { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--accent-contrast); }
 .pl .pl-check.is-readonly { cursor: default; opacity: .7; }
-.pl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pl-color); margin: 6px 6px 0; flex-shrink: 0; }
-.pl-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; color: var(--text-primary); text-decoration: none; }
+.pl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pl-color); margin: 0 6px; flex-shrink: 0; }
+/* The title and the first indicators are the row's link; it fills the row's height so the whole line is a target. */
+.pl-item__body { flex: 1 1 0; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 8px;
+  color: var(--text-primary); text-decoration: none; }
 .pl-item__body:hover { text-decoration: none; color: var(--text-primary); }
-.pl-item__title { font-weight: 600; font-size: 0.9375rem; overflow-wrap: anywhere; }
+.pl-item__title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 .pl-item.is-done .pl-item__title { text-decoration: line-through; color: var(--pl-muted); font-weight: 500; }
-.pl-item__meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 0.75rem; color: var(--pl-muted); }
+.pl-ind { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; font-size: 0.75rem; color: var(--pl-muted); }
+.pl-ind:empty { display: none; }
+.pl-ind__icon { font-size: 0.875rem; line-height: 1; }
+.pl-ind__src { font-weight: 600; color: var(--app-meals); }
 .pl-time { font-variant-numeric: tabular-nums; }
 .pl-overdue, .pl-overdue a { color: var(--red); }
-.pl-prio { color: var(--warn); font-weight: 600; }
+.pl-prio { color: var(--warn); font-weight: 800; }
+/* The checklist: its progress and a chevron, then the subtasks under the row while open. */
+.pl .pl-cl-toggle { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; min-height: 30px; padding: 0 6px;
+  border-radius: 8px; font-size: 0.75rem; color: var(--pl-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pl .pl-cl-toggle:hover, .pl .pl-cl-toggle[aria-expanded="true"] { background: var(--surface-hover); color: var(--text-primary); }
+.pl-cl-toggle__chev { transition: transform .15s; }
+.pl-cl-toggle[aria-expanded="true"] .pl-cl-toggle__chev { transform: rotate(180deg); }
+.pl-cl-count { flex-shrink: 0; font-size: 0.75rem; color: var(--pl-muted); white-space: nowrap; }
+.pl-item__cl { flex-basis: 100%; margin: 0 0 8px 32px !important; font-size: 0.8125rem; cursor: default; }
+.pl-item > .pl-avatar, .pl-item > .pl-shared-out, .pl-item > .pl-note-mark { flex-shrink: 0; }
 .pl-empty { color: var(--pl-muted); font-size: 0.875rem; margin: 0; padding: 4px 2px; }
 
 /* ---------- Day: the hour timeline ---------- */
@@ -202,8 +222,13 @@ html.js .pl .pl-nojs { display: none; }
 .pl-col__dow { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--pl-muted); }
 .pl-col__num { font-size: 1.125rem; font-weight: 700; }
 .pl-col.is-today .pl-col__num { color: var(--accent); }
-.pl-col .pl-item { padding: 7px 8px; gap: 7px; }
-.pl-col .pl-item__title { font-size: 0.8125rem; }
+/* Week's narrow columns: the same one-line row; indicators collapse to icons (and "6:00" without AM/PM). */
+.pl-col .pl-item { padding: 0 6px 0 8px; column-gap: 6px; font-size: 0.8125rem; }
+.pl-col .pl-item__body { gap: 5px; }
+.pl-col .pl-ind { gap: 5px; }
+.pl-col .pl-ind__text, .pl-col .pl-time__ampm { display: none; }
+.pl-col .pl-cl-toggle { padding: 0 3px; }
+.pl-col .pl-item__cl { margin-left: 4px !important; }
 @media (min-width: 900px) {
   .pl-week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   .pl-col { min-height: 320px; }
@@ -224,10 +249,15 @@ html.js .pl .pl-nojs { display: none; }
 .pl-cell__num:hover { background: var(--surface-hover); text-decoration: none; }
 .pl-cell.is-today .pl-cell__num { background: var(--accent-solid); color: var(--accent-contrast); }
 .pl-cell__items { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Month: the same one-line rule at calendar size - the title cut off with "…", then time and icons. */
 .pl-chip { --pl-color: var(--accent); font-size: 0.6875rem; line-height: 1.35; border-radius: 5px; padding: 1px 5px;
   background: color-mix(in srgb, var(--pl-color) 16%, transparent); overflow: hidden; }
-.pl-chip a { display: block; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pl-chip.is-done a { text-decoration: line-through; color: var(--pl-muted); }
+.pl-chip a { display: flex; align-items: center; gap: 4px; min-height: 18px; color: var(--text-primary); text-decoration: none;
+  white-space: nowrap; overflow: hidden; }
+.pl-chip__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pl-chip .pl-time, .pl-chip__icon, .pl-chip__cl { flex-shrink: 0; color: var(--pl-muted); }
+.pl-chip .pl-meal-icon { flex-shrink: 0; }
+.pl-chip.is-done .pl-chip__title { text-decoration: line-through; color: var(--pl-muted); }
 .pl-more a { font-size: 0.6875rem; color: var(--pl-muted); padding: 0 5px; }
 @media (min-width: 700px) { .pl-cell { min-height: 108px; padding: 6px; } .pl-chip { font-size: 0.75rem; } }
 @media (max-width: 520px) {
@@ -235,6 +265,7 @@ html.js .pl .pl-nojs { display: none; }
   .pl-cell__items { flex-direction: row; flex-wrap: wrap; gap: 3px; padding: 0 2px; }
   .pl-chip { width: 7px; height: 7px; padding: 0; border-radius: 50%; background: var(--pl-color); }
   .pl-chip a { font-size: 0; height: 100%; }
+  .pl-chip a > * { display: none; }
   .pl-more a { font-size: 0.625rem; padding: 0; }
 }
 
@@ -297,7 +328,8 @@ html.js .pl .pl-nojs { display: none; }
 /* An item another app keeps up to date: a small link back to its record. */
 .pl-src { flex-shrink: 0; align-self: center; padding: 2px 6px; border-radius: 6px; color: var(--pl-muted); text-decoration: none; }
 .pl-src:hover { color: var(--accent); background: var(--accent-soft); }
-.pl-note-mark { color: var(--text-secondary); }
+.pl-note-mark { display: inline-flex; color: var(--pl-muted); }
+.pl-note-mark.is-gone { opacity: .6; }
 /* The item page's linked note: its title and a one-line preview (it opens in Notes). */
 .pl-note-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin: 0 0 10px; border-radius: 10px;
   background: var(--pl-card); border: 1px solid var(--pl-line); border-left: 3px solid var(--app-notes, var(--accent));
@@ -313,10 +345,6 @@ html.js .pl .pl-nojs { display: none; }
 #pl-settings .pl-fieldset { margin-bottom: 22px; }
 
 /* ---------- Task checklists (checklist.py) - a grocery run's items ---------- */
-.pl-item:has(.pl-cl) { flex-wrap: wrap; }
-.pl-cl { flex-basis: 100%; margin: 2px 0 0 32px; font-size: 0.8125rem; }
-.pl-cl > summary { cursor: pointer; color: var(--pl-muted); min-height: 28px; display: inline-flex; align-items: center; }
-.pl-cl-count { color: var(--pl-muted); }
 .pl-cl__rows { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pl-cl__rows--full { gap: 6px; margin: 0 0 8px; }
 .pl-cl__row { display: flex; align-items: center; gap: 8px; min-height: 32px; }

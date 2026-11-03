@@ -94,7 +94,7 @@ class OneShowsTests(Base):
         later = self.client.get(url("week") + "?date=2026-11-16").content.decode()
         self.assertEqual(self.count_on_page(later, item), 0)
         month = self.client.get(url("month") + "?date=2026-11-01").content.decode()
-        self.assertEqual(month.count("Trash</a></li>"), 1)            # Month's chips
+        self.assertEqual(month.count('<span class="pl-chip__title">Trash</span>'), 1)            # Month's chips
         self.on(d(11, 9))
         day = self.client.get(url("day")).content.decode()
         self.assertEqual(self.count_on_page(day, item), 1)

@@ -108,7 +108,7 @@ class NoteLinkTests(Base):
         self.note.body = "Bring insurance card"
         self.note.save()
         self.assertIn("Bring insurance card", self.edit_page())
-        self.assertIn("&#x1F4DD; Note", self.client.get(url("day") + f"?date={TODAY}").content.decode())
+        self.assertIn('class="pl-note-mark" title="Linked note"', self.client.get(url("day") + f"?date={TODAY}").content.decode())
 
     def test_new_note_is_owned_by_the_user_titled_from_the_item_and_linked(self):
         response = self.client.post(url("item_note", self.task.pk), {"action": "new"})
@@ -153,7 +153,7 @@ class NoteLinkTests(Base):
         self.assertIsNone(self.task.note)
         self.assertTrue(self.task.note_deleted)
         self.assertIn("Note deleted", self.edit_page())
-        self.assertIn("Note deleted", self.client.get(url("day") + f"?date={TODAY}").content.decode())
+        self.assertIn('title="Its note was deleted"', self.client.get(url("day") + f"?date={TODAY}").content.decode())
 
     def test_deleting_the_item_keeps_the_note(self):
         self.task.note = self.note
@@ -406,7 +406,7 @@ class ScheduleApiTests(Base):
                          (self.me, "FREQ=WEEKLY;BYDAY=MO,WE,FR", 10, "Grok bot", True, self.token))
         self.assertEqual(response.json()["repeats"], "Every Mon, Wed, Fri, 10 times")
         html = self.client.get(url("day") + "?date=2026-11-02").content.decode()
-        self.assertIn("&#x1F916; Grok bot", html)
+        self.assertIn("&middot; Added by Grok bot", html)                 # the row's tooltip
 
     def test_create_with_an_rrule(self):
         response = self.call("POST", self.api_url("schedule"), {

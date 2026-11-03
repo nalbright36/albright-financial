@@ -1,8 +1,8 @@
-{% comment %}A planned meal from Meals (read live, never copied): view only - no checkbox, no drag. Opens it in Meals.{% endcomment %}
+{% comment %}A planned meal from Meals (read live, never copied), on the same one line as any item: the fork, its title (cut off with "…"; the full title is the tooltip), then its slot and "Meals" - icons only in Week's narrow columns. View only - no checkbox, no drag. Opens it in Meals.{% endcomment %}
 <li class="pl-item is-meal" data-meal="{{ o.entry.pk }}">
     <span class="pl-meal-icon" aria-hidden="true">{% include "albright_planner/_fork.html" %}</span>
-    <a href="{{ o.url }}" class="pl-item__body">
+    <a href="{{ o.url }}" class="pl-item__body" title="{{ o.slot }}: {{ o.title }} (Meals)">
         <span class="pl-item__title">{{ o.title }}</span>
-        <span class="pl-item__meta"><span>{{ o.slot }}</span><span>Meals</span></span>
+        <span class="pl-ind"><span class="pl-ind__text">{{ o.slot }}</span><span class="pl-ind__src pl-ind__text">Meals</span></span>
     </a>
 </li>
