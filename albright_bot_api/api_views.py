@@ -51,8 +51,9 @@ def _iso(value):
 DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions - except in Meals,
 whose meals:write endpoints add to the household's plan, grocery list, ideas and recipes directly (labeled
 "Recipe Bot" on the site), in Notes, whose notes:write endpoints save the owner's notes (labeled with
-your token's name), and in the Planner, whose schedule:write endpoints add items to the owner's schedule and
-check occurrences off (labeled with your token's name).
+your token's name), in the Planner, whose schedule:write endpoints add items to the owner's schedule and
+check occurrences off (labeled with your token's name), and in Fitness, whose fitness:write endpoints log the
+owner's own workouts, food and weigh-ins.
 
 BASE URL: <site>/api/bot/v1/
 AUTH: send "Authorization: Bearer <token>" on every request, over HTTPS.
@@ -333,6 +334,48 @@ POST schedule/<id>/checklist/<item_id>/uncomplete      scope: schedule:write
   the task checks itself off (and unticking one reopens it), if the owner has "Complete task when all items
   are checked" on. A grocery-list subtask checks the line on the Meals grocery list (the owner needs Meals).
   Returns {"item_id", "checklist_item_id", "occurrence_date", "done", "progress" ("2/5"), "task_done"}.
+
+FITNESS (the owner's own workouts, food diary and weigh-ins - private to them, even within a household)
+------------------------------------------------------------------------------------------------------
+Every call is a 403 if the owner can't open Fitness. Dates are YYYY-MM-DD (default today, never in the future).
+
+POST fitness/workouts                                 scope: fitness:write
+  Logs a finished workout for today. EITHER {"text": "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30"} (the
+  site's quick log: weight x reps x sets, or reps per set "8,8,7"; cardio a distance and/or a time; "kg" after a
+  weight for kilograms) OR {"exercises": [{"exercise": "Bench press", "sets": [{"reps": 8, "weight": 185,
+  "unit": "lb"}]}, {"exercise": "Running", "sets": [{"distance": 3.1, "distance_unit": "mi", "duration_seconds":
+  1710}]}]}; optional "name". Exercise names match the owner's library (aliases like "bench", "squat", "ohp").
+  When it matches today's planned program day it counts as that workout and checks off its Planner task.
+  Returns 201 {"id", "date", "name", "exercises": [{"exercise", "sets"}], "unknown": [{"text", "problem",
+  "suggestions": [exercise names]}] (NOT logged - confirm the name and send again), "records": [{"exercise",
+  "kind", "text"}] (new personal records), "program_day", "planner_completed", "url"}. 422 (with "unknown")
+  if nothing could be logged.
+
+POST fitness/food                                     scope: fitness:write
+  One diary entry, by ONE of: {"recipe_id": 12} or {"recipe": "Turkey chili"} (a Meals recipe the owner can see,
+  with nutrition) x "servings"; {"my_food": "Protein shake"} (one of the owner's foods) x "servings"; or quick
+  macros {"label": "Latte", "calories": 190, "protein": 10, "carbs": 18, "fat": 7} (any of them). Optional
+  "slot": "breakfast"|"lunch"|"dinner"|"snack" (default snack), "date", "servings" (default 1, up to 50).
+  Names match exactly (any case). NEVER GUESSED: an unmatched name logs nothing and returns 422 {"error",
+  "suggestions": {"recipes": [{"id", "title"}], "my_foods": [names], "usda": [{"fdc_id", "name"}]}} - USDA foods
+  are only suggestions for the owner to pick on the site. Example: {"recipe": "Turkey chili", "servings": 1.5,
+  "slot": "dinner"}. Returns 201 {"id", "date", "slot", "label", "source", "servings", "calories", "protein",
+  "carbs", "fat", "fiber"}.
+
+POST fitness/weight                                   scope: fitness:write
+  Body: {"weight": 182.4 (required), "unit": "lb"|"kg" (default the owner's), "date", "note"}. One weigh-in a
+  day - a second one that day replaces it (200 instead of 201). Example: {"weight": 182.4, "unit": "lb"}.
+  Returns {"id", "date", "weight", "unit", "replaced"}.
+
+GET  fitness/today                                    scope: fitness:read
+  Returns {"date", "planned": [{"name", "program", "done"}], "workouts_done": [{"id", "name"}], "macros":
+  {"calories"|"protein"|"carbs"|"fat"|"fiber": {"eaten", "target", "remaining" (negative = over), "tracked"}}}.
+
+GET  fitness/summary?weeks=4                          scope: fitness:read
+  The last 1-12 weeks (default 4), this week first: {"weeks": [{"week_of" (Monday), "workouts_done",
+  "workouts_planned", "volume_lb", "volume_change_pct" (vs the week before, or null), "new_records": [{"exercise",
+  "text"}], "days_food_logged", "avg_calories", "avg_protein" (over days with food logged), "target_calories",
+  "target_protein"}]}.
 """
 
 

@@ -1,0 +1,71 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Insights · {% endblock %}
+{% block fitness %}
+{% comment %}
+Insights (body_views.insights_page, insights.py): this week; training (sets per muscle per week, estimated 1RM
+trends for the main lifts, exercises not done lately); nutrition (4-week averages vs targets, most logged); and
+consistency (the streak, and a calendar of workout days). Plain numbers and neutral wording - only you see it.
+{% endcomment %}
+<div class="fx-narrow fx-narrow--wide">
+<div class="fx-head"><div><h1 class="fx-head__title">Insights</h1><p class="fx-head__sub">Week of {{ this_week.start|date:"M j" }}</p></div></div>
+
+<section class="card fx-card" id="fx-week-summary" aria-labelledby="fx-week-h">
+    <h2 class="fx-card__title" id="fx-week-h">This week</h2>
+    <div class="fx-row"><span class="fx-row__title">Workouts</span><span class="fx-row__ind fx-ind-strong">{{ this_week.done }}{% if this_week.planned %} of {{ this_week.planned }} planned{% endif %}</span></div>
+    <div class="fx-row fx-row--wrap"><span class="fx-row__title">Volume</span><span class="fx-row__ind fx-ind-strong">{{ this_week.volume }} lb{% if volume_text %} <span class="fx-muted">&middot; {{ volume_text }}</span>{% endif %}</span></div>
+    <div class="fx-row"><span class="fx-row__title">New records</span><span class="fx-row__ind fx-ind-strong">{{ this_week.records|length }}</span></div>
+    {% for r in this_week.records %}<div class="fx-row fx-row--wrap fx-row--sub"><span class="fx-row__title"><span aria-hidden="true">&#x1F3C6;</span> {{ r.exercise }}</span><span class="fx-row__ind">{{ r.text }}</span></div>{% endfor %}
+    <div class="fx-row"><span class="fx-row__title">Food logged</span><span class="fx-row__ind fx-ind-strong">{{ this_week.days_logged }} day{{ this_week.days_logged|pluralize }}</span></div>
+    {% if this_week.avg_protein is not None %}<div class="fx-row"><span class="fx-row__title">Average protein</span><span class="fx-row__ind fx-ind-strong">{{ this_week.avg_protein }} g{% if this_week.target_protein %} <span class="fx-muted">/ {{ this_week.target_protein }} g target</span>{% endif %}</span></div>
+    <div class="fx-row"><span class="fx-row__title">Average calories</span><span class="fx-row__ind fx-ind-strong">{{ this_week.avg_calories }}{% if this_week.target_calories %} <span class="fx-muted">/ {{ this_week.target_calories }} target</span>{% endif %}</span></div>{% endif %}
+</section>
+
+<section class="card fx-card" id="fx-muscle-weeks" aria-labelledby="fx-mw-h">
+    <h2 class="fx-card__title" id="fx-mw-h">Working sets per muscle, last 8 weeks</h2>
+    {% if muscles.rows %}
+    <div class="fx-table-wrap fx-heat-wrap"><table class="fx-table fx-heat">
+        <thead><tr><th scope="col">Muscle</th>{% for w in muscles.weeks %}<th scope="col" class="fx-heat__week">{{ w|date:"n/j" }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for r in muscles.rows %}<tr><th scope="row">{{ r.label }}</th>{% for n in r.sets %}<td class="fx-heat__cell"><span class="fx-heat__bar" style="height: {% widthratio n muscles.max 100 %}%;"></span><span class="fx-heat__n">{{ n|default:"" }}</span></td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="fx-empty">Working sets show up here as you log them.</p>{% endif %}
+</section>
+
+<section class="card fx-card" id="fx-lifts" aria-labelledby="fx-lifts-h">
+    <h2 class="fx-card__title" id="fx-lifts-h">Estimated 1-rep max, main lifts</h2>
+    {% for lift in lifts %}
+    <div class="fx-measure">
+        <div class="fx-measure__head"><span class="fx-measure__label">{{ lift.name }}</span><span class="fx-measure__value">{{ lift.last|floatformat:0 }} lb{% if lift.change %} <span class="fx-muted fx-small">({% if lift.change > 0 %}+{% endif %}{{ lift.change|floatformat:0 }} since {{ lift.points.0.date|date:"M j" }})</span>{% endif %}</span></div>
+        {% if lift.chart %}{% with chart_id="fx-lift-"|add:lift.name|slugify %}{% include "albright_fitness/_time_chart.html" with chart=lift.chart small=True desc=lift.name %}{% endwith %}{% endif %}
+    </div>
+    {% empty %}<p class="fx-empty">Squat, bench press, deadlift and overhead press trends show up here once you log them.</p>{% endfor %}
+</section>
+
+{% if untrained %}
+<section class="card fx-card" id="fx-untrained" aria-labelledby="fx-untrained-h">
+    <h2 class="fx-card__title" id="fx-untrained-h">Not done in the last 2 weeks</h2>
+    {% for r in untrained %}<a href="{% url 'albright_fitness:exercise' r.exercise.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ r.exercise.name }}</span><span class="fx-row__ind">last {{ r.last|date:"M j" }}</span></a>{% endfor %}
+</section>
+{% endif %}
+
+<section class="card fx-card" id="fx-food-insights" aria-labelledby="fx-fi-h">
+    <h2 class="fx-card__title" id="fx-fi-h">Food, last 4 weeks</h2>
+    {% if food.days_logged %}
+    <p class="fx-help">Averages over the {{ food.days_logged }} day{{ food.days_logged|pluralize }} with food logged.</p>
+    {% for r in food.rows %}<div class="fx-row"><span class="fx-row__title">{{ r.name|capfirst }}</span><span class="fx-row__ind fx-ind-strong">{{ r.average }}{% if r.name != "calories" %} g{% endif %}{% if r.target %} <span class="fx-muted">/ {{ r.target }} target</span>{% endif %}</span></div>{% endfor %}
+    <div class="fx-grid fx-grid--lists">
+        <div><h3 class="fx-label">Most logged foods</h3>{% for f in food.foods %}<div class="fx-row"><span class="fx-row__title">{{ f.label }}</span><span class="fx-row__ind">&times;{{ f.times }}</span></div>{% empty %}<p class="fx-empty fx-small">None yet.</p>{% endfor %}</div>
+        <div><h3 class="fx-label">Most logged recipes</h3>{% for f in food.recipes %}<div class="fx-row"><span class="fx-row__title">{{ f.label }}</span><span class="fx-row__ind">&times;{{ f.times }}</span></div>{% empty %}<p class="fx-empty fx-small">None yet.</p>{% endfor %}</div>
+    </div>
+    {% else %}<p class="fx-empty">Log food in the <a href="{% url 'albright_fitness:food' %}">diary</a> to see averages here.</p>{% endif %}
+</section>
+
+<section class="card fx-card" id="fx-consistency" aria-labelledby="fx-cons-h">
+    <h2 class="fx-card__title" id="fx-cons-h">Consistency</h2>
+    <p class="fx-help">Streak: {{ consistency.streak }} week{{ consistency.streak|pluralize }} with every planned workout done &middot; {{ consistency.active_days }} workout day{{ consistency.active_days|pluralize }} in 12 weeks.</p>
+    <div class="fx-cal-heat" role="img" aria-label="Workout days over the last 12 weeks: {{ consistency.active_days }} days with a workout.">
+        <div class="fx-cal-heat__days" aria-hidden="true">{% for letter in weekday_letters %}<span>{{ letter }}</span>{% endfor %}</div>
+        {% for w in consistency.weeks %}<div class="fx-cal-heat__week" title="Week of {{ w.monday|date:'M j' }}: {{ w.done }}{% if w.planned %} of {{ w.planned }}{% endif %}">{% for d in w.days %}<span class="fx-cal-heat__day{% if d.count %} is-on{% endif %}{% if d.future %} is-future{% endif %}" title="{{ d.date|date:'D M j' }}{% if d.count %}: workout{% endif %}"></span>{% endfor %}</div>{% endfor %}
+    </div>
+</section>
+</div>
+{% endblock %}

@@ -111,6 +111,34 @@ def start_workout(user, day=None, planner_item=None, planner_date=None, name="")
     return workout
 
 
+def match_today(user, exercises, today=None):
+    """Today's planned program day (not yet done) that shares the most exercises with what was logged, or None."""
+    from . import stats
+    logged = {e.pk for e in exercises}
+    best = None
+    for day, done in stats.todays(user, today):
+        if done:
+            continue
+        overlap = len(logged & set(day.exercises.values_list("exercise_id", flat=True)))
+        if overlap and (best is None or overlap > best[0]):
+            best = (overlap, day)
+    return best[1] if best else None
+
+
+@transaction.atomic
+def log_parsed(user, parsed, name="Quick log", today=None):
+    """A finished workout today from parsed exercises (training.parse_quick, or the Bot API's structured ones) ->
+    (workout, new records, matched program day or None). When it matches today's planned program day, it counts as
+    that day's workout and its Planner occurrence is checked off."""
+    today = today or timezone.localdate()
+    day = match_today(user, [p.exercise for p in parsed], today)
+    item, when = planner_occurrence(user, day, today) if day else (None, None)
+    workout = Workout.objects.create(owner=user, date=today, name=name if not day else "", program_day=day,
+                                     planner_item=item, planner_date=when)
+    training.save_quick(workout, parsed)
+    return workout, finish(workout), day
+
+
 def planner_occurrence(user, day, requested_date=None):
     """(the Planner task for this program day, the occurrence to check off) - today's (or the requested date's)
     when the task is scheduled then; else (None, None)."""

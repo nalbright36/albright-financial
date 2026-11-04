@@ -1,0 +1,80 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Body · {% endblock %}
+{% block fitness %}
+{% comment %}
+Body metrics (body_views.body_page, body.py): weigh-ins with the 7-day average (faint daily dots, the bold average
+line), the changes over 2 and 4 weeks in plain words, the goal and - when the trend supports one - a projected
+date; measurements with a small trend each; settings (units, goal, hide weight from the dashboard, a weekly
+weigh-in reminder on the Planner). Only you ever see this page.
+{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">Body</h1><p class="fx-head__sub">Only you see this - it's never shared.</p></div></div>
+
+<form method="post" action="{% url 'albright_fitness:log_weight' %}" class="card fx-card fx-row-form fx-weigh" id="fx-weigh">{% csrf_token %}
+    <label for="fx-weight" class="fx-label">Weigh-in</label>
+    <input type="number" name="weight" id="fx-weight" class="ledger-input fx-weigh__input" step="0.1" min="20" max="880" inputmode="decimal" required placeholder="{{ unit }}">
+    <input type="hidden" name="unit" value="{{ unit }}">
+    <label for="fx-weigh-date" class="visually-hidden">Date</label>
+    <input type="date" name="date" id="fx-weigh-date" class="ledger-input fx-weigh__date" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}">
+    <button type="submit" class="btn btn-primary">Log</button>
+    <label for="fx-weigh-note" class="visually-hidden">Note (optional)</label>
+    <input type="text" name="note" id="fx-weigh-note" class="ledger-input fx-input-wide" maxlength="200" placeholder="Note (optional)">
+</form>
+
+<section class="card fx-card" id="fx-weight-trend" aria-labelledby="fx-weight-h">
+    <h2 class="fx-card__title" id="fx-weight-h">Weight <span class="fx-muted fx-small">({{ unit }})</span></h2>
+    {% if latest %}
+    <p class="fx-weight-now"><strong>{{ latest.average }}</strong> {{ unit }} <span class="fx-muted fx-small">7-day average &middot; last weigh-in {{ latest.weight }} {{ unit }}, {{ latest.date|date:"M j" }}</span></p>
+    {% if changes %}<ul class="fx-changes" id="fx-changes">{% for c in changes %}<li>{{ c.text|capfirst }}</li>{% endfor %}</ul>{% endif %}
+    {% if goal %}<p class="fx-help" id="fx-goal">Goal {{ goal }} {{ unit }}{% if projection %} &middot; at about {{ projection.rate }} {{ unit }} a week, around <strong>{{ projection.date|date:"M j, Y" }}</strong>{% endif %}.</p>{% endif %}
+    {% endif %}
+    {% if chart %}{% include "albright_fitness/_time_chart.html" with chart=chart chart_id="fx-weight-chart" faint=True desc="Daily weigh-ins as dots with the 7-day average as a line, last 90 days." %}
+    <p class="fx-help">Dots are daily weigh-ins; the line is the 7-day average, which smooths out normal day-to-day swings.</p>
+    {% elif latest %}<p class="fx-empty">The chart starts with your second weigh-in.</p>
+    {% else %}<p class="fx-empty">Log a weigh-in to start your trend.</p>{% endif %}
+    {% if entries %}<details class="fx-table-wrap"><summary class="fx-small">Recent weigh-ins</summary>
+        {% for e, value in entries %}<div class="fx-row"><span class="fx-row__title">{{ e.date|date:"D M j" }}{% if e.note %} <span class="fx-muted fx-small">{{ e.note }}</span>{% endif %}</span><span class="fx-row__ind">{{ value }} {{ unit }}</span>
+            <form method="post" action="{% url 'albright_fitness:delete_weight' e.pk %}">{% csrf_token %}<button type="submit" class="fx-icon-btn" aria-label="Remove the {{ e.date|date:'M j' }} weigh-in" title="Remove">&times;</button></form></div>{% endfor %}
+    </details>{% endif %}
+</section>
+
+<section class="card fx-card" id="fx-measurements" aria-labelledby="fx-measure-h">
+    <h2 class="fx-card__title" id="fx-measure-h">Measurements <span class="fx-muted fx-small">({{ length_unit }})</span></h2>
+    {% for m in measurements %}
+    <div class="fx-measure">
+        <div class="fx-measure__head"><span class="fx-measure__label">{{ m.label }}</span><span class="fx-measure__value">{{ m.latest.value }} {{ m.unit }}{% if m.change is not None %} <span class="fx-muted fx-small">({% if m.change > 0 %}+{% endif %}{{ m.change }} since {{ m.chart.first|date:"M j" }})</span>{% endif %}</span></div>
+        {% if m.chart %}{% with chart_id="fx-m-"|add:m.key %}{% include "albright_fitness/_time_chart.html" with chart=m.chart small=True desc=m.label %}{% endwith %}{% endif %}
+    </div>
+    {% empty %}<p class="fx-empty">No measurements yet.</p>{% endfor %}
+    <details class="fx-measure-form"{% if not measurements %} open{% endif %}>
+        <summary class="fx-small">Add measurements</summary>
+        <form method="post" action="{% url 'albright_fitness:log_measurements' %}" class="fx-form">{% csrf_token %}
+            <div class="fx-macro-inputs">
+                {% for key, label in parts %}<div class="field"><label for="fx-m-in-{{ key }}">{{ label }}</label><input type="number" name="{{ key }}" id="fx-m-in-{{ key }}" class="ledger-input" step="0.1" min="1" max="300" inputmode="decimal"></div>{% endfor %}
+                <div class="field"><label for="fx-m-in-fat">Body fat % (optional)</label><input type="number" name="body_fat" id="fx-m-in-fat" class="ledger-input" step="0.1" min="2" max="70" inputmode="decimal"></div>
+                <div class="field"><label for="fx-m-date">Date</label><input type="date" name="date" id="fx-m-date" class="ledger-input" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}"></div>
+            </div>
+            <button type="submit" class="btn btn-secondary">Save measurements</button>
+        </form>
+    </details>
+</section>
+
+<details class="card fx-card" id="fx-body-settings">
+    <summary class="fx-card__title">Settings</summary>
+    <form method="post" action="{% url 'albright_fitness:body_settings' %}" class="fx-form">{% csrf_token %}
+        <div class="fx-macro-inputs">
+            <div class="field"><label for="fx-bs-wu">Weight in</label><select name="weight_unit" id="fx-bs-wu" class="ledger-input"><option value="lb"{% if unit == "lb" %} selected{% endif %}>lb</option><option value="kg"{% if unit == "kg" %} selected{% endif %}>kg</option></select></div>
+            <div class="field"><label for="fx-bs-hu">Measurements in</label><select name="height_unit" id="fx-bs-hu" class="ledger-input"><option value="in"{% if length_unit == "in" %} selected{% endif %}>in</option><option value="cm"{% if length_unit == "cm" %} selected{% endif %}>cm</option></select></div>
+        </div>
+        <div class="field"><label for="fx-bs-goal">Goal weight ({{ unit }}, optional)</label><input type="number" name="goal" id="fx-bs-goal" class="ledger-input" step="0.1" value="{{ goal|default_if_none:'' }}" inputmode="decimal"></div>
+        <label class="fx-check"><input type="checkbox" name="hide_weight" value="1"{% if profile.hide_weight %} checked{% endif %}> Hide weight from the Fitness dashboard</label>
+        <div class="fx-row-form">
+            <label class="fx-check"><input type="checkbox" name="weigh_in_reminder" value="1"{% if profile.weigh_in_reminder %} checked{% endif %}> Weekly weigh-in reminder on my Planner, on</label>
+            <label for="fx-bs-day" class="visually-hidden">Reminder day</label>
+            <select name="weigh_in_weekday" id="fx-bs-day" class="ledger-input fx-unit-select">{% for n, name in weekdays %}<option value="{{ n }}"{% if profile.weigh_in_weekday == n %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+</details>
+</div>
+{% endblock %}

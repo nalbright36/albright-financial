@@ -7,7 +7,6 @@ from datetime import date, timedelta
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
 from django.db.models import Max, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import nutrition, programs, stats, training
+from . import body, insights, nutrition, programs, stats, training
 from .models import (EQUIPMENT, MUSCLES, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord, Program, ProgramDay,
                      ProgramExercise, Workout, WorkoutExercise, WorkoutSet, WorkoutShare)
 
@@ -63,8 +62,19 @@ def dashboard(request):
     return render(request, "albright_fitness/dashboard.html", {
         **data, "volume_max": top, "open_workout": open_workout, "progress": nutrition.progress(profile, eaten),
         "food_average": nutrition.averages(request.user), "tracked": profile.tracked or [],
+        "week_summary": insights.week(request.user, stats.week_start(timezone.localdate())), "weight": _dashboard_weight(request.user, profile),
         "records_text": [(r, training.record_text(r)) for r in data["records"]],
         "recent": Workout.objects.filter(owner=request.user, finished_at__isnull=False).select_related("program_day")[:5]})
+
+
+def _dashboard_weight(user, profile):
+    """The dashboard's weigh-in card: the 7-day average and its 4-week change - None when weight is hidden."""
+    if profile.hide_weight:
+        return None
+    points = body.series(user, days=35)
+    return {"unit": profile.weight_unit, "average": body.shown(points[-1][2], profile.weight_unit) if points else None,
+            "change": body.change(points, 4, profile.weight_unit) if points else None,
+            "today": any(p[0] == timezone.localdate() for p in points)}
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +169,8 @@ def start(request):
 @login_required
 @require_POST
 def quick(request):
-    """The quick text log: a finished workout, today, from "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30"."""
+    """The quick text log: a finished workout, today, from "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30" (it
+    counts as today's planned program day when it matches one - programs.log_parsed)."""
     parsed = training.parse_quick(request.POST.get("text", "")[:2000], request.user)
     good = [p for p in parsed if not p.problem]
     for p in parsed:
@@ -167,10 +178,7 @@ def quick(request):
             messages.error(request, f"“{p.text}”: {p.problem}.")
     if not good:
         return redirect("albright_fitness:dashboard")
-    with transaction.atomic():
-        workout = Workout.objects.create(owner=request.user, date=timezone.localdate(), name="Quick log")
-        training.save_quick(workout, good)
-        programs.finish(workout)
+    workout, _records, _day = programs.log_parsed(request.user, good)
     return redirect("albright_fitness:summary", pk=workout.pk)
 
 

@@ -34,6 +34,8 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("schedule:read", "List the owner's Planner occurrences in a date range, with whether each is checked off."),
     ("schedule:write", "Add items to the owner's Planner (labeled with this bot's name), and check occurrences off or "
                        "back on."),
+    ("fitness:read", "Read the owner's Fitness day (planned workout, workouts done, macros vs targets) and weekly summary."),
+    ("fitness:write", "Log workouts, food and weigh-ins for the owner (their own diary and records only)."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

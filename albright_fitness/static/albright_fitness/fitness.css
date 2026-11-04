@@ -248,3 +248,39 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-target-row__label { font-size: var(--text-sm); font-weight: 600; }
 .fx-check { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: var(--text-sm); white-space: nowrap; }
 .fx-grid--today { margin-bottom: var(--space-4); }
+
+/* ---------- Body metrics and Insights (body_views) ---------- */
+.fx-chart--small { grid-template-rows: 90px auto; }
+.fx-chart__dot--faint { width: 6px; height: 6px; margin: -3px 0 0 -3px; opacity: 0.35; }
+.fx-chart__dot--faint.is-on { opacity: 1; }
+.fx-weigh { align-items: center; }
+.fx .ledger-input.fx-weigh__input { width: 110px; flex: 0 0 110px; }
+.fx .ledger-input.fx-weigh__date { width: auto; flex: 1 1 140px; }
+.fx-weight-now { margin: 0 0 4px; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.fx-changes { list-style: none; margin: 0 0 var(--space-2); padding: 0; font-size: var(--text-sm); }
+.fx-week-line { margin: 0 0 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-measure { padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.fx-measure:first-of-type { border-top: 0; }
+.fx-measure__head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: var(--text-sm); }
+.fx-measure__label { font-weight: 600; }
+.fx-measure__value { font-variant-numeric: tabular-nums; text-align: right; }
+.fx-measure-form { margin-top: var(--space-3); }
+.fx-measure-form summary { cursor: pointer; font-weight: 600; }
+.fx-ind-strong { color: var(--text-primary); font-size: var(--text-sm); }
+.fx-row--sub { min-height: 36px; padding-left: 12px; }
+.fx-grid--lists { margin-top: var(--space-3); }
+/* Sets per muscle per week: a small bar in each cell (one series, one hue), the count beside it. */
+.fx-heat-wrap { overflow-x: auto; }
+.fx-heat { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.fx-heat th[scope="row"] { text-align: left; white-space: nowrap; padding-right: 8px; font-weight: 600; }
+.fx-heat__week { font-weight: 500; color: var(--text-secondary); text-align: center; }
+.fx-heat__cell { position: relative; height: 32px; min-width: 28px; text-align: center; vertical-align: bottom; }
+.fx-heat__bar { position: absolute; left: 25%; right: 25%; bottom: 2px; max-height: calc(100% - 4px); border-radius: 3px 3px 0 0; background: var(--accent-soft); }
+.fx-heat__n { position: relative; font-variant-numeric: tabular-nums; }
+/* Workout days: weeks as columns, Monday to Sunday down. */
+.fx-cal-heat { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 4px; }
+.fx-cal-heat__days, .fx-cal-heat__week { display: grid; grid-template-rows: repeat(7, 16px); gap: 3px; }
+.fx-cal-heat__days span { font-size: 0.625rem; line-height: 16px; color: var(--text-secondary); width: 12px; }
+.fx-cal-heat__day { width: 16px; height: 16px; border-radius: 4px; background: var(--surface-hover); }
+.fx-cal-heat__day.is-on { background: var(--accent); }
+.fx-cal-heat__day.is-future { background: transparent; border: 1px dashed var(--border); }

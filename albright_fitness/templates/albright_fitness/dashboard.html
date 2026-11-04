@@ -34,6 +34,26 @@ quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
 </section>
 </div>
 
+<div class="fx-grid fx-grid--today">
+<section class="card fx-card" id="fx-week-card" aria-labelledby="fx-week-card-h">
+    <h2 class="fx-card__title" id="fx-week-card-h"><a href="{% url 'albright_fitness:insights' %}" class="fx-title-link">This week &rarr;</a></h2>
+    <p class="fx-week-line">{{ week_summary.done }}{% if week_summary.planned %} of {{ week_summary.planned }}{% endif %} workout{{ week_summary.done|pluralize }}{% if week_summary.volume %} &middot; {{ week_summary.volume }} lb lifted{% endif %}{% if week_summary.records %} &middot; {{ week_summary.records|length }} new record{{ week_summary.records|length|pluralize }}{% endif %}</p>
+    {% if week_summary.days_logged %}<p class="fx-help">Food logged {{ week_summary.days_logged }} day{{ week_summary.days_logged|pluralize }}{% if week_summary.avg_protein is not None %} &middot; {{ week_summary.avg_protein }} g protein a day on average{% endif %}</p>{% endif %}
+</section>
+{% if weight %}
+<section class="card fx-card" id="fx-weigh-card" aria-labelledby="fx-weigh-card-h">
+    <h2 class="fx-card__title" id="fx-weigh-card-h"><a href="{% url 'albright_fitness:body' %}" class="fx-title-link">Weight &rarr;</a></h2>
+    {% if weight.average %}<p class="fx-week-line">{{ weight.average }} {{ weight.unit }} <span class="fx-muted fx-small">7-day average{% if weight.change %} &middot; {{ weight.change.text }}{% endif %}</span></p>{% endif %}
+    <form method="post" action="{% url 'albright_fitness:log_weight' %}" class="fx-row-form">{% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'albright_fitness:dashboard' %}"><input type="hidden" name="unit" value="{{ weight.unit }}">
+        <label for="fx-dash-weight" class="visually-hidden">Today's weight ({{ weight.unit }})</label>
+        <input type="number" name="weight" id="fx-dash-weight" class="ledger-input fx-weigh__input" step="0.1" min="20" max="880" inputmode="decimal" required placeholder="{% if weight.today %}Logged today{% else %}Today, {{ weight.unit }}{% endif %}">
+        <button type="submit" class="btn btn-secondary btn-sm">Log</button>
+    </form>
+</section>
+{% endif %}
+</div>
+
 <section class="fx-stats" aria-label="This week">
     <div class="card fx-stat" id="fx-week"><span class="card__label">This week</span>
         <span class="fx-stat__value">{{ done }}<span class="fx-stat__of"> / {{ planned }}</span></span>

@@ -10,6 +10,8 @@ programs aren't rows: they're templates in programs.py that a person copies into
 Nutrition (Phase 2): Food is a shared cache of USDA FoodData Central foods (public data - usda.py fills it). Everything
 else is private to its owner, even within a household: NutritionProfile (body info, units, macro targets), CustomFood
 ("My foods") and FoodLogEntry (the diary). A recipe's nutrition lives with the recipe (albright_meals.RecipeNutrition).
+
+Body metrics (Phase 3): WeightEntry and Measurement - private to their owner, never shared with anyone.
 """
 from decimal import Decimal
 
@@ -310,6 +312,13 @@ class NutritionProfile(models.Model):
     target_fat = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(1000)])
     target_fiber = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(300)])
     tracked = models.JSONField(default=list, blank=True)
+    # Body metrics (Phase 3): a goal weight (for a projected date), hiding weight from the dashboard, and an
+    # optional weekly weigh-in reminder on the Planner (off by default) on weigh_in_weekday (0 = Monday).
+    goal_weight_kg = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1,
+                                         validators=[MinValueValidator(30), MaxValueValidator(350)])
+    hide_weight = models.BooleanField(default=False)
+    weigh_in_reminder = models.BooleanField(default=False)
+    weigh_in_weekday = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(6)])
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -378,3 +387,45 @@ class FoodLogEntry(models.Model):
 
     def __str__(self):
         return f"{self.date} {self.slot}: {self.label}"
+
+
+# ---------------------------------------------------------------------------
+# Body metrics - private to their owner, never shared
+# ---------------------------------------------------------------------------
+
+class WeightEntry(models.Model):
+    """One weigh-in a day (a second one that day replaces it). Stored in kg; shown in the person's unit."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_weights")
+    date = models.DateField()
+    weight_kg = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(20), MaxValueValidator(400)])
+    note = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+        constraints = [models.UniqueConstraint(fields=["owner", "date"], name="fitness_one_weight_a_day")]
+
+    def __str__(self):
+        return f"{self.date}: {self.weight_kg} kg"
+
+
+class Measurement(models.Model):
+    """Body measurements on one day, in cm (shown in the person's height unit), and body fat %. Any can be empty."""
+    PARTS = [("waist", "Waist"), ("chest", "Chest"), ("hips", "Hips"), ("arms", "Arms"), ("thighs", "Thighs"), ("neck", "Neck")]
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_measurements")
+    date = models.DateField()
+    waist = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, validators=[MinValueValidator(5), MaxValueValidator(300)])
+    chest = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, validators=[MinValueValidator(5), MaxValueValidator(300)])
+    hips = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, validators=[MinValueValidator(5), MaxValueValidator(300)])
+    arms = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, validators=[MinValueValidator(5), MaxValueValidator(300)])
+    thighs = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, validators=[MinValueValidator(5), MaxValueValidator(300)])
+    neck = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, validators=[MinValueValidator(5), MaxValueValidator(300)])
+    body_fat = models.DecimalField(null=True, blank=True, max_digits=4, decimal_places=1, validators=[MinValueValidator(2), MaxValueValidator(70)])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+        constraints = [models.UniqueConstraint(fields=["owner", "date"], name="fitness_one_measurement_a_day")]
+
+    def __str__(self):
+        return f"Measurements {self.date}"

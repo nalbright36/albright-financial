@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import api_views, key_views, meals_api, notes_api, schedule_api, views
+from . import api_views, fitness_api, key_views, meals_api, notes_api, schedule_api, views
 
 # Site pages. Token management and the activity log moved to the Admin area
 # (/control/bot-api/); the old URLs redirect there.
@@ -36,6 +36,12 @@ api_urlpatterns = [
     path("site-suggestions", api_views.site_suggestions, name="site_suggestions"),
     path("site-suggestions/counts", api_views.site_suggestion_counts, name="site_suggestion_counts"),
     path("ideas", api_views.ideas, name="ideas"),
+    # Fitness (albright_bot_api.fitness_api) - the owner's own workouts, food and weigh-ins.
+    path("fitness/workouts", fitness_api.workouts, name="fitness_workouts"),
+    path("fitness/food", fitness_api.food, name="fitness_food"),
+    path("fitness/weight", fitness_api.weight, name="fitness_weight"),
+    path("fitness/today", fitness_api.today, name="fitness_today"),
+    path("fitness/summary", fitness_api.summary, name="fitness_summary"),
     # Meals (albright_bot_api.meals_api) - the Recipe Bot.
     path("meals/plan", meals_api.plan, name="meals_plan"),
     path("meals/plan/<int:entry_id>", meals_api.plan_delete, name="meals_plan_entry"),

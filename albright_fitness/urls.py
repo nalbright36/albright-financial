@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import food_views, views
+from . import body_views, food_views, views
 
 app_name = "albright_fitness"
 
@@ -36,4 +36,11 @@ urlpatterns = [
     path("food/mine/", food_views.my_foods, name="my_foods"),
     path("food/mine/<int:pk>/delete/", food_views.delete_my_food, name="my_food_delete"),
     path("targets/", food_views.targets, name="targets"),
+    # Body metrics and Insights (body_views) - each person's own.
+    path("body/", body_views.body_page, name="body"),
+    path("body/weight/", body_views.log_weight, name="log_weight"),
+    path("body/weight/<int:pk>/delete/", body_views.delete_weight, name="delete_weight"),
+    path("body/measurements/", body_views.log_measurements, name="log_measurements"),
+    path("body/settings/", body_views.body_settings, name="body_settings"),
+    path("insights/", body_views.insights_page, name="insights"),
 ]

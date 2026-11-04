@@ -1,0 +1,20 @@
+{% comment %}
+A chart over time (body.time_chart) in the existing .fx-chart style: the SVG line stretches to the box, the dots
+and labels are true-size HTML on top, so nothing distorts. Hover or tap shows a point's value (fitness.js).
+Include with chart=..., chart_id=..., desc=... and optionally small=True (a compact trend) and faint=True (faint
+dots under a bold line - daily weigh-ins under the 7-day average).
+{% endcomment %}
+<div class="fx-chart{% if small %} fx-chart--small{% endif %}" data-chart role="img" aria-labelledby="{{ chart_id }}-desc">
+    <p class="visually-hidden" id="{{ chart_id }}-desc">{{ desc }}</p>
+    <div class="fx-chart__axis" aria-hidden="true">{% for t in chart.ticks %}{% if not small or forloop.first or forloop.last %}<span class="fx-chart__tick" style="top: {{ t.y }}%;">{{ t.label }}</span>{% endif %}{% endfor %}</div>
+    <div class="fx-chart__plot" data-plot>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="fx-chart__svg" aria-hidden="true" focusable="false">
+            {% for t in chart.ticks %}<line x1="0" x2="100" y1="{{ t.y }}" y2="{{ t.y }}" class="fx-chart__grid" vector-effect="non-scaling-stroke"/>{% endfor %}
+            <polyline points="{{ chart.line }}" class="fx-chart__line" fill="none" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <span class="fx-chart__cross" data-cross hidden></span>
+        {% for p in chart.dots %}<span class="fx-chart__dot{% if faint %} fx-chart__dot--faint{% endif %}" style="left: {{ p.x }}%; top: {{ p.y }}%;" data-x="{{ p.x }}" data-label="{{ p.date|date:'M j' }}: {{ p.label }}"></span>{% endfor %}
+        <div class="fx-chart__tip" role="status" aria-live="polite" hidden data-tip></div>
+    </div>
+    <div class="fx-chart__dates" aria-hidden="true"><span>{{ chart.first|date:"M j" }}</span><span>{{ chart.last|date:"M j" }}</span></div>
+</div>
