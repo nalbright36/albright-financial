@@ -15,7 +15,7 @@ from django.urls import reverse
 
 from albright_labs import app_access, apps_registry
 from albright_labs.models import UserPreference
-from albright_labs.testing import launcher_tiles, with_apps
+from albright_labs.testing import kitchen, launcher_tiles, with_apps
 
 from . import planner, quickadd, recurrence
 from .models import ItemCompletion, ItemException, ItemShare, ScheduleItem
@@ -45,6 +45,7 @@ class Base(TestCase):
         self.me = with_apps(User.objects.create_user(username="nate", password=PASSWORD))
         self.wife = with_apps(User.objects.create_user(username="sam", password=PASSWORD), ["planner"])
         self.stranger = with_apps(User.objects.create_user(username="stranger", password=PASSWORD), ["planner"])
+        self.kitchen = kitchen(self.me)
         self.client.force_login(self.me)
 
     def item(self, title="Item", owner=None, **fields):

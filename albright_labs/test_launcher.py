@@ -209,8 +209,11 @@ class LauncherLinesTests(Base):
     def test_real_line_functions(self):
         from albright_meals.models import MealPlanEntry
         from django.utils import timezone
+        from .testing import kitchen
+        self.assertEqual(launcher.meals(self.user), "Set up your kitchen")
+        household = kitchen(self.user)
         self.assertEqual(launcher.meals(self.user), "No dinner planned")
-        MealPlanEntry.objects.create(date=timezone.localdate(), slot="dinner",
+        MealPlanEntry.objects.create(household=household, date=timezone.localdate(), slot="dinner",
                                      title="Slow cooker chicken tortilla soup with lime")
         self.assertEqual(launcher.meals(self.user), "Slow cooker chicken tortill…")
         with mock.patch("albright_control.jobs.health_rows", return_value=[{"status": "ok"}]):

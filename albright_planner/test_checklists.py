@@ -7,7 +7,7 @@ from datetime import time
 from django.contrib.auth.models import User
 from django.urls import reverse
 
-from albright_labs.testing import with_apps
+from albright_labs.testing import kitchen, with_apps
 from albright_meals.models import GroceryItem
 
 from . import checklist
@@ -18,9 +18,9 @@ from .tests import PASSWORD, TODAY, Base, url
 class Fixtures(Base):
     def setUp(self):
         super().setUp()
-        self.milk = GroceryItem.objects.create(name="milk", quantity=1, unit="gal", aisle="dairy")
-        self.eggs = GroceryItem.objects.create(name="eggs", quantity=12, aisle="dairy")
-        self.bread = GroceryItem.objects.create(name="bread", aisle="bakery")
+        self.milk = GroceryItem.objects.create(household=self.kitchen, name="milk", quantity=1, unit="gal", aisle="dairy")
+        self.eggs = GroceryItem.objects.create(household=self.kitchen, name="eggs", quantity=12, aisle="dairy")
+        self.bread = GroceryItem.objects.create(household=self.kitchen, name="bread", aisle="bakery")
 
     def create(self, *lines, client=None, **fields):
         data = {"item": [str(l.pk) for l in lines], "title": "", "date": TODAY.isoformat(), **fields}
@@ -167,7 +167,7 @@ class ArchiveTests(Fixtures):
 
     def test_merging_a_duplicate_moves_its_checklist_row(self):
         from albright_meals import groceries
-        cup = GroceryItem.objects.create(name="milk", quantity=2, unit="cup", duplicate_of=self.milk)
+        cup = GroceryItem.objects.create(household=self.kitchen, name="milk", quantity=2, unit="cup", duplicate_of=self.milk)
         self.create(cup)
         groceries.merge(cup)
         self.assertEqual(TaskChecklistItem.objects.get().grocery_item, self.milk)
@@ -180,6 +180,7 @@ class PermissionTests(Fixtures):
         self.task_obj = ScheduleItem.objects.get()
         self.row = self.task_obj.checklist.get(grocery_item=self.milk)
         self.cook = with_apps(User.objects.create_user(username="cook", password=PASSWORD), ["meals", "planner"])
+        kitchen(self.me, self.cook)                                         # the grocery list is the household's
 
     def test_anyone_with_the_grocery_list_can_check_and_it_shows_in_the_task(self):
         self.toggle_line(self.milk, client=self.as_user(self.cook))
@@ -209,6 +210,14 @@ class PermissionTests(Fixtures):
         page = wife.get(url("edit", self.task_obj.pk)).content.decode()
         self.assertIn("1 gal milk", page)
         self.assertNotIn(url("checklist_toggle", self.task_obj.pk, self.row.pk), page)
+
+    def test_grocery_rows_are_read_only_outside_the_household(self):
+        outsider = with_apps(User.objects.create_user(username="outsider", password=PASSWORD), ["meals", "planner"])
+        kitchen(outsider, name="Elsewhere")
+        ItemShare.objects.create(item=self.task_obj, user=outsider, permission=ItemShare.EDIT)
+        self.assertEqual(self.toggle_row(self.row, client=self.as_user(outsider)).status_code, 404)
+        self.milk.refresh_from_db()
+        self.assertFalse(self.milk.checked)
 
 
 class ProgressTests(Fixtures):

@@ -1,12 +1,14 @@
-"""Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes.
-Everything is shared by everyone who can open Meals (Admin > Users -
-albright_labs.app_access 404s it for anyone else)."""
+"""Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes (mine, shared with me, the library).
+Everything belongs to the user's household (scope.py): another household's plan, list, ideas and recipes are 404s
+(Meals access itself is checked first - albright_labs.app_access). Someone with Meals access but no household gets
+"Set up your kitchen". A recipe in the library or shared with someone is read-only to them; they can save a copy."""
 import secrets
 from datetime import timedelta
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -16,10 +18,16 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import groceries, importer, plan
+from albright_labs import households
+from albright_labs.models import household_of
+
+from . import groceries, importer, plan, scope
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
-from .models import GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe, RecipeRating, SLOTS, STANDARD_TAGS
+from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe, RecipeRating, RecipeShare, SLOTS,
+                     STANDARD_TAGS)
+
+TABS = [("mine", "My recipes"), ("shared", "Shared with me"), ("library", "Recipe library")]
 
 
 def _week_url(day):
@@ -31,43 +39,86 @@ def _wants_json(request):
         request.headers.get("Accept", "")
 
 
+def _person(user):
+    return (user.first_name or user.get_username()).strip() if user else "Someone"
+
+
+def _notices(request):
+    """"Nathan shared Family Meatballs with you" - shares not seen yet."""
+    return RecipeShare.objects.filter(shared_with=request.user, seen_at__isnull=True) \
+        .exclude(recipe__household=request.household).select_related("recipe", "shared_by")[:5]
+
+
+# ---------------------------------------------------------------------------
+# No household yet
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+def setup(request):
+    """"Set up your kitchen": a household of your own (anyone can be invited into it later)."""
+    if household_of(request.user):
+        return redirect("albright_meals:week")
+    try:
+        household = households.create(request.user, request.POST.get("name", ""))
+    except households.HouseholdError as exc:
+        messages.error(request, str(exc))
+        return redirect("albright_meals:week")
+    messages.success(request, f"Your kitchen is ready: {household.name}. Invite people from My account > Household.")
+    return redirect("albright_meals:week")
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def notices_seen(request):
+    RecipeShare.objects.filter(shared_with=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
+    return JsonResponse({"ok": True}) if _wants_json(request) else redirect(request.POST.get("next") or "albright_meals:week")
+
+
 # ---------------------------------------------------------------------------
 # This week
 # ---------------------------------------------------------------------------
 
 @login_required
+@scope.kitchen_required
 def week(request):
+    household = request.household
     start = plan.week_start(plan.parse_day(request.GET.get("start"), timezone.localdate()))
-    settings_form = None
-    if request.user.is_superuser:
-        settings_form = MealsSettingsForm(instance=MealsSettings.load())
+    settings_form = MealsSettingsForm(instance=MealsSettings.load(household)) if request.user.is_superuser else None
     return render(request, "albright_meals/week.html", {
         "start": start, "end": start + timedelta(days=6), "slots": SLOTS,
         "days": [(day, [(slot, label, meals.get(slot)) for slot, label in SLOTS], bool(meals))
-                 for day, meals in plan.week(start)],
+                 for day, meals in plan.week(household, start)],
         "today": timezone.localdate(), "this_week": plan.week_start(), "prev": start - timedelta(days=7), "next": start + timedelta(days=7),
-        "recipes": Recipe.objects.only("pk", "title"), "settings_form": settings_form,
+        "recipes": scope.own(household).only("pk", "title"), "settings_form": settings_form, "notices": _notices(request),
     })
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def plan_add(request):
     form = PlanSlotForm(request.POST)
     title = (request.POST.get("title") or "").strip()[:200]
-    recipe = Recipe.objects.filter(pk=request.POST.get("recipe") or 0).first()
+    recipe = scope.own(request.household).filter(pk=request.POST.get("recipe") or 0).first()
     if not form.is_valid() or not (recipe or title):
         messages.error(request, "Pick a day, a slot, and a recipe or a title.")
         return redirect("albright_meals:week")
     day, slot = form.cleaned_data["date"], form.cleaned_data["slot"]
-    entry, _created = plan.set_slot(day, slot, recipe=recipe, title=title, user=request.user)
+    entry, _created = plan.set_slot(request.household, day, slot, recipe=recipe, title=title, user=request.user)
     messages.success(request, f"Planned {entry.display_title} for {day:%a %b} {day.day} ({entry.get_slot_display().lower()}).")
     return redirect(_week_url(day))
 
 
+def _entry(request, pk):
+    return get_object_or_404(MealPlanEntry.objects.select_related("recipe", "created_by"), pk=pk, household=request.household)
+
+
 @login_required
+@scope.kitchen_required
 def plan_entry(request, pk):
-    entry = get_object_or_404(MealPlanEntry.objects.select_related("recipe", "created_by"), pk=pk)
+    entry = _entry(request, pk)
     form = EntryForm(request.POST or None, instance=entry)
     if request.method == "POST" and form.is_valid():
         form.save()
@@ -78,9 +129,10 @@ def plan_entry(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def plan_move(request, pk):
-    entry = get_object_or_404(MealPlanEntry, pk=pk)
+    entry = _entry(request, pk)
     form = PlanSlotForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Pick the day and slot to move it to.")
@@ -93,9 +145,10 @@ def plan_move(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def plan_status(request, pk):
-    entry = get_object_or_404(MealPlanEntry, pk=pk)
+    entry = _entry(request, pk)
     status = request.POST.get("status")
     if status in dict(MealPlanEntry.STATUSES):
         entry.status = status
@@ -104,9 +157,10 @@ def plan_status(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def plan_delete(request, pk):
-    entry = get_object_or_404(MealPlanEntry, pk=pk)
+    entry = _entry(request, pk)
     day = entry.date
     entry.delete()
     messages.success(request, "Removed from the plan.")
@@ -114,12 +168,13 @@ def plan_delete(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def settings_save(request):
     """The owner's digest line (superusers only - it's their Telegram)."""
     if not request.user.is_superuser:
         return redirect("albright_meals:week")
-    form = MealsSettingsForm(request.POST, instance=MealsSettings.load())
+    form = MealsSettingsForm(request.POST, instance=MealsSettings.load(request.household))
     if form.is_valid():
         form.save()
         messages.success(request, "Saved.")
@@ -138,7 +193,7 @@ def _can_plan(user):
 
 
 def _list_payload(request):
-    groups = groceries.grouped()
+    groups = groceries.grouped(request.household)
     can_plan = _can_plan(request.user)
     if can_plan:
         from albright_planner.checklist import tasks_for_lines
@@ -149,11 +204,17 @@ def _list_payload(request):
     html = render_to_string("albright_meals/_grocery_list.html", {"groups": groups, "can_plan": can_plan},
                             request=request)
     unchecked = sum(1 for _key, _label, rows in groups for item in rows if not item.checked)
-    return {"version": groceries.list_version(), "html": html, "unchecked": unchecked,
+    return {"version": groceries.list_version(request.household), "html": html, "unchecked": unchecked,
             "checked": sum(len(rows) for _k, _l, rows in groups) - unchecked}
 
 
+def _item(request, pk, queryset=None):
+    return get_object_or_404((queryset if queryset is not None else GroceryItem.objects.active()), pk=pk,
+                             household=request.household)
+
+
 @login_required
+@scope.kitchen_required
 def grocery_page(request):
     if request.method == "POST":
         line = (request.POST.get("line") or "").strip()
@@ -161,8 +222,8 @@ def grocery_page(request):
         if not parsed["name"]:
             messages.error(request, "Type what to add, e.g. \"2 lb chicken thighs\".")
         else:
-            item, merged = groceries.add_item(parsed["name"], parsed["quantity"], parsed["unit"], parsed["aisle"],
-                                              parsed["note"], user=request.user)
+            item, merged = groceries.add_item(request.household, parsed["name"], parsed["quantity"], parsed["unit"],
+                                              parsed["aisle"], parsed["note"], user=request.user)
             if _wants_json(request):
                 return JsonResponse({"ok": True, "merged": merged, **_list_payload(request)})
             messages.success(request, f"{'Updated' if merged else 'Added'} {item.name}.")
@@ -171,24 +232,26 @@ def grocery_page(request):
     return render(request, "albright_meals/groceries.html", {
         "list_html": payload["html"], "version": payload["version"], "unchecked": payload["unchecked"],
         "checked_count": payload["checked"], "week_start": plan.week_start(), "can_plan": _can_plan(request.user),
-        "selecting": request.GET.get("select") == "1", "today": timezone.localdate()})
+        "selecting": request.GET.get("select") == "1", "today": timezone.localdate(), "notices": _notices(request)})
 
 
 @never_cache
 @login_required
+@scope.kitchen_required
 def grocery_list(request):
     """The list as HTML in JSON - what the page fetches every 20 seconds (and after each change).
     ?version=<the one it has>: just {"changed": false} when nothing changed."""
-    version = groceries.list_version()
+    version = groceries.list_version(request.household)
     if request.GET.get("version") == version:
         return JsonResponse({"changed": False, "version": version})
     return JsonResponse({"changed": True, **_list_payload(request)})
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def grocery_toggle(request, pk):
-    item = get_object_or_404(GroceryItem.objects.active(), pk=pk)
+    item = _item(request, pk)
     item.checked = not item.checked
     item.checked_by = request.user if item.checked else None
     item.checked_by_bot = False
@@ -200,19 +263,21 @@ def grocery_toggle(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def grocery_delete(request, pk):
-    GroceryItem.objects.filter(pk=pk).delete()
+    _item(request, pk, GroceryItem.objects.all()).delete()
     if _wants_json(request):
         return JsonResponse({"ok": True, **_list_payload(request)})
     return redirect("albright_meals:groceries")
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def grocery_merge(request, pk):
     """A "Possible duplicate" line's Merge: into the line it was linked to (groceries.merge)."""
-    item = get_object_or_404(GroceryItem.objects.active().select_related("duplicate_of"), pk=pk)
+    item = _item(request, pk, GroceryItem.objects.active().select_related("duplicate_of"))
     kept = groceries.merge(item)
     if _wants_json(request):
         return JsonResponse({"ok": kept is not None, **_list_payload(request)})
@@ -224,26 +289,29 @@ def grocery_merge(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def grocery_clear(request):
     """Archives the checked lines (off the list, but a Planner task's checklist still shows them)."""
     now = timezone.now()
-    count = GroceryItem.objects.active().filter(checked=True).update(archived_at=now, updated_at=now)
+    count = GroceryItem.objects.active().filter(household=request.household, checked=True) \
+        .update(archived_at=now, updated_at=now)
     messages.success(request, f"Cleared {count} checked item{'s' if count != 1 else ''}.")
     return redirect("albright_meals:groceries")
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def grocery_from_week(request):
     start = plan.week_start(plan.parse_day(request.POST.get("start"), timezone.localdate()))
-    entries = MealPlanEntry.objects.filter(date__gte=start, date__lt=start + timedelta(days=7), status="planned") \
-        .exclude(recipe=None).select_related("recipe")
+    entries = MealPlanEntry.objects.filter(household=request.household, date__gte=start, date__lt=start + timedelta(days=7),
+                                           status="planned").exclude(recipe=None).select_related("recipe")
     recipes = [entry.recipe for entry in entries]
     if not recipes:
         messages.error(request, "No planned meals with recipes this week.")
         return redirect("albright_meals:groceries")
-    added, merged, _skipped = groceries.add_recipes(recipes, user=request.user)
+    added, merged, _skipped = groceries.add_recipes(request.household, recipes, user=request.user)
     messages.success(request, f"Added {added} item{'s' if added != 1 else ''} from {len(recipes)} meal"
                               f"{'s' if len(recipes) != 1 else ''}" + (f", {merged} combined with the list" if merged
                                                                        else "") + ".")
@@ -255,33 +323,36 @@ def grocery_from_week(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@scope.kitchen_required
 def ideas(request):
     form = IdeaForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         idea = form.save(commit=False)
-        idea.added_by = request.user
+        idea.added_by, idea.household = request.user, request.household
         idea.save()
         messages.success(request, f"Saved {idea.title}.")
         return redirect("albright_meals:ideas")
     show = request.GET.get("show", "new")
-    qs = MealIdea.objects.select_related("added_by", "planned_entry")
+    mine = MealIdea.objects.filter(household=request.household)
+    qs = mine.select_related("added_by", "planned_entry")
     qs = qs.filter(status="new") if show == "new" else qs.exclude(status="new")
     return render(request, "albright_meals/ideas.html", {
         "form": form, "ideas": qs, "show": show, "slots": SLOTS, "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
-        "new_count": MealIdea.objects.filter(status="new").count()})
+        "new_count": mine.filter(status="new").count(), "notices": _notices(request)})
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def idea_plan(request, pk):
-    idea = get_object_or_404(MealIdea, pk=pk)
+    idea = get_object_or_404(MealIdea, pk=pk, household=request.household)
     form = PlanSlotForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Pick the day and slot.")
         return redirect("albright_meals:ideas")
     day, slot = form.cleaned_data["date"], form.cleaned_data["slot"]
     notes = "\n".join(x for x in (idea.notes, idea.link) if x)
-    entry, _created = plan.set_slot(day, slot, title=idea.title, notes=notes, user=request.user)
+    entry, _created = plan.set_slot(request.household, day, slot, title=idea.title, notes=notes, user=request.user)
     idea.status, idea.planned_entry = "planned", entry
     idea.save(update_fields=["status", "planned_entry", "updated_at"])
     messages.success(request, f"Planned {idea.title} for {day:%a %b} {day.day}.")
@@ -289,35 +360,72 @@ def idea_plan(request, pk):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def idea_decline(request, pk):
-    idea = get_object_or_404(MealIdea, pk=pk)
+    idea = get_object_or_404(MealIdea, pk=pk, household=request.household)
     idea.status = "declined" if idea.status != "declined" else "new"
     idea.save(update_fields=["status", "updated_at"])
     return redirect("albright_meals:ideas")
 
 
 # ---------------------------------------------------------------------------
-# Recipes
+# Recipes: mine, shared with me, the library - with ratings on the cards
 # ---------------------------------------------------------------------------
 
+def _filter_query(request, filters, tab, q, tag):
+    """The current filters as a query string (bookmarkable) - without the page's own tab switch."""
+    params = [("tab", tab)] if tab != "mine" else []
+    if q:
+        params.append(("q", q))
+    if tag:
+        params.append(("tag", tag))
+    if scope.filters_active(filters):
+        params.append(("rated_by", str(filters["rated_by"])))
+        params += [("rating", str(level)) for level in filters["levels"]] + ([("rating", "none")] if filters["none"] else [])
+        if filters["love"]:
+            params.append(("love", "1"))
+    return urlencode(params)
+
+
 @login_required
+@scope.kitchen_required
 def recipes(request):
-    q = (request.GET.get("q") or "").strip()
-    tag = (request.GET.get("tag") or "").strip().lower()
-    qs = Recipe.objects.select_related("created_by")
+    user, household = request.user, request.household
+    tab = request.GET.get("tab", "mine")
+    tab = tab if tab in dict(TABS) else "mine"
+    q = (request.GET.get("q") or "").strip()[:100]
+    tag = (request.GET.get("tag") or "").strip().lower()[:50]
+    filters = scope.parse_filters(request.GET, user, household)
+    base = {"mine": scope.own(household), "shared": scope.shared_with(user, household), "library": scope.library()}[tab]
+    qs = base.select_related("created_by", "household").prefetch_related("shares__shared_with")
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(notes__icontains=q))
-    rows = [r for r in qs if not tag or tag in [t.lower() for t in r.tags]]
-    tags = sorted({t.lower() for r in Recipe.objects.only("tags") for t in (r.tags or [])})
-    return render(request, "albright_meals/recipes.html", {"recipes": rows, "q": q, "tag": tag, "tags": tags})
+    qs = scope.apply_filters(qs, filters, user, household).distinct()
+    rows = [r for r in qs if not tag or tag in [t.lower() for t in (r.tags or [])]
+            or tag in [label.lower() for key, label in STANDARD_TAGS if key in (r.standard_tags or [])]]
+    stamps = scope.stamps(rows, household)
+    mine_by_recipe, others = {}, {}
+    for recipe_pk, ratings in stamps.items():
+        for rating in ratings:
+            if rating.user_id == user.pk:
+                mine_by_recipe[recipe_pk] = rating
+            else:
+                others.setdefault(recipe_pk, []).append(rating)
+    shares = {s.recipe_id: s for s in RecipeShare.objects.filter(shared_with=user, recipe__in=rows).select_related("shared_by")}
+    cards = [{"recipe": r, "mine": mine_by_recipe.get(r.pk), "others": others.get(r.pk, []), "own": r.household_id == household.pk,
+              "share": shares.get(r.pk)} for r in rows]
+    tags = sorted({t.lower() for r in base.only("tags") for t in (r.tags or [])})
+    return render(request, "albright_meals/recipes.html", {
+        "cards": cards, "recipes": rows, "q": q, "tag": tag, "tags": tags, "tab": tab, "tabs": TABS,
+        "filters": filters, "filtering": scope.filters_active(filters), "query": _filter_query(request, filters, tab, q, tag),
+        "members": [m for m in households.members(household) if m.pk != user.pk], "rating_levels": RecipeRating.choices(),
+        "notices": _notices(request), "shared_count": scope.shared_with(user, household).count()})
 
 
-@login_required
-def recipe(request, pk):
-    obj = get_object_or_404(Recipe.objects.select_related("created_by"), pk=pk)
+def _ingredients_for(household, obj):
     ingredients = []
-    listed = groceries.on_list()
+    listed = groceries.on_list(household)
     for index, ingredient in enumerate(obj.ingredients or []):
         name, quantity, unit, note = groceries.ingredient_parts(ingredient)
         original = ingredient.get("original", "") if isinstance(ingredient, dict) else ""
@@ -325,27 +433,41 @@ def recipe(request, pk):
             on_list = [groceries.describe(item) for item in listed.get(groceries.name_key(name), [])] if name else []
             ingredients.append({"index": index, "name": name, "quantity": groceries.format_quantity(quantity),
                                 "unit": unit, "note": note, "original": original, "on_list": on_list})
+    return ingredients
+
+
+@login_required
+@scope.kitchen_required
+def recipe(request, pk):
+    obj, editable = scope.readable_recipe(request.user, request.household, pk)
+    RecipeShare.objects.filter(recipe=obj, shared_with=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
+    ingredients = _ingredients_for(request.household, obj)
     source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
     host = (urlsplit(source_link).hostname or "") if source_link else ""
     mine = RecipeRating.objects.filter(recipe=obj, user=request.user).first()
+    others = [r for r in scope.stamps([obj], request.household).get(obj.pk, []) if r.user_id != request.user.pk]
     labels = dict(STANDARD_TAGS)
+    share = RecipeShare.objects.filter(recipe=obj, shared_with=request.user).select_related("shared_by").first()
     return render(request, "albright_meals/recipe.html", {
-        "my_rating": mine, "rating_levels": RecipeRating.choices(), "needs_tweaks": RecipeRating.NEEDS_TWEAKS,
+        "my_rating": mine, "others": others, "rating_levels": RecipeRating.choices(), "needs_tweaks": RecipeRating.NEEDS_TWEAKS,
         "standard_tags": [labels[key] for key in obj.standard_tags or [] if key in labels],
-        "recipe": obj, "ingredients": ingredients, "step_groups": importer.step_groups(obj.steps),
+        "recipe": obj, "editable": editable, "share": share, "ingredients": ingredients,
+        "step_groups": importer.step_groups(obj.steps),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
+        "shares": obj.shares.select_related("shared_with") if editable else [],
         "picked_count": sum(1 for i in ingredients if i["name"] and not i["on_list"])})
 
 
 @login_required
+@scope.kitchen_required
 def recipe_edit(request, pk=None):
-    obj = get_object_or_404(Recipe, pk=pk) if pk else None
+    obj = scope.own_recipe(request.household, pk) if pk else None
     form = RecipeForm(request.POST or None, instance=obj)
     if request.method == "POST" and form.is_valid():
         saved = form.save(commit=False)
         if not saved.pk:
-            saved.created_by = request.user
+            saved.created_by, saved.household = request.user, request.household
         saved.save()
         messages.success(request, f"Saved {saved.title}.")
         return redirect("albright_meals:recipe", pk=saved.pk)
@@ -353,14 +475,16 @@ def recipe_edit(request, pk=None):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def recipe_rate(request, pk):
-    """The recipe's Rating drop-down: this person's own level (blank removes it) and, optionally, a note."""
-    obj = get_object_or_404(Recipe, pk=pk)
+    """My own stamp on a recipe I can read (blank removes it) and, optionally, a note - from the recipe page or a
+    card. Only my household ever sees it."""
+    obj, _editable = scope.readable_recipe(request.user, request.household, pk)
     raw = request.POST.get("level", "")
     level = int(raw) if raw.isdigit() and int(raw) in dict(RecipeRating.LEVELS) else None
     if raw and level is None:
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        if _wants_json(request):
             return JsonResponse({"ok": False, "error": "Pick one of the ratings."}, status=400)
         messages.error(request, "Pick one of the ratings.")
         return redirect("albright_meals:recipe", pk=pk)
@@ -368,46 +492,50 @@ def recipe_rate(request, pk):
         RecipeRating.objects.filter(recipe=obj, user=request.user).delete()
         rating = None
     else:
-        rating, _ = RecipeRating.objects.update_or_create(recipe=obj, user=request.user, defaults={
-            "level": level, "note": request.POST.get("note", "").strip()[:500]})
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        defaults = {"level": level}
+        if "note" in request.POST:
+            defaults["note"] = request.POST.get("note", "").strip()[:500]
+        rating, _ = RecipeRating.objects.update_or_create(recipe=obj, user=request.user, defaults=defaults)
+    if _wants_json(request):
         return JsonResponse({"ok": True, "level": rating.level if rating else None,
                              "label": rating.get_level_display() if rating else "",
                              "meaning": rating.meaning if rating else ""})
     messages.success(request, f"Rated {rating.emoji} {rating.get_level_display()}." if rating else "Rating cleared.")
-    return redirect("albright_meals:recipe", pk=pk)
+    return redirect(request.POST.get("next") or reverse("albright_meals:recipe", args=[pk]))
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def recipe_plan(request, pk):
-    obj = get_object_or_404(Recipe, pk=pk)
+    obj = scope.own_recipe(request.household, pk)
     form = PlanSlotForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Pick the day and slot.")
         return redirect("albright_meals:recipe", pk=pk)
     day, slot = form.cleaned_data["date"], form.cleaned_data["slot"]
-    plan.set_slot(day, slot, recipe=obj, user=request.user)
+    plan.set_slot(request.household, day, slot, recipe=obj, user=request.user)
     messages.success(request, f"Planned {obj.title} for {day:%a %b} {day.day}.")
     return redirect(_week_url(day))
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def recipe_groceries(request, pk):
     """The recipe page's "Add selected to grocery list" (picked=1, ingredient=<position>...): the ticked ones,
     combined with a same-unit line already there, else linked to it as a possible duplicate. Without picked:
     every ingredient, except any already on the list from this recipe (unchecked)."""
-    obj = get_object_or_404(Recipe, pk=pk)
+    obj = scope.own_recipe(request.household, pk)
     if request.POST.get("picked") == "1":
         indexes = [int(v) for v in request.POST.getlist("ingredient") if v.isdigit()]
         if not indexes:
             messages.error(request, "Tick the ingredients to add first.")
         else:
-            counts = groceries.add_selected(obj, indexes, user=request.user)
+            counts = groceries.add_selected(request.household, obj, indexes, user=request.user)
             messages.success(request, groceries.summary(counts) + ".")
         return redirect(reverse("albright_meals:recipe", args=[pk]) + "#ingredients")
-    added, merged, skipped = groceries.add_recipes([obj], user=request.user, skip_listed=True)
+    added, merged, skipped = groceries.add_recipes(request.household, [obj], user=request.user, skip_listed=True)
     if not added and not merged and skipped:
         messages.info(request, "Everything from this recipe is already on the grocery list.")
     else:
@@ -415,6 +543,70 @@ def recipe_groceries(request, pk):
                                   + (f", {merged} combined with what was there" if merged else "")
                                   + (f" ({skipped} already on it from this recipe)" if skipped else "") + ".")
     return redirect("albright_meals:recipe", pk=pk)
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_save_copy(request, pk):
+    """"Save to my recipes": a copy in my household - credited "Saved from <their household>", with the original
+    source link - that we can edit, rate and plan. The original (and its ratings) stay theirs."""
+    obj, editable = scope.readable_recipe(request.user, request.household, pk)
+    if editable:
+        return redirect("albright_meals:recipe", pk=pk)
+    fields = ("title", "description", "ingredients", "steps", "prep_minutes", "cook_minutes", "total_time_minutes",
+              "servings", "tags", "standard_tags", "source_url", "source_name", "author", "image_url", "notes")
+    copy = Recipe(**{name: getattr(obj, name) for name in fields}, household=request.household, created_by=request.user,
+                  saved_from=obj, saved_from_name=obj.household.name[:100], visibility=Recipe.HOUSEHOLD)
+    copy.save()
+    messages.success(request, f"Saved {copy.title} to your recipes.")
+    return redirect("albright_meals:recipe", pk=copy.pk)
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_visibility(request, pk):
+    """Put one of our recipes in the shared library (read-only for every Meals user), or take it out. Copies others
+    saved stay theirs."""
+    obj = scope.own_recipe(request.household, pk)
+    obj.visibility = Recipe.LIBRARY if request.POST.get("visibility") == Recipe.LIBRARY else Recipe.HOUSEHOLD
+    obj.save(update_fields=["visibility", "updated_at"])
+    messages.success(request, "In the shared library - everyone with Meals can read it and save a copy."
+                     if obj.visibility == Recipe.LIBRARY else "Back to just your household. Copies others saved stay theirs.")
+    return redirect("albright_meals:recipe", pk=pk)
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_share(request, pk):
+    """Share one of our recipes with one person outside the household (their exact username or email - nobody is
+    ever listed or suggested), or stop sharing it. They must be able to open Meals."""
+    from albright_labs import app_access
+    from albright_labs.models import UserPreference
+    obj = scope.own_recipe(request.household, pk)
+    action = request.POST.get("action", "add")
+    result = {"ok": True}
+    if action == "remove":
+        RecipeShare.objects.filter(recipe=obj, shared_with_id=request.POST.get("user") or 0).delete()
+        result["message"] = "No longer shared."
+    else:
+        person = households.find_person(request.POST.get("who", ""))
+        if person is None or not app_access.can_use(person, UserPreference.for_user(person), "meals"):
+            result = {"ok": False, "error": "No one with Meals matches that exactly - check their username or email."}
+        elif household_of(person) == request.household:
+            result = {"ok": False, "error": "They're in your household - they already see it."}
+        else:
+            _share, created = RecipeShare.objects.get_or_create(recipe=obj, shared_with=person,
+                                                                defaults={"shared_by": request.user})
+            result["message"] = f"Shared with {_person(person)}." if created else f"Already shared with {_person(person)}."
+    result["shares"] = [{"user": s.shared_with_id, "name": _person(s.shared_with)}
+                        for s in obj.shares.select_related("shared_with")]
+    if _wants_json(request):
+        return JsonResponse(result, status=200 if result["ok"] else 400)
+    (messages.success if result["ok"] else messages.error)(request, result.get("message") or result.get("error"))
+    return redirect(request.POST.get("next") or reverse("albright_meals:recipe", args=[pk]))
 
 
 # ---------------------------------------------------------------------------
@@ -443,6 +635,7 @@ def _import_response(request, context):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def recipe_import(request):
     form = ImportLinkForm(request.POST)
@@ -452,11 +645,11 @@ def recipe_import(request):
         return _import_response(request, context)
     url = form.cleaned_data["url"]
     try:
-        existing = importer.find_saved(url)
+        existing = importer.find_saved(request.household, url)
         data = None
         if not existing:
             data = importer.read_page(url)
-            existing = importer.find_saved(data["source_url"], data["page_url"])
+            existing = importer.find_saved(request.household, data["source_url"], data["page_url"])
     except importer.RecipeImportError as exc:
         context.update(import_status="error", import_error=exc.message)
         return _import_response(request, context)
@@ -469,6 +662,7 @@ def recipe_import(request):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def recipe_import_save(request):
     form = ImportPreviewForm(request.POST)
@@ -482,11 +676,12 @@ def recipe_import_save(request):
         return render(request, "albright_meals/recipe_import.html", {
             "import_status": "needs_review" if data["needs_review"] else "preview", "import_data": data,
             "import_form": form, "import_url": data.get("page_url", "")})
-    existing = importer.find_saved(data["source_url"], data["page_url"])
+    existing = importer.find_saved(request.household, data["source_url"], data["page_url"])
     if existing:
         messages.info(request, f"Already saved: {existing.title}.")
         return redirect("albright_meals:recipe", pk=existing.pk)
-    saved = importer.save_new({**data, **form.recipe_fields(data)}, user=request.user)
+    with transaction.atomic():
+        saved = importer.save_new({**data, **form.recipe_fields(data)}, request.household, user=request.user)
     imports.pop(import_id, None)
     request.session[IMPORTS_SESSION_KEY] = imports
     messages.success(request, f"Saved {saved.title}." + (" It's marked \"Needs review\" - check it against the "
@@ -495,9 +690,10 @@ def recipe_import_save(request):
 
 
 @login_required
+@scope.kitchen_required
 @require_POST
 def recipe_reimport(request, pk):
-    obj = get_object_or_404(Recipe, pk=pk)
+    obj = scope.own_recipe(request.household, pk)
     try:
         importer.reimport(obj)
     except importer.RecipeImportError as exc:

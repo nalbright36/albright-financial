@@ -1,0 +1,6 @@
+{% comment %}"Nathan shared Family Meatballs with you" - recipes shared with me I haven't opened yet (views._notices). Opening one, or Dismiss, clears it.{% endcomment %}{% if notices %}
+<div class="meals-notices" id="meals-notices" role="status">
+    {% for n in notices %}<p class="meals-notice"><strong>{{ n.shared_by.first_name|default:n.shared_by.username|default:"Someone" }}</strong> shared <a href="{% url 'albright_meals:recipe' n.recipe.pk %}">{{ n.recipe.title }}</a> with you</p>{% endfor %}
+    <form method="post" action="{% url 'albright_meals:notices_seen' %}" class="meals-notices__dismiss">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="meals-link-btn">Dismiss</button></form>
+</div>
+{% endif %}

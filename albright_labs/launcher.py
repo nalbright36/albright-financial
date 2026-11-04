@@ -61,7 +61,12 @@ def opps(user):
 
 def meals(user):
     from albright_meals.plan import tonight
-    dinner = tonight()
+
+    from .models import household_of
+    household = household_of(user)
+    if household is None:
+        return "Set up your kitchen"
+    dinner = tonight(household)
     if not dinner:
         return "No dinner planned"
     title = dinner.display_title

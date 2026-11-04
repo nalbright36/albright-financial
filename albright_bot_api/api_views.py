@@ -175,6 +175,8 @@ GET  ideas?page=N                                     scope: ideas:read
 
 MEALS (the household's meal planning - you are the "Recipe Bot")
 ------------------------------------------------------------------
+Everything here is the token owner's HOUSEHOLD's - its plan, grocery list, ideas and recipes; another household's are
+404s. If the owner isn't in a household yet, every meals endpoint answers 409 until they set one up in Meals.
 Slots: "breakfast" | "lunch" | "dinner" | "snack" - one meal per day per slot. Aisles: "produce" | "meat" |
 "dairy" | "bakery" | "pantry" | "frozen" | "household" | "other". Quantities: a number (2, 0.5) or a string
 ("1 1/2"), up to 100000. "added_by" is "Recipe Bot" for what you created, else the person's name.
@@ -212,13 +214,21 @@ POST meals/ideas                                      scope: meals:write
   Body: {"title": str (required, <=200), "notes": str (optional), "link": http(s) URL (optional)}.
   Returns 201 {"id", ...}.
 
-GET  meals/recipes?q=<words>                          scope: meals:read
-  Recipes, most recently changed first (up to 200; q filters by title). Each: {"id", "title", "description",
-  "ingredients": [{"name", "quantity", "unit", "note"}], "steps": [str], "prep_minutes", "cook_minutes",
-  "servings", "tags", "source_url", "image_url", "notes", "added_by", "updated_at"}.
+GET  meals/recipes?scope=household&q=<words>&rated_by=me&rating=5&rating=6&love=1    scope: meals:read
+  Recipes, most recently changed first (up to 200). scope: "household" (default - the owner's household's),
+  "shared" (other households' recipes shared with the owner - read-only) or "library" (the shared recipe library -
+  read-only). q filters by title. Rating filters (the Recipes page's), judged by the owner's household's stamps:
+  rated_by = "me" (default) | "anyone" (anyone in the household) | <a household member's user id>; rating = 1-6
+  (Won't eat again, Not for me, Needs tweaks, Will eat again, Favorite, Staple) or "none" (not rated) - repeat it
+  for several; love=1: at least two of the household rated it and all Favorite or Staple. Each recipe:
+  {"id", "title", "description", "ingredients": [{"name", "quantity", "unit", "note"}], "steps": [str],
+  "prep_minutes", "cook_minutes", "servings", "tags", "source_url", "image_url", "notes", "added_by", "updated_at",
+  "ours": bool, "visibility": "household" | "library", "ratings": [{"by", "level", "label"}] (the household's
+  stamps only - never another household's)}. Returns {"scope", "recipes"}. Ratings are read-only here.
 
 POST meals/recipes                                    scope: meals:write
-  Create a recipe, or update the one with the same title (case-insensitive) - only the fields you send change.
+  Create a recipe in the owner's household, or update the household's one with the same title (case-insensitive) -
+  only the fields you send change.
   Body: {"title": str (required, <=200), "description", "notes" (<=5000), "ingredients": [{"name" (required,
   <=120), "quantity" (<=20), "unit" (<=20), "note" (<=200)} or "2 lb chicken thighs", ...] (<=100),
   "steps": [str (<=2000)] (<=100), "prep_minutes" / "cook_minutes" (0-2880), "servings" (1-100),

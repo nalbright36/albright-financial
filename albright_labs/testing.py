@@ -60,3 +60,15 @@ def with_apps(user, keys=None):
     keys = apps_registry.grantable_keys() if keys is None else list(keys)
     UserPreference.objects.update_or_create(user=user, defaults={"allowed_apps": keys})
     return user
+
+
+def kitchen(user, *others, name="Test household"):
+    """Put a test user (and any others) in a household - Meals' data is a household's. Returns the household."""
+    from .models import Household, HouseholdMember, household_of
+    household = household_of(user)
+    if household is None:
+        household = Household.objects.create(name=name, created_by=user)
+        HouseholdMember.objects.create(household=household, user=user)
+    for other in others:
+        HouseholdMember.objects.get_or_create(user=other, defaults={"household": household})
+    return household

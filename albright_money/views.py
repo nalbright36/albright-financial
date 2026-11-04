@@ -600,5 +600,5 @@ def household(request):
         return redirect("albright_money:household")
     return render(request, "albright_money/household.html", {
         "household": mine, "members": money.members(mine),
-        "candidates": money.money_users().exclude(money_membership__isnull=False).exclude(pk=user.pk)})
+        "candidates": money.money_users().exclude(household_membership__isnull=False).exclude(pk=user.pk)})
 

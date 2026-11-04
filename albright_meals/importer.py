@@ -830,18 +830,18 @@ RECIPE_FIELDS = ("title", "description", "ingredients", "steps", "servings", "pr
                  "total_time_minutes", "image_url", "author", "source_name", "needs_review")
 
 
-def find_saved(*urls):
-    """The recipe already saved from any of these links (compared by normalize_url), or None."""
+def find_saved(household, *urls):
+    """The household's recipe already saved from any of these links (compared by normalize_url), or None."""
     from .models import Recipe
     keys = {normalize_url(u)[:500] for u in urls if u}
-    return Recipe.objects.filter(source_key__in=keys).order_by("pk").first() if keys else None
+    return Recipe.objects.filter(household=household, source_key__in=keys).order_by("pk").first() if keys else None
 
 
-def save_new(data, user=None, token=None):
+def save_new(data, household, user=None, token=None):
     from django.utils import timezone
 
     from .models import Recipe
-    recipe = Recipe(**{key: data.get(key) for key in RECIPE_FIELDS}, source_url=data["source_url"],
+    recipe = Recipe(**{key: data.get(key) for key in RECIPE_FIELDS}, household=household, source_url=data["source_url"],
                     imported_at=timezone.now(), from_bot=token is not None, bot_token=token,
                     created_by=user if user and user.is_authenticated else None)
     recipe.title = recipe.title or "Imported recipe"
@@ -851,16 +851,16 @@ def save_new(data, user=None, token=None):
     return recipe
 
 
-def import_url(url, user=None, token=None, session=None, ai_client=None):
-    """-> (recipe, "created" | "already_saved" | "needs_review"). Raises RecipeImportError."""
-    existing = find_saved(url)
+def import_url(url, household, user=None, token=None, session=None, ai_client=None):
+    """Into this household -> (recipe, "created" | "already_saved" | "needs_review"). Raises RecipeImportError."""
+    existing = find_saved(household, url)
     if existing:
         return existing, "already_saved"
     data = read_page(url, session=session, ai_client=ai_client)
-    existing = find_saved(data["source_url"], data["page_url"])
+    existing = find_saved(household, data["source_url"], data["page_url"])
     if existing:
         return existing, "already_saved"
-    recipe = save_new(data, user=user, token=token)
+    recipe = save_new(data, household, user=user, token=token)
     return recipe, "needs_review" if recipe.needs_review else "created"
 
 

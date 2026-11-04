@@ -3,8 +3,13 @@
 {% block page_title %}{{ recipe.title }} · {% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
-    <a href="{% url 'albright_meals:recipes' %}" class="meals-back">&larr; Recipes</a>
+    <a href="{% url 'albright_meals:recipes' %}{% if not editable %}?tab={% if share %}shared{% else %}library{% endif %}{% endif %}" class="meals-back">&larr; Recipes</a>
     <article class="meals-recipe">
+        {# Not ours (the library, or shared with me): read-only - "Save to my recipes" makes our own copy. #}
+        {% if not editable %}<div class="card meals-readonly" id="recipe-readonly">
+            <p>{% if share %}<strong>{{ share.shared_by.first_name|default:share.shared_by.username|default:"Someone" }}</strong> shared this with you{% else %}From the <strong>Recipe library</strong>{% endif %} &middot; {{ recipe.household.name }}'s recipe, read-only.</p>
+            <form method="post" action="{% url 'albright_meals:recipe_save_copy' recipe.pk %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm" id="recipe-save-copy">Save to my recipes</button></form>
+        </div>{% endif %}
         {# Rating: this person's own (others never see it here); blank until they pick one. Saves on change (static/meals/recipe.js); without JS, Save. #}
         <form method="post" action="{% url 'albright_meals:recipe_rate' recipe.pk %}" class="meals-rating" id="recipe-rating" data-needs-tweaks="{{ needs_tweaks }}">{% csrf_token %}
             <label for="recipe-rating-level" class="meals-rating__label">Rating</label>
@@ -14,15 +19,16 @@
             </select>
             <button type="submit" class="btn btn-secondary btn-sm meals-rating__save">Save</button>
             <span class="meals-rating__status" id="recipe-rating-status" role="status" aria-live="polite"></span>
-            <p class="meals-hint meals-rating__meaning" id="recipe-rating-meaning">{% if my_rating %}{{ my_rating.meaning }}{% else %}Only you see your rating.{% endif %}</p>
+            <p class="meals-hint meals-rating__meaning" id="recipe-rating-meaning">{% if my_rating %}{{ my_rating.meaning }}{% else %}Only your household sees your rating.{% endif %}</p>
             <div class="field meals-rating__note"{% if my_rating.level != needs_tweaks %} hidden{% endif %} id="recipe-rating-note-field">
                 <label for="recipe-rating-note">What would you change?</label>
                 <input type="text" name="note" id="recipe-rating-note" class="ledger-input" maxlength="500" value="{{ my_rating.note|default:'' }}" placeholder="Less salt, add lime&hellip;">
             </div>
         </form>
+        {% if others %}<p class="meals-stamps" id="recipe-stamps" aria-label="Your household's ratings">{% for r in others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</p>{% endif %}
         <h1 class="meals-head__title">{{ recipe.title }}{% if recipe.needs_review %} <span class="badge warn meals-review-badge" title="The AI read this from the page's text - check it against the original">Needs review</span>{% endif %}</h1>
         <p class="meals-head__sub">
-            {% if recipe.prep_minutes %}Prep {{ recipe.prep_minutes }} min &middot; {% endif %}{% if recipe.cook_minutes %}Cook {{ recipe.cook_minutes }} min &middot; {% endif %}{% if recipe.total_time_minutes %}Total {{ recipe.total_time_minutes }} min &middot; {% endif %}{% if recipe.servings %}Serves {{ recipe.servings }} &middot; {% endif %}Added by <span class="meals-by">{{ recipe.author_label|default:"someone" }}</span>
+            {% if recipe.prep_minutes %}Prep {{ recipe.prep_minutes }} min &middot; {% endif %}{% if recipe.cook_minutes %}Cook {{ recipe.cook_minutes }} min &middot; {% endif %}{% if recipe.total_time_minutes %}Total {{ recipe.total_time_minutes }} min &middot; {% endif %}{% if recipe.servings %}Serves {{ recipe.servings }} &middot; {% endif %}Added by <span class="meals-by">{{ recipe.author_label|default:"someone" }}</span>{% if recipe.saved_from_name %} &middot; <span id="recipe-saved-from">Saved from {{ recipe.saved_from_name }}</span>{% endif %}{% if editable and recipe.visibility == "library" %} &middot; <span class="meals-chip">In the shared library</span>{% endif %}
         </p>
         {% if source_link %}<p class="meals-source" id="recipe-source">Source: <a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">{{ recipe.source_name|default:source_host }}</a>{% if recipe.author %} &middot; by {{ recipe.author }}{% endif %}</p>{% elif recipe.author %}<p class="meals-source">By {{ recipe.author }}</p>{% endif %}
         {% if recipe.needs_review %}<p class="meals-hint">The AI read this recipe from the page's text because the page had no recipe data - check it against the original, then untick "Needs review" in Edit.</p>{% endif %}
@@ -31,7 +37,7 @@
         {% if standard_tags %}<div class="meals-tags meals-tags--standard" id="recipe-standard-tags">{% for label in standard_tags %}<span class="meals-tag meals-tag--standard">{{ label }}</span>{% endfor %}</div>{% endif %}
         {% if recipe.tags %}<div class="meals-tags">{% for t in recipe.tags %}<a href="{% url 'albright_meals:recipes' %}?tag={{ t|urlencode }}" class="meals-tag">{{ t }}</a>{% endfor %}</div>{% endif %}
 
-        <div class="meals-recipe__actions">
+        {% if editable %}<div class="meals-recipe__actions">
             <form method="post" action="{% url 'albright_meals:recipe_plan' recipe.pk %}" class="meals-inline" id="recipe-plan-form">{% csrf_token %}
                 <div class="field"><label for="{{ plan_form.date.id_for_label }}">Day</label>{{ plan_form.date }}</div>
                 <div class="field"><label for="{{ plan_form.slot.id_for_label }}">Slot</label>{{ plan_form.slot }}</div>
@@ -43,11 +49,20 @@
                 <small class="meals-hint">Replaces the title, description, ingredients, steps, times and servings with the source's current version. Tags and notes stay.</small>
             </form>
             {% endif %}
-        </div>
+            <div class="meals-share-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-share-open="{% url 'albright_meals:recipe_share' recipe.pk %}" data-share-title="{{ recipe.title }}" data-share-link="{% url 'albright_meals:recipe' recipe.pk %}" data-share-list='[{% for s in shares %}{"user": {{ s.shared_with_id }}, "name": "{{ s.shared_with.first_name|default:s.shared_with.username|escapejs }}"}{% if not forloop.last %}, {% endif %}{% endfor %}]'>Share</button>
+                <form method="post" action="{% url 'albright_meals:recipe_visibility' recipe.pk %}" class="meals-inline-form">{% csrf_token %}
+                    <input type="hidden" name="visibility" value="{% if recipe.visibility == 'library' %}household{% else %}library{% endif %}">
+                    <button type="submit" class="btn btn-secondary btn-sm" id="recipe-visibility">{% if recipe.visibility == "library" %}Take out of the library{% else %}Put in the shared library{% endif %}</button>
+                </form>
+            </div>
+        </div>{% endif %}
 
         <section class="card meals-section" id="ingredients">
             <h2 class="meals-section__title">Ingredients</h2>
-            {% if ingredients %}
+            {% if ingredients and not editable %}
+            <ul class="meals-ingredients">{% for i in ingredients %}<li>{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}</li>{% endfor %}</ul>
+            {% elif ingredients %}
             {# Tick the ones to buy (static/meals/recipe.js keeps the count; without JS it's a plain form). Ones already on the list (unchecked) start unticked, with what's there. #}
             <form method="post" action="{% url 'albright_meals:recipe_groceries' recipe.pk %}" id="ingredient-form">{% csrf_token %}
                 <input type="hidden" name="picked" value="1">
@@ -73,8 +88,10 @@
         </section>
 
         {% if recipe.notes %}<section class="card meals-section"><h2 class="meals-section__title">Notes</h2><p>{{ recipe.notes|linebreaksbr }}</p></section>{% endif %}
-        <p class="meals-hint">{% if source_link %}<a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">Original recipe</a> &middot; {% endif %}<a href="{% url 'albright_meals:recipe_edit' recipe.pk %}">Edit this recipe</a></p>
+        <p class="meals-hint">{% if source_link %}<a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">Original recipe</a>{% if editable %} &middot; {% endif %}{% endif %}{% if editable %}<a href="{% url 'albright_meals:recipe_edit' recipe.pk %}">Edit this recipe</a>{% endif %}</p>
     </article>
 </div>
+{% if editable %}{% include "albright_meals/_share_dialog.html" %}{% endif %}
 <script src="{% static_version 'meals/recipe.js' %}" defer></script>
+<script src="{% static_version 'meals/ratings.js' %}" defer></script>
 {% endblock %}

@@ -1,0 +1,54 @@
+{% extends "index.html" %}
+{% block page_title %}Household · {% endblock %}
+{% block content %}
+{% comment %}
+My account > Household (labs.views.household): one household per person, shared by Meals and Money. Its creator
+renames it, adds people by their exact username or email (nobody is ever listed or suggested), invites someone new
+(an invite link - signing up puts them straight in, with the apps the household uses that the creator has) and
+removes people. Anyone else in it can leave.
+{% endcomment %}
+<div class="container household-page" style="padding-top: 32px; padding-bottom: 48px; max-width: 640px;">
+    <h1 style="margin: 0 0 6px;">Household</h1>
+    {% if household %}
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">Everyone here shares Meals (plan, groceries, ideas, recipes) and Money's shared accounts and budget. Personal things stay personal.</p>
+    <section class="card" style="margin-bottom: 16px;" id="household-members">
+        {% if manage %}<form method="post" style="display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px;">{% csrf_token %}<input type="hidden" name="action" value="rename">
+            <label for="hh-name" class="visually-hidden">Household name</label>
+            <input type="text" name="name" id="hh-name" class="ledger-input" maxlength="100" value="{{ household.name }}" style="flex: 1 1 200px; min-height: 40px;">
+            <button type="submit" class="btn btn-secondary btn-sm">Rename</button></form>
+        {% else %}<h2 style="margin: 0 0 12px; font-size: 1.0625rem;">{{ household.name }}</h2>{% endif %}
+        <ul style="list-style: none; margin: 0; padding: 0;">{% for m in members %}
+            <li style="display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; border-top: 1px solid var(--border);">
+                <span><strong>{{ m.first_name|default:m.username }}</strong> <span style="color: var(--text-secondary); font-size: 0.8125rem;">{{ m.username }}{% if m.pk == household.created_by_id %} &middot; created it{% endif %}{% if m == request.user %} &middot; you{% endif %}</span></span>
+                {% if manage and m != request.user %}<form method="post" style="margin: 0;" data-confirm="Remove {{ m.first_name|default:m.username }} from {{ household.name }}? They'll stop seeing what it shares.">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ m.pk }}"><button type="submit" class="btn btn-secondary btn-sm">Remove</button></form>{% endif %}
+            </li>{% endfor %}</ul>
+    </section>
+    {% if manage %}
+    <section class="card" style="margin-bottom: 16px;" id="household-add">
+        <form method="post" style="margin: 0 0 14px;">{% csrf_token %}<input type="hidden" name="action" value="add">
+            <label for="hh-who" style="display: block; font-weight: 600; margin-bottom: 4px;">Add someone who has an account</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;"><input type="text" name="who" id="hh-who" class="ledger-input" placeholder="Their exact username or email" autocomplete="off" autocapitalize="off" spellcheck="false" required style="flex: 1 1 220px; min-height: 40px;">
+            <button type="submit" class="btn btn-primary btn-sm">Add</button></div>
+        </form>
+        <form method="post" style="margin: 0;">{% csrf_token %}<input type="hidden" name="action" value="invite">
+            <label for="hh-email" style="display: block; font-weight: 600; margin-bottom: 4px;">Invite someone new</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;"><input type="email" name="email" id="hh-email" class="ledger-input" placeholder="Their email" required style="flex: 1 1 200px; min-height: 40px;">
+            <input type="text" name="name" class="ledger-input" placeholder="First name (optional)" maxlength="120" style="flex: 1 1 140px; min-height: 40px;" aria-label="Their first name (optional)">
+            <button type="submit" class="btn btn-secondary btn-sm">Send invite</button></div>
+            <p style="margin: 6px 0 0; font-size: 0.75rem; color: var(--text-secondary);">Signing up with it puts them straight into {{ household.name }}, with Meals and Money if you have them.</p>
+        </form>
+        {% if new_link %}<p id="household-invite-link" style="margin: 12px 0 0; font-size: 0.8125rem; overflow-wrap: anywhere;">Invite link: <a href="{{ new_link }}">{{ new_link }}</a></p>{% endif %}
+        {% if invites %}<p style="margin: 12px 0 0; font-size: 0.8125rem; color: var(--text-secondary);">Waiting: {% for i in invites %}{{ i.email }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    </section>
+    {% else %}
+    <form method="post" data-confirm="Leave {{ household.name }}? You'll stop seeing what it shares.">{% csrf_token %}<input type="hidden" name="action" value="leave"><button type="submit" class="btn btn-secondary btn-sm">Leave {{ household.name }}</button></form>
+    {% endif %}
+    {% else %}
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">You're not in a household yet. Make one - or ask someone to add you to theirs.</p>
+    <form method="post" class="card" style="display: flex; gap: 8px; flex-wrap: wrap;">{% csrf_token %}<input type="hidden" name="action" value="create">
+        <label for="hh-new" class="visually-hidden">Household name</label>
+        <input type="text" name="name" id="hh-new" class="ledger-input" maxlength="100" placeholder="{{ request.user.first_name|default:request.user.username }}'s household" style="flex: 1 1 220px; min-height: 40px;">
+        <button type="submit" class="btn btn-primary">Create household</button></form>
+    {% endif %}
+</div>
+{% endblock %}

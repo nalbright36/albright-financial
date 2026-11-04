@@ -73,6 +73,10 @@ def kinds_for(user, allowed=None):
 
 
 def _queryset(kind, user):
+    if kind.model == "albright_meals.Recipe":
+        from albright_labs.models import household_of
+        from albright_meals import scope
+        return scope.readable(user, household_of(user))
     qs = kind.model_class.objects.all()
     return qs.filter(**{kind.owner_field: user}) if kind.owner_field else qs
 

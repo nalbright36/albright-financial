@@ -6,6 +6,8 @@ app_name = "albright_meals"
 
 urlpatterns = [
     path("", views.week, name="week"),
+    path("setup/", views.setup, name="setup"),
+    path("notices/seen/", views.notices_seen, name="notices_seen"),
     path("plan/add/", views.plan_add, name="plan_add"),
     path("plan/<int:pk>/", views.plan_entry, name="plan_entry"),
     path("plan/<int:pk>/move/", views.plan_move, name="plan_move"),
@@ -30,6 +32,9 @@ urlpatterns = [
     path("recipes/<int:pk>/edit/", views.recipe_edit, name="recipe_edit"),
     path("recipes/<int:pk>/plan/", views.recipe_plan, name="recipe_plan"),
     path("recipes/<int:pk>/rate/", views.recipe_rate, name="recipe_rate"),
+    path("recipes/<int:pk>/save-copy/", views.recipe_save_copy, name="recipe_save_copy"),
+    path("recipes/<int:pk>/visibility/", views.recipe_visibility, name="recipe_visibility"),
+    path("recipes/<int:pk>/share/", views.recipe_share, name="recipe_share"),
     path("recipes/<int:pk>/groceries/", views.recipe_groceries, name="recipe_groceries"),
     path("recipes/<int:pk>/reimport/", views.recipe_reimport, name="recipe_reimport"),
 ]

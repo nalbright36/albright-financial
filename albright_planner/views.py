@@ -474,7 +474,9 @@ def toggle(request, pk):
     if occurrence and request.POST.get("all_subtasks") == "1" and planner.valid_occurrence(item, occurrence) \
             and not item.completions.filter(occurrence_date=occurrence).exists():
         # "Mark all subtasks done too?" - Yes (a grocery row needs Meals, as checking it anywhere does)
-        if sources.can_open(request.user, "meals") or not item.checklist.filter(grocery_item__isnull=False).exists():
+        groceries_ok = all(_can_check_grocery(request.user, row.grocery_item)
+                           for row in item.checklist.filter(grocery_item__isnull=False).select_related("grocery_item"))
+        if groceries_ok:
             checklist.mark_all(item, occurrence, request.user)
     done = planner.toggle(item, occurrence, request.user, done=True if request.POST.get("all_subtasks") == "1"
                           else None) if occurrence else None
@@ -491,6 +493,14 @@ def toggle(request, pk):
     return redirect(_next(request))
 
 
+def _can_check_grocery(user, line):
+    """A grocery row checks the line on a household's grocery list itself: only someone who can open Meals and is in
+    that household (a task shared with someone outside it still shows them the row - read-only)."""
+    from albright_labs.models import household_of
+    return sources.can_open(user, "meals") and line is not None and household_of(user) is not None \
+        and line.household_id == household_of(user).pk
+
+
 @login_required
 @require_POST
 def checklist_toggle(request, pk, row_id):
@@ -500,8 +510,8 @@ def checklist_toggle(request, pk, row_id):
     item = _editable(request, pk)
     row = get_object_or_404(item.checklist.select_related("grocery_item"), pk=row_id)
     occurrence = _day(request.POST.get("date")) or planner.current_or_first(item)
-    if (row.grocery_item_id and not sources.can_open(request.user, "meals")) or not row.applies_to(occurrence) \
-            or not planner.valid_occurrence(item, occurrence):
+    if (row.grocery_item_id and not _can_check_grocery(request.user, row.grocery_item)) \
+            or not row.applies_to(occurrence) or not planner.valid_occurrence(item, occurrence):
         raise Http404
     before = {r.pk: r.checked for r in checklist.occurrence_rows(item, occurrence)}
     checklist.set_checked(row, occurrence, not before.get(row.pk), request.user)
@@ -535,7 +545,10 @@ def from_groceries(request):
     from albright_meals.models import GroceryItem
     back = _next(request, "albright_meals:groceries")
     ids = [int(pk) for pk in request.POST.getlist("item") if pk.isdigit()]
-    lines = list(GroceryItem.objects.active().filter(pk__in=ids).order_by("aisle", "checked", "name", "pk"))
+    from albright_labs.models import household_of
+    # Only the user's own household's list (another household's lines are never picked up).
+    lines = list(GroceryItem.objects.active().filter(pk__in=ids, household=household_of(request.user))
+                 .order_by("aisle", "checked", "name", "pk"))
     form = GroceryTaskForm(request.POST)
     if not lines:
         messages.error(request, "Pick at least one item for the task.")

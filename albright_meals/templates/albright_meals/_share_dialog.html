@@ -1,0 +1,23 @@
+{% comment %}
+Share a recipe outside the household (views.recipe_share; static/meals/ratings.js opens it for the button pressed):
+type someone's exact username or email - nobody is ever listed or suggested; they need Meals. Who it's shared with,
+each with Remove. "Copy link" copies the recipe's address - it only opens for people it's shared with (or, for a
+library recipe, anyone with Meals).
+{% endcomment %}
+<dialog class="meals-dialog" id="share-dialog" aria-labelledby="share-dialog-h">
+    <form method="post" class="meals-share-form" id="share-form" data-share-form>{% csrf_token %}
+        <h2 class="meals-dialog__title" id="share-dialog-h">Share <span data-share-name></span></h2>
+        <label for="share-who" class="meals-hint">Their exact username or email (they need Meals)</label>
+        <div class="meals-share-row">
+            <input type="text" name="who" id="share-who" class="ledger-input" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" required>
+            <button type="submit" class="btn btn-primary btn-sm">Share</button>
+        </div>
+        <p class="meals-share-status" id="share-status" role="status" aria-live="polite"></p>
+        <h3 class="meals-hint">Shared with</h3>
+        <ul class="meals-share-list" id="share-list"></ul>
+        <div class="meals-dialog__actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-share-copy>Copy link</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-share-close>Done</button>
+        </div>
+    </form>
+</dialog>

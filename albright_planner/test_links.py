@@ -21,8 +21,11 @@ from .models import ItemCompletion, PlannerSettings, ScheduleItem
 from .tests import PASSWORD, TODAY, Base, url
 
 
-def meal(day=TODAY, slot="dinner", title="Tacos", **fields):
-    return MealPlanEntry.objects.create(date=day, slot=slot, title=title, **fields)
+def meal(day=TODAY, slot="dinner", title="Tacos", household=None, **fields):
+    """A planned meal - in nate's household unless another is given."""
+    from albright_labs.models import Household
+    household = household or Household.objects.get(members__user__username="nate")
+    return MealPlanEntry.objects.create(household=household, date=day, slot=slot, title=title, **fields)
 
 
 # ---------------------------------------------------------------------------

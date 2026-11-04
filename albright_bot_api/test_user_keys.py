@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from albright_control.models import AuditEntry
 from albright_labs.models import UserPreference
-from albright_labs.testing import allow_api_keys, with_apps
+from albright_labs.testing import allow_api_keys, kitchen, with_apps
 from albright_planner.models import ItemShare, ScheduleItem
 
 from .models import BotRequestLog, BotToken, hash_token
@@ -28,6 +28,7 @@ class Base(TestCase):
         self.wife = allow_api_keys(with_apps(User.objects.create_user(username="sam", password=PASSWORD,
                                                                       first_name="Sam"),
                                              ["meals", "notes", "planner"]))
+        kitchen(self.boss, self.wife)
         self.client.force_login(self.wife)
         self.api = Client()
 

@@ -22,30 +22,8 @@ ZERO = Decimal("0.00")
 MONEY = {"max_digits": 12, "decimal_places": 2}
 
 
-class Household(models.Model):
-    """A shared household: its members see each other's shared accounts, categories, rules and budget."""
-    name = models.CharField(max_length=100)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name="+")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
-
-class HouseholdMember(models.Model):
-    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name="members")
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="money_membership")
-    joined_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["joined_at", "pk"]
-
-
-def household_of(user):
-    """The user's household, or None."""
-    membership = HouseholdMember.objects.filter(user=user).select_related("household").first()
-    return membership.household if membership else None
+# The household is shared by every app now (albright_labs.models) - re-exported here so Money's code is unchanged.
+from albright_labs.models import Household, HouseholdMember, household_of  # noqa: E402,F401
 
 
 class ScopedQuerySet(models.QuerySet):

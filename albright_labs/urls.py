@@ -11,6 +11,7 @@ urlpatterns = [
     path("home/launcher/", views.launcher_lines, name="launcher_lines"),
     path("home/landing/", views.save_landing, name="save_landing"),
     path("home/account/", views.account, name="account"),
+    path("home/account/household/", views.household, name="household"),
     path("home/nav/", views.save_nav, name="save_nav"),
     path("home/picker/", views.save_picker, name="save_picker"),
     path("home/pin/", views.toggle_pin, name="toggle_pin"),

@@ -20,7 +20,7 @@ from django.urls import reverse
 from albright_bot_api.models import SCOPE_KEYS, BotRequestLog, BotToken
 from albright_labs import app_access, apps_registry, tiles
 from albright_labs.models import UserPreference
-from albright_labs.testing import allow_api_keys, launcher_links, launcher_tiles, with_apps
+from albright_labs.testing import allow_api_keys, kitchen, launcher_links, launcher_tiles, with_apps
 
 from . import links, notes, render
 from .models import ME, Note, NoteLink, NoteShare
@@ -41,6 +41,7 @@ class Base(TestCase):
         self.me = with_apps(User.objects.create_user(username="nate", password=PASSWORD))
         self.wife = with_apps(User.objects.create_user(username="sam", password=PASSWORD), ["notes"])
         self.stranger = with_apps(User.objects.create_user(username="stranger", password=PASSWORD), ["notes"])
+        self.kitchen = kitchen(self.me)
         self.client.force_login(self.me)
 
     def note(self, owner=None, title="Groceries", body="", **fields):
@@ -120,7 +121,7 @@ class CreateEditTests(Base):
         from albright_meals.models import Recipe
         note = self.note(title="Taco night", body="## Plan\nBuy **tortillas** first", tags=["food"])
         NoteShare.objects.create(note=note, user=self.wife)
-        links.add(note, links.BY_KEY[("meals", "recipe")], Recipe.objects.create(title="Fish tacos"))
+        links.add(note, links.BY_KEY[("meals", "recipe")], Recipe.objects.create(household=self.kitchen, title="Fish tacos"))
         row = self.client.get(url("list")).content.decode().split(f'id="note-{note.pk}"', 1)[1].split("</a>", 1)[0]
         self.assertIn("<p>Plan</p>", row)
         self.assertIn('<span class="nt-tag">food</span>', row)
@@ -273,7 +274,7 @@ class LinkTests(Base):
         super().setUp()
         from albright_meals.models import Recipe
         from albright_reselling_app.tests.test_ledger import _make_entry
-        self.recipe = Recipe.objects.create(title="Chili")
+        self.recipe = Recipe.objects.create(household=self.kitchen, title="Chili")
         self.mine = _make_entry(self.me, item="Morgan dollar")
         self.theirs = _make_entry(self.stranger, item="Their coin")
         self.note_ = self.note()
@@ -323,6 +324,7 @@ class LinkTests(Base):
 class BotApiTests(TestCase):
     def setUp(self):
         self.owner = allow_api_keys(with_apps(User.objects.create_user(username="owner", password=PASSWORD)))
+        self.kitchen = kitchen(self.owner)
         self.token, self.raw = BotToken.issue(self.owner, "Note Bot", ["notes:read", "notes:write"])
         self.bare, self.bare_raw = BotToken.issue(self.owner, "No scopes", [])
         self.api = Client()
@@ -344,7 +346,7 @@ class BotApiTests(TestCase):
 
     def test_create_with_tags_pin_and_link_labeled_with_the_bot(self):
         from albright_meals.models import Recipe
-        recipe = Recipe.objects.create(title="Chili")
+        recipe = Recipe.objects.create(household=self.kitchen, title="Chili")
         response = self.call("POST", reverse("bot_api_v1:notes"), {
             "title": "Chili notes", "body": "Add **more** cumin", "tags": ["Food"], "pinned": True,
             "link": {"app": "meals", "type": "recipe", "id": recipe.pk}})

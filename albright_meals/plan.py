@@ -1,5 +1,5 @@
-"""The meal plan: weeks run Monday to Sunday; one meal per day per slot.
-Moving a meal onto a taken slot swaps the two."""
+"""A household's meal plan: weeks run Monday to Sunday; one meal per day per slot.
+Moving a meal onto a taken slot swaps the two. Every function works within one household."""
 from datetime import date, timedelta
 
 from django.db import transaction
@@ -27,9 +27,9 @@ def week_days(start):
     return [start + timedelta(days=i) for i in range(7)]
 
 
-def week(start):
+def week(household, start):
     """[(day, {slot: entry})] for the 7 days from start."""
-    entries = MealPlanEntry.objects.filter(date__gte=start, date__lt=start + timedelta(days=7)) \
+    entries = MealPlanEntry.objects.filter(household=household, date__gte=start, date__lt=start + timedelta(days=7)) \
         .select_related("recipe", "created_by")
     by_day = {}
     for entry in entries:
@@ -37,14 +37,14 @@ def week(start):
     return [(day, by_day.get(day, {})) for day in week_days(start)]
 
 
-def set_slot(day, slot, *, recipe=None, title="", notes=None, user=None, token=None):
+def set_slot(household, day, slot, *, recipe=None, title="", notes=None, user=None, token=None):
     """Puts a meal in a day's slot - replacing whatever was planned there. Returns (entry, created)."""
     defaults = {"recipe": recipe, "title": "" if recipe else title, "status": "planned",
                 "from_bot": token is not None, "bot_token": token,
                 "created_by": user if user and user.is_authenticated else None}
     if notes is not None:
         defaults["notes"] = notes
-    return MealPlanEntry.objects.update_or_create(date=day, slot=slot, defaults=defaults)
+    return MealPlanEntry.objects.update_or_create(household=household, date=day, slot=slot, defaults=defaults)
 
 
 def move(entry, day, slot):
@@ -52,7 +52,8 @@ def move(entry, day, slot):
     if (entry.date, entry.slot) == (day, slot):
         return None
     with transaction.atomic():
-        other = MealPlanEntry.objects.select_for_update().filter(date=day, slot=slot).exclude(pk=entry.pk).first()
+        other = MealPlanEntry.objects.select_for_update().filter(household_id=entry.household_id, date=day, slot=slot) \
+            .exclude(pk=entry.pk).first()
         old_day, old_slot = entry.date, entry.slot
         if other:
             entry.slot = _MOVING
@@ -64,7 +65,9 @@ def move(entry, day, slot):
     return other
 
 
-def tonight(today=None):
-    """Today's dinner, if one is planned (and not skipped)."""
-    return MealPlanEntry.objects.filter(date=today or timezone.localdate(), slot="dinner") \
+def tonight(household, today=None):
+    """Today's dinner in this household, if one is planned (and not skipped)."""
+    if household is None:
+        return None
+    return MealPlanEntry.objects.filter(household=household, date=today or timezone.localdate(), slot="dinner") \
         .exclude(status="skipped").select_related("recipe").first()

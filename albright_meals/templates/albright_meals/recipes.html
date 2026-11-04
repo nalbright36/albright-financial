@@ -2,42 +2,91 @@
 {% load cache_bust %}
 {% block page_title %}Recipes · {% endblock %}
 {% block content %}
+{% comment %}
+Recipes (views.recipes): three tabs - My recipes (the household's), Shared with me (other households' recipes
+shared with me, read-only), the Recipe library (everyone's library recipes, read-only). Text search, tags, and the
+rating filters - who rated it (me, a household member, anyone in the household) and which levels (or not rated),
+plus "We both love" - all in the URL, so a filter can be bookmarked. Each card shows my rating as a drop-down that
+saves on change without opening the recipe (static/meals/ratings.js), and my household's other stamps.
+{% endcomment %}
 <div class="container meals-page">
+    {% include "albright_meals/_notices.html" %}
     <div class="meals-head">
         <div>
             <h1 class="meals-head__title">Recipes</h1>
-            <p class="meals-head__sub">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag %} found{% endif %}</p>
+            <p class="meals-head__sub" id="recipe-count">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag or filtering %} found{% endif %}</p>
         </div>
         <a href="{% url 'albright_meals:recipe_add' %}" class="btn btn-primary btn-sm">Add a recipe</a>
     </div>
 
-    {% include "albright_meals/_import_box.html" %}
+    <nav class="meals-tabs" aria-label="Which recipes">{% for key, label in tabs %}<a href="?{% if key != 'mine' %}tab={{ key }}{% endif %}" class="meals-tabs__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if key == "shared" and shared_count %} <span class="meals-tabs__count">{{ shared_count }}</span>{% endif %}</a>{% endfor %}</nav>
 
-    <form method="get" class="meals-search" role="search">
-        <label for="recipe-q" class="visually-hidden">Search recipes</label>
-        <input type="search" name="q" id="recipe-q" value="{{ q }}" class="ledger-input" placeholder="Search recipes">
+    {% if tab == "mine" %}{% include "albright_meals/_import_box.html" %}{% endif %}
+
+    <form method="get" class="meals-filters" id="recipe-filters" role="search">
+        {% if tab != "mine" %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
         {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
-        <button type="submit" class="btn btn-secondary">Search</button>
+        <div class="meals-search">
+            <label for="recipe-q" class="visually-hidden">Search recipes</label>
+            <input type="search" name="q" id="recipe-q" value="{{ q }}" class="ledger-input" placeholder="Search recipes">
+            <button type="submit" class="btn btn-secondary">Search</button>
+        </div>
+        <details class="meals-filter-box"{% if filtering %} open{% endif %}>
+            <summary>Filter by rating{% if filtering %} <span class="meals-chip meals-chip--on">on</span>{% endif %}</summary>
+            <div class="meals-filter-grid">
+                <label class="field"><span>Rated by</span>
+                    <select name="rated_by" class="ledger-input" id="filter-rated-by">
+                        <option value="me"{% if filters.rated_by == "me" %} selected{% endif %}>Me</option>
+                        {% for m in members %}<option value="{{ m.pk }}"{% if filters.rated_by == m.pk %} selected{% endif %}>{{ m.first_name|default:m.username }}</option>{% endfor %}
+                        <option value="anyone"{% if filters.rated_by == "anyone" %} selected{% endif %}>Anyone in my household</option>
+                    </select></label>
+                <fieldset class="meals-filter-levels"><legend>Rating</legend>
+                    {% for r in rating_levels %}<label class="meals-filter-chip"><input type="checkbox" name="rating" value="{{ r.value }}"{% if r.value in filters.levels %} checked{% endif %}> {{ r.emoji }} {{ r.label }}</label>{% endfor %}
+                    <label class="meals-filter-chip"><input type="checkbox" name="rating" value="none"{% if filters.none %} checked{% endif %}> Not rated</label>
+                </fieldset>
+                <label class="meals-filter-chip meals-filter-chip--love"><input type="checkbox" name="love" value="1"{% if filters.love %} checked{% endif %}> &#x2764;&#xFE0F; We both love <span class="meals-hint">(at least two of us rated it, all Favorite or Staple)</span></label>
+            </div>
+            <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm">Apply</button>{% if filtering %} <a href="?{% if tab != 'mine' %}tab={{ tab }}{% endif %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
+        </details>
     </form>
+
     {% if tags %}
     <div class="meals-tags" aria-label="Tags">
-        <a href="?{% if q %}q={{ q|urlencode }}{% endif %}" class="meals-tag{% if not tag %} is-active{% endif %}">All</a>
-        {% for t in tags %}<a href="?tag={{ t|urlencode }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}" class="meals-tag{% if t == tag %} is-active" aria-current="true{% endif %}">{{ t }}</a>{% endfor %}
+        <a href="?{{ query }}" class="meals-tag{% if not tag %} is-active{% endif %}">All</a>
+        {% for t in tags %}<a href="?{% if tab != 'mine' %}tab={{ tab }}&amp;{% endif %}tag={{ t|urlencode }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}" class="meals-tag{% if t == tag %} is-active" aria-current="true{% endif %}">{{ t }}</a>{% endfor %}
     </div>
     {% endif %}
 
     <ul class="meals-recipe-grid" id="recipe-list">
-        {% for r in recipes %}
-        <li><a href="{% url 'albright_meals:recipe' r.pk %}" class="card meals-recipe-card">
-            <strong class="meals-recipe-card__title">{{ r.title }}{% if r.needs_review %} <span class="badge warn meals-review-badge">Needs review</span>{% endif %}</strong>
+        {% for c in cards %}{% with r=c.recipe %}
+        <li><article class="card meals-recipe-card" data-recipe="{{ r.pk }}">
+            {# The title is the card's link (it covers the card); the rating, stamps and Share sit above it, so using them never opens the recipe. #}
+            <a href="{% url 'albright_meals:recipe' r.pk %}" class="meals-recipe-card__link"><strong class="meals-recipe-card__title">{{ r.title }}{% if r.needs_review %} <span class="badge warn meals-review-badge">Needs review</span>{% endif %}</strong></a>
             {% if r.description %}<span class="meals-recipe-card__desc">{{ r.description|truncatechars:110 }}</span>{% endif %}
-            <span class="meals-hint">{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
+            <span class="meals-hint">{% if not c.own %}{% if c.share %}Shared by <span class="meals-by">{{ c.share.shared_by.first_name|default:c.share.shared_by.username|default:"someone" }}</span>{% else %}{{ r.household.name }}{% endif %} &middot; {% endif %}{% if r.saved_from_name %}Saved from {{ r.saved_from_name }} &middot; {% endif %}{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
             {% if r.tags %}<span class="meals-tags meals-tags--small">{% for t in r.tags|slice:":4" %}<span class="meals-tag">{{ t }}</span>{% endfor %}</span>{% endif %}
-        </a></li>
-        {% empty %}
-        <li class="meals-empty">{% if q or tag %}No recipes match.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
+            <div class="meals-card-rating">
+                <form method="post" action="{% url 'albright_meals:recipe_rate' r.pk %}" class="meals-card-rate" data-card-rate>{% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <label for="rate-{{ r.pk }}" class="visually-hidden">My rating for {{ r.title }}</label>
+                    <select name="level" id="rate-{{ r.pk }}" class="ledger-input meals-rating__select meals-card-rate__select" data-level="{{ c.mine.level|default:'' }}">
+                        <option value=""{% if not c.mine %} selected{% endif %}>Not rated</option>
+                        {% for lv in rating_levels %}<option value="{{ lv.value }}" title="{{ lv.meaning }}"{% if c.mine.level == lv.value %} selected{% endif %}>{{ lv.emoji }} {{ lv.label }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-secondary btn-sm meals-card-rate__save">Save</button>
+                    <span class="meals-card-rate__status" role="status" aria-live="polite"></span>
+                </form>
+                {% if c.others %}<span class="meals-stamps">{% for r in c.others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</span>{% endif %}
+                {% if c.own %}<button type="button" class="btn btn-secondary btn-sm meals-card-share" data-share-open="{% url 'albright_meals:recipe_share' r.pk %}" data-share-title="{{ r.title }}" data-share-link="{% url 'albright_meals:recipe' r.pk %}" data-share-list='[{% for s in r.shares.all %}{"user": {{ s.shared_with_id }}, "name": "{{ s.shared_with.first_name|default:s.shared_with.username|escapejs }}"}{% if not forloop.last %}, {% endif %}{% endfor %}]'>Share</button>{% endif %}
+            </div>
+            <p class="meals-stamp-note" data-stamp-note hidden></p>
+        </article></li>
+        {% endwith %}{% empty %}
+        <li class="meals-empty">{% if q or tag or filtering %}No recipes match.{% elif tab == "shared" %}Nothing's been shared with you yet.{% elif tab == "library" %}The library is empty so far - put one of yours in it from its page.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
         {% endfor %}
     </ul>
 </div>
+{% include "albright_meals/_share_dialog.html" %}
 <script src="{% static_version 'meals/recipe_import.js' %}" defer></script>
+<script src="{% static_version 'meals/ratings.js' %}" defer></script>
 {% endblock %}

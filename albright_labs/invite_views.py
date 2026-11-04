@@ -40,6 +40,9 @@ def signup(request, token):
                                                         password=form.cleaned_data["password1"],
                                                         first_name=invite.name[:150])
             pref = app_access.new_user_preference(user, invite.apps)
+            if invite.household_id:                     # a household invite: straight into it
+                from .models import HouseholdMember
+                HouseholdMember.objects.get_or_create(user=user, defaults={"household_id": invite.household_id})
             invite.used_at, invite.used_by = timezone.now(), user
             invite.save(update_fields=["used_at", "used_by"])
         auth.login(request, user, backend="django.contrib.auth.backends.ModelBackend")

@@ -21,7 +21,7 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
@@ -319,3 +319,53 @@ def landing_settings(request):
         messages.success(request, "Landing page saved.")
         return redirect("labs_admin:settings")
     return render(request, "albright_labs/landing_settings.html", {"form": form, **landing_context()})
+
+
+@login_required
+def household(request):
+    """My account > Household: who's in it; its creator renames it, adds people (their exact username or email -
+    nobody is ever listed or suggested), invites someone new (the invite system - signing up puts them straight in)
+    and removes people. Anyone else in it can leave. No household yet: make one."""
+    from . import households, invites
+    user = request.user
+    mine = households.household_of(user)
+    manage = households.can_manage(user, mine)
+    new_link = None
+    if request.method == "POST":
+        action = request.POST.get("action")
+        try:
+            if action == "create" and not mine:
+                mine = households.create(user, request.POST.get("name", ""))
+                messages.success(request, f"Created {mine.name}.")
+            elif action == "rename" and manage:
+                mine.name = " ".join(request.POST.get("name", "").split())[:100] or mine.name
+                mine.save(update_fields=["name"])
+                messages.success(request, "Saved.")
+            elif action == "add" and manage:
+                person = households.find_person(request.POST.get("who", ""))
+                if person is None:
+                    raise households.HouseholdError("No account matches that exactly - check their username or email.")
+                households.add_member(mine, person)
+                messages.success(request, f"Added {person.first_name or person.username}.")
+            elif action == "invite" and manage:
+                invite, raw = households.invite(mine, user, request.POST.get("email", ""), request.POST.get("name", ""))
+                new_link = invites.link(raw)
+                ok, note = invites.send(invite, raw)
+                messages.success(request, f"Invite sent to {invite.email}." if ok else f"Invite made - {note} Copy the link below.")
+            elif action == "remove" and manage:
+                other = get_object_or_404(households.HouseholdMember, household=mine, user_id=request.POST.get("user") or 0)
+                if other.user_id == user.pk:
+                    raise households.HouseholdError("You can't remove yourself - you made this household.")
+                households.remove_member(mine, other.user)
+                messages.success(request, f"Removed {other.user.first_name or other.user.username}.")
+            elif action == "leave" and mine and not manage:
+                households.remove_member(mine, user)
+                messages.success(request, f"You left {mine.name}.")
+                mine = None
+        except households.HouseholdError as exc:
+            messages.error(request, str(exc))
+        if new_link is None:
+            return redirect("labs:household")
+    return render(request, "albright_labs/household.html", {
+        "household": mine, "members": households.members(mine), "manage": manage, "new_link": new_link,
+        "invites": mine.invitations.filter(used_at__isnull=True, revoked=False).order_by("-created_at")[:10] if manage else []})

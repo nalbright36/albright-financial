@@ -1,0 +1,14 @@
+{% extends "index.html" %}
+{% block page_title %}Set up your kitchen · {% endblock %}
+{% block content %}
+{% comment %}Meals with no household yet (scope.kitchen_required): make one - or wait to be added to someone's (they invite you from My account > Household).{% endcomment %}
+<div class="container meals-page meals-narrow">
+    <div class="meals-head"><div><h1 class="meals-head__title">Set up your kitchen</h1>
+        <p class="meals-head__sub">Meals keeps a household's plan, grocery list, ideas and recipes together - just for the people in it.</p></div></div>
+    <form method="post" action="{% url 'albright_meals:setup' %}" class="card meals-setup" id="kitchen-setup">{% csrf_token %}
+        <div class="field"><label for="kitchen-name">Household name</label><input type="text" name="name" id="kitchen-name" class="ledger-input" maxlength="100" placeholder="{{ request.user.first_name|default:request.user.username }}'s household"></div>
+        <button type="submit" class="btn btn-primary">Create my household</button>
+    </form>
+    <p class="meals-hint">Joining someone else's? Ask them to add you from <strong>My account &rarr; Household</strong> - you'll see their kitchen as soon as they do.</p>
+</div>
+{% endblock %}

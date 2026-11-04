@@ -15,6 +15,36 @@ LANDING_CHOICES = [("home", "App picker (Home)"), ("last_app", "Last used app"),
                    ("page", "A specific page")]
 
 
+class Household(models.Model):
+    """A household - shared by every app that has one (Money's shared accounts and budget, Meals' kitchen). Its
+    members see what it owns; each person belongs to at most one (HouseholdMember.user is unique). Moved here from
+    albright_money (migration 0007 took over its tables - same rows, same ids)."""
+    name = models.CharField(max_length=100)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class HouseholdMember(models.Model):
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name="members")
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="household_membership")
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["joined_at", "pk"]
+
+
+def household_of(user):
+    """The user's household, or None."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return None
+    membership = HouseholdMember.objects.filter(user=user).select_related("household").first()
+    return membership.household if membership else None
+
+
 def default_allowed_apps():
     """New accounts start with no apps until a superuser grants some (an invite's apps, or
     Admin > Users). Accounts from before this rule got a row with what they had (migration 0003)."""
@@ -102,6 +132,8 @@ class Invitation(models.Model):
     used_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name="+")
     revoked = models.BooleanField(default=False)
+    # Signing up with it also joins this household (Household page > Invite someone).
+    household = models.ForeignKey(Household, on_delete=models.SET_NULL, null=True, blank=True, related_name="invitations")
 
     class Meta:
         ordering = ["-created_at", "-pk"]
@@ -110,11 +142,12 @@ class Invitation(models.Model):
         return f"Invite for {self.email} ({self.status})"
 
     @classmethod
-    def create(cls, *, email, name="", apps=(), created_by=None, days=7):
+    def create(cls, *, email, name="", apps=(), created_by=None, days=7, household=None):
         """A new invite and its raw token (the only time the token exists in full)."""
         raw = secrets.token_urlsafe(32)
         invite = cls.objects.create(email=email, name=name, apps=list(apps), created_by=created_by, days=days,
-                                    token_hash=hash_token(raw), expires_at=timezone.now() + timedelta(days=days))
+                                    token_hash=hash_token(raw), expires_at=timezone.now() + timedelta(days=days),
+                                    household=household)
         return invite, raw
 
     @classmethod

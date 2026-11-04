@@ -605,8 +605,8 @@ class AddToGroceriesTests(Base):
         chili = self.recipe("Chili", [{"name": "onions", "quantity": "2"}, {"name": "garlic", "quantity": "3",
                                                                            "unit": "clove"}])
         tacos = self.recipe("Tacos", [{"name": "onion", "quantity": "1"}])
-        onion = GroceryItem.objects.create(name="onion", quantity=1, aisle="produce")
-        GroceryItem.objects.create(name="garlic", quantity=1, unit="clove", checked=True)    # checked: not merged
+        onion = GroceryItem.objects.create(household=self.household, name="onion", quantity=1, aisle="produce")
+        GroceryItem.objects.create(household=self.household, name="garlic", quantity=1, unit="clove", checked=True)    # checked: not merged
         self.client.post(reverse("albright_meals:recipe_groceries", args=[chili.pk]))
         onion.refresh_from_db()
         self.assertEqual(onion.quantity, 3)
@@ -684,7 +684,7 @@ class BotImportTests(Base):
         self.assertTrue(Recipe.objects.get().needs_review)
 
     def test_add_to_plan_and_groceries(self):
-        GroceryItem.objects.create(name="ground beef", quantity=1, unit="lb")
+        GroceryItem.objects.create(household=self.household, name="ground beef", quantity=1, unit="lb")
         body = {"url": CHILI_URL, "add_to_plan": {"date": self.today.isoformat(), "slot": "dinner"},
                 "add_to_groceries": True}
         with fetching(fixture("jsonld_graph.html")):

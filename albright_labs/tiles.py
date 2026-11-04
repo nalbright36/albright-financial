@@ -60,11 +60,16 @@ def opps(user):
 
 
 def meals(user):
-    """Tonight's dinner, and what's still on the grocery list."""
+    """Tonight's dinner, and what's still on the grocery list - the user's household's."""
     from albright_meals.models import GroceryItem
     from albright_meals.plan import tonight
-    dinner = tonight()
-    to_get = GroceryItem.objects.filter(checked=False).count()
+
+    from .models import household_of
+    household = household_of(user)
+    if household is None:
+        return {"value": "Set up your kitchen", "note": "no household yet", "tone": "warn", "size": "text"}
+    dinner = tonight(household)
+    to_get = GroceryItem.objects.active().filter(household=household, checked=False).count()
     title = dinner.display_title if dinner else "Nothing planned"
     if len(title) > 40:
         title = title[:39].rstrip() + "…"

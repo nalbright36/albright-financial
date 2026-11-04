@@ -1,6 +1,8 @@
-"""Albright Meals: the household's meal plan, recipes, meal ideas and one
-shared grocery list. Everything here is shared by everyone who can open the
-Meals app (Admin > Users) - there's no per-user copy.
+"""Albright Meals: each household's meal plan, recipes, meal ideas and grocery list (albright_labs.Household).
+Everything here belongs to a household and only its members see it (scope.py - anything else is a 404); someone
+with Meals access but no household is asked to set one up. Recipes can also be shared beyond the household:
+read-only in the "Recipe library" (visibility), or with one person at a time (RecipeShare) - either way the
+recipe's plan, grocery list, ideas and ratings stay the household's.
 
 The Grok "Recipe Bot" writes here too, through the Bot API (meals:write).
 Rows it creates have from_bot set (and the token that wrote them, while it
@@ -41,6 +43,10 @@ class _Authored(models.Model):
         return (user.first_name or user.get_username()) if user else ""
 
 
+def _household_fk():
+    return models.ForeignKey("albright_labs.Household", on_delete=models.CASCADE, related_name="+")
+
+
 def _user_fk(related_name):
     return models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                              related_name=related_name)
@@ -54,6 +60,14 @@ STANDARD_TAGS = [("quick_weeknight", "Quick weeknight"), ("good_leftovers", "Goo
 
 
 class Recipe(_Authored):
+    HOUSEHOLD, LIBRARY = "household", "library"
+    VISIBILITY = [(HOUSEHOLD, "Household"), (LIBRARY, "Shared library")]
+    household = _household_fk()
+    # "Shared library": every Meals user can read it (and save a copy); only its household can change it.
+    visibility = models.CharField(max_length=10, choices=VISIBILITY, default=HOUSEHOLD, db_index=True)
+    # A copy saved from someone else's recipe ("Save to my recipes"): credited "Saved from <household name>".
+    saved_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="copies")
+    saved_from_name = models.CharField(max_length=100, blank=True)
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     # [{"name": "onion", "quantity": "1", "unit": "", "note": "diced", "original": "1 onion, diced"}, ...]
@@ -114,6 +128,7 @@ class RecipeRating(models.Model):
         STAPLE: ("⭐", "gold", "Part of the regular rotation; our go-to."),
     }
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="ratings")
+    # A person's own stamp - only their household's members ever see it (scope.household_ratings).
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="meal_ratings")
     level = models.PositiveSmallIntegerField(choices=LEVELS, validators=[MinValueValidator(1), MaxValueValidator(6)])
     # Optional - for "Needs tweaks" the form asks "What would you change?"
@@ -151,9 +166,24 @@ class RecipeRating(models.Model):
         return self.INFO[self.level][2]
 
 
+class RecipeShare(models.Model):
+    """One recipe shown, read-only, to one person outside its household (they can save a copy). seen_at: when they
+    saw the "<name> shared <recipe> with you" notice."""
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="shares")
+    shared_with = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="meals_shared_recipes")
+    shared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    seen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [models.UniqueConstraint(fields=["recipe", "shared_with"], name="meals_share_once")]
+
+
 class MealPlanEntry(_Authored):
     """One meal in the plan: a day's breakfast/lunch/dinner/snack - a recipe, or just a title ("Leftovers")."""
     STATUSES = [("planned", "Planned"), ("cooked", "Cooked"), ("skipped", "Skipped")]
+    household = _household_fk()
     date = models.DateField(db_index=True)
     slot = models.CharField(max_length=10, choices=SLOTS, default="dinner")
     recipe = models.ForeignKey(Recipe, on_delete=models.SET_NULL, null=True, blank=True, related_name="plan_entries")
@@ -164,7 +194,7 @@ class MealPlanEntry(_Authored):
 
     class Meta:
         ordering = ["date", "slot", "pk"]
-        constraints = [models.UniqueConstraint(fields=["date", "slot"], name="meals_one_entry_per_slot")]
+        constraints = [models.UniqueConstraint(fields=["household", "date", "slot"], name="meals_one_entry_per_slot")]
 
     def __str__(self):
         return f"{self.date} {self.slot}: {self.display_title}"
@@ -178,6 +208,7 @@ class MealIdea(_Authored):
     """Something to try some day - moved into the plan, or declined."""
     AUTHOR_FIELD = "added_by"
     STATUSES = [("new", "New"), ("planned", "Planned"), ("declined", "Declined")]
+    household = _household_fk()
     title = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
     link = models.URLField(max_length=500, blank=True)
@@ -205,6 +236,7 @@ class GroceryItem(_Authored):
     duplicate_of links a line to an unchecked line for the same ingredient in a different unit ("1 lb" vs "2 cups")
     - shown as "Possible duplicate" with a Merge button."""
     AUTHOR_FIELD = "added_by"
+    household = _household_fk()
     name = models.CharField(max_length=120)
     quantity = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     unit = models.CharField(max_length=20, blank=True)
@@ -231,8 +263,8 @@ class GroceryItem(_Authored):
 
 
 class MealsSettings(models.Model):
-    """Meals' own settings (one row): the "Tonight: <dinner>" line in the owner's daily Telegram digest."""
-    SINGLETON_PK = 1
+    """A household's Meals settings: the "Tonight: <dinner>" line in the owner's daily Telegram digest."""
+    household = models.OneToOneField("albright_labs.Household", on_delete=models.CASCADE, related_name="meals_settings")
     digest_tonight = models.BooleanField(default=True, verbose_name='"Tonight: <dinner>" in my daily digest')
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -240,5 +272,5 @@ class MealsSettings(models.Model):
         return "Meals settings"
 
     @classmethod
-    def load(cls):
-        return cls.objects.get_or_create(pk=cls.SINGLETON_PK)[0]
+    def load(cls, household):
+        return cls.objects.get_or_create(household=household)[0]
