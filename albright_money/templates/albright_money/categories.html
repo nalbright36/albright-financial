@@ -2,17 +2,14 @@
 {% block page_title %}Categories · {% endblock %}
 {% block money %}
 {% comment %}
-Categories and rules (views.categories), for one set at a time: the household's (shared) or your personal one.
+Categories and rules (views.categories), for one space's set at a time (the switcher).
 A category in use is archived rather than deleted, so its history stays. Rules: "payee contains X" (optionally an
 amount range or one account) gets a category - imports and quick add use them; the longest match wins.
 {% endcomment %}
 <div class="mn-head">
-    <div><h1 class="mn-head__title">Categories</h1><p class="mn-head__sub">{% if scope == "household" %}{{ household.name }}'s shared set{% else %}Your personal set{% endif %}</p></div>
+    <div><h1 class="mn-head__title">Categories</h1><p class="mn-head__sub">{% if space.circle_id %}{{ space.name }}'s set{% else %}Your personal set{% endif %}</p></div>
 </div>
-{% if household %}<nav class="mn-seg" aria-label="Which set">
-    <a href="?scope=household" class="mn-seg__item{% if scope == 'household' %} is-on{% endif %}"{% if scope == "household" %} aria-current="page"{% endif %}>{{ household.name }}</a>
-    <a href="?scope=personal" class="mn-seg__item{% if scope == 'personal' %} is-on{% endif %}"{% if scope == "personal" %} aria-current="page"{% endif %}>Personal</a>
-</nav>{% endif %}
+{% include "albright_labs/_space_switch.html" %}
 
 <section class="card mn-card" aria-labelledby="mn-cats-h">
     <h2 class="mn-card__title" id="mn-cats-h">Categories</h2>

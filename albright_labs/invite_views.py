@@ -40,13 +40,15 @@ def signup(request, token):
                                                         password=form.cleaned_data["password1"],
                                                         first_name=invite.name[:150])
             pref = app_access.new_user_preference(user, invite.apps)
-            if invite.household_id:                     # a household invite: straight into it
-                from .models import HouseholdMember
-                HouseholdMember.objects.get_or_create(user=user, defaults={"household_id": invite.household_id})
+            if invite.circle_invite_id:                 # it came with a circle invite: theirs to accept now
+                from .circles import attach_signup
+                attach_signup(user, invite)
             invite.used_at, invite.used_by = timezone.now(), user
             invite.save(update_fields=["used_at", "used_by"])
         auth.login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         audit(request, "invite_used", f"{user.username} ({invite.email}) signed up with invite #{invite.pk}: "
                                       f"{', '.join(pref.allowed_apps) or 'no apps'}")
+        if invite.circle_invite_id:
+            return redirect("labs:circles")
         return redirect("labs:root")
     return render(request, "albright_labs/signup.html", {"invite": invite, "form": form})

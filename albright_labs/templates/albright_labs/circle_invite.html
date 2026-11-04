@@ -1,0 +1,22 @@
+{% extends "index.html" %}
+{% block page_title %}Join {{ invite.circle.name }} · {% endblock %}
+{% block content %}
+{% comment %}
+An invite waiting for me (labs.circle_views.invite_page): who asked, what the circle shares, and which apps I join -
+every one off until I tick it. Accept or Decline.
+{% endcomment %}
+<div class="container circles-page">
+    <h1 class="circles-title">Join {{ invite.circle.name }}?</h1>
+    <p class="circles-lead"><strong>{{ inviter }}</strong> invited you. Choose what you share with the circle - you can change it any time in Circles. Your personal things stay yours.</p>
+    <form method="post" class="card circles-card circles-form" id="circle-accept">{% csrf_token %}
+        <fieldset class="circles-apps"><legend>Join in</legend>
+            {% for a in apps %}<label class="circles-check"><input type="checkbox" name="apps" value="{{ a.key }}"{% if not a.can_open %} disabled{% endif %}> <span><strong>{{ a.label }}</strong> <span class="circles-muted">{{ a.shares }}{% if not a.can_open %} - you don't have {{ a.label }} yet{% endif %}</span></span></label>
+            {% empty %}<p class="circles-muted">This circle doesn't share any apps yet.</p>{% endfor %}
+        </fieldset>
+        <div class="circles-actions">
+            <button type="submit" name="action" value="accept" class="btn btn-primary">Accept</button>
+            <button type="submit" name="action" value="decline" class="btn btn-secondary">Decline</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

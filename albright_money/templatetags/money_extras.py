@@ -36,4 +36,14 @@ def signed(value):
 @register.filter
 def scope_of(obj):
     """"shared" or "personal" - which category menu a transaction's row uses."""
-    return "shared" if getattr(obj, "household_id", None) else "personal"
+    space = getattr(obj, "space", None)
+    return "shared" if space is not None and space.circle_id else "personal"
+
+
+@register.filter
+def get_item(mapping, key):
+    """{{ by_scope|get_item:t.account.space_id }} - a dict lookup by a variable key."""
+    try:
+        return mapping.get(key, [])
+    except AttributeError:
+        return []

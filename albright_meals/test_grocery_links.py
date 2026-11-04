@@ -43,7 +43,7 @@ class NormalizationTests(Base):
 class OnListTests(Base):
     def test_on_list_badge_and_starts_unticked(self):
         chili = self.recipe("Chili", CHILI)
-        groceries.add_recipes(self.household, [chili], user=self.owner)
+        groceries.add_recipes(self.space, [chili], user=self.owner)
         tacos = self.recipe("Tacos", TACOS)
         html = page(self.client, tacos)
         beef = html.split('value="0"', 1)[1].split("</li>", 1)[0]
@@ -57,8 +57,8 @@ class OnListTests(Base):
 
     def test_checked_and_cleared_lines_dont_count(self):
         chili = self.recipe("Chili", CHILI)
-        GroceryItem.objects.create(household=self.household, name="ground beef", quantity=1, unit="lb", checked=True)
-        GroceryItem.objects.create(household=self.household, name="onion", quantity=1, archived_at="2026-11-01T10:00:00Z", checked=True)
+        GroceryItem.objects.create(space=self.space, name="ground beef", quantity=1, unit="lb", checked=True)
+        GroceryItem.objects.create(space=self.space, name="onion", quantity=1, archived_at="2026-11-01T10:00:00Z", checked=True)
         self.assertNotIn("On list:", page(self.client, chili))
 
 
@@ -66,8 +66,8 @@ class AddSelectedTests(Base):
     def setUp(self):
         super().setUp()
         self.chili = self.recipe("Chili", CHILI)
-        groceries.add_recipes(self.household, [self.chili], user=self.owner)
-        GroceryItem.objects.create(household=self.household, name="tomato", quantity=1, unit="lb")
+        groceries.add_recipes(self.space, [self.chili], user=self.owner)
+        GroceryItem.objects.create(space=self.space, name="tomato", quantity=1, unit="lb")
         self.tacos = self.recipe("Tacos", TACOS)
 
     def test_only_the_ticked_ones_are_added(self):
@@ -115,7 +115,7 @@ class GroceryListBadgeTests(Base):
 
     def test_multi_recipe_badge_lists_them(self):
         chili, tacos = self.recipe("Chili", CHILI), self.recipe("Tacos", TACOS)
-        groceries.add_recipes(self.household, [chili], user=self.owner)
+        groceries.add_recipes(self.space, [chili], user=self.owner)
         add(self.client, tacos, 0)
         html = self.list_html()
         beef = html.split(f'data-item="{GroceryItem.objects.get(name="ground beef").pk}"', 1)[1].split("</li>", 1)[0]
@@ -127,8 +127,8 @@ class GroceryListBadgeTests(Base):
         self.assertIn("from Chili", onion)
 
     def test_possible_duplicate_flag_and_merge(self):
-        lb = GroceryItem.objects.create(household=self.household, name="ground beef", quantity=1, unit="lb")
-        cup, status = groceries.add_item_detail(self.household, "ground beef", Decimal(2), "cups")
+        lb = GroceryItem.objects.create(space=self.space, name="ground beef", quantity=1, unit="lb")
+        cup, status = groceries.add_item_detail(self.space, "ground beef", Decimal(2), "cups")
         self.assertEqual(status, groceries.DUPLICATE)
         html = self.list_html()
         flagged = html.split(f'data-item="{cup.pk}"', 1)[1].split("</li>", 1)[0]
@@ -146,8 +146,8 @@ class GroceryListBadgeTests(Base):
 
     def test_merge_same_unit_adds_quantities_and_keeps_recipes(self):
         chili = self.recipe("Chili", CHILI)
-        lb = GroceryItem.objects.create(household=self.household, name="ground beef", quantity=1, unit="lb")
-        other = GroceryItem.objects.create(household=self.household, name="beef", quantity=Decimal("0.5"), unit="lb", duplicate_of=lb)
+        lb = GroceryItem.objects.create(space=self.space, name="ground beef", quantity=1, unit="lb")
+        other = GroceryItem.objects.create(space=self.space, name="beef", quantity=Decimal("0.5"), unit="lb", duplicate_of=lb)
         other.recipes.add(chili)
         self.assertEqual(groceries.merge(other), lb)
         lb.refresh_from_db()
@@ -155,16 +155,16 @@ class GroceryListBadgeTests(Base):
         self.assertEqual(list(lb.recipes.all()), [chili])
 
     def test_no_merge_once_the_other_line_is_checked(self):
-        lb = GroceryItem.objects.create(household=self.household, name="ground beef", quantity=1, unit="lb", checked=True)
-        cup = GroceryItem.objects.create(household=self.household, name="ground beef", quantity=2, unit="cup", duplicate_of=lb)
+        lb = GroceryItem.objects.create(space=self.space, name="ground beef", quantity=1, unit="lb", checked=True)
+        cup = GroceryItem.objects.create(space=self.space, name="ground beef", quantity=2, unit="cup", duplicate_of=lb)
         self.assertNotIn("Possible duplicate", self.list_html())
         self.assertIsNone(groceries.merge(cup))
 
 
 class ClearCheckedTests(Base):
     def test_clear_checked_archives_instead_of_deleting(self):
-        milk = GroceryItem.objects.create(household=self.household, name="milk", checked=True)
-        eggs = GroceryItem.objects.create(household=self.household, name="eggs")
+        milk = GroceryItem.objects.create(space=self.space, name="milk", checked=True)
+        eggs = GroceryItem.objects.create(space=self.space, name="eggs")
         self.client.post(reverse("albright_meals:grocery_clear"))
         milk.refresh_from_db()
         self.assertIsNotNone(milk.archived_at)                              # still in the database
@@ -173,7 +173,7 @@ class ClearCheckedTests(Base):
         self.assertIn(f'data-item="{eggs.pk}"', html)
         self.assertEqual(self.client.post(reverse("albright_meals:grocery_toggle", args=[milk.pk])).status_code, 404)
         # Never matched again: adding milk makes a new line.
-        groceries.add_item(self.household, "milk")
+        groceries.add_item(self.space, "milk")
         self.assertEqual(GroceryItem.objects.active().filter(name="milk").count(), 1)
         # Off the Bot API's list too.
         self.assertNotIn(milk.pk, [i.pk for i in GroceryItem.objects.active()])

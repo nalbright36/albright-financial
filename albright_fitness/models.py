@@ -8,7 +8,7 @@ Built-in exercises have no owner (seeded by migration 0002); a person's own ones
 programs aren't rows: they're templates in programs.py that a person copies into their own Program.
 
 Nutrition (Phase 2): Food is a shared cache of USDA FoodData Central foods (public data - usda.py fills it). Everything
-else is private to its owner, even within a household: NutritionProfile (body info, units, macro targets), CustomFood
+else is private to its owner, even within a circle: NutritionProfile (body info, units, macro targets), CustomFood
 ("My foods") and FoodLogEntry (the diary). A recipe's nutrition lives with the recipe (albright_meals.RecipeNutrition).
 
 Body metrics (Phase 3): WeightEntry and Measurement - private to their owner, never shared with anyone.

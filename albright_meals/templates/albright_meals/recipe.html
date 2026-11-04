@@ -7,7 +7,7 @@
     <article class="meals-recipe">
         {# Not ours (the library, or shared with me): read-only - "Save to my recipes" makes our own copy. #}
         {% if not editable %}<div class="card meals-readonly" id="recipe-readonly">
-            <p>{% if share %}<strong>{{ share.shared_by.first_name|default:share.shared_by.username|default:"Someone" }}</strong> shared this with you{% else %}From the <strong>Recipe library</strong>{% endif %} &middot; {{ recipe.household.name }}'s recipe, read-only.</p>
+            <p>{% if share %}<strong>{{ share.shared_by.first_name|default:share.shared_by.username|default:"Someone" }}</strong> shared this with you{% else %}From the <strong>Recipe library</strong>{% endif %} &middot; {{ recipe.space.label }}'s recipe, read-only.</p>
             <form method="post" action="{% url 'albright_meals:recipe_save_copy' recipe.pk %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm" id="recipe-save-copy">Save to my recipes</button></form>
         </div>{% endif %}
         {# Rating: this person's own (others never see it here); blank until they pick one. Saves on change (static/meals/recipe.js); without JS, Save. #}
@@ -19,13 +19,13 @@
             </select>
             <button type="submit" class="btn btn-secondary btn-sm meals-rating__save">Save</button>
             <span class="meals-rating__status" id="recipe-rating-status" role="status" aria-live="polite"></span>
-            <p class="meals-hint meals-rating__meaning" id="recipe-rating-meaning">{% if my_rating %}{{ my_rating.meaning }}{% else %}Only your household sees your rating.{% endif %}</p>
+            <p class="meals-hint meals-rating__meaning" id="recipe-rating-meaning">{% if my_rating %}{{ my_rating.meaning }}{% else %}Only people who see this recipe's space see your rating.{% endif %}</p>
             <div class="field meals-rating__note"{% if my_rating.level != needs_tweaks %} hidden{% endif %} id="recipe-rating-note-field">
                 <label for="recipe-rating-note">What would you change?</label>
                 <input type="text" name="note" id="recipe-rating-note" class="ledger-input" maxlength="500" value="{{ my_rating.note|default:'' }}" placeholder="Less salt, add lime&hellip;">
             </div>
         </form>
-        {% if others %}<p class="meals-stamps" id="recipe-stamps" aria-label="Your household's ratings">{% for r in others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</p>{% endif %}
+        {% if others %}<p class="meals-stamps" id="recipe-stamps" aria-label="Ratings from this recipe's space">{% for r in others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</p>{% endif %}
         <h1 class="meals-head__title">{{ recipe.title }}{% if recipe.needs_review %} <span class="badge warn meals-review-badge" title="The AI read this from the page's text - check it against the original">Needs review</span>{% endif %}</h1>
         <p class="meals-head__sub">
             {% if recipe.prep_minutes %}Prep {{ recipe.prep_minutes }} min &middot; {% endif %}{% if recipe.cook_minutes %}Cook {{ recipe.cook_minutes }} min &middot; {% endif %}{% if recipe.total_time_minutes %}Total {{ recipe.total_time_minutes }} min &middot; {% endif %}{% if recipe.servings %}Serves {{ recipe.servings }} &middot; {% endif %}Added by <span class="meals-by">{{ recipe.author_label|default:"someone" }}</span>{% if recipe.saved_from_name %} &middot; <span id="recipe-saved-from">Saved from {{ recipe.saved_from_name }}</span>{% endif %}{% if editable and recipe.visibility == "library" %} &middot; <span class="meals-chip">In the shared library</span>{% endif %}

@@ -14,6 +14,7 @@ account's own set. Changing one saves at once (money.js) and offers "Always cate
         <a href="{% url 'albright_money:import' %}" class="btn btn-secondary btn-sm">Import CSV</a>
     </div>
 </div>
+{% include "albright_labs/_space_switch.html" %}
 
 {% if accounts %}
 <form method="post" action="{% url 'albright_money:quick_add' %}" class="card mn-quick" id="mn-quick" autocomplete="off">{% csrf_token %}
@@ -41,7 +42,7 @@ account's own set. Changing one saves at once (money.js) and offers "Always cate
         <option value="">All accounts</option>{% for a in all_accounts %}<option value="{{ a.pk }}"{% if filters.account == a.pk|stringformat:"d" %} selected{% endif %}>{{ a.name }}{% if a.archived %} (archived){% endif %}</option>{% endfor %}</select></label>
     <label class="mn-inline"><span class="visually-hidden">Category</span><select name="category" class="ledger-input" data-autosubmit>
         <option value="">All categories</option><option value="none"{% if filters.category == "none" %} selected{% endif %}>Uncategorized</option>
-        {% for c in categories %}<option value="{{ c.pk }}"{% if filters.category == c.pk|stringformat:"d" %} selected{% endif %}>{{ c.name }}{% if c.household_id %} (shared){% endif %}</option>{% endfor %}</select></label>
+        {% for c in categories %}<option value="{{ c.pk }}"{% if filters.category == c.pk|stringformat:"d" %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></label>
     <label class="mn-inline"><span class="visually-hidden">Month</span><select name="month" class="ledger-input" data-autosubmit>
         <option value="">Any month</option>{% for m in months %}<option value="{{ m|date:'Y-m' }}"{% if filters.month == m|date:'Y-m' %} selected{% endif %}>{{ m|date:"F Y" }}</option>{% endfor %}</select></label>
     <label class="mn-check"><input type="checkbox" name="review" value="1" data-autosubmit{% if filters.review %} checked{% endif %}> Needs review</label>
@@ -74,8 +75,7 @@ account's own set. Changing one saves at once (money.js) and offers "Always cate
                     <label for="mn-cat-{{ t.pk }}" class="visually-hidden">Category for {{ t.payee|default:"this transaction" }}</label>
                     <select name="category" id="mn-cat-{{ t.pk }}" class="ledger-input mn-cat">
                         <option value="">Uncategorized</option>
-                        {% if t.account.household_id %}{% for c in by_scope.shared %}<option value="{{ c.pk }}"{% if c.pk == t.category_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
-                        {% else %}{% for c in by_scope.personal %}<option value="{{ c.pk }}"{% if c.pk == t.category_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}{% endif %}
+                        {% for c in by_scope|get_item:t.account.space_id %}<option value="{{ c.pk }}"{% if c.pk == t.category_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
                     </select>
                     <button type="submit" class="btn btn-secondary btn-sm mn-nojs">Save</button>
                 </form>

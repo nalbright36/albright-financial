@@ -79,7 +79,7 @@ Recent (what I log most - one tap), My foods (servings), Quick add (just the num
 
 {% elif tab == "recipes" %}
 <section class="card fx-card" id="fx-recipes">
-    {% if recipes is None %}<p class="fx-empty">Recipes come from Meals - you're not in a household there yet.</p>
+    {% if recipes is None %}<p class="fx-empty">Recipes come from Meals - you can't open Meals yet.</p>
     {% else %}{% for r in recipes %}
     <form method="post" action="{% url 'albright_fitness:food_log' %}" class="fx-row">{% csrf_token %}
         <input type="hidden" name="kind" value="recipe"><input type="hidden" name="recipe" value="{{ r.pk }}"><input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot }}">

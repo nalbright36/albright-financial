@@ -1,5 +1,5 @@
 """Fitness pages for body metrics (/fitness/body/) and Insights (/fitness/insights/). Body metrics are their owner's
-alone - never shared, even within a household: every lookup is through owner=request.user (anyone else: 404)."""
+alone - never shared, even within a circle: every lookup is through owner=request.user (anyone else: 404)."""
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 

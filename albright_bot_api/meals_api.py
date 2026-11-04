@@ -1,11 +1,12 @@
 """Bot API v1 - Meals (/api/bot/v1/meals/...), for the Grok "Recipe Bot".
 
 Unlike the rest of the API, these endpoints write straight to the Meals app's
-own tables - always the token owner's household's plan, grocery list, ideas
-and recipes (albright_meals.scope), never another household's: anything else
-is a 404, and an owner with no household gets a 409 until they set one up.
+own tables - always in a space the token owner can see (their Personal space,
+or a circle's they've joined and opted in to Meals - albright_labs.circles):
+the one they last picked in Meals, or "space": <id> (query string or JSON body)
+for another of theirs. Anything else is a 404.
 GET recipes can also list recipes shared with the owner (scope=shared) or the
-shared library (scope=library) - read-only - and filter by the household's
+shared library (scope=library) - read-only - and filter by the space's
 ratings (the same filters as the Recipes page). That's
 what the bot is for, and the owner asked for it. Everything it creates is
 marked from_bot (labeled "Recipe Bot" on the site), every input is checked
@@ -36,13 +37,38 @@ def _meals():
     return models
 
 
-def _household(token):
-    """The token owner's household - everything here happens inside it."""
-    from albright_labs.models import household_of
-    household = household_of(token.owner)
-    if household is None:
-        raise ApiError(409, "Set up a household in Meals first (Meals > Set up your kitchen).", "rejected: no household")
-    return household
+def _requested_space(request):
+    raw = request.GET.get("space")
+    if raw is None and request.method != "GET" and request.body:
+        try:
+            import json
+            body = json.loads(request.body)
+            raw = body.get("space") if isinstance(body, dict) else None
+        except (ValueError, UnicodeDecodeError):
+            raw = None
+    return raw
+
+
+def _space(token, request):
+    """The space this call works in: "space" (an id - one the owner can see, else 404) or the one they last picked in
+    Meals (their Personal space by default)."""
+    from albright_labs import circles
+    raw = _requested_space(request)
+    if raw not in (None, ""):
+        if isinstance(raw, bool) or not str(raw).isdigit():
+            raise ApiError(400, '"space" must be a space id (see GET meals/spaces).', "rejected: bad space")
+        if int(raw) not in circles.space_ids(token.owner, "meals"):
+            raise ApiError(404, "No such space for this token's owner.", "rejected: space not visible")
+    space = circles.current_space(token.owner, "meals", raw)
+    if space is None:
+        raise ApiError(403, "This token's owner can't open Meals.", "rejected: no meals")
+    return space
+
+
+def _visible(token):
+    """Every space the owner sees in Meals (for changing one item by id)."""
+    from albright_labs import circles
+    return circles.space_ids(token.owner, "meals")
 
 
 def _iso(value):
@@ -138,7 +164,7 @@ def plan_list(request, token):
         raise ApiError(400, '"end" is before "start".', "rejected: end before start")
     if (end - start).days > MAX_RANGE_DAYS:
         raise ApiError(400, f"At most {MAX_RANGE_DAYS} days at a time.", "rejected: range too long")
-    entries = models.MealPlanEntry.objects.filter(household=_household(token), date__gte=start, date__lte=end) \
+    entries = models.MealPlanEntry.objects.filter(space=_space(token, request), date__gte=start, date__lte=end) \
         .select_related("recipe", "created_by")
     rows = [_entry_json(e) for e in entries]
     return ({"start": start.isoformat(), "end": end.isoformat(), "entries": rows}, 200,
@@ -149,7 +175,7 @@ def plan_list(request, token):
 def plan_set(request, token):
     from albright_meals.plan import set_slot
     models = _meals()
-    household = _household(token)
+    space = _space(token, request)
     data = json_body(request)
     day = _day(data.get("date"), "date")
     slot = _choice(data, "slot", models.SLOTS, None) if data.get("slot") else None
@@ -159,14 +185,14 @@ def plan_set(request, token):
     if data.get("recipe_id") not in (None, ""):
         if isinstance(data["recipe_id"], bool) or not isinstance(data["recipe_id"], int):
             raise ApiError(400, '"recipe_id" must be a number.', "rejected: bad recipe_id")
-        recipe = models.Recipe.objects.filter(household=household, pk=data["recipe_id"]).first()
+        recipe = models.Recipe.objects.filter(space=space, pk=data["recipe_id"]).first()
         if recipe is None:
             raise ApiError(404, f"No recipe {data['recipe_id']}.", "rejected: recipe not found")
     title = _str(data, "title", 200)
     if not recipe and not title:
         raise ApiError(400, 'Send "recipe_id" or "title".', "rejected: no recipe or title")
     notes = _str(data, "notes", 5000) if "notes" in data else None
-    entry, created = set_slot(household, day, slot, recipe=recipe, title=title, notes=notes, token=token, user=token.owner)
+    entry, created = set_slot(space, day, slot, recipe=recipe, title=title, notes=notes, token=token, user=token.owner)
     return ({"id": entry.pk, "created": created, **_entry_json(entry)}, 201 if created else 200,
             f"{'set' if created else 'replaced'} {day} {slot}: {entry.display_title[:80]}")
 
@@ -174,7 +200,7 @@ def plan_set(request, token):
 @bot_endpoint("meals:write", methods=("DELETE",))
 def plan_delete(request, token, entry_id):
     models = _meals()
-    entry = models.MealPlanEntry.objects.filter(household=_household(token), pk=entry_id).first()
+    entry = models.MealPlanEntry.objects.filter(space_id__in=_visible(token), pk=entry_id).first()
     if entry is None:
         raise ApiError(404, f"No plan entry {entry_id}.", "rejected: entry not found")
     if not entry.from_bot:
@@ -203,7 +229,7 @@ def _item_json(i):
 @bot_endpoint("meals:read")
 def groceries_list(request, token):
     models = _meals()
-    items = [_item_json(i) for i in models.GroceryItem.objects.active().filter(household=_household(token)).select_related("added_by")]
+    items = [_item_json(i) for i in models.GroceryItem.objects.active().filter(space=_space(token, request)).select_related("added_by")]
     return {"items": items}, 200, f"listed {len(items)} grocery items"
 
 
@@ -211,7 +237,7 @@ def groceries_list(request, token):
 def groceries_add(request, token):
     from albright_meals.groceries import add_item
     models = _meals()
-    household = _household(token)
+    space = _space(token, request)
     data = json_body(request)
     raw = data["items"] if "items" in data else [data]
     if not isinstance(raw, list) or not raw:
@@ -232,7 +258,7 @@ def groceries_add(request, token):
     results = []
     with transaction.atomic():
         for row in cleaned:
-            saved, merged = add_item(household, row["name"], row["quantity"], row["unit"], row["aisle"], row["note"], token=token,
+            saved, merged = add_item(space, row["name"], row["quantity"], row["unit"], row["aisle"], row["note"], token=token,
                                      user=token.owner)
             results.append({"id": saved.pk, "merged": merged, **_item_json(saved)})
     merged = sum(r["merged"] for r in results)
@@ -243,8 +269,8 @@ def groceries_add(request, token):
 @bot_endpoint("meals:write", methods=("PATCH",))
 def grocery_update(request, token, item_id):
     models = _meals()
-    # Cleared (archived) lines are gone; another household's are a 404.
-    item = models.GroceryItem.objects.active().filter(household=_household(token), pk=item_id).first()
+    # Cleared (archived) lines are gone; another space's are a 404.
+    item = models.GroceryItem.objects.active().filter(space_id__in=_visible(token), pk=item_id).first()
     if item is None:
         raise ApiError(404, f"No grocery item {item_id}.", "rejected: item not found")
     data = json_body(request)
@@ -286,7 +312,7 @@ def _idea_json(i):
 @bot_endpoint("meals:read")
 def ideas_list(request, token):
     models = _meals()
-    rows = [_idea_json(i) for i in models.MealIdea.objects.filter(household=_household(token)).select_related("added_by")[:200]]
+    rows = [_idea_json(i) for i in models.MealIdea.objects.filter(space=_space(token, request)).select_related("added_by")[:200]]
     return {"ideas": rows}, 200, f"listed {len(rows)} meal ideas"
 
 
@@ -294,7 +320,7 @@ def ideas_list(request, token):
 def ideas_add(request, token):
     models = _meals()
     data = json_body(request)
-    idea = models.MealIdea.objects.create(household=_household(token), title=_str(data, "title", 200, required=True),
+    idea = models.MealIdea.objects.create(space=_space(token, request), title=_str(data, "title", 200, required=True),
                                           notes=_str(data, "notes", 5000),
                                           link=_url(data, "link"), from_bot=True, bot_token=token,
                                           added_by=token.owner)
@@ -310,45 +336,47 @@ def ideas(request):
 # Recipes
 # ---------------------------------------------------------------------------
 
-def _recipe_json(r, household=None, stamps=None):
-    """A recipe - with its "ratings": the owner's household's stamps only (never another household's)."""
+def _recipe_json(r, space=None, stamps=None):
+    """A recipe - with its "ratings": the owner's space's stamps only (never another space's)."""
     out = {"id": r.pk, "title": r.title, "description": r.description, "ingredients": r.ingredients,
            "steps": r.steps, "prep_minutes": r.prep_minutes, "cook_minutes": r.cook_minutes, "servings": r.servings,
            "tags": r.tags, "source_url": r.source_url, "image_url": r.image_url, "notes": r.notes,
            "added_by": _by(r), "updated_at": _iso(r.updated_at)}
-    if household is not None:
-        out["ours"] = r.household_id == household.pk
+    if space is not None:
+        out["ours"] = r.space_id == space.pk
+        out["space"] = r.space_id
         out["visibility"] = r.visibility
         out["ratings"] = [{"by": (s.user.first_name or s.user.username), "level": s.level, "label": s.get_level_display()}
                           for s in (stamps or {}).get(r.pk, [])]
     return out
 
 
-SCOPES = ("household", "shared", "library")
+SCOPES = ("space", "shared", "library")
 
 
 @bot_endpoint("meals:read")
 def recipes_list(request, token):
-    """GET recipes: scope=household (default) | shared (shared with the owner) | library; q; and the rating filters
+    """GET recipes: scope=space (default) | shared (shared with the owner) | library; q; and the rating filters
     rated_by=me|anyone|<member id>, rating=1..6|none (repeat it for more than one), love=1 - judged by the owner's
-    household's stamps."""
+    space's stamps."""
     from albright_meals import scope as meals_scope
-    household = _household(token)
+    space = _space(token, request)
     owner = token.owner
     q = (request.GET.get("q") or "").strip()[:100]
-    which = (request.GET.get("scope") or "household").strip()
+    which = (request.GET.get("scope") or "space").strip()
+    which = "space" if which == "household" else which          # the old name still works
     if which not in SCOPES:
-        raise ApiError(400, '"scope" must be household, shared or library.', "rejected: bad scope")
-    base = {"household": meals_scope.own(household), "shared": meals_scope.shared_with(owner, household),
+        raise ApiError(400, '"scope" must be space, shared or library.', "rejected: bad scope")
+    base = {"space": meals_scope.own(space), "shared": meals_scope.shared_with(owner, space),
             "library": meals_scope.library()}[which]
     qs = base.select_related("created_by").order_by("-updated_at", "-pk")
     if q:
         qs = qs.filter(title__icontains=q)
-    filters = meals_scope.parse_filters(request.GET, owner, household)
-    qs = meals_scope.apply_filters(qs, filters, owner, household).distinct()
+    filters = meals_scope.parse_filters(request.GET, owner, space)
+    qs = meals_scope.apply_filters(qs, filters, owner, space).distinct()
     recipes = list(qs[:MAX_RECIPES])
-    stamps = meals_scope.stamps(recipes, household)
-    rows = [_recipe_json(r, household, stamps) for r in recipes]
+    stamps = meals_scope.stamps(recipes, space, owner)
+    rows = [_recipe_json(r, space, stamps) for r in recipes]
     return ({"scope": which, "recipes": rows}, 200, f"listed {len(rows)} {which} recipes" + (f" matching {q!r}" if q else "")
             + (" (rating filters)" if meals_scope.filters_active(filters) else ""))
 
@@ -400,7 +428,7 @@ def _tags(value):
 @bot_endpoint("meals:write", methods=("POST",))
 def recipes_upsert(request, token):
     models = _meals()
-    household = _household(token)
+    space = _space(token, request)
     data = json_body(request)
     title = _str(data, "title", 200, required=True)
     fields = {}
@@ -420,10 +448,10 @@ def recipes_upsert(request, token):
     if "tags" in data:
         fields["tags"] = _tags(data["tags"])
     with transaction.atomic():
-        recipe = models.Recipe.objects.select_for_update().filter(household=household, title__iexact=title).order_by("pk").first()
+        recipe = models.Recipe.objects.select_for_update().filter(space=space, title__iexact=title).order_by("pk").first()
         created = recipe is None
         if created:
-            recipe = models.Recipe(household=household, title=title, from_bot=True, bot_token=token, created_by=token.owner)
+            recipe = models.Recipe(space=space, title=title, from_bot=True, bot_token=token, created_by=token.owner)
         for key, value in fields.items():
             setattr(recipe, key, value)
         recipe.save()
@@ -449,7 +477,7 @@ def recipes_import(request, token):
     from albright_meals.groceries import add_recipes
     from albright_meals.plan import set_slot
     models = _meals()
-    household = _household(token)
+    space = _space(token, request)
     data = json_body(request)
     url = _str(data, "url", importer.MAX_URL, required=True)
     if not is_http_url(url):
@@ -470,7 +498,7 @@ def recipes_import(request, token):
         raise ApiError(400, '"add_to_groceries" must be true or false.', "rejected: bad add_to_groceries")
     host = (urlsplit(url).hostname or "")[:80]
     try:
-        recipe, status = importer.import_url(url, household, token=token, user=token.owner)
+        recipe, status = importer.import_url(url, space, token=token, user=token.owner)
     except importer.RecipeImportError as exc:
         raise ApiError(IMPORT_ERROR_STATUS.get(exc.code, 422), exc.message,
                        f"import from {host} failed: {exc.code}") from exc
@@ -478,13 +506,24 @@ def recipes_import(request, token):
               "url": request.build_absolute_uri(reverse("albright_meals:recipe", args=[recipe.pk]))}
     extras = []
     if day:
-        entry, _created = set_slot(household, day, slot, recipe=recipe, token=token, user=token.owner)
+        entry, _created = set_slot(space, day, slot, recipe=recipe, token=token, user=token.owner)
         result["plan"] = _entry_json(entry)
         extras.append(f"planned {day} {slot}")
     if to_groceries:
-        added, merged, skipped = add_recipes(household, [recipe], user=token.owner, token=token, skip_listed=True)
+        added, merged, skipped = add_recipes(space, [recipe], user=token.owner, token=token, skip_listed=True)
         result["groceries"] = {"added": added, "merged": merged, "already_listed": skipped}
         extras.append(f"groceries +{added} ~{merged}")
     return (result, 200 if status == "already_saved" else 201,
             f"import from {host}: {status} recipe #{recipe.pk} {recipe.title[:60]}"
             + (f" ({', '.join(extras)})" if extras else ""))
+
+
+@bot_endpoint("meals:read")
+def spaces(request, token):
+    """The spaces the owner sees in Meals - their Personal one and circles they've joined (and opted in to Meals) -
+    and which one calls use when "space" isn't given."""
+    from albright_labs import circles
+    current = circles.current_space(token.owner, "meals")
+    rows = [{"id": sp.pk, "name": sp.name, "personal": sp.is_personal, "current": current is not None and sp.pk == current.pk}
+            for sp in circles.visible_spaces(token.owner, "meals")]
+    return {"spaces": rows}, 200, f"listed {len(rows)} meals spaces"

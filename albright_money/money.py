@@ -1,8 +1,9 @@
-"""Albright Money's core: who's in a household, each scope's categories (with the default set), rules, balances,
-and spending / income totals (splits counted by their own categories, transfers never).
+"""Albright Money's core: the spaces a person sees, each space's categories (with the default set), rules,
+balances, and spending / income totals (splits counted by their own categories, transfers never).
 
-A "scope" is (owner, household): household None = the owner's personal set; set = the household's shared set.
-Categories, rules and budgets live in a scope; an account's transactions use its scope's categories.
+Categories, rules and budgets live in a space (someone's Personal space or a circle's - albright_labs.circles decides
+who sees which); an account's transactions use its space's categories. Functions still take (owner, space): the
+space is what counts; the owner is who new rows are made by.
 """
 import re
 from decimal import Decimal
@@ -10,7 +11,9 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Sum
 
-from .models import ZERO, Account, Category, HouseholdMember, Rule, Split, Transaction, household_of
+from .models import ZERO, Account, Category, Rule, Split, Transaction
+
+APP = "money"
 
 DEFAULT_CATEGORIES = ("Housing", "Utilities", "Groceries", "Dining", "Transportation", "Health", "Insurance",
                       "Subscriptions", "Shopping", "Entertainment", "Travel", "Gifts", "Pets", "Personal care",
@@ -18,11 +21,11 @@ DEFAULT_CATEGORIES = ("Housing", "Utilities", "Groceries", "Dining", "Transporta
 
 
 # ---------------------------------------------------------------------------
-# People and households
+# People and spaces
 # ---------------------------------------------------------------------------
 
 def money_users():
-    """Everyone who can open Money (Admin > Users) - who can be in a household."""
+    """Everyone who can open Money (Admin > Users) - who can be in a space."""
     return get_user_model().objects.filter(is_active=True).filter(
         Q(is_superuser=True) | Q(labs_preference__allowed_apps__contains=["money"])).order_by("username")
 
@@ -35,25 +38,40 @@ def person(user):
     return (user.first_name or user.get_username()).strip() if user else ""
 
 
-def members(household):
-    return [m.user for m in HouseholdMember.objects.filter(household=household).select_related("user")] \
-        if household else []
+def members(space):
+    """Who sees this space in Money."""
+    from albright_labs.circles import space_members
+    return list(space_members(space, APP)) if space else []
+
+
+def visible_spaces(user):
+    from albright_labs.circles import visible_spaces as spaces
+    return spaces(user, APP)
+
+
+def current_space(user, requested=None):
+    from albright_labs.circles import current_space as current
+    return current(user, APP, requested)
 
 
 # ---------------------------------------------------------------------------
 # Scopes and categories
 # ---------------------------------------------------------------------------
 
-def scope_filter(owner, household):
-    return Q(household=household) if household else Q(household__isnull=True, owner=owner)
+def scope_filter(owner, space):
+    """Rows in this space (owner is unused - kept so callers read the same)."""
+    return Q(space=space)
 
 
-def ensure_categories(owner, household=None):
-    """The scope's categories - the default set the first time it has none."""
-    qs = Category.objects.filter(scope_filter(owner, household))
+def ensure_categories(owner, space=None):
+    """The space's categories - the default set the first time it has none. No space: the owner's Personal one."""
+    if space is None:
+        from albright_labs.circles import personal_space
+        space = personal_space(owner)
+    qs = Category.objects.filter(scope_filter(owner, space))
     if not qs.exists():
         Category.objects.bulk_create([
-            Category(owner=owner, household=household, name=name, order=i,
+            Category(owner=owner, space=space, name=name, order=i,
                      kind=Category.INCOME if name == "Income" else Category.EXPENSE)
             for i, name in enumerate(DEFAULT_CATEGORIES)])
     return qs.filter(archived=False)
@@ -61,13 +79,12 @@ def ensure_categories(owner, household=None):
 
 def categories_for_account(account):
     """The categories a transaction on this account can use: the account's own scope's."""
-    return ensure_categories(account.owner, account.household)
+    return ensure_categories(account.owner, account.space)
 
 
 def scopes(user):
-    """[(label, household or None)] - the household's first (when the user has one), then "Personal"."""
-    household = household_of(user)
-    return ([(household.name, household)] if household else []) + [("Personal", None)]
+    """[(label, space)] for every space the user sees in Money - Personal first."""
+    return [(s.name, s) for s in visible_spaces(user)]
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +113,7 @@ def rule_for(transaction, rules=None):
     case), within the amount range (by size) and for the account if they name one - the longest text wins."""
     account = transaction.account
     if rules is None:
-        rules = Rule.objects.filter(scope_filter(account.owner, account.household)).select_related("category")
+        rules = Rule.objects.filter(scope_filter(account.owner, account.space)).select_related("category")
     payee, size = norm(transaction.payee), abs(transaction.amount)
     best = None
     for rule in rules:
@@ -129,13 +146,13 @@ def create_rule_from(transaction, category, user):
     scope's other uncategorized (or needs-review) transactions it matches. Returns (rule, how many others)."""
     account = transaction.account
     rule, _created = Rule.objects.get_or_create(
-        owner=user if account.household_id else account.owner, household=account.household,
+        owner=user, space=account.space,
         payee_contains=rule_key(transaction.payee), account=None, min_amount=None, max_amount=None,
         defaults={"category": category})
     if rule.category_id != category.pk:
         rule.category = category
         rule.save(update_fields=["category"])
-    accounts = Account.objects.filter(scope_filter(account.owner, account.household))
+    accounts = Account.objects.filter(scope_filter(account.owner, account.space))
     others = Transaction.objects.filter(account__in=accounts, is_transfer=False).filter(
         Q(category__isnull=True) | Q(needs_review=True)).exclude(pk=transaction.pk).exclude(splits__isnull=False)
     changed = 0

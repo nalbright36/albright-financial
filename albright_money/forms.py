@@ -1,5 +1,5 @@
 """Albright Money's forms. Choices are always limited to what the user can see (accounts, categories), and a
-transaction's category must come from its account's own set (personal or household) - checked on the server."""
+transaction's category must come from its account's own space's set - checked on the server."""
 from decimal import Decimal
 
 from django import forms
@@ -21,7 +21,8 @@ def _amount_field(**kw):
 class AccountForm(forms.ModelForm):
     """Never a full account number: last 4 digits only. A credit card's starting balance is entered as what's
     owed (a positive number) and stored as a negative balance."""
-    shared = forms.BooleanField(required=False, label="Shared with my household")
+    space = forms.ChoiceField(label="Space", required=False,
+                              help_text="Who sees it: just you (Personal), or a circle that shares Money.")
     starting_balance = _amount_field(initial=Decimal("0.00"),
                                      help_text="For a credit card: what you owed on the starting date.")
 
@@ -35,18 +36,30 @@ class AccountForm(forms.ModelForm):
                                                    "maxlength": 4, "autocomplete": "off", "placeholder": "1234"}),
                    "starting_date": forms.DateInput(attrs={**INPUT, "type": "date"}, format="%Y-%m-%d")}
 
-    def __init__(self, *args, household=None, **kwargs):
+    def __init__(self, *args, spaces=(), current=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.household = household
-        if not household:
-            del self.fields["shared"]
-        elif self.instance.pk:
-            self.fields["shared"].initial = self.instance.household_id is not None
+        self.spaces = {s.pk: s for s in spaces}
+        self.current = self.instance.space if self.instance.pk else current
+        self.fields["space"].choices = [(s.pk, s.name) for s in spaces]
+        self.fields["space"].widget.attrs.update(INPUT)
+        self.fields["space"].initial = self.instance.space_id if self.instance.pk else (current.pk if current else None)
+        if len(self.spaces) < 2:
+            self.fields["space"].widget = forms.HiddenInput()
         if self.instance.pk and self.instance.is_credit:
             self.initial["starting_balance"] = -self.instance.starting_balance
         if not self.instance.pk:
             del self.fields["archived"]
             self.fields["starting_date"].initial = timezone.localdate()
+
+    def clean_space(self):
+        """One of the spaces the user sees in Money - never anyone else's."""
+        value = self.cleaned_data["space"]
+        if value in (None, ""):                                  # not sent: the one being shown (or its own)
+            value = self.current.pk if self.current else ""
+        space = self.spaces.get(int(value)) if str(value).isdigit() else None
+        if space is None:
+            raise forms.ValidationError("Pick one of your spaces.")
+        return space
 
     def clean_starting_balance(self):
         value = self.cleaned_data["starting_balance"]
@@ -78,7 +91,7 @@ class TransactionForm(forms.ModelForm):
         account, category = data.get("account"), data.get("category")
         if account and category and not category.same_scope(account):
             self.add_error("category", "Pick one of this account's categories "
-                                       f"({'the household' if account.household_id else 'your personal'} set).")
+                                       f"({account.space.name}'s set).")
         return data
 
 
@@ -152,10 +165,10 @@ class RuleForm(forms.ModelForm):
                    "category": forms.Select(attrs=INPUT), "account": forms.Select(attrs=INPUT)}
         labels = {"payee_contains": "Payee contains", "account": "Only for account"}
 
-    def __init__(self, *args, owner, household, **kwargs):
+    def __init__(self, *args, owner, space, **kwargs):
         super().__init__(*args, **kwargs)
-        scope = money.scope_filter(owner, household)
-        self.fields["category"].queryset = money.ensure_categories(owner, household)
+        scope = money.scope_filter(owner, space)
+        self.fields["category"].queryset = money.ensure_categories(owner, space)
         self.fields["account"].queryset = Account.objects.filter(scope).filter(archived=False)
         self.fields["account"].required = False
 

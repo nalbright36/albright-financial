@@ -18,9 +18,9 @@ PASSWORD = "pw-not-real-12345"
 class ConverterPageTests(TestCase):
     def setUp(self):
         self.me = with_apps(User.objects.create_user(username="nate", password=PASSWORD), ["meals"])
-        self.household = kitchen(self.me)
+        self.space = kitchen(self.me)
         self.client.force_login(self.me)
-        self.recipe = Recipe.objects.create(household=self.household, title="Cookies", created_by=self.me, ingredients=[
+        self.recipe = Recipe.objects.create(space=self.space, title="Cookies", created_by=self.me, ingredients=[
             {"name": "all-purpose flour", "quantity": "2 1/4", "unit": "cup", "note": ""},
             {"name": "butter", "quantity": "1", "unit": "cup", "note": "softened"},
             {"name": "eggs", "quantity": "2", "unit": "", "note": ""},

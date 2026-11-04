@@ -9,7 +9,7 @@ needs review, the top 5 categories this month and the latest transactions.
 <div class="mn-head">
     <div>
         <h1 class="mn-head__title">{{ month|date:"F Y" }}</h1>
-        <p class="mn-head__sub">{% if household %}{{ household.name }} and your own{% else %}Your money{% endif %}</p>
+        <p class="mn-head__sub">{% if all_spaces %}All my spaces{% else %}{{ space.name }}{% endif %}</p>
     </div>
     <div class="mn-head__actions">
         <a href="{% url 'albright_money:transactions' %}#mn-quick" class="btn btn-primary btn-sm">Add</a>
@@ -17,6 +17,19 @@ needs review, the top 5 categories this month and the latest transactions.
     </div>
 </div>
 
+{% include "albright_labs/_space_switch.html" %}
+{% if overview %}
+<section class="card mn-card" id="mn-overview" aria-labelledby="mn-overview-h">
+    <h2 class="mn-card__title" id="mn-overview-h">Balances in all my spaces</h2>
+    {% for o in overview %}
+    <div class="mn-overview">
+        <div class="mn-overview__head"><a href="{% url 'albright_money:dashboard' %}?space={{ o.space.pk }}" class="mn-overview__name">{{ o.space.name }}</a><span class="mn-amount">{{ o.total|usd }}</span></div>
+        {% if o.rows %}<ul class="mn-list">{% for r in o.rows %}<li class="mn-list__row"><span class="mn-list__main">{{ r.account.name }}</span><span class="mn-amount{% if r.label == 'Owed' %} mn-owed{% endif %}">{% if r.label != "Balance" %}<span class="mn-muted mn-small">{{ r.label }}</span> {% endif %}{{ r.shown|usd }}</span></li>{% endfor %}</ul>
+        {% else %}<p class="mn-empty mn-small">No accounts.</p>{% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
 <section class="mn-stats" aria-label="This month">
     <div class="card mn-stat" id="mn-safe">
         <span class="card__label">Safe to spend</span>
@@ -44,7 +57,7 @@ needs review, the top 5 categories this month and the latest transactions.
 {% for label, h, v in budgets %}
 <section class="card mn-card" aria-labelledby="mn-b-{{ forloop.counter }}">
     <div class="card__header"><h2 class="mn-card__title" id="mn-b-{{ forloop.counter }}">{{ label }} budget</h2>
-        <a href="{% url 'albright_money:budget' %}?scope={% if h %}household{% else %}personal{% endif %}" class="mn-small">Open &rarr;</a></div>
+        <a href="{% url 'albright_money:budget' %}?space={{ h.pk }}" class="mn-small">Open &rarr;</a></div>
     <p class="mn-line"><strong>{{ v.spent|usd }}</strong> spent of {{ v.available|usd }} &middot; <span class="{% if v.remaining < 0 %}mn-over{% endif %}">{{ v.remaining|usd }} {% if v.remaining < 0 %}over{% else %}left{% endif %}</span></p>
 </section>
 {% endfor %}
@@ -53,7 +66,7 @@ needs review, the top 5 categories this month and the latest transactions.
     <section class="card mn-card" aria-labelledby="mn-accounts-h">
         <div class="card__header"><h2 class="mn-card__title" id="mn-accounts-h">Accounts</h2><a href="{% url 'albright_money:accounts' %}" class="mn-small">All &rarr;</a></div>
         {% if accounts %}<ul class="mn-list">{% for r in accounts %}
-            <li class="mn-list__row"><a href="{% url 'albright_money:transactions' %}?account={{ r.account.pk }}" class="mn-list__main">{{ r.account.name }}{% if r.account.last4 %} <span class="mn-muted">&middot;&middot;{{ r.account.last4 }}</span>{% endif %}{% if r.account.household_id %} <span class="mn-tag">Shared</span>{% endif %}</a>
+            <li class="mn-list__row"><a href="{% url 'albright_money:transactions' %}?account={{ r.account.pk }}" class="mn-list__main">{{ r.account.name }}{% if r.account.last4 %} <span class="mn-muted">&middot;&middot;{{ r.account.last4 }}</span>{% endif %}{% if all_spaces %} <span class="mn-tag{% if not r.account.space.circle_id %} mn-tag--quiet{% endif %}">{{ r.account.space.name }}</span>{% endif %}</a>
                 <span class="mn-amount{% if r.account.is_credit and r.label == 'Owed' %} mn-owed{% endif %}">{% if r.label != "Balance" %}<span class="mn-muted mn-small">{{ r.label }}</span> {% endif %}{{ r.shown|usd }}</span></li>
         {% endfor %}</ul>
         {% else %}<p class="mn-empty">No accounts yet. <a href="{% url 'albright_money:accounts' %}">Add one</a> to start.</p>{% endif %}

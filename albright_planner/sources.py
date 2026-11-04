@@ -162,12 +162,12 @@ def meals(user, start, end, show=None):
     views' choice for this page (View options, live before it's saved); None = the saved setting."""
     if not (show_meals(user) if show is None else show and can_open(user, "meals")):
         return []
-    from albright_labs.models import household_of
+    from albright_meals.scope import space_ids
     from albright_meals.models import MealPlanEntry
-    household = household_of(user)
-    if household is None:
+    spaces = space_ids(user)
+    if not spaces:
         return []
-    entries = MealPlanEntry.objects.filter(household=household, date__gte=start, date__lte=end).exclude(status="skipped") \
+    entries = MealPlanEntry.objects.filter(space_id__in=spaces, date__gte=start, date__lte=end).exclude(status="skipped") \
         .select_related("recipe")
     out = [Meal(e, e.date, e.display_title, e.get_slot_display(), reverse("albright_meals:plan_entry", args=[e.pk]))
            for e in entries]

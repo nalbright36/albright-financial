@@ -92,7 +92,7 @@ APPS = (
         stylesheet="albright_planner/planner.css", script="albright_planner/planner.js"),
     App(key="money", label="Money", short_label="Money", brand="Albright Money", accent="money",
         color="#34D399", landing_url_name="albright_money:dashboard", namespaces=("albright_money",),
-        description="Accounts, transactions, monthly budgets and bank CSV import - yours and your household's.",
+        description="Accounts, transactions, monthly budgets and bank CSV import - yours and your circles'.",
         last_app_cookie="money", tile="money",
         pages=(("money:dashboard", "Dashboard", "albright_money:dashboard"),
                ("money:transactions", "Transactions", "albright_money:transactions"),

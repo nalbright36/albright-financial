@@ -2,8 +2,8 @@
 
 "Calculate nutrition" matches every ingredient line to its best USDA food (albright_fitness.usda - generic foods
 first, branded ones when nothing generic matches) and converts the parsed quantity and unit to grams with the food's
-household portions or standard conversions (albright_fitness.nutrition.to_grams). Lines like "salt to taste" start
-ignored. It needs review until someone in the household confirms the matches; any line can be re-matched, given
+space portions or standard conversions (albright_fitness.nutrition.to_grams). Lines like "salt to taste" start
+ignored. It needs review until someone in the space confirms the matches; any line can be re-matched, given
 other grams, or ignored. Or the per-serving numbers are typed in instead (MANUAL).
 
 Totals are the matched, not-ignored lines; per serving divides by the recipe's servings (one serving when unset).
@@ -33,7 +33,7 @@ def _match(ingredient, session=None):
     food = foods[0]
     unit = nutrition.unit_of(ingredient.get("unit"))
     if unit not in WEIGHT_UNITS and not food.detailed:
-        food = usda.food(food.fdc_id, session=session)            # its household portions, for cups and counts
+        food = usda.food(food.fdc_id, session=session)            # its space portions, for cups and counts
     quantity = groceries.parse_quantity(str(ingredient.get("quantity") or "")) or Decimal(1)
     return food, nutrition.to_grams(quantity, unit, food.portions, ingredient.get("name"))
 

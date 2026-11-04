@@ -1,12 +1,9 @@
-"""Albright Money: accounts, transactions, categories and rules, monthly budgets - each personal (its owner only)
-or shared with the owner's household.
+"""Albright Money: accounts, transactions, categories and rules, monthly budgets - each owned by a space
+(albright_labs.Space): someone's Personal space, or a circle's when the circle shares Money.
 
-Who sees what (the managers' visible_to - every view goes through them; anything else is a 404):
-  - a personal account / category / rule / budget: its owner only;
-  - a shared one (household set): every member of that household;
-  - a transaction: whoever can see its account.
-Each person belongs to at most one household (HouseholdMember.user is unique); its members are people with
-Money access (Admin > Users).
+Who sees what (the managers' visible_to - every view goes through them; anything else is a 404): a space's rows show
+to whoever albright_labs.circles says can see that space in Money (Personal: its person; a circle: its active
+members who opted in to Money). A transaction: whoever can see its account. `owner` is who made the row.
 
 Never stored: bank logins or passwords, full account or card numbers (last 4 digits only), uploaded files (CSV
 imports are read in memory and dropped - imports.py). Every amount is a Decimal.
@@ -16,35 +13,25 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models import Q
 
 ZERO = Decimal("0.00")
 MONEY = {"max_digits": 12, "decimal_places": 2}
 
 
-# The household is shared by every app now (albright_labs.models) - re-exported here so Money's code is unchanged.
-from albright_labs.models import Household, HouseholdMember, household_of  # noqa: E402,F401
-
-
 class ScopedQuerySet(models.QuerySet):
-    """Personal (household empty: the owner only) or shared (every member of the household)."""
+    """Rows in the spaces a person can see in Money (albright_labs.circles), or in one space."""
 
     def visible_to(self, user):
-        household = household_of(user)
-        mine = Q(household__isnull=True, owner=user)
-        return self.filter(mine | Q(household=household)) if household else self.filter(mine)
+        from albright_labs.circles import space_ids
+        return self.filter(space_id__in=space_ids(user, "money"))
 
-    def personal(self, user):
-        return self.filter(household__isnull=True, owner=user)
-
-    def shared(self, household):
-        return self.filter(household=household) if household else self.none()
+    def in_space(self, space):
+        return self.filter(space=space) if space else self.none()
 
 
 class Scoped(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
-    household = models.ForeignKey(Household, on_delete=models.CASCADE, null=True, blank=True, related_name="+",
-                                  help_text="Empty: personal (the owner only). Set: shared with the household.")
+    space = models.ForeignKey("albright_labs.Space", on_delete=models.CASCADE, related_name="+")
 
     objects = ScopedQuerySet.as_manager()
 
@@ -53,13 +40,12 @@ class Scoped(models.Model):
 
     @property
     def is_shared(self):
-        return self.household_id is not None
+        """In a circle's space (not someone's Personal one)."""
+        return self.space.circle_id is not None
 
     def same_scope(self, other):
-        """Personal ones go with the same owner's personal ones; shared with the same household's."""
-        if self.household_id or other.household_id:
-            return self.household_id == other.household_id
-        return self.owner_id == other.owner_id
+        """Rows go together only within one space."""
+        return self.space_id == other.space_id
 
 
 class Account(Scoped):
@@ -91,7 +77,7 @@ class Account(Scoped):
 
 
 class Category(Scoped):
-    """A budget category - in a personal set (the owner's) or the household's set. "income" categories are money
+    """A budget category - in a space's set. "income" categories are money
     in (planned vs received on the budget); everything else is spending."""
     EXPENSE, INCOME = "expense", "income"
     KINDS = [(EXPENSE, "Spending"), (INCOME, "Income")]
@@ -183,16 +169,11 @@ class Rule(Scoped):
 
 
 class Budget(Scoped):
-    """One month's budget - the household's (shared) or a personal one. month: its first day."""
+    """One month's budget for a space. month: its first day."""
     month = models.DateField()
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["household", "month"], condition=Q(household__isnull=False),
-                                    name="money_one_household_budget_a_month"),
-            models.UniqueConstraint(fields=["owner", "month"], condition=Q(household__isnull=True),
-                                    name="money_one_personal_budget_a_month"),
-        ]
+        constraints = [models.UniqueConstraint(fields=["space", "month"], name="money_one_budget_a_month")]
 
 
 class BudgetLine(models.Model):

@@ -1,6 +1,6 @@
 """The header nav: Admin's Overview + Bot / System / Site groups with the
 right links, the open page's group marked, attention badges; the account
-menu (My account, Logout) far right in every app; and the shared rules -
+menu (My account, Circles, Logout) far right in every app; and the shared rules -
 the brand never wraps or shrinks, the nav collapses into "Menu" instead of
 wrapping, and dropdowns carry the ARIA a keyboard/screen reader needs."""
 import re
@@ -139,7 +139,8 @@ class AccountMenuTests(Base):
                 with self.subTest(user=user.username, url=url):
                     content = self.page(url)
                     self.assertEqual(hrefs(account_menu(content)),
-                                     [(reverse("labs:account"), "My account"), (reverse("user_logout"), "Logout")])
+                                     [(reverse("labs:account"), "My account"), (reverse("labs:circles"), "Circles"),
+                                      (reverse("user_logout"), "Logout")])
                     self.assertIn('aria-haspopup="true" aria-expanded="false" aria-controls="account-menu"', content)
                     self.assertIn(f'title="Signed in as {user.username}"', content)
                     links = links_html(content)

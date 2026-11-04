@@ -1,6 +1,8 @@
 """Albright Money pages (/money/). Opening any of them needs Money access (Admin > Users -
-albright_labs.app_access 404s everyone else first); every object is looked up through visible_to, so someone
-else's personal account, category, rule or budget - or a household you're not in - is a 404 too."""
+albright_labs.app_access 404s everyone else first). Money lives in spaces: your Personal space and circles that share
+Money (albright_labs.circles). Each page shows one space - the switcher (?space=<id>, remembered) - and the dashboard
+also has "All my spaces". Every object is looked up through visible_to, so anything in a space you don't see is a
+404."""
 from datetime import date
 from decimal import Decimal
 
@@ -19,8 +21,7 @@ from django.views.decorators.http import require_POST
 from . import budget as budgets
 from . import imports, money, quickadd
 from .forms import AccountForm, CategoryForm, MappingForm, RuleForm, SplitRows, TransactionForm, TransferForm, UploadForm
-from .models import (ZERO, Account, Category, Household, HouseholdMember, Rule, Split, Transaction,
-                     household_of)
+from .models import ZERO, Account, Category, Rule, Split, Transaction
 
 LIST_LIMIT = 300
 
@@ -44,13 +45,18 @@ def _month(value, default):
         return default
 
 
-def _scope(request, value=None):
-    """(owner, household) for ?scope= / scope=: "household" (when the user has one) or "personal"."""
-    household = household_of(request.user)
-    value = value if value is not None else request.POST.get("scope", request.GET.get("scope", ""))
-    if value == "personal" or not household:
-        return request.user, None
-    return request.user, household
+def _scope(request):
+    """(owner, space): the space this page shows - ?space= / space= when the user sees it, else the one they last
+    picked, else Personal. Also request.space / request.spaces, for the switcher."""
+    request.spaces = money.visible_spaces(request.user)
+    request.space = money.current_space(request.user, request.POST.get("space") or request.GET.get("space"))
+    if request.space is None:
+        raise Http404
+    return request.user, request.space
+
+
+def _in(space, url):
+    return f"{url}{'&' if '?' in url else '?'}space={space.pk}"
 
 
 def _accounts(user):
@@ -74,10 +80,17 @@ def _rows(accounts):
 @never_cache
 def dashboard(request):
     user, month = request.user, budgets.this_month()
-    views = budgets.budgets_for(user, month)
-    accounts = list(_accounts(user).filter(archived=False).select_related("household"))
+    _owner, space = _scope(request)
+    everything = request.GET.get("all") == "1"
+    views = [row for row in budgets.budgets_for(user, month) if everything or row[1].pk == space.pk]
+    accounts = list(_accounts(user).filter(archived=False).select_related("space__circle", "space__user", "owner"))
+    if not everything:
+        accounts = [a for a in accounts if a.space_id == space.pk]
     visible = Transaction.objects.visible_to(user)
     categories = list(Category.objects.visible_to(user).filter(kind=Category.EXPENSE))
+    if not everything:
+        visible = visible.filter(account__space=space)
+        categories = [c for c in categories if c.space_id == space.pk]
     net = money.category_totals(categories, month, budgets.month_end(month))
     top = sorted(({"category": c, "spent": money.spent(c, net[c.pk])} for c in categories if c.pk in net),
                  key=lambda r: r["spent"], reverse=True)
@@ -93,7 +106,18 @@ def dashboard(request):
         "review_count": visible.filter(needs_review=True).count(),
         "top": top, "top_max": max([r["spent"] for r in top] or [Decimal(1)]),
         "latest": visible.select_related("account", "category").prefetch_related("splits")[:10],
-        "household": household_of(user)})
+        "space": space, "all_spaces": everything, "all_url": reverse("albright_money:dashboard") + "?all=1",
+        "overview": _overview(user) if everything else None})
+
+
+def _overview(user):
+    """"All my spaces": each space I see in Money with its accounts' balances and their total."""
+    rows = _rows(list(_accounts(user).filter(archived=False).select_related("space__circle", "space__user")))
+    out = []
+    for s in money.visible_spaces(user):
+        mine = [r for r in rows if r["account"].space_id == s.pk]
+        out.append({"space": s, "rows": mine, "total": sum((r["balance"] for r in mine), ZERO)})
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -110,9 +134,10 @@ def _filters(request):
 @never_cache
 def transactions(request):
     user = request.user
+    _owner, space = _scope(request)
     f = _filters(request)
-    qs = Transaction.objects.visible_to(user).select_related("account", "category", "entered_by").prefetch_related(
-        "splits__category")
+    qs = Transaction.objects.visible_to(user).filter(account__space=space).select_related(
+        "account", "category", "entered_by").prefetch_related("splits__category")
     if f["account"].isdigit():
         qs = qs.filter(account_id=int(f["account"]))
     if f["category"] == "none":
@@ -133,14 +158,14 @@ def transactions(request):
         if not groups or groups[-1]["date"] != t.date:
             groups.append({"date": t.date, "items": []})
         groups[-1]["items"].append(t)
-    accounts = list(_accounts(user).filter(archived=False))
+    accounts = list(_accounts(user).filter(archived=False, space=space))
     by_scope = _categories_by_scope(user)
     offer = None
     if request.GET.get("offer", "").isdigit():
         offer = _rule_offer(user, Transaction.objects.visible_to(user).filter(pk=int(request.GET["offer"])).first())
     return render(request, "albright_money/transactions.html", {
         "groups": groups, "more": len(rows) > LIST_LIMIT, "filters": f, "accounts": accounts,
-        "all_accounts": _accounts(user), "categories": Category.objects.visible_to(user).filter(archived=False),
+        "all_accounts": _accounts(user).filter(space=space), "categories": Category.objects.visible_to(user).filter(archived=False, space=space),
         "by_scope": by_scope, "offer": offer, "default_account": accounts[0].pk if accounts else None,
         "here": request.get_full_path(), "months": _recent_months()})
 
@@ -151,12 +176,8 @@ def _recent_months(n=12):
 
 
 def _categories_by_scope(user):
-    """{"shared"/"personal": [categories]} - a row's category menu is its account's set."""
-    household = household_of(user)
-    out = {"personal": list(money.ensure_categories(user, None))}
-    if household:
-        out["shared"] = list(money.ensure_categories(user, household))
-    return out
+    """{space id: [categories]} - a row's category menu is its account's space's set."""
+    return {s.pk: list(money.ensure_categories(user, s)) for s in money.visible_spaces(user)}
 
 
 def _rule_offer(user, t):
@@ -301,7 +322,7 @@ def transfer(request):
 # ---------------------------------------------------------------------------
 
 def _rescope(account):
-    """An account moved between personal and shared: its transactions take the same-named categories in the new
+    """An account moved to another space: its transactions take the same-named categories in the new
     set (a name it doesn't have: uncategorized, needs review)."""
     by_name = {c.name.lower(): c for c in money.categories_for_account(account)}
     for t in account.transactions.select_related("category"):
@@ -319,11 +340,10 @@ def _save_account(form, request, account=None):
     account = form.save(commit=False)
     if account.pk is None:
         account.owner = request.user
-    household = form.household
-    was = account.household_id
-    account.household = household if household and form.cleaned_data.get("shared") else None
+    was = account.space_id
+    account.space = form.cleaned_data["space"]
     account.save()
-    if was != account.household_id and account.transactions.exists():
+    if was != account.space_id and account.transactions.exists():
         _rescope(account)
     return account
 
@@ -331,30 +351,30 @@ def _save_account(form, request, account=None):
 @login_required
 def accounts(request):
     user = request.user
-    household = household_of(user)
-    form = AccountForm(request.POST or None, household=household)
+    _owner, space = _scope(request)
+    form = AccountForm(request.POST or None, spaces=request.spaces, current=space)
     if request.method == "POST" and form.is_valid():
         account = _save_account(form, request)
-        messages.success(request, f"Added {account.name}.")
-        return redirect("albright_money:accounts")
-    rows = _rows(list(_accounts(user).select_related("household", "owner")))
-    return render(request, "albright_money/accounts.html", {"rows": rows, "form": form, "household": household,
+        messages.success(request, f"Added {account.name} to {account.space.name}.")
+        return redirect(_in(account.space, reverse("albright_money:accounts")))
+    rows = _rows(list(_accounts(user).filter(space=space).select_related("space__circle", "owner")))
+    return render(request, "albright_money/accounts.html", {"rows": rows, "form": form, "space": space,
                                                             "open_form": request.method == "POST" or not rows})
 
 
 @login_required
 def account(request, pk):
     user = request.user
-    a = get_object_or_404(_accounts(user), pk=pk)
-    household = household_of(user)
-    form = AccountForm(request.POST or None, instance=a, household=household)
+    a = get_object_or_404(_accounts(user).select_related("space__circle"), pk=pk)
+    space = a.space
+    form = AccountForm(request.POST or None, instance=a, spaces=money.visible_spaces(user))
     if request.method == "POST" and form.is_valid():
         _save_account(form, request, a)
         messages.success(request, "Saved.")
         return redirect("albright_money:accounts")
     label, shown = money.shown_balance(a, money.balance(a))
     return render(request, "albright_money/account.html", {"a": a, "form": form, "label": label, "shown": shown,
-                                                           "count": a.transactions.count(), "household": household})
+                                                           "count": a.transactions.count(), "space": space})
 
 
 # ---------------------------------------------------------------------------
@@ -438,33 +458,31 @@ def _preview(request, account, headers, rows, mapping):
 @login_required
 def categories(request):
     user = request.user
-    owner, household = _scope(request)
+    owner, space = _scope(request)
     if request.method == "POST":
         form = CategoryForm(request.POST)
         if form.is_valid():
             c = form.save(commit=False)
-            c.owner, c.household = owner, household
-            c.order = Category.objects.filter(money.scope_filter(owner, household)).count()
+            c.owner, c.space = owner, space
+            c.order = Category.objects.filter(money.scope_filter(owner, space)).count()
             c.save()
             messages.success(request, f"Added {c.name}.")
         else:
             messages.error(request, "Give the category a name.")
-        return redirect(reverse("albright_money:categories") + f"?scope={'household' if household else 'personal'}")
-    money.ensure_categories(owner, household)
-    cats = Category.objects.filter(money.scope_filter(owner, household)).annotate(
+        return redirect(_in(space, reverse("albright_money:categories")))
+    money.ensure_categories(owner, space)
+    cats = Category.objects.filter(money.scope_filter(owner, space)).annotate(
         uses=Count("transactions", distinct=True) + Count("splits", distinct=True))
-    rules = Rule.objects.filter(money.scope_filter(owner, household)).select_related("category", "account")
+    rules = Rule.objects.filter(money.scope_filter(owner, space)).select_related("category", "account")
     return render(request, "albright_money/categories.html", {
-        "cats": cats, "rules": rules, "scope": "household" if household else "personal",
-        "household": household_of(user), "form": CategoryForm(), "rule_form": RuleForm(owner=owner, household=household)})
+        "cats": cats, "rules": rules, "space": space, "form": CategoryForm(), "rule_form": RuleForm(owner=owner, space=space)})
 
 
 @login_required
 @require_POST
 def category(request, pk):
     c = get_object_or_404(Category.objects.visible_to(request.user), pk=pk)
-    scope = "household" if c.household_id else "personal"
-    back = reverse("albright_money:categories") + f"?scope={scope}"
+    back = _in(c.space, reverse("albright_money:categories"))
     if request.POST.get("action") == "delete":
         if c.transactions.exists() or c.splits.exists():
             c.archived = True
@@ -486,12 +504,12 @@ def category(request, pk):
 @login_required
 @require_POST
 def rules(request):
-    owner, household = _scope(request)
-    form = RuleForm(request.POST, owner=owner, household=household)
-    back = reverse("albright_money:categories") + f"?scope={'household' if household else 'personal'}"
+    owner, space = _scope(request)
+    form = RuleForm(request.POST, owner=owner, space=space)
+    back = _in(space, reverse("albright_money:categories"))
     if form.is_valid():
         rule = form.save(commit=False)
-        rule.owner, rule.household = owner, household
+        rule.owner, rule.space = owner, space
         rule.payee_contains = rule.payee_contains.strip()
         rule.save()
         messages.success(request, f"Rule added: “{rule.payee_contains}” → {rule.category.name}.")
@@ -504,10 +522,10 @@ def rules(request):
 @require_POST
 def rule_delete(request, pk):
     rule = get_object_or_404(Rule.objects.visible_to(request.user), pk=pk)
-    scope = "household" if rule.household_id else "personal"
+    back = _in(rule.space, reverse("albright_money:categories"))
     rule.delete()
     messages.success(request, "Rule deleted.")
-    return redirect(reverse("albright_money:categories") + f"?scope={scope}")
+    return redirect(back)
 
 
 # ---------------------------------------------------------------------------
@@ -518,13 +536,12 @@ def rule_delete(request, pk):
 @never_cache
 def budget(request):
     user = request.user
-    owner, household = _scope(request)
+    owner, space = _scope(request)
     month = _month(request.POST.get("month") or request.GET.get("month"), budgets.this_month())
-    scope = "household" if household else "personal"
-    here = reverse("albright_money:budget") + f"?scope={scope}&month={month:%Y-%m}"
+    here = _in(space, reverse("albright_money:budget") + f"?month={month:%Y-%m}")
     if request.method == "POST":
         if request.POST.get("action") == "copy":
-            copied = budgets.copy_last_month(owner, household, month)
+            copied = budgets.copy_last_month(owner, space, month)
             if copied is None:
                 messages.error(request, "Last month has no budget to copy.")
             else:
@@ -539,66 +556,24 @@ def budget(request):
                     return redirect(here)
                 planned[int(key[8:])] = amount
         rollover = {int(v) for v in request.POST.getlist("rollover") if v.isdigit()}
-        cats = money.ensure_categories(owner, household)
+        cats = money.ensure_categories(owner, space)
         for c in cats:
             if c.kind == Category.EXPENSE and c.rollover != (c.pk in rollover):
                 c.rollover = c.pk in rollover
                 c.save(update_fields=["rollover"])
-        budgets.save_plan(owner, household, month, planned)
+        budgets.save_plan(owner, space, month, planned)
         messages.success(request, "Budget saved.")
         return redirect(here)
-    view = budgets.month_view(owner, household, month)
+    view = budgets.month_view(owner, space, month)
     return render(request, "albright_money/budget.html", {
-        "v": view, "scope": scope, "household": household_of(user), "prev": budgets.add_months(month, -1),
+        "v": view, "space": space, "prev": budgets.add_months(month, -1),
         "next": budgets.add_months(month, 1), "is_this_month": month == budgets.this_month()})
 
 
 # ---------------------------------------------------------------------------
-# Household
+# The old Household page -> Circles
 # ---------------------------------------------------------------------------
 
-@login_required
 def household(request):
-    user = request.user
-    mine = household_of(user)
-    if request.method == "POST":
-        action = request.POST.get("action")
-        if action == "create" and not mine:
-            name = request.POST.get("name", "").strip()[:100] or f"{money.person(user)}'s household"
-            with db_transaction.atomic():
-                h = Household.objects.create(name=name, created_by=user)
-                HouseholdMember.objects.create(household=h, user=user)
-                money.ensure_categories(user, h)
-            messages.success(request, f"Created {h.name}. Add someone, then mark accounts as shared.")
-        elif action == "rename" and mine:
-            mine.name = request.POST.get("name", "").strip()[:100] or mine.name
-            mine.save(update_fields=["name"])
-            messages.success(request, "Saved.")
-        elif action == "add" and mine:
-            username = request.POST.get("username", "").strip()
-            person = money.money_users().filter(username__iexact=username).first()
-            if person is None:
-                messages.error(request, "No one by that username can open Money - give them access in Admin > Users first.")
-            elif HouseholdMember.objects.filter(user=person).exists():
-                messages.error(request, f"{money.person(person)} is already in a household.")
-            else:
-                HouseholdMember.objects.create(household=mine, user=person)
-                messages.success(request, f"Added {money.person(person)}.")
-        elif action == "remove" and mine:
-            other = get_object_or_404(HouseholdMember, household=mine, user_id=request.POST.get("user") or 0)
-            if other.user_id == user.pk:
-                raise Http404
-            other.delete()
-            messages.success(request, f"Removed {money.person(other.user)} - they no longer see the shared money.")
-        elif action == "leave" and mine:
-            if mine.members.count() == 1:
-                # The shared accounts, budgets and categories belong to the household - never dropped by leaving.
-                messages.error(request, "You're the only member - the shared accounts and budget stay with the household.")
-            else:
-                HouseholdMember.objects.filter(household=mine, user=user).delete()
-                messages.success(request, "You left the household - its shared money is no longer visible to you.")
-        return redirect("albright_money:household")
-    return render(request, "albright_money/household.html", {
-        "household": mine, "members": money.members(mine),
-        "candidates": money.money_users().exclude(household_membership__isnull=False).exclude(pk=user.pk)})
-
+    """Who shares Money is now a circle (My account > Circles)."""
+    return redirect("labs:circles")

@@ -4,7 +4,7 @@ the targets calculator and its guardrails; gram conversions; the diary (totals, 
 quick add, My foods, Recent, copy yesterday, USDA portions); recipe nutrition (matching, ignored lines, overrides,
 per serving, manual, shown on cards and the page, following the recipe's visibility); logging a planned meal or a
 recipe; the Meals week's planned macros; the dashboard and launcher line; and privacy between two people in the
-same household."""
+same space."""
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
@@ -97,7 +97,7 @@ class Base(TestCase):
                             ["fitness", "meals"])
         self.wife = with_apps(User.objects.create_user(username="sam", password=PASSWORD, first_name="Sam"),
                               ["fitness", "meals"])
-        self.household = kitchen(self.me, self.wife)
+        self.space = kitchen(self.me, self.wife)
         self.client.force_login(self.me)
         self.today = timezone.localdate()
         self.fake, patcher = fake_usda(searches={"chicken": [CHICKEN], "rice": [RICE_SEARCH], "egg": [EGG_DETAIL],
@@ -367,7 +367,7 @@ class DiaryTests(Base):
 class RecipeNutritionTests(Base):
     def setUp(self):
         super().setUp()
-        self.recipe = Recipe.objects.create(household=self.household, title="Chicken and rice", created_by=self.me, servings=4,
+        self.recipe = Recipe.objects.create(space=self.space, title="Chicken and rice", created_by=self.me, servings=4,
                                             ingredients=[{"name": "chicken breast", "quantity": "1", "unit": "lb"},
                                                          {"name": "white rice", "quantity": "2", "unit": "cup"},
                                                          {"name": "salt", "quantity": "", "unit": "", "original": "salt to taste"}])
@@ -454,9 +454,9 @@ class RecipeNutritionTests(Base):
 class MealsConnectionTests(Base):
     def setUp(self):
         super().setUp()
-        self.recipe = Recipe.objects.create(household=self.household, title="Turkey chili", created_by=self.me, servings=6)
+        self.recipe = Recipe.objects.create(space=self.space, title="Turkey chili", created_by=self.me, servings=6)
         recipe_nutrition.set_manual(self.recipe, {"calories": D(400), "protein": D(30), "carbs": D(35), "fat": D(12), "fiber": None}, self.me)
-        self.dinner = MealPlanEntry.objects.create(household=self.household, date=self.today, slot="dinner", recipe=self.recipe)
+        self.dinner = MealPlanEntry.objects.create(space=self.space, date=self.today, slot="dinner", recipe=self.recipe)
 
     def test_from_my_meal_plan_logs_with_servings(self):
         page = self.client.get(url("food")).content.decode()
@@ -481,8 +481,8 @@ class MealsConnectionTests(Base):
         self.assertNotIn("evil", response["Location"])
 
     def test_meals_week_planned_macros(self):
-        other = Recipe.objects.create(household=self.household, title="Mystery soup", created_by=self.me)
-        MealPlanEntry.objects.create(household=self.household, date=self.today, slot="lunch", recipe=other)
+        other = Recipe.objects.create(space=self.space, title="Mystery soup", created_by=self.me)
+        MealPlanEntry.objects.create(space=self.space, date=self.today, slot="lunch", recipe=other)
         page = self.client.get(reverse("albright_meals:week")).content.decode()
         self.assertIn("Planned: 400 kcal &middot; 30 g protein", page)
         self.assertIn("(1 of 2 meals known)", page)
@@ -501,7 +501,7 @@ class MealsConnectionTests(Base):
 
 
 # ---------------------------------------------------------------------------
-# Privacy - even within a household
+# Privacy - even within a space
 # ---------------------------------------------------------------------------
 
 class PrivacyTests(Base):
@@ -529,8 +529,8 @@ class PrivacyTests(Base):
         kitchen(self.me, meals_only)
         lee = self.as_user(meals_only)
         self.assertEqual(lee.get(url("food")).status_code, 404)
-        recipe = Recipe.objects.create(household=self.household, title="Tacos", created_by=self.me)
+        recipe = Recipe.objects.create(space=self.space, title="Tacos", created_by=self.me)
         recipe_nutrition.set_manual(recipe, {"calories": D(500), "protein": D(25), "carbs": None, "fat": None, "fiber": None}, self.me)
         page = lee.get(reverse("albright_meals:recipe", args=[recipe.pk])).content.decode()
-        self.assertIn('id="recipe-per-serving"', page)                                     # the recipe's, for its household
+        self.assertIn('id="recipe-per-serving"', page)                                     # the recipe's, for its space
         self.assertNotIn('id="recipe-log"', page)                                          # no diary without Fitness

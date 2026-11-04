@@ -182,7 +182,7 @@ class CompletionTests(Fixtures):
 
 class GroceryTests(Fixtures):
     def test_grocery_rows_still_check_the_line(self):
-        milk = GroceryItem.objects.create(household=self.kitchen, name="milk", quantity=1, unit="gal")
+        milk = GroceryItem.objects.create(space=self.kitchen, name="milk", quantity=1, unit="gal")
         task = checklist.task_from_groceries(self.me, [milk], "", TODAY)
         row = task.checklist.get()
         self.client.post(url("checklist_toggle", task.pk, row.pk), {"date": TODAY.isoformat()})

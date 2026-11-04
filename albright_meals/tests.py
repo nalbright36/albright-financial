@@ -36,13 +36,13 @@ class Base(TestCase):
         self.outlook.start()
         self.addCleanup(self.outlook.stop)
         self.owner = User.objects.create_superuser(username="nate", password=PASSWORD, email="", first_name="Nate")
-        self.household = kitchen(self.owner)
+        self.space = kitchen(self.owner)
         self.client.force_login(self.owner)
         self.today = timezone.localdate()
         self.monday = plan.week_start(self.today)
 
     def recipe(self, title, ingredients, **kw):
-        return Recipe.objects.create(household=self.household, title=title, ingredients=ingredients, created_by=self.owner, **kw)
+        return Recipe.objects.create(space=self.space, title=title, ingredients=ingredients, created_by=self.owner, **kw)
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ class GroceryPageTests(Base):
         self.assertEqual(data["unchecked"], 3)
 
     def test_checked_lines_never_take_merges(self):
-        item = GroceryItem.objects.create(household=self.household, name="eggs", quantity=12, aisle="dairy", checked=True,
+        item = GroceryItem.objects.create(space=self.space, name="eggs", quantity=12, aisle="dairy", checked=True,
                                           checked_at=timezone.now())
         self.client.post(reverse("albright_meals:groceries"), {"line": "6 eggs"})
         self.assertEqual(GroceryItem.objects.count(), 2)
@@ -216,9 +216,9 @@ class GroceryPageTests(Base):
         self.assertEqual(item.quantity, 12)
 
     def test_checking_strikes_through_and_moves_to_the_bottom_of_its_aisle(self):
-        apples = GroceryItem.objects.create(household=self.household, name="apples", aisle="produce")
-        GroceryItem.objects.create(household=self.household, name="bananas", aisle="produce")
-        GroceryItem.objects.create(household=self.household, name="milk", aisle="dairy")
+        apples = GroceryItem.objects.create(space=self.space, name="apples", aisle="produce")
+        GroceryItem.objects.create(space=self.space, name="bananas", aisle="produce")
+        GroceryItem.objects.create(space=self.space, name="milk", aisle="dairy")
         response = self.client.post(reverse("albright_meals:grocery_toggle", args=[apples.pk]),
                                     HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         apples.refresh_from_db()
@@ -235,8 +235,8 @@ class GroceryPageTests(Base):
         self.assertFalse(apples.checked)
 
     def test_clear_checked(self):
-        GroceryItem.objects.create(household=self.household, name="apples", checked=True, checked_at=timezone.now())
-        GroceryItem.objects.create(household=self.household, name="milk")
+        GroceryItem.objects.create(space=self.space, name="apples", checked=True, checked_at=timezone.now())
+        GroceryItem.objects.create(space=self.space, name="milk")
         self.client.post(reverse("albright_meals:grocery_clear"))
         self.assertEqual(list(GroceryItem.objects.active().values_list("name", flat=True)), ["milk"])
 
@@ -248,7 +248,7 @@ class GroceryPageTests(Base):
         self.assertTrue(data["changed"])
         version = data["version"]
         self.assertEqual(self.client.get(url, {"version": version}).json(), {"changed": False, "version": version})
-        GroceryItem.objects.create(household=self.household, name="milk")
+        GroceryItem.objects.create(space=self.space, name="milk")
         changed = self.client.get(url, {"version": version}).json()
         self.assertTrue(changed["changed"])
         self.assertIn("milk", changed["html"])
@@ -269,12 +269,12 @@ class GroceryPageTests(Base):
                                       {"name": "garlic", "quantity": "1", "unit": "tbsp", "note": ""},
                                       "1 can coconut milk"])
         skipped = self.recipe("Skipped", [{"name": "onion", "quantity": "5"}])
-        MealPlanEntry.objects.create(household=self.household, date=self.monday, slot="dinner", recipe=stew)
-        MealPlanEntry.objects.create(household=self.household, date=self.monday + timedelta(days=1), slot="dinner", recipe=curry)
-        MealPlanEntry.objects.create(household=self.household, date=self.monday + timedelta(days=2), slot="dinner", recipe=skipped,
+        MealPlanEntry.objects.create(space=self.space, date=self.monday, slot="dinner", recipe=stew)
+        MealPlanEntry.objects.create(space=self.space, date=self.monday + timedelta(days=1), slot="dinner", recipe=curry)
+        MealPlanEntry.objects.create(space=self.space, date=self.monday + timedelta(days=2), slot="dinner", recipe=skipped,
                                      status="skipped")
-        MealPlanEntry.objects.create(household=self.household, date=self.monday + timedelta(days=8), slot="dinner", recipe=skipped)  # next week
-        GroceryItem.objects.create(household=self.household, name="onion", quantity=1, aisle="produce")              # already on the list
+        MealPlanEntry.objects.create(space=self.space, date=self.monday + timedelta(days=8), slot="dinner", recipe=skipped)  # next week
+        GroceryItem.objects.create(space=self.space, name="onion", quantity=1, aisle="produce")              # already on the list
         self.client.post(reverse("albright_meals:grocery_from_week"), {"start": self.monday.isoformat()})
         rows = {(i.name.lower(), i.unit): i for i in GroceryItem.objects.all()}
         self.assertEqual(rows[("onion", "")].quantity, Decimal("4"))                      # 1 + 2 + the list's 1
@@ -297,7 +297,7 @@ class GroceryPageTests(Base):
 
 class WeekTests(Base):
     def test_seven_days_and_week_arrows(self):
-        MealPlanEntry.objects.create(household=self.household, date=self.today, slot="dinner", title="Tacos")
+        MealPlanEntry.objects.create(space=self.space, date=self.today, slot="dinner", title="Tacos")
         page = self.client.get(reverse("albright_meals:week")).content.decode()
         self.assertEqual(len(re.findall(r'class="card meals-day', page)), 7)
         self.assertIn("Tacos", page)
@@ -334,13 +334,13 @@ class WeekTests(Base):
     def test_digest_setting_is_the_owners(self):
         self.assertContains(self.client.get(reverse("albright_meals:week")), 'id="meals-settings"')
         self.client.post(reverse("albright_meals:settings"), {})
-        self.assertFalse(MealsSettings.load(self.household).digest_tonight)
+        self.assertFalse(MealsSettings.load(self.space).digest_tonight)
         sam = User.objects.create_user(username="sam", password=PASSWORD)
         UserPreference.objects.create(user=sam, allowed_apps=["meals"])
         self.client.force_login(sam)
         self.assertNotContains(self.client.get(reverse("albright_meals:week")), 'id="meals-settings"')
         self.client.post(reverse("albright_meals:settings"), {"digest_tonight": "on"})
-        self.assertFalse(MealsSettings.load(self.household).digest_tonight)                       # unchanged
+        self.assertFalse(MealsSettings.load(self.space).digest_tonight)                       # unchanged
 
 
 class IdeaAndRecipeTests(Base):
@@ -354,7 +354,7 @@ class IdeaAndRecipeTests(Base):
         idea.refresh_from_db()
         self.assertEqual(idea.status, "planned")
         self.assertEqual(idea.planned_entry.title, "Gnocchi")
-        other = MealIdea.objects.create(household=self.household, title="Liver")
+        other = MealIdea.objects.create(space=self.space, title="Liver")
         self.client.post(reverse("albright_meals:idea_decline", args=[other.pk]))
         other.refresh_from_db()
         self.assertEqual(other.status, "declined")
@@ -407,8 +407,8 @@ class BotApiTests(Base):
         return getattr(self.client, method.lower())(API + path, **kwargs)
 
     def test_every_endpoint_needs_its_scope(self):
-        entry = MealPlanEntry.objects.create(household=self.household, date=self.today, slot="dinner", title="Bot", from_bot=True)
-        item = GroceryItem.objects.create(household=self.household, name="milk")
+        entry = MealPlanEntry.objects.create(space=self.space, date=self.today, slot="dinner", title="Bot", from_bot=True)
+        item = GroceryItem.objects.create(space=self.space, name="milk")
         reads = ["meals/plan", "meals/groceries", "meals/ideas", "meals/recipes"]
         writes = [("POST", "meals/plan", {"date": self.today.isoformat(), "slot": "lunch", "title": "Soup"}),
                   ("POST", "meals/groceries", {"name": "eggs"}),
@@ -438,7 +438,7 @@ class BotApiTests(Base):
         self.assertIn("listed 0 grocery items", logs[1].summary)
 
     def test_plan_upsert_by_date_and_slot(self):
-        pasta = Recipe.objects.create(household=self.household, title="Pasta")
+        pasta = Recipe.objects.create(space=self.space, title="Pasta")
         first = self.call("POST", "meals/plan", {"date": self.today.isoformat(), "slot": "dinner", "title": "Tacos"})
         self.assertEqual(first.status_code, 201)
         self.assertTrue(first.json()["created"])
@@ -462,16 +462,16 @@ class BotApiTests(Base):
         self.assertEqual(self.call("GET", "meals/plan?start=2026-01-01&end=2026-06-01").status_code, 400)
 
     def test_delete_only_the_bots_own_entries(self):
-        mine = MealPlanEntry.objects.create(household=self.household, date=self.today, slot="lunch", title="Sam's", created_by=self.owner)
-        bots = MealPlanEntry.objects.create(household=self.household, date=self.today, slot="dinner", title="Bot's", from_bot=True)
+        mine = MealPlanEntry.objects.create(space=self.space, date=self.today, slot="lunch", title="Sam's", created_by=self.owner)
+        bots = MealPlanEntry.objects.create(space=self.space, date=self.today, slot="dinner", title="Bot's", from_bot=True)
         self.assertEqual(self.call("DELETE", f"meals/plan/{mine.pk}").status_code, 403)
         self.assertEqual(self.call("DELETE", f"meals/plan/{bots.pk}").json(), {"deleted": bots.pk})
         self.assertEqual(list(MealPlanEntry.objects.values_list("title", flat=True)), ["Sam's"])
         self.assertEqual(self.call("DELETE", "meals/plan/99999").status_code, 404)
 
     def test_groceries_add_merge_and_patch(self):
-        GroceryItem.objects.create(household=self.household, name="onion", quantity=1, aisle="produce")
-        GroceryItem.objects.create(household=self.household, name="eggs", quantity=6, aisle="dairy", checked=True, checked_at=timezone.now())
+        GroceryItem.objects.create(space=self.space, name="onion", quantity=1, aisle="produce")
+        GroceryItem.objects.create(space=self.space, name="eggs", quantity=6, aisle="dairy", checked=True, checked_at=timezone.now())
         response = self.call("POST", "meals/groceries", {"items": [
             {"name": "Onions", "quantity": 2}, {"name": "eggs", "quantity": "12"},
             {"name": "chicken thighs", "quantity": "1 1/2", "unit": "lbs"}, {"name": "dish soap"}]})
@@ -558,20 +558,20 @@ class TileAndDigestTests(Base):
         self.assertIn("meals", home_tiles(self.client.get(reverse("labs:hub")).content.decode()))
         empty = self.client.get(reverse("labs:tile", args=["meals"])).json()
         self.assertEqual((empty["ok"], empty["value"]), (True, "Nothing planned"))
-        MealPlanEntry.objects.create(household=self.household, date=self.today, slot="dinner", title="Tacos")
-        GroceryItem.objects.create(household=self.household, name="tortillas")
-        GroceryItem.objects.create(household=self.household, name="limes")
-        GroceryItem.objects.create(household=self.household, name="old", checked=True, checked_at=timezone.now())
+        MealPlanEntry.objects.create(space=self.space, date=self.today, slot="dinner", title="Tacos")
+        GroceryItem.objects.create(space=self.space, name="tortillas")
+        GroceryItem.objects.create(space=self.space, name="limes")
+        GroceryItem.objects.create(space=self.space, name="old", checked=True, checked_at=timezone.now())
         data = self.client.get(reverse("labs:tile", args=["meals"])).json()
         self.assertEqual((data["value"], data["note"], data["size"]), ("Tacos", "tonight · 2 on the grocery list", "text"))
 
     def test_digest_line(self):
         self.assertEqual(digest_lines(), ["", "Tonight: nothing planned"])
-        MealPlanEntry.objects.create(household=self.household, date=self.today, slot="dinner", title="Fish & chips")
+        MealPlanEntry.objects.create(space=self.space, date=self.today, slot="dinner", title="Fish & chips")
         self.assertEqual(digest_lines(), ["", "Tonight: Fish &amp; chips"])          # HTML-escaped for Telegram
         from albright_reselling_app.scanner.alerts import build_digest_message
         self.assertIn("Tonight: Fish &amp; chips", build_digest_message())
-        settings_row = MealsSettings.load(self.household)
+        settings_row = MealsSettings.load(self.space)
         settings_row.digest_tonight = False
         settings_row.save()
         self.assertEqual(digest_lines(), [])

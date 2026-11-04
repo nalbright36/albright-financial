@@ -1,12 +1,13 @@
 {% extends "albright_money/base.html" %}{% load money_extras %}
 {% block page_title %}Accounts · {% endblock %}
 {% block money %}
-{% comment %}Accounts (views.accounts): each one's current balance (starting balance + its transactions; a credit card shows what's owed), personal or shared, and the form to add one.{% endcomment %}
+{% comment %}Accounts (views.accounts): the space's accounts, each with its current balance (starting balance + its transactions; a credit card shows what's owed), and the form to add one (in any of my spaces).{% endcomment %}
 <div class="mn-head">
     <div><h1 class="mn-head__title">Accounts</h1>
-        <p class="mn-head__sub">{% if household %}Shared ones are {{ household.name }}'s{% else %}<a href="{% url 'albright_money:household' %}">Set up a household</a> to share accounts{% endif %}</p></div>
-    <div class="mn-head__actions"><a href="{% url 'albright_money:household' %}" class="btn btn-secondary btn-sm">Household</a></div>
+        <p class="mn-head__sub">{{ space.name }}{% if space.circle_id %} &middot; everyone in the circle who joined Money sees these{% else %} &middot; only you see these{% endif %}</p></div>
+    <div class="mn-head__actions"><a href="{% url 'labs:circles' %}" class="btn btn-secondary btn-sm">Circles</a></div>
 </div>
+{% include "albright_labs/_space_switch.html" %}
 
 {% if rows %}
 <div class="card mn-card">
@@ -14,7 +15,7 @@
         <li class="mn-list__row{% if r.account.archived %} is-archived{% endif %}">
             <a href="{% url 'albright_money:account' r.account.pk %}" class="mn-list__main">{{ r.account.name }}
                 <span class="mn-muted mn-small">{{ r.account.get_kind_display }}{% if r.account.institution %} &middot; {{ r.account.institution }}{% endif %}{% if r.account.last4 %} &middot; &middot;&middot;{{ r.account.last4 }}{% endif %}{% if r.account.archived %} &middot; archived{% endif %}</span>
-                {% if r.account.household_id %}<span class="mn-tag">Shared</span>{% else %}<span class="mn-tag mn-tag--quiet">Personal</span>{% endif %}</a>
+</a>
             <span class="mn-amount{% if r.label == 'Owed' %} mn-owed{% endif %}">{% if r.label != "Balance" %}<span class="mn-muted mn-small">{{ r.label }}</span> {% endif %}{{ r.shown|usd }}</span>
         </li>
     {% endfor %}</ul>

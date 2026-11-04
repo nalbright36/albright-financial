@@ -1,17 +1,8 @@
-"""Albright Meals: each household's meal plan, recipes, meal ideas and grocery list (albright_labs.Household).
-Everything here belongs to a household and only its members see it (scope.py - anything else is a 404); someone
-with Meals access but no household is asked to set one up. Recipes can also be shared beyond the household:
-read-only in the "Recipe library" (visibility), or with one person at a time (RecipeShare) - either way the
-recipe's plan, grocery list, ideas and ratings stay the household's.
-
-The Grok "Recipe Bot" writes here too, through the Bot API (meals:write).
-Rows it creates have from_bot set (and the token that wrote them, while it
-exists) and are labeled "Recipe Bot" on the site.
-
-Recipes can also be imported from a link (importer.py): the page's own
-recipe data, or - when it has none - the AI reading the page's text, which
-marks the recipe "needs review".
-"""
+"""Albright Meals: meal plans, recipes, meal ideas and grocery lists - each in a space (albright_labs.Space): someone's
+Personal space, or a circle's when the circle shares Meals. Who sees which space is decided by albright_labs.circles
+(scope.py asks it - anything else is a 404). Recipes can also be shared beyond the space: put in the "Recipe library"
+(every Meals user can read it and save a copy) or shared with one person (RecipeShare). A recipe's plan, grocery
+list, ideas and ratings stay with its space."""
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -43,8 +34,8 @@ class _Authored(models.Model):
         return (user.first_name or user.get_username()) if user else ""
 
 
-def _household_fk():
-    return models.ForeignKey("albright_labs.Household", on_delete=models.CASCADE, related_name="+")
+def _space_fk():
+    return models.ForeignKey("albright_labs.Space", on_delete=models.CASCADE, related_name="+")
 
 
 def _user_fk(related_name):
@@ -61,11 +52,11 @@ STANDARD_TAGS = [("quick_weeknight", "Quick weeknight"), ("good_leftovers", "Goo
 
 class Recipe(_Authored):
     HOUSEHOLD, LIBRARY = "household", "library"
-    VISIBILITY = [(HOUSEHOLD, "Household"), (LIBRARY, "Shared library")]
-    household = _household_fk()
-    # "Shared library": every Meals user can read it (and save a copy); only its household can change it.
+    VISIBILITY = [(HOUSEHOLD, "This space only"), (LIBRARY, "Shared library")]
+    space = _space_fk()
+    # "Shared library": every Meals user can read it (and save a copy); only its space can change it.
     visibility = models.CharField(max_length=10, choices=VISIBILITY, default=HOUSEHOLD, db_index=True)
-    # A copy saved from someone else's recipe ("Save to my recipes"): credited "Saved from <household name>".
+    # A copy saved from someone else's recipe ("Save to my recipes"): credited "Saved from <space name>".
     saved_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="copies")
     saved_from_name = models.CharField(max_length=100, blank=True)
     title = models.CharField(max_length=200)
@@ -128,7 +119,7 @@ class RecipeRating(models.Model):
         STAPLE: ("⭐", "gold", "Part of the regular rotation; our go-to."),
     }
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="ratings")
-    # A person's own stamp - only their household's members ever see it (scope.household_ratings).
+    # A person's own stamp - only the people who see the recipe's space ever see it (scope.stamps).
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="meal_ratings")
     level = models.PositiveSmallIntegerField(choices=LEVELS, validators=[MinValueValidator(1), MaxValueValidator(6)])
     # Optional - for "Needs tweaks" the form asks "What would you change?"
@@ -167,7 +158,7 @@ class RecipeRating(models.Model):
 
 
 class RecipeShare(models.Model):
-    """One recipe shown, read-only, to one person outside its household (they can save a copy). seen_at: when they
+    """One recipe shown, read-only, to one person outside its space (they can save a copy). seen_at: when they
     saw the "<name> shared <recipe> with you" notice."""
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="shares")
     shared_with = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="meals_shared_recipes")
@@ -183,7 +174,7 @@ class RecipeShare(models.Model):
 class MealPlanEntry(_Authored):
     """One meal in the plan: a day's breakfast/lunch/dinner/snack - a recipe, or just a title ("Leftovers")."""
     STATUSES = [("planned", "Planned"), ("cooked", "Cooked"), ("skipped", "Skipped")]
-    household = _household_fk()
+    space = _space_fk()
     date = models.DateField(db_index=True)
     slot = models.CharField(max_length=10, choices=SLOTS, default="dinner")
     recipe = models.ForeignKey(Recipe, on_delete=models.SET_NULL, null=True, blank=True, related_name="plan_entries")
@@ -194,7 +185,7 @@ class MealPlanEntry(_Authored):
 
     class Meta:
         ordering = ["date", "slot", "pk"]
-        constraints = [models.UniqueConstraint(fields=["household", "date", "slot"], name="meals_one_entry_per_slot")]
+        constraints = [models.UniqueConstraint(fields=["space", "date", "slot"], name="meals_one_entry_per_slot")]
 
     def __str__(self):
         return f"{self.date} {self.slot}: {self.display_title}"
@@ -208,7 +199,7 @@ class MealIdea(_Authored):
     """Something to try some day - moved into the plan, or declined."""
     AUTHOR_FIELD = "added_by"
     STATUSES = [("new", "New"), ("planned", "Planned"), ("declined", "Declined")]
-    household = _household_fk()
+    space = _space_fk()
     title = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
     link = models.URLField(max_length=500, blank=True)
@@ -236,7 +227,7 @@ class GroceryItem(_Authored):
     duplicate_of links a line to an unchecked line for the same ingredient in a different unit ("1 lb" vs "2 cups")
     - shown as "Possible duplicate" with a Merge button."""
     AUTHOR_FIELD = "added_by"
-    household = _household_fk()
+    space = _space_fk()
     name = models.CharField(max_length=120)
     quantity = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     unit = models.CharField(max_length=20, blank=True)
@@ -263,8 +254,8 @@ class GroceryItem(_Authored):
 
 
 class MealsSettings(models.Model):
-    """A household's Meals settings: the "Tonight: <dinner>" line in the owner's daily Telegram digest."""
-    household = models.OneToOneField("albright_labs.Household", on_delete=models.CASCADE, related_name="meals_settings")
+    """A space's Meals settings: the "Tonight: <dinner>" line in the owner's daily Telegram digest."""
+    space = models.OneToOneField("albright_labs.Space", on_delete=models.CASCADE, related_name="meals_settings")
     digest_tonight = models.BooleanField(default=True, verbose_name='"Tonight: <dinner>" in my daily digest')
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -272,8 +263,8 @@ class MealsSettings(models.Model):
         return "Meals settings"
 
     @classmethod
-    def load(cls, household):
-        return cls.objects.get_or_create(household=household)[0]
+    def load(cls, space):
+        return cls.objects.get_or_create(space=space)[0]
 
 
 NUTRITION_FIELDS = ("calories", "protein", "carbs", "fat", "fiber")
@@ -281,10 +272,10 @@ _AMOUNT = {"max_digits": 9, "decimal_places": 2, "null": True, "blank": True}
 
 
 class RecipeNutrition(models.Model):
-    """A recipe's nutrition - it belongs to the recipe, so it's shared exactly as the recipe is (its household; the
+    """A recipe's nutrition - it belongs to the recipe, so it's shared exactly as the recipe is (its space; the
     library or a share when the recipe is). Worked out by matching each ingredient line to a USDA food
     (albright_fitness.nutrition - the lines below), or typed in per serving (MANUAL). NEEDS_REVIEW until someone in
-    the household confirms the matches. total_*: the whole recipe; serving_*: per serving (the recipe's servings, or
+    the space confirms the matches. total_*: the whole recipe; serving_*: per serving (the recipe's servings, or
     the whole recipe as one serving when it has none)."""
     NEEDS_REVIEW, CONFIRMED, MANUAL = "review", "confirmed", "manual"
     STATUSES = [(NEEDS_REVIEW, "Needs review"), (CONFIRMED, "Confirmed"), (MANUAL, "Typed in")]

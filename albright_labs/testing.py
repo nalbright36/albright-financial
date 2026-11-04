@@ -62,13 +62,30 @@ def with_apps(user, keys=None):
     return user
 
 
-def kitchen(user, *others, name="Test household"):
-    """Put a test user (and any others) in a household - Meals' data is a household's. Returns the household."""
-    from .models import Household, HouseholdMember, household_of
-    household = household_of(user)
-    if household is None:
-        household = Household.objects.create(name=name, created_by=user)
-        HouseholdMember.objects.create(household=household, user=user)
+def kitchen(user, *others, name="Test circle", apps=("meals", "money")):
+    """A circle sharing Meals and Money (by default) with `user` as owner and `others` as members - everyone active
+    and opted in - like a household that became a circle. Returns the circle's Space (where shared data lives).
+    Called again for the same owner and name, it adds the others to that circle."""
+    from django.utils import timezone
+
+    from .models import Circle, CircleMembership, Space
+    circle = Circle.objects.filter(name=name, memberships__user=user, memberships__role="owner").first()
+    if circle is None:
+        circle = Circle.objects.create(name=name, created_by=user, enabled_apps=list(apps))
+        CircleMembership.objects.create(circle=circle, user=user, role="owner", status="active", joined_at=timezone.now(),
+                                        apps=list(apps))
     for other in others:
-        HouseholdMember.objects.get_or_create(user=other, defaults={"household": household})
-    return household
+        CircleMembership.objects.update_or_create(circle=circle, user=other, defaults={
+            "status": "active", "role": "member", "joined_at": timezone.now(), "apps": list(apps)})
+    space = Space.objects.get_or_create(circle=circle)[0]
+    for person in (user,) + others:                              # the circle's space is what they look at
+        from .circles import remember
+        for app in apps:
+            remember(person, app, space.pk)
+    return space
+
+
+def personal(user):
+    """The user's Personal space."""
+    from .circles import personal_space
+    return personal_space(user)

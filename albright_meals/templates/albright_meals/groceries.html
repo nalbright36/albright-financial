@@ -13,6 +13,7 @@ row; "Create task" makes a Planner task whose checklist is those lines
 (albright_planner:from_groceries).
 {% endcomment %}
 <div class="container meals-page meals-narrow{% if selecting %} is-selecting{% endif %}" id="grocery-page">
+{% include "albright_labs/_space_switch.html" %}
     {% include "albright_meals/_notices.html" %}
     <div class="meals-head">
         <div>

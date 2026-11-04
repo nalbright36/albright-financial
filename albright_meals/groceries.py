@@ -179,7 +179,7 @@ def format_quantity(quantity):
 ADDED, COMBINED, DUPLICATE = "added", "combined", "duplicate"
 
 
-def add_item_detail(household, name, quantity=None, unit="", aisle=None, note="", user=None, token=None,
+def add_item_detail(space, name, quantity=None, unit="", aisle=None, note="", user=None, token=None,
                     from_recipe=None, recipes=()):
     """Adds a line, or combines it into an unchecked line for the same thing and unit; the same thing in another
     unit is added as its own line linked to that one (a possible duplicate). Either way the recipes it came from
@@ -190,7 +190,7 @@ def add_item_detail(household, name, quantity=None, unit="", aisle=None, note=""
     note = (note or "").strip()[:MAX_NOTE]
     key = name_key(name)
     with transaction.atomic():
-        same_thing = [i for i in GroceryItem.objects.active().select_for_update().filter(household=household, checked=False)
+        same_thing = [i for i in GroceryItem.objects.active().select_for_update().filter(space=space, checked=False)
                       .order_by("pk")
                       if name_key(i.name) == key]
         for existing in same_thing:
@@ -205,7 +205,7 @@ def add_item_detail(household, name, quantity=None, unit="", aisle=None, note=""
                 existing.recipes.add(*recipes)
             return existing, COMBINED
         item = GroceryItem.objects.create(
-            household=household, name=name, quantity=quantity, unit=unit, aisle=aisle if aisle in AISLE_LABELS else guess_aisle(name),
+            space=space, name=name, quantity=quantity, unit=unit, aisle=aisle if aisle in AISLE_LABELS else guess_aisle(name),
             note=note, added_by=user if user and user.is_authenticated else None, from_bot=token is not None,
             bot_token=token, from_recipe=from_recipe or (recipes[0] if len(recipes) == 1 else None),
             duplicate_of=same_thing[0] if same_thing else None)
@@ -214,10 +214,10 @@ def add_item_detail(household, name, quantity=None, unit="", aisle=None, note=""
         return item, DUPLICATE if same_thing else ADDED
 
 
-def add_item(household, name, quantity=None, unit="", aisle=None, note="", user=None, token=None, from_recipe=None,
+def add_item(space, name, quantity=None, unit="", aisle=None, note="", user=None, token=None, from_recipe=None,
              recipes=()):
     """add_item_detail, answering (item, merged) - merged when it was combined into an existing line."""
-    item, status = add_item_detail(household, name, quantity, unit, aisle, note, user=user, token=token,
+    item, status = add_item_detail(space, name, quantity, unit, aisle, note, user=user, token=token,
                                    from_recipe=from_recipe, recipes=recipes)
     return item, status == COMBINED
 
@@ -240,14 +240,14 @@ def ingredient_parts(ingredient):
     return name, quantity, normalize_unit(unit), str(ingredient.get("note") or "").strip()
 
 
-def add_recipes(household, recipes, user=None, token=None, skip_listed=False):
+def add_recipes(space, recipes, user=None, token=None, skip_listed=False):
     """Every ingredient of these recipes, duplicates combined first (same thing, same unit),
     then merged into the list. skip_listed: leave out an ingredient whose unchecked line already
     came from one of these recipes (so pressing "Add ingredients" twice doesn't double it).
     Returns (lines added, lines merged, ingredients skipped)."""
     listed = set()
     if skip_listed:
-        for name, unit, recipe_pk in GroceryItem.objects.active().filter(household=household, checked=False,
+        for name, unit, recipe_pk in GroceryItem.objects.active().filter(space=space, checked=False,
                                                                          recipes__in=[r.pk for r in recipes]) \
                 .values_list("name", "unit", "recipes"):
             listed.add((name_key(name), unit, recipe_pk))
@@ -274,7 +274,7 @@ def add_recipes(household, recipes, user=None, token=None, skip_listed=False):
         if any((key, unit, pk) in listed for pk in row["recipes"]):
             skipped += 1
             continue
-        _item, was_merged = add_item(household, row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
+        _item, was_merged = add_item(space, row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
                                      token=token, recipes=[by_pk[pk] for pk in sorted(row["recipes"])])
         merged += was_merged
         added += not was_merged
@@ -292,16 +292,16 @@ def describe(item):
     return amount + (f" (from {', '.join(titles)})" if titles else "")
 
 
-def on_list(household):
-    """{name_key: [unchecked lines on the household's list]} - for the recipe page's "On list" badges."""
+def on_list(space):
+    """{name_key: [unchecked lines on the space's list]} - for the recipe page's "On list" badges."""
     index = {}
-    for item in GroceryItem.objects.active().filter(household=household, checked=False).prefetch_related("recipes") \
+    for item in GroceryItem.objects.active().filter(space=space, checked=False).prefetch_related("recipes") \
             .order_by("pk"):
         index.setdefault(name_key(item.name), []).append(item)
     return index
 
 
-def add_selected(household, recipe, indexes, user=None):
+def add_selected(space, recipe, indexes, user=None):
     """The picked ingredients of one recipe (by position in recipe.ingredients), the same thing in the same unit
     combined first, then added to the list. Returns {"added", "combined", "duplicates"} counts."""
     picked = OrderedDict()
@@ -320,7 +320,7 @@ def add_selected(household, recipe, indexes, user=None):
             row["note"] = f"{row['note']}; {note}" if row["note"] else note
     counts = {"added": 0, "combined": 0, "duplicates": 0}
     for row in picked.values():
-        _item, status = add_item_detail(household, row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
+        _item, status = add_item_detail(space, row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
                                         recipes=[recipe])
         counts[{ADDED: "added", COMBINED: "combined", DUPLICATE: "duplicates"}[status]] += 1
     return counts
@@ -346,7 +346,7 @@ def merge(item):
     line kept, or None if there's nothing to merge into (it was checked off or cleared meanwhile)."""
     target = item.duplicate_of
     if target is None or target.checked or target.archived_at or item.checked or item.archived_at \
-            or target.household_id != item.household_id:
+            or target.space_id != item.space_id:
         return None
     if item.unit == target.unit:
         if item.quantity is not None:
@@ -375,10 +375,10 @@ def possible_duplicate(item):
     return not item.checked and any(not d.checked and d.archived_at is None for d in item.duplicates.all())
 
 
-def grouped(household, items=None):
+def grouped(space, items=None):
     """[(aisle key, label, [items, unchecked first then checked (most recently checked last)])], aisle order.
     Each item gets .possible_duplicate and .can_merge."""
-    items = list(items if items is not None else GroceryItem.objects.active().filter(household=household)
+    items = list(items if items is not None else GroceryItem.objects.active().filter(space=space)
                  .select_related("added_by", "checked_by", "duplicate_of").prefetch_related("recipes", "duplicates"))
     for item in items:
         item.possible_duplicate = possible_duplicate(item)
@@ -393,8 +393,8 @@ def grouped(household, items=None):
     return groups
 
 
-def list_version(household):
-    """Changes whenever anything on the household's list changes - the 20-second refresh skips an unchanged list."""
+def list_version(space):
+    """Changes whenever anything on the space's list changes - the 20-second refresh skips an unchanged list."""
     from django.db.models import Count, Max
-    stats = GroceryItem.objects.filter(household=household).aggregate(n=Count("pk", filter=models.Q(archived_at__isnull=True)), last=Max("updated_at"))
+    stats = GroceryItem.objects.filter(space=space).aggregate(n=Count("pk", filter=models.Q(archived_at__isnull=True)), last=Max("updated_at"))
     return f"{stats['n']}-{stats['last'].timestamp() if stats['last'] else 0}"

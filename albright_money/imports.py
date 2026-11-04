@@ -178,7 +178,7 @@ def mark_duplicates(account, rows):
 
 def preview(account, rows):
     """The rows marked duplicate or new, with the category a rule would give each new one."""
-    rules = list(Rule.objects.filter(money.scope_filter(account.owner, account.household)).select_related("category"))
+    rules = list(Rule.objects.filter(money.scope_filter(account.owner, account.space)).select_related("category"))
     mark_duplicates(account, rows)
     for row in rows:
         if not row["duplicate"]:
@@ -191,7 +191,7 @@ def preview(account, rows):
 def import_rows(account, rows, user):
     """Create the new rows' transactions (duplicates skipped again, in case something was added meanwhile).
     Returns (created, skipped)."""
-    rules = list(Rule.objects.filter(money.scope_filter(account.owner, account.household)).select_related("category"))
+    rules = list(Rule.objects.filter(money.scope_filter(account.owner, account.space)).select_related("category"))
     mark_duplicates(account, rows)
     created = 0
     for row in rows:

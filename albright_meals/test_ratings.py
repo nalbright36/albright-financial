@@ -26,9 +26,9 @@ class Base(TestCase):
         self.addCleanup(outlook.stop)
         self.me = with_apps(User.objects.create_user(username="nate", password=PASSWORD, first_name="Nate"), ["meals"])
         self.wife = with_apps(User.objects.create_user(username="kim", password=PASSWORD, first_name="Kim"), ["meals"])
-        self.household = kitchen(self.me, self.wife)
+        self.space = kitchen(self.me, self.wife)
         self.client.force_login(self.me)
-        self.recipe = Recipe.objects.create(household=self.household, title="Sheet-pan fajitas", created_by=self.me)
+        self.recipe = Recipe.objects.create(space=self.space, title="Sheet-pan fajitas", created_by=self.me)
 
     def page(self, client=None):
         return (client or self.client).get(reverse("albright_meals:recipe", args=[self.recipe.pk])).content.decode()
@@ -52,7 +52,7 @@ class LevelTests(Base):
         self.assertEqual(RecipeRating.INFO[RecipeRating.STAPLE][2], "Part of the regular rotation; our go-to.")
 
     def test_sorts_and_filters_by_level(self):
-        other = Recipe.objects.create(household=self.household, title="Tofu bowls")
+        other = Recipe.objects.create(space=self.space, title="Tofu bowls")
         RecipeRating.objects.create(recipe=self.recipe, user=self.me, level=RecipeRating.STAPLE)
         RecipeRating.objects.create(recipe=other, user=self.me, level=RecipeRating.NEEDS_TWEAKS)
         self.assertEqual(list(RecipeRating.objects.filter(level__gte=RecipeRating.FAVORITE).values_list("recipe__title", flat=True)),

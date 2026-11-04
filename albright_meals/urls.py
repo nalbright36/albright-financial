@@ -6,7 +6,6 @@ app_name = "albright_meals"
 
 urlpatterns = [
     path("", views.week, name="week"),
-    path("setup/", views.setup, name="setup"),
     path("notices/seen/", views.notices_seen, name="notices_seen"),
     path("plan/add/", views.plan_add, name="plan_add"),
     path("plan/<int:pk>/", views.plan_entry, name="plan_entry"),

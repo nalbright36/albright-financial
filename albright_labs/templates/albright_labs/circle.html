@@ -1,0 +1,87 @@
+{% extends "index.html" %}
+{% block page_title %}{{ circle.name }} · Circles · {% endblock %}
+{% block content %}
+{% comment %}
+One circle (labs.circle_views.circle_page) - only for its active members: who's in it (role, which apps each has
+joined), my own part, Leave; for owners also pending invites (resend / revoke), inviting, renaming, its apps,
+removing people, making someone an owner, and deleting it. Nobody here ever sees anyone's personal data.
+{% endcomment %}
+<div class="container circles-page">
+    <h1 class="circles-title"{% if circle.color %} style="--circle-color: {{ circle.color }};"{% endif %}>{{ circle.name }}</h1>
+    <p class="circles-lead">Shares {% for a in enabled %}{{ a.label }}{% if not forloop.last %}, {% endif %}{% empty %}no apps yet{% endfor %}.</p>
+
+    <section class="card circles-card" id="circle-members" aria-labelledby="circle-members-h">
+        <h2 class="circles-card__title" id="circle-members-h">Members</h2>
+        {% for row in members %}
+        <div class="circles-row">
+            <span class="circles-avatar" aria-hidden="true">{{ row.initials }}</span>
+            <span class="circles-row__main"><strong>{{ row.name }}</strong>{% if row.m.user == request.user %} <span class="circles-muted">(you)</span>{% endif %}
+                <span class="circles-muted">{% if row.m.role == "owner" %}Owner{% else %}Member{% endif %} &middot; {% for a in row.apps %}{{ a.label }}{% if not forloop.last %}, {% endif %}{% empty %}no apps joined{% endfor %}</span></span>
+            {% if owner and row.m.user != request.user %}
+            <details class="circles-menu"><summary class="btn btn-secondary btn-sm" aria-label="Manage {{ row.name }}">&hellip;</summary>
+                <div class="circles-menu__panel">
+                    {% if row.m.role != "owner" %}
+                    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make_owner"><input type="hidden" name="user" value="{{ row.m.user_id }}"><input type="hidden" name="keep" value="1"><button type="submit" class="btn btn-secondary btn-sm">Make an owner too</button></form>
+                    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make_owner"><input type="hidden" name="user" value="{{ row.m.user_id }}"><button type="submit" class="btn btn-secondary btn-sm">Hand over ownership</button></form>
+                    {% endif %}
+                    <form method="post" data-confirm="Remove {{ row.name }} from {{ circle.name }}? They stop seeing what it shares at once. Their own data is untouched.">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ row.m.user_id }}"><button type="submit" class="btn btn-secondary btn-sm">Remove</button></form>
+                </div>
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </section>
+
+    <section class="card circles-card" id="circle-mine" aria-labelledby="circle-mine-h">
+        <h2 class="circles-card__title" id="circle-mine-h">My part</h2>
+        {% for a in my_apps %}
+        <form method="post" action="{% url 'labs:circles' %}" class="circles-toggle">{% csrf_token %}
+            <input type="hidden" name="action" value="participate"><input type="hidden" name="circle" value="{{ circle.pk }}"><input type="hidden" name="app" value="{{ a.key }}"><input type="hidden" name="on" value="{% if a.on %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'labs:circle' circle.pk %}">
+            <span class="circles-toggle__label">{{ a.label }} <span class="circles-muted">{{ a.shares }}</span></span>
+            <button type="submit" class="circles-switch{% if a.on %} is-on{% endif %}" role="switch" aria-checked="{% if a.on %}true{% else %}false{% endif %}" aria-label="{{ a.label }} in {{ circle.name }}"><span></span></button>
+        </form>
+        {% empty %}<p class="circles-muted">This circle doesn't share any apps yet.</p>{% endfor %}
+        <form method="post" class="circles-leave" data-confirm="Leave {{ circle.name }}? You stop seeing what it shares at once. Your own data is untouched.">{% csrf_token %}<input type="hidden" name="action" value="leave"><button type="submit" class="btn btn-secondary btn-sm" id="circle-leave">Leave circle</button></form>
+    </section>
+
+    {% if owner %}
+    <section class="card circles-card" id="circle-invites" aria-labelledby="circle-invites-h">
+        <h2 class="circles-card__title" id="circle-invites-h">Invite people</h2>
+        <form method="post" class="circles-form">{% csrf_token %}<input type="hidden" name="action" value="invite">
+            <label for="circle-who" class="visually-hidden">Their exact username or email</label>
+            <textarea name="who" id="circle-who" class="ledger-input" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" required placeholder="Their exact username or email - one per line"></textarea>
+            <button type="submit" class="btn btn-primary btn-sm">Invite</button>
+        </form>
+        {% for i in waiting %}
+        <div class="circles-row">
+            <span class="circles-row__main">{% if i.user %}{{ i.user.first_name|default:i.user.username }}{% else %}{{ i.email }}{% endif %} <span class="circles-muted">{% if i.status == "expired" %}expired{% else %}until {{ i.expires_at|date:"M j" }}{% endif %}</span></span>
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="resend"><input type="hidden" name="invite" value="{{ i.pk }}"><button type="submit" class="btn btn-secondary btn-sm">Resend</button></form>
+            {% if i.status == "pending" %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="revoke"><input type="hidden" name="invite" value="{{ i.pk }}"><button type="submit" class="btn btn-secondary btn-sm">Revoke</button></form>{% endif %}
+        </div>
+        {% endfor %}
+    </section>
+
+    <details class="card circles-card" id="circle-settings">
+        <summary class="circles-card__title">Owner settings</summary>
+        <form method="post" class="circles-form circles-inline">{% csrf_token %}<input type="hidden" name="action" value="rename">
+            <label for="circle-rename" class="visually-hidden">Circle name</label>
+            <input type="text" name="name" id="circle-rename" class="ledger-input" maxlength="100" value="{{ circle.name }}" required>
+            <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+        </form>
+        <form method="post" class="circles-form">{% csrf_token %}<input type="hidden" name="action" value="apps">
+            <fieldset class="circles-apps"><legend>What it shares</legend>
+                {% for a in all_apps %}<label class="circles-check"><input type="checkbox" name="apps" value="{{ a.key }}"{% if a.key in circle.enabled_apps %} checked{% endif %}> <span><strong>{{ a.label }}</strong> <span class="circles-muted">{{ a.shares }}</span></span></label>{% endfor %}
+            </fieldset>
+            <p class="circles-muted">Turning an app off hides it from everyone in the circle at once.</p>
+            <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+        </form>
+        <form method="post" class="circles-form circles-danger" data-confirm="Delete {{ circle.name }}? Everything it shares in Meals and Money is deleted. Everyone's personal data stays.">{% csrf_token %}<input type="hidden" name="action" value="delete">
+            <label for="circle-delete-name">Type <strong>{{ circle.name }}</strong> to delete the circle</label>
+            <input type="text" name="confirm_name" id="circle-delete-name" class="ledger-input" autocomplete="off">
+            <button type="submit" class="btn btn-secondary btn-sm">Delete circle</button>
+        </form>
+    </details>
+    {% endif %}
+    <p><a href="{% url 'labs:circles' %}">All circles</a></p>
+</div>
+{% endblock %}

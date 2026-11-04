@@ -1,7 +1,7 @@
 """Bot API v1 - Fitness (/api/bot/v1/fitness/...).
 
 Always the token owner's own Fitness data - their workouts, food diary and weigh-ins - never anyone else's (not even
-a household member's). fitness:read reads (today, the weekly summary); fitness:write logs a workout, food or a
+someone in the same circle). fitness:read reads (today, the weekly summary); fitness:write logs a workout, food or a
 weigh-in. The owner needs Fitness access and API keys allowed (auth.bot_endpoint checks on every call, and logs it).
 
 Food is never guessed: a recipe or "my food" name must match exactly (any case) - otherwise nothing is logged and
@@ -189,12 +189,8 @@ def food(request, token):
     servings = _number(data, "servings", Decimal("0.01"), MAX_SERVINGS) or Decimal(1)
     entry = None
     if data.get("recipe_id") not in (None, "") or data.get("recipe"):
-        from albright_labs.models import household_of
         from albright_meals import scope
-        household = household_of(user)
-        if household is None:
-            raise ApiError(409, "Recipes come from Meals - set up a household there first.", "rejected: no household")
-        readable = scope.readable(user, household).select_related("nutrition")
+        readable = scope.readable(user).select_related("nutrition")
         if data.get("recipe_id") not in (None, ""):
             if isinstance(data["recipe_id"], bool) or not isinstance(data["recipe_id"], int):
                 raise ApiError(400, '"recipe_id" must be a number.', "rejected: bad recipe_id")

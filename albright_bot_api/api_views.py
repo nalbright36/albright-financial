@@ -49,7 +49,7 @@ def _iso(value):
 # ---------------------------------------------------------------------------
 
 DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions - except in Meals,
-whose meals:write endpoints add to the household's plan, grocery list, ideas and recipes directly (labeled
+whose meals:write endpoints add to a Meals space's plan, grocery list, ideas and recipes directly (labeled
 "Recipe Bot" on the site), in Notes, whose notes:write endpoints save the owner's notes (labeled with
 your token's name), in the Planner, whose schedule:write endpoints add items to the owner's schedule and
 check occurrences off (labeled with your token's name), and in Fitness, whose fitness:write endpoints log the
@@ -174,10 +174,17 @@ GET  ideas?page=N                                     scope: ideas:read
   Existing ideas, newest first, 50 per page - check before sending one. Returns
   {"ideas": [{"id", "title", "app", "status", "created_at"}], "page", "pages", "total", "next_page" (int | null)}.
 
-MEALS (the household's meal planning - you are the "Recipe Bot")
-------------------------------------------------------------------
-Everything here is the token owner's HOUSEHOLD's - its plan, grocery list, ideas and recipes; another household's are
-404s. If the owner isn't in a household yet, every meals endpoint answers 409 until they set one up in Meals.
+MEALS (meal planning in a space - you are the "Recipe Bot")
+------------------------------------------------------------
+Everything here happens in a SPACE the token owner sees: their Personal space, or a circle's they've joined and opted
+in to Meals (My account > Circles). By default the one they last picked in Meals (Personal at first); send "space":
+<id> - in the query string for GET, or in the JSON body - for another of theirs (ids from GET meals/spaces). A space
+they don't see is a 404; leaving a circle or turning Meals off for it takes effect at once.
+
+GET  meals/spaces                                     scope: meals:read
+  The owner's Meals spaces. Returns {"spaces": [{"id", "name" ("Personal" or the circle's name), "personal": bool,
+  "current": bool (used when "space" isn't sent)}]}. Example: GET meals/plan?space=12
+
 Slots: "breakfast" | "lunch" | "dinner" | "snack" - one meal per day per slot. Aisles: "produce" | "meat" |
 "dairy" | "bakery" | "pantry" | "frozen" | "household" | "other". Quantities: a number (2, 0.5) or a string
 ("1 1/2"), up to 100000. "added_by" is "Recipe Bot" for what you created, else the person's name.
@@ -193,10 +200,11 @@ POST meals/plan                                       scope: meals:write
   Returns 201 (new) or 200 (replaced) {"id", "created": bool, ...the entry}. 404 if recipe_id doesn't exist.
 
 DELETE meals/plan/<id>                                scope: meals:write
-  Remove a plan entry the Recipe Bot created (403 for anyone else's). Returns {"deleted": id}.
+  Remove a plan entry the Recipe Bot created, in any space the owner sees (403 for anyone else's). Returns
+  {"deleted": id}.
 
 GET  meals/groceries                                  scope: meals:read
-  The shared grocery list. Returns {"items": [{"id", "name", "quantity" (str | null), "unit", "aisle", "note",
+  The space's grocery list. Returns {"items": [{"id", "name", "quantity" (str | null), "unit", "aisle", "note",
   "checked", "added_by"}]}.
 
 POST meals/groceries                                  scope: meals:write
@@ -205,7 +213,7 @@ POST meals/groceries                                  scope: meals:write
   with the same name and unit (quantities added). Returns 201 {"items": [{"id", "merged": bool, ...}]}.
 
 PATCH meals/groceries/<id>                            scope: meals:write
-  Body: any of {"quantity", "note", "checked": true|false}. Returns the item.
+  Body: any of {"quantity", "note", "checked": true|false}. Any line in a space the owner sees. Returns the item.
 
 GET  meals/ideas                                      scope: meals:read
   Meal ideas, newest first (up to 200). Returns {"ideas": [{"id", "title", "notes", "link", "status"
@@ -215,20 +223,21 @@ POST meals/ideas                                      scope: meals:write
   Body: {"title": str (required, <=200), "notes": str (optional), "link": http(s) URL (optional)}.
   Returns 201 {"id", ...}.
 
-GET  meals/recipes?scope=household&q=<words>&rated_by=me&rating=5&rating=6&love=1    scope: meals:read
-  Recipes, most recently changed first (up to 200). scope: "household" (default - the owner's household's),
-  "shared" (other households' recipes shared with the owner - read-only) or "library" (the shared recipe library -
-  read-only). q filters by title. Rating filters (the Recipes page's), judged by the owner's household's stamps:
-  rated_by = "me" (default) | "anyone" (anyone in the household) | <a household member's user id>; rating = 1-6
+GET  meals/recipes?scope=space&q=<words>&rated_by=me&rating=5&rating=6&love=1    scope: meals:read
+  Recipes, most recently changed first (up to 200). scope: "space" (default - the space's; "household" still works),
+  "shared" (recipes from other spaces shared with the owner - read-only) or "library" (the shared recipe library -
+  read-only). q filters by title. Rating filters (the Recipes page's), judged by the stamps of the people who see the
+  space: rated_by = "me" (default) | "anyone" (anyone in the space) | <the user id of someone in it>; rating = 1-6
   (Won't eat again, Not for me, Needs tweaks, Will eat again, Favorite, Staple) or "none" (not rated) - repeat it
-  for several; love=1: at least two of the household rated it and all Favorite or Staple. Each recipe:
+  for several; love=1: at least two people in the space rated it and all Favorite or Staple. Each recipe:
   {"id", "title", "description", "ingredients": [{"name", "quantity", "unit", "note"}], "steps": [str],
   "prep_minutes", "cook_minutes", "servings", "tags", "source_url", "image_url", "notes", "added_by", "updated_at",
-  "ours": bool, "visibility": "household" | "library", "ratings": [{"by", "level", "label"}] (the household's
-  stamps only - never another household's)}. Returns {"scope", "recipes"}. Ratings are read-only here.
+  "ours": bool, "space": its space id, "visibility": "household" (this space only) | "library", "ratings": [{"by",
+  "level", "label"}] (stamps from the people who see the recipe's space - for a recipe from a space the owner doesn't
+  see, only their own)}. Returns {"scope", "recipes"}. Ratings are read-only here.
 
 POST meals/recipes                                    scope: meals:write
-  Create a recipe in the owner's household, or update the household's one with the same title (case-insensitive) -
+  Create a recipe in the space, or update the space's one with the same title (case-insensitive) -
   only the fields you send change.
   Body: {"title": str (required, <=200), "description", "notes" (<=5000), "ingredients": [{"name" (required,
   <=120), "quantity" (<=20), "unit" (<=20), "note" (<=200)} or "2 lb chicken thighs", ...] (<=100),
@@ -335,7 +344,7 @@ POST schedule/<id>/checklist/<item_id>/uncomplete      scope: schedule:write
   are checked" on. A grocery-list subtask checks the line on the Meals grocery list (the owner needs Meals).
   Returns {"item_id", "checklist_item_id", "occurrence_date", "done", "progress" ("2/5"), "task_done"}.
 
-FITNESS (the owner's own workouts, food diary and weigh-ins - private to them, even within a household)
+FITNESS (the owner's own workouts, food diary and weigh-ins - private to them, even within a circle)
 ------------------------------------------------------------------------------------------------------
 Every call is a 403 if the owner can't open Fitness. Dates are YYYY-MM-DD (default today, never in the future).
 

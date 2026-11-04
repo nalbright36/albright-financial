@@ -62,11 +62,11 @@ def opps(user):
 def meals(user):
     from albright_meals.plan import tonight
 
-    from .models import household_of
-    household = household_of(user)
-    if household is None:
-        return "Set up your kitchen"
-    dinner = tonight(household)
+    from .circles import current_space
+    space = current_space(user, "meals")
+    if space is None:
+        return "No dinner planned"
+    dinner = tonight(space)
     if not dinner:
         return "No dinner planned"
     title = dinner.display_title

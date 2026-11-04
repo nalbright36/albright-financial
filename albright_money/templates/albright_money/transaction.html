@@ -31,8 +31,7 @@ money between your own accounts: never spending or income. Delete removes a tran
                 <label class="mn-inline"><span class="visually-hidden">Category {{ forloop.counter }}</span>
                     <select name="split_category" class="ledger-input">
                         <option value="">Uncategorized</option>
-                        {% if t.account.household_id %}{% for c in by_scope.shared %}<option value="{{ c.pk }}"{% if row.category.pk == c.pk %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
-                        {% else %}{% for c in by_scope.personal %}<option value="{{ c.pk }}"{% if row.category.pk == c.pk %} selected{% endif %}>{{ c.name }}</option>{% endfor %}{% endif %}
+                        {% for c in by_scope|get_item:t.account.space_id %}<option value="{{ c.pk }}"{% if row.category.pk == c.pk %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
                     </select></label>
                 <label class="mn-inline"><span class="visually-hidden">Amount {{ forloop.counter }}</span><input type="text" name="split_amount" class="ledger-input mn-split__amount" inputmode="decimal" placeholder="-0.00" value="{% if row %}{{ row.amount }}{% endif %}"></label>
                 <label class="mn-inline mn-split__note"><span class="visually-hidden">Note {{ forloop.counter }}</span><input type="text" name="split_note" class="ledger-input" maxlength="200" placeholder="Note" value="{% if row %}{{ row.note }}{% endif %}"></label>

@@ -50,6 +50,7 @@ the buttons submit the form.
                 </select>
                 <span class="labs-picker__note">The app picker is always one click away: the Home tile in the app menu, and every Home link, open it.</span>
             </div>
+            <p class="labs-picker__note" id="picker-circles"><a href="{% url 'labs:circles' %}">Circles</a> - who you share apps with{% if circle_invites %} ({{ circle_invites }} invite{{ circle_invites|pluralize }} waiting){% endif %}.</p>
             {% if today_setting %}
             <input type="hidden" name="today_panel" value="1">
             <label class="labs-choice"><input type="checkbox" name="show_today" value="1" id="show-today" aria-controls="show-completed-row"{% if pref.show_today_panel %} checked{% endif %}> Show Today panel <span class="labs-picker__note">(the Planner's tasks for today, above the tiles)</span></label>

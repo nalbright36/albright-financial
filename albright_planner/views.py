@@ -494,11 +494,10 @@ def toggle(request, pk):
 
 
 def _can_check_grocery(user, line):
-    """A grocery row checks the line on a household's grocery list itself: only someone who can open Meals and is in
-    that household (a task shared with someone outside it still shows them the row - read-only)."""
-    from albright_labs.models import household_of
-    return sources.can_open(user, "meals") and line is not None and household_of(user) is not None \
-        and line.household_id == household_of(user).pk
+    """A grocery row checks the line on a Meals grocery list itself: only someone who sees that line's space in Meals
+    (albright_labs.circles - a task shared with anyone else still shows them the row, read-only)."""
+    from albright_meals.scope import space_ids
+    return sources.can_open(user, "meals") and line is not None and line.space_id in space_ids(user)
 
 
 @login_required
@@ -545,9 +544,9 @@ def from_groceries(request):
     from albright_meals.models import GroceryItem
     back = _next(request, "albright_meals:groceries")
     ids = [int(pk) for pk in request.POST.getlist("item") if pk.isdigit()]
-    from albright_labs.models import household_of
-    # Only the user's own household's list (another household's lines are never picked up).
-    lines = list(GroceryItem.objects.active().filter(pk__in=ids, household=household_of(request.user))
+    from albright_meals.scope import space_ids
+    # Only lists in the user's own Meals spaces (anyone else's lines are never picked up).
+    lines = list(GroceryItem.objects.active().filter(pk__in=ids, space_id__in=space_ids(request.user))
                  .order_by("aisle", "checked", "name", "pk"))
     form = GroceryTaskForm(request.POST)
     if not lines:

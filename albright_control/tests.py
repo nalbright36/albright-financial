@@ -501,7 +501,7 @@ class TokenManagementTests(AdminTestCase):
         from albright_bot_api.models import SCOPES
         page = self.client.get(reverse("albright_control:bot_api")).content.decode()
         form = page.split('id="token-form"', 1)[1].split("</form>", 1)[0]
-        self.assertEqual(len(SCOPES), 15)
+        self.assertEqual(len(SCOPES), 17)                              # + fitness:read, fitness:write
         for key, description in SCOPES:
             self.assertIn(f'value="{key}"', form)
             self.assertIn(f"<code>{key}</code> &mdash; {escape(description)}", form)

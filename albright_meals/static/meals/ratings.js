@@ -1,10 +1,10 @@
 /*
- * Ratings on the recipe cards, household stamps, and sharing a recipe (albright_meals/recipes.html, recipe.html).
+ * Ratings on the recipe cards, the space's stamps, and sharing a recipe (albright_meals/recipes.html, recipe.html).
  * Vanilla JS; without it every form posts normally.
  *
  *   card rating  my rating drop-down on each card saves as soon as it changes (views.recipe_rate) and shows a small
  *                "Saved" check - the card's link is underneath, so using the drop-down never opens the recipe
- *   stamps       tapping a household member's stamp shows their label and note under the card
+ *   stamps       tapping someone's stamp shows their label and note under the card
  *   share        the Share button opens the dialog for its recipe: add someone by their exact username or email,
  *                Remove, Copy link (views.recipe_share answers with who it's shared with now)
  */
@@ -51,7 +51,7 @@
         form.addEventListener("submit", function (e) { e.preventDefault(); save(); });
     });
 
-    // ---------- Household stamps: tap for the label and note ----------
+    // ---------- The space's stamps: tap for the label and note ----------
     document.addEventListener("click", function (event) {
         var stamp = event.target.closest && event.target.closest("[data-stamp]");
         if (!stamp) return;
@@ -79,7 +79,7 @@
         if (!shares.length) {
             var none = document.createElement("li");
             none.className = "meals-hint";
-            none.textContent = "Nobody outside your household yet.";
+            none.textContent = "Nobody outside this space yet.";
             list.appendChild(none);
         }
         shares.forEach(function (s) {

@@ -1,5 +1,5 @@
-"""Albright Money: the registry entry and colors (Trading now sky blue, Money green), household privacy (personal
-vs shared, 404s), balances, splits and transfers, quick add, CSV import (mapping, preview, duplicates, rules,
+"""Albright Money: the registry entry and colors (Trading now sky blue, Money green), privacy by space (Personal vs a
+circle's, 404s), balances, splits and transfers, quick add, CSV import (mapping, preview, duplicates, rules,
 nothing stored), "Always categorize", the budget math (rollover, left to budget), the dashboard, the launcher
 line and Home tile, and the stylesheet on every page."""
 import io
@@ -20,7 +20,11 @@ from albright_labs import apps_registry, launcher, tiles
 from albright_labs.testing import with_apps
 
 from . import budget, imports, money, quickadd
-from .models import (Account, Budget, BudgetLine, Category, Household, HouseholdMember, Rule, Split, Transaction)
+from albright_labs import circles
+from albright_labs.models import CircleMembership
+from albright_labs.testing import kitchen, personal
+
+from .models import (Account, Budget, BudgetLine, Category, Rule, Split, Transaction)
 
 PASSWORD = "pw-not-real-12345"
 D = Decimal
@@ -53,18 +57,17 @@ class Base(TestCase):
         return client
 
     def household(self, *people):
-        h = Household.objects.create(name="The Albrights", created_by=self.me)
-        for p in (self.me,) + people:
-            HouseholdMember.objects.create(household=h, user=p)
-        return h
+        """A circle sharing Money (and Meals) with me as owner and these people in it -> its Space."""
+        return kitchen(self.me, *people, name="The Albrights")
 
     def account(self, name="Checking", owner=None, household=None, **kw):
         kw.setdefault("starting_date", self.month - timedelta(days=60))
-        return Account.objects.create(name=name, owner=owner or self.me, household=household, **kw)
+        return Account.objects.create(name=name, owner=owner or self.me, space=household or personal(owner or self.me), **kw)
 
     def cat(self, name, owner=None, household=None):
-        money.ensure_categories(owner or self.me, household)
-        return Category.objects.get(money.scope_filter(owner or self.me, household), name=name)
+        space = household or personal(owner or self.me)
+        money.ensure_categories(owner or self.me, space)
+        return Category.objects.get(money.scope_filter(owner or self.me, space), name=name)
 
     def txn(self, account, amount, payee="", category=None, day=None, **kw):
         return Transaction.objects.create(account=account, amount=D(str(amount)), payee=payee, category=category,
@@ -125,7 +128,7 @@ class RegistryAndColorTests(Base):
         a = self.account()
         t = self.txn(a, -10, "Coffee")
         for path in (url("dashboard"), url("transactions"), url("transaction", t.pk), url("transfer"), url("accounts"),
-                     url("account", a.pk), url("import"), url("categories"), url("budget"), url("household")):
+                     url("account", a.pk), url("import"), url("categories"), url("budget")):
             page = self.client.get(path).content.decode()
             self.assertRegex(page, r'<link rel="stylesheet" href="/static/albright_money/money\.css\?v=\d+">', path)
             self.assertRegex(page, r'<script src="/static/albright_money/money\.js\?v=\d+"></script>', path)
@@ -134,22 +137,21 @@ class RegistryAndColorTests(Base):
 
 
 # ---------------------------------------------------------------------------
-# Household privacy
+# Privacy by space
 # ---------------------------------------------------------------------------
 
 class HouseholdTests(Base):
-    def test_create_and_add_my_wife(self):
-        self.client.post(url("household"), {"action": "create", "name": "The Albrights"})
-        h = Household.objects.get()
-        self.client.post(url("household"), {"action": "add", "username": "sam"})
-        self.assertEqual(sorted(m.user.username for m in h.members.all()), ["nate", "sam"])
-        self.assertTrue(Category.objects.filter(household=h, name="Groceries").exists())   # the shared default set
+    def test_the_old_household_page_is_now_circles(self):
+        self.assertRedirects(self.client.get(url("household")), reverse("labs:circles"), fetch_redirect_response=False)
+        h = self.household(self.wife)
+        self.client.get(url("categories") + f"?space={h.pk}")
+        self.assertTrue(Category.objects.filter(space=h, name="Groceries").exists())   # the circle's default set
 
     def test_only_people_with_money_access(self):
-        self.household()
         no_money = with_apps(User.objects.create_user(username="pat", password=PASSWORD), ["notes"])
-        self.client.post(url("household"), {"action": "add", "username": no_money.username})
-        self.assertFalse(HouseholdMember.objects.filter(user=no_money).exists())
+        h = self.household(no_money)
+        ours = self.account("Joint", household=h)
+        self.assertNotIn(ours, Account.objects.visible_to(no_money))       # in the circle, but no Money: nothing
 
     def test_personal_is_private_shared_is_shared(self):
         h = self.household(self.wife)
@@ -186,21 +188,22 @@ class HouseholdTests(Base):
     def test_personal_categories_rules_and_budgets(self):
         h = self.household(self.wife)
         mine = self.cat("Dining")
-        rule = Rule.objects.create(owner=self.me, payee_contains="chipotle", category=mine)
+        rule = Rule.objects.create(owner=self.me, space=personal(self.me), payee_contains="chipotle", category=mine)
         sam = self.as_user(self.wife)
         self.assertEqual(sam.post(url("category", mine.pk), {"name": "Mine now", "kind": "expense"}).status_code, 404)
         self.assertEqual(sam.post(url("rule_delete", rule.pk)).status_code, 404)
-        budget.save_plan(self.me, None, self.month, {mine.pk: D("300")})
-        sam_page = sam.get(url("budget") + "?scope=personal").content.decode()
+        budget.save_plan(self.me, personal(self.me), self.month, {mine.pk: D("300")})
+        sam_page = sam.get(url("budget") + f"?space={personal(self.wife).pk}").content.decode()
         self.assertNotIn('value="300.00"', sam_page)                   # her personal budget, not mine
 
     def test_leaving_and_removing(self):
         h = self.household(self.wife)
         ours = self.account("Joint", household=h)
-        self.client.post(url("household"), {"action": "remove", "user": self.wife.pk})
+        circles.remove(self.me, h.circle, self.wife)
         self.assertEqual(self.as_user(self.wife).get(url("account", ours.pk)).status_code, 404)
-        self.client.post(url("household"), {"action": "leave"})        # the last member: stays (data kept)
-        self.assertTrue(HouseholdMember.objects.filter(user=self.me).exists())
+        with self.assertRaises(circles.CircleError):                    # the only owner can't just leave
+            circles.leave(self.me, h.circle)
+        self.assertTrue(CircleMembership.objects.filter(user=self.me, status="active").exists())
         self.assertTrue(Account.objects.filter(pk=ours.pk).exists())
 
 
@@ -247,10 +250,10 @@ class AccountTests(Base):
         a = self.account()
         t = self.txn(a, -30, "Publix", category=self.cat("Groceries"))
         self.client.post(url("account", a.pk), {"name": "Checking", "kind": "checking", "starting_balance": "0",
-                                                "starting_date": a.starting_date.isoformat(), "shared": "on"})
+                                                "starting_date": a.starting_date.isoformat(), "space": h.pk})
         a.refresh_from_db()
         t.refresh_from_db()
-        self.assertEqual(a.household, h)
+        self.assertEqual(a.space, h)
         self.assertEqual(t.category, self.cat("Groceries", household=h))
 
 
@@ -363,7 +366,7 @@ class AlwaysCategorizeTests(Base):
         self.assertFalse(res["needs_review"])
         res = self.client.post(res["offer"]["url"], HTTP_X_REQUESTED_WITH="XMLHttpRequest").json()
         rule = Rule.objects.get()
-        self.assertEqual((rule.payee_contains, rule.category, rule.household), ("publix", g, None))
+        self.assertEqual((rule.payee_contains, rule.category, rule.space), ("publix", g, personal(self.me)))
         self.assertEqual(res["changed"], 1)
         other.refresh_from_db()
         self.assertEqual((other.category, other.needs_review), (g, False))     # the others it matches, too
@@ -387,18 +390,18 @@ class AlwaysCategorizeTests(Base):
         self.assertEqual(money.rule_key("SQ *BLUE BOTTLE 2231"), "sq blue bottle")
         self.assertEqual(money.rule_key("Netflix.com"), "netflix com")
         a = self.account()
-        rule = Rule.objects.create(owner=self.me, payee_contains="Netflix.com", category=self.cat("Subscriptions"))
+        rule = Rule.objects.create(owner=self.me, space=personal(self.me), payee_contains="Netflix.com", category=self.cat("Subscriptions"))
         self.assertEqual(money.rule_for(Transaction(account=a, payee="NETFLIX.COM 866-579", amount=D("-15"))), rule)
 
     def test_rules_match(self):
         a = self.account()
         g, d = self.cat("Groceries"), self.cat("Dining")
-        Rule.objects.create(owner=self.me, payee_contains="publix", category=g)
-        Rule.objects.create(owner=self.me, payee_contains="publix deli", category=d, max_amount=D("20"))
+        Rule.objects.create(owner=self.me, space=personal(self.me), payee_contains="publix", category=g)
+        Rule.objects.create(owner=self.me, space=personal(self.me), payee_contains="publix deli", category=d, max_amount=D("20"))
         self.assertEqual(money.rule_for(Transaction(account=a, payee="PUBLIX DELI 12", amount=D("-12"))).category, d)
         self.assertEqual(money.rule_for(Transaction(account=a, payee="PUBLIX DELI 12", amount=D("-80"))).category, g)
         other = self.account("Visa")
-        Rule.objects.create(owner=self.me, payee_contains="shell", category=d, account=other)
+        Rule.objects.create(owner=self.me, space=personal(self.me), payee_contains="shell", category=d, account=other)
         self.assertIsNone(money.rule_for(Transaction(account=a, payee="SHELL", amount=D("-30"))))
 
 
@@ -439,7 +442,7 @@ class ImportTests(Base):
         a = self.account(csv_mapping={"date": "Date", "description": "Description", "amount": "Amount",
                                       "date_format": "%m/%d/%Y"})
         g = self.cat("Groceries")
-        Rule.objects.create(owner=self.me, payee_contains="publix", category=g)
+        Rule.objects.create(owner=self.me, space=personal(self.me), payee_contains="publix", category=g)
         # Entered by hand already: "Publix" on Nov 1 for 42.18.
         self.txn(a, "-42.18", "Publix", day=date(2026, 11, 1), category=g)
         page = self.upload(a).content.decode()
@@ -503,12 +506,12 @@ class BudgetTests(Base):
     def test_planned_spent_remaining_and_colors(self):
         a = self.account()
         g, d, h = self.cat("Groceries"), self.cat("Dining"), self.cat("Housing")
-        budget.save_plan(self.me, None, self.month, {g.pk: D("500"), d.pk: D("100"), h.pk: D("1000")})
+        budget.save_plan(self.me, personal(self.me), self.month, {g.pk: D("500"), d.pk: D("100"), h.pk: D("1000")})
         self.txn(a, "-200", "Publix", category=g)
         self.txn(a, "-95", "Chipotle", category=d)
         self.txn(a, "-1100", "Rent", category=h)
         self.txn(a, "20", "Refund", category=g)                       # a refund brings spending down
-        v = budget.month_view(self.me, None, self.month)
+        v = budget.month_view(self.me, personal(self.me), self.month)
         rows = {r["category"].name: r for r in v["rows"]}
         self.assertEqual((rows["Groceries"]["spent"], rows["Groceries"]["remaining"], rows["Groceries"]["status"]),
                          (D("180"), D("320"), "under"))
@@ -518,9 +521,9 @@ class BudgetTests(Base):
     def test_income_and_left_to_budget(self):
         a = self.account()
         inc, g = self.cat("Income"), self.cat("Groceries")
-        budget.save_plan(self.me, None, self.month, {inc.pk: D("5000"), g.pk: D("600")})
+        budget.save_plan(self.me, personal(self.me), self.month, {inc.pk: D("5000"), g.pk: D("600")})
         self.txn(a, "2500", "Payroll", category=inc)
-        v = budget.month_view(self.me, None, self.month)
+        v = budget.month_view(self.me, personal(self.me), self.month)
         self.assertEqual((v["income_planned"], v["income_received"]), (D("5000"), D("2500")))
         self.assertEqual(v["left_to_budget"], D("4400"))
         page = self.client.get(url("budget")).content.decode()
@@ -534,30 +537,30 @@ class BudgetTests(Base):
         g.save()
         dining = self.cat("Dining")
         last, two_ago = budget.add_months(self.month, -1), budget.add_months(self.month, -2)
-        budget.save_plan(self.me, None, two_ago, {g.pk: D("400"), dining.pk: D("100")})
-        budget.save_plan(self.me, None, last, {g.pk: D("400"), dining.pk: D("100")})
-        budget.save_plan(self.me, None, self.month, {g.pk: D("400"), dining.pk: D("100")})
+        budget.save_plan(self.me, personal(self.me), two_ago, {g.pk: D("400"), dining.pk: D("100")})
+        budget.save_plan(self.me, personal(self.me), last, {g.pk: D("400"), dining.pk: D("100")})
+        budget.save_plan(self.me, personal(self.me), self.month, {g.pk: D("400"), dining.pk: D("100")})
         self.txn(a, "-350", "Publix", category=g, day=two_ago)       # +50
         self.txn(a, "-480", "Publix", category=g, day=last)          # -80  -> -30 carried in
         self.txn(a, "-10", "Chipotle", category=dining, day=last)    # no rollover: nothing carried
-        rows = {r["category"].name: r for r in budget.month_view(self.me, None, self.month)["rows"]}
+        rows = {r["category"].name: r for r in budget.month_view(self.me, personal(self.me), self.month)["rows"]}
         self.assertEqual((rows["Groceries"]["carry"], rows["Groceries"]["available"]), (D("-30"), D("370")))
         self.assertEqual((rows["Dining"]["carry"], rows["Dining"]["available"]), (D("0"), D("100")))
 
     def test_copy_last_month(self):
         g = self.cat("Groceries")
-        budget.save_plan(self.me, None, budget.add_months(self.month, -1), {g.pk: D("450")})
-        self.client.post(url("budget"), {"action": "copy", "scope": "personal", "month": f"{self.month:%Y-%m}"})
+        budget.save_plan(self.me, personal(self.me), budget.add_months(self.month, -1), {g.pk: D("450")})
+        self.client.post(url("budget"), {"action": "copy", "space": personal(self.me).pk, "month": f"{self.month:%Y-%m}"})
         self.assertEqual(BudgetLine.objects.get(budget__month=self.month, category=g).planned, D("450"))
 
     def test_saving_from_the_page(self):
         g = self.cat("Groceries")
-        self.client.post(url("budget"), {"scope": "personal", "month": f"{self.month:%Y-%m}", f"planned_{g.pk}": "525.50",
+        self.client.post(url("budget"), {"space": personal(self.me).pk, "month": f"{self.month:%Y-%m}", f"planned_{g.pk}": "525.50",
                                          "rollover": [g.pk]})
         self.assertEqual(BudgetLine.objects.get(category=g).planned, D("525.50"))
         g.refresh_from_db()
         self.assertTrue(g.rollover)
-        self.assertEqual(self.client.post(url("budget"), {"scope": "personal", f"planned_{g.pk}": "-5"}).status_code, 302)
+        self.assertEqual(self.client.post(url("budget"), {"space": personal(self.me).pk, f"planned_{g.pk}": "-5"}).status_code, 302)
         self.assertEqual(BudgetLine.objects.get(category=g).planned, D("525.50"))   # negative refused
 
     def test_shared_household_budget_plus_personal(self):
@@ -565,11 +568,11 @@ class BudgetTests(Base):
         ours, mine = self.account("Joint", household=h), self.account("Mine")
         hg, pg = self.cat("Groceries", household=h), self.cat("Groceries")
         budget.save_plan(self.me, h, self.month, {hg.pk: D("800")})
-        budget.save_plan(self.me, None, self.month, {pg.pk: D("100")})
+        budget.save_plan(self.me, personal(self.me), self.month, {pg.pk: D("100")})
         self.txn(ours, "-300", "Publix", category=hg)
         self.txn(mine, "-40", "Snacks", category=pg)
         self.assertEqual(budget.left_this_month(self.me), D("560"))    # 500 + 60
-        self.assertEqual(budget.left_this_month(self.wife), D("500"))  # the household's only - mine is mine
+        self.assertEqual(budget.left_this_month(self.wife), D("500"))  # the circle's only - mine is mine
         self.assertEqual(Budget.objects.count(), 2)
         self.assertIn("$800.00", self.as_user(self.wife).get(url("budget")).content.decode().replace('value="800.00"', "$800.00"))
 
@@ -583,7 +586,7 @@ class DashboardTests(Base):
         super().setUp()
         self.a = self.account(starting_balance=D("1000"))
         self.g, self.d = self.cat("Groceries"), self.cat("Dining")
-        budget.save_plan(self.me, None, self.month, {self.g.pk: D("500"), self.d.pk: D("200")})
+        budget.save_plan(self.me, personal(self.me), self.month, {self.g.pk: D("500"), self.d.pk: D("200")})
         self.txn(self.a, "-120", "Publix", category=self.g)
         self.txn(self.a, "-80", "Chipotle", category=self.d)
         self.txn(self.a, "-15", "Mystery", needs_review=True)

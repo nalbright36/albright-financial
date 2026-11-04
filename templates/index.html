@@ -185,10 +185,11 @@
                     <div class="navbar__dropdown navbar__account">
                         <button type="button" class="navbar__dropdown-trigger navbar__account-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu" title="Signed in as {{ user.get_username }}">
                             <svg class="navbar__account-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
-                            <span class="navbar__account-name">{{ user.get_username }}</span><span class="visually-hidden"> - account menu</span> <span class="navbar__dropdown-caret" aria-hidden="true">&#9662;</span>
+                            <span class="navbar__account-name">{{ user.get_username }}</span>{% if circle_invites %}<span class="badge navbar__badge" id="circle-invite-badge" title="{{ circle_invites }} circle invite{{ circle_invites|pluralize }}">{{ circle_invites }}</span><span class="visually-hidden"> - {{ circle_invites }} circle invite{{ circle_invites|pluralize }} waiting</span>{% endif %}<span class="visually-hidden"> - account menu</span> <span class="navbar__dropdown-caret" aria-hidden="true">&#9662;</span>
                         </button>
                         <div class="navbar__dropdown-menu navbar__dropdown-menu--end" id="account-menu">
                             <a href="{% url 'labs:account' %}" id="nav-account-link">My account</a>
+                            <a href="{% url 'labs:circles' %}" id="nav-circles-link">Circles{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }}</span>{% endif %}</a>
                             <a href="{% url 'user_logout' %}">Logout</a>
                         </div>
                     </div>

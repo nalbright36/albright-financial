@@ -1,96 +1,135 @@
 """Who sees what in Meals - every page, the Bot API, the Planner's meal overlay and Notes' recipe links go through
-here.
+here, and here asks albright_labs.circles (the one place membership is checked).
 
-  - Everything (recipes, the plan, the grocery list, ideas, settings) belongs to one household; only its members see
-    or change it. Anything else is a 404.
+  - Everything (recipes, the plan, the grocery list, ideas, settings) belongs to one space: someone's Personal space or
+    a circle's. A circle's space shows only to its active members who opted in to Meals; a Personal space only to its
+    person. Anything else is a 404.
+  - Each page shows one space at a time - the switcher in the Meals header (space_required: ?space=<id>, remembered
+    per person), Personal by default.
   - A recipe can also be read - never changed - by every Meals user when it's in the "Recipe library", and by one
-    person at a time it's shared with (RecipeShare). They can save a copy into their own household.
-  - Ratings are people's own stamps, shown only within their household: on any recipe (ours, shared, library) you
-    see your household's stamps and nobody else's.
-  - Someone with Meals access but no household gets the "Set up your kitchen" page (kitchen_required).
+    person at a time it's shared with (RecipeShare). They can save a copy into their own space.
+  - Ratings are people's own stamps, shown only to the people who see the recipe's space.
 """
 from functools import wraps
 
 from django.db.models import Count, Exists, OuterRef, Q
 from django.http import Http404
-from django.shortcuts import render
 
-from albright_labs.households import member_ids
-from albright_labs.models import household_of
+from albright_labs import circles
 
 from .models import Recipe, RecipeRating, RecipeShare
 
+APP = "meals"
 HIGH = (RecipeRating.FAVORITE, RecipeRating.STAPLE)
 
 
-def kitchen_required(view):
-    """The view runs with request.household (the user's); without one, the "Set up your kitchen" page."""
+def space_required(view):
+    """The view runs with request.space (the one being shown: ?space=<id> when the user may see it, else the one
+    they last picked, else Personal) and request.spaces (every space they see in Meals - the switcher)."""
     @wraps(view)
     def wrapped(request, *args, **kwargs):
-        request.household = household_of(request.user)
-        if request.household is None:
-            return render(request, "albright_meals/setup.html", status=200)
+        request.spaces = circles.visible_spaces(request.user, APP)
+        if not request.spaces:
+            raise Http404
+        request.space = circles.current_space(request.user, APP, request.GET.get("space") or request.POST.get("space"))
         return view(request, *args, **kwargs)
     return wrapped
+
+
+
+def space_ids(user):
+    return circles.space_ids(user, APP)
+
+
+def member_ids(space):
+    """Who sees this space in Meals - whose stamps count."""
+    return set(circles.space_members(space, APP).values_list("pk", flat=True))
+
+
+def title(space):
+    """How a space is credited: a circle's name, or "<first name>'s recipes" for someone's Personal space."""
+    if space.circle_id:
+        return space.circle.name
+    person = space.user
+    return f"{(person.first_name or person.get_username()).strip()}'s recipes"
 
 
 # ---------------------------------------------------------------------------
 # Recipes
 # ---------------------------------------------------------------------------
 
-def own(household):
-    return Recipe.objects.filter(household=household)
+def own(space):
+    return Recipe.objects.filter(space=space)
 
 
-def shared_with(user, household=None):
-    """Recipes other households shared with this person."""
-    qs = Recipe.objects.filter(shares__shared_with=user)
-    return qs.exclude(household=household) if household else qs
+def shared_with(user, space=None):
+    """Recipes shared with this person from spaces they don't see."""
+    return Recipe.objects.filter(shares__shared_with=user).exclude(space_id__in=space_ids(user))
 
 
 def library():
     return Recipe.objects.filter(visibility=Recipe.LIBRARY)
 
 
-def readable(user, household):
-    """Every recipe this person may read: their household's, the library, and ones shared with them."""
+def readable(user, space=None):
+    """Every recipe this person may read: in any space they see, the library, and ones shared with them."""
     shared = RecipeShare.objects.filter(recipe=OuterRef("pk"), shared_with=user)
-    return Recipe.objects.filter(Q(household=household) | Q(visibility=Recipe.LIBRARY) | Exists(shared))
+    return Recipe.objects.filter(Q(space_id__in=space_ids(user)) | Q(visibility=Recipe.LIBRARY) | Exists(shared))
 
 
-def readable_recipe(user, household, pk):
-    """(recipe, editable) - or Http404 when it isn't theirs, in the library or shared with them."""
-    recipe = readable(user, household).select_related("created_by", "household").filter(pk=pk).first()
+def readable_recipe(user, space, pk):
+    """(recipe, editable) - editable when it's in a space they see; Http404 when they can't read it at all."""
+    recipe = readable(user).select_related("created_by", "space__circle", "space__user").filter(pk=pk).first()
     if recipe is None:
         raise Http404
-    return recipe, recipe.household_id == getattr(household, "pk", None)
+    return recipe, recipe.space_id in space_ids(user)
 
 
-def own_recipe(household, pk, queryset=None):
-    """One of the household's recipes (to change) - anyone else's is a 404, even one they can read."""
-    recipe = (queryset if queryset is not None else Recipe.objects).filter(household=household, pk=pk).first()
+def own_recipe(space, pk, queryset=None):
+    """One of this space's recipes (to change) - anything else is a 404, even one they can read."""
+    recipe = (queryset if queryset is not None else Recipe.objects).filter(space=space, pk=pk).first()
+    if recipe is None:
+        raise Http404
+    return recipe
+
+
+def editable_recipe(user, pk, queryset=None):
+    """A recipe in any space this person sees (to change) - else 404."""
+    recipe = (queryset if queryset is not None else Recipe.objects).filter(space_id__in=space_ids(user), pk=pk).first()
     if recipe is None:
         raise Http404
     return recipe
 
 
 # ---------------------------------------------------------------------------
-# Ratings - private to the household
+# Ratings - shown only to the people who see the recipe's space
 # ---------------------------------------------------------------------------
 
-def stamps(recipes, household):
-    """{recipe pk: [ratings by members of this household]} - never anyone else's."""
-    ids = member_ids(household)
+def stamps(recipes, space, user):
+    """{recipe pk: [ratings]} for `user` to see - each recipe's stamps from the people who see ITS space, when the
+    user sees that space too. A library or shared recipe from a space they don't see shows only their own stamp."""
+    from albright_labs.models import Space
+    mine = space_ids(user)
+    by_space = {}
+    for r in recipes:
+        by_space.setdefault(r.space_id, []).append(r.pk)
     out = {}
-    for r in RecipeRating.objects.filter(recipe__in=list(recipes), user_id__in=ids).select_related("user").order_by("user_id"):
-        out.setdefault(r.recipe_id, []).append(r)
+    for space_id, pks in by_space.items():
+        if space_id not in mine:
+            ids = {user.pk}
+        else:
+            here = space if space is not None and space_id == space.pk else \
+                Space.objects.select_related("circle", "user").filter(pk=space_id).first()
+            ids = member_ids(here) if here else {user.pk}
+        for rating in RecipeRating.objects.filter(recipe_id__in=pks, user_id__in=ids).select_related("user").order_by("user_id"):
+            out.setdefault(rating.recipe_id, []).append(rating)
     return out
 
 
-def parse_filters(params, user, household):
+def parse_filters(params, user, space):
     """The rating filters from a query string: {"rated_by": "me" | "anyone" | <member id>, "levels": [1-6],
-    "none": bool, "love": bool} - anything else ignored. rated_by is only kept if it's someone in the household."""
-    ids = member_ids(household)
+    "none": bool, "love": bool} - anything else ignored. rated_by is only kept if it's someone who sees the space."""
+    ids = member_ids(space)
     raw = (params.get("rated_by") or "me").strip()
     if raw == "anyone":
         rated_by = "anyone"
@@ -106,12 +145,12 @@ def parse_filters(params, user, household):
             "love": str(params.get("love") or "") in ("1", "true")}
 
 
-def apply_filters(qs, filters, user, household):
-    """Recipes matching the rating filters - judged only by this household's stamps.
+def apply_filters(qs, filters, user, space):
+    """Recipes matching the rating filters - judged only by the stamps of the people who see this space.
       rated_by me / a member: their stamp is one of `levels` (or they haven't rated it, with "none");
-      rated_by anyone: someone in the household's stamp is one of `levels` (or nobody here rated it);
-      love ("We both love"): at least two of the household rated it and every one of them Favorite or Staple."""
-    ids = member_ids(household)
+      rated_by anyone: someone's stamp here is one of `levels` (or nobody here rated it);
+      love ("We both love"): at least two people here rated it and every one of them Favorite or Staple."""
+    ids = member_ids(space)
     who = ids if filters["rated_by"] == "anyone" else {user.pk if filters["rated_by"] == "me" else filters["rated_by"]}
     if filters["levels"] or filters["none"]:
         rated = RecipeRating.objects.filter(recipe=OuterRef("pk"), user_id__in=who)

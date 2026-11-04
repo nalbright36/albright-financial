@@ -1,0 +1,60 @@
+{% extends "index.html" %}
+{% block page_title %}Circles · {% endblock %}
+{% block content %}
+{% comment %}
+My account > Circles (labs.circle_views.circles_page; every rule in albright_labs.circles): the circles I'm in - who's
+in them, what they share, and my part in each app (a toggle each: nothing of a circle shows in an app until I turn it
+on) - invites waiting for me, and making a new circle. People are added by their exact username or email only;
+nobody is ever listed or suggested.
+{% endcomment %}
+<div class="container circles-page">
+    <h1 class="circles-title">Circles</h1>
+    <p class="circles-lead">Groups of people who choose to share some apps. Your personal things stay yours - nobody in a circle (owners included) sees them.</p>
+
+    {% if pending %}
+    <section class="card circles-card" id="circle-invites" aria-labelledby="circle-invites-h">
+        <h2 class="circles-card__title" id="circle-invites-h">Invites for you</h2>
+        {% for i in pending %}
+        <div class="circles-row">
+            <span class="circles-row__main"><strong>{{ i.circle.name }}</strong> <span class="circles-muted">from {{ i.invited_by.first_name|default:i.invited_by.username|default:"someone" }} &middot; shares {% for a in i.circle.enabled_apps %}{{ a|capfirst }}{% if not forloop.last %}, {% endif %}{% empty %}nothing yet{% endfor %}</span></span>
+            <a href="{% url 'labs:circle_invite' i.pk %}" class="btn btn-primary btn-sm">Review</a>
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="card circles-card" id="my-circles" aria-labelledby="my-circles-h">
+        <h2 class="circles-card__title" id="my-circles-h">My circles</h2>
+        {% for r in rows %}
+        <article class="circles-circle" data-circle="{{ r.circle.pk }}">
+            <div class="circles-circle__head">
+                <a href="{% url 'labs:circle' r.circle.pk %}" class="circles-circle__name"{% if r.circle.color %} style="--circle-color: {{ r.circle.color }};"{% endif %}>{{ r.circle.name }}</a>
+                <span class="circles-avatars" aria-label="{{ r.members|length }} member{{ r.members|length|pluralize }}">{% for u, initials in r.members %}<span class="circles-avatar" title="{{ u.first_name|default:u.username }}">{{ initials }}</span>{% endfor %}{% if r.more %}<span class="circles-avatar circles-avatar--more">+{{ r.more }}</span>{% endif %}</span>
+                {% if r.me.role == "owner" %}<span class="badge neutral">Owner</span>{% endif %}
+            </div>
+            {% for a in r.apps %}
+            <form method="post" class="circles-toggle">{% csrf_token %}
+                <input type="hidden" name="action" value="participate"><input type="hidden" name="circle" value="{{ r.circle.pk }}"><input type="hidden" name="app" value="{{ a.key }}"><input type="hidden" name="on" value="{% if a.on %}0{% else %}1{% endif %}">
+                <span class="circles-toggle__label">{{ a.label }} <span class="circles-muted">{{ a.shares }}{% if not a.can_open %} - you don't have {{ a.label }}{% endif %}</span></span>
+                <button type="submit" class="circles-switch{% if a.on %} is-on{% endif %}" role="switch" aria-checked="{% if a.on %}true{% else %}false{% endif %}" aria-label="{{ a.label }} in {{ r.circle.name }}"{% if not a.can_open %} disabled{% endif %}><span></span></button>
+            </form>
+            {% empty %}<p class="circles-muted">This circle doesn't share any apps yet.</p>{% endfor %}
+        </article>
+        {% empty %}<p class="circles-muted">You're not in any circles yet.</p>{% endfor %}
+    </section>
+
+    <details class="card circles-card" id="new-circle"{% if not rows %} open{% endif %}>
+        <summary class="circles-card__title">Create a circle</summary>
+        <form method="post" class="circles-form">{% csrf_token %}<input type="hidden" name="action" value="create">
+            <div class="field"><label for="circle-name">Name</label><input type="text" name="name" id="circle-name" class="ledger-input" maxlength="100" required placeholder="Albright Family"></div>
+            <fieldset class="circles-apps"><legend>What it shares</legend>
+                {% for a in apps %}<label class="circles-check"><input type="checkbox" name="apps" value="{{ a.key }}"> <span><strong>{{ a.label }}</strong> <span class="circles-muted">{{ a.shares }}</span></span></label>{% endfor %}
+            </fieldset>
+            <div class="field"><label for="circle-invite">Invite people <span class="circles-muted">(optional)</span></label>
+                <textarea name="invite" id="circle-invite" class="ledger-input" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Their exact username or email - one per line"></textarea>
+                <small class="circles-muted">Nobody is listed or suggested. Someone without an account gets a sign-up invite by email.</small></div>
+            <button type="submit" class="btn btn-primary">Create circle</button>
+        </form>
+    </details>
+</div>
+{% endblock %}

@@ -2,23 +2,20 @@
 {% block page_title %}Budget · {{ v.month|date:"F Y" }} · {% endblock %}
 {% block money %}
 {% comment %}
-The month's budget (views.budget, budget.month_view) - the household's or your personal one. Income first:
+The month's budget (views.budget, budget.month_view) - the space being shown (the switcher). Income first:
 planned vs received, and "left to budget" (planned income minus planned spending). Then each spending category:
 planned, spent and what's left (rollover adds last month's leftover - or takes its overspend), with a bar: green
 under 90%, amber 90-100%, red over. "Copy last month" fills in last month's amounts.
 {% endcomment %}
 <div class="mn-head">
-    <div><h1 class="mn-head__title">{{ v.month|date:"F Y" }}</h1><p class="mn-head__sub">{% if scope == "household" %}{{ household.name }}'s budget{% else %}Your personal budget{% endif %}</p></div>
+    <div><h1 class="mn-head__title">{{ v.month|date:"F Y" }}</h1><p class="mn-head__sub">{% if space.circle_id %}{{ space.name }}'s budget{% else %}Your personal budget{% endif %}</p></div>
     <nav class="mn-monthnav" aria-label="Month">
-        <a href="?scope={{ scope }}&amp;month={{ prev|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Previous month">&lsaquo;</a>
-        {% if not is_this_month %}<a href="?scope={{ scope }}" class="btn btn-secondary btn-sm">This month</a>{% endif %}
-        <a href="?scope={{ scope }}&amp;month={{ next|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Next month">&rsaquo;</a>
+        <a href="?space={{ space.pk }}&amp;month={{ prev|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Previous month">&lsaquo;</a>
+        {% if not is_this_month %}<a href="?space={{ space.pk }}" class="btn btn-secondary btn-sm">This month</a>{% endif %}
+        <a href="?space={{ space.pk }}&amp;month={{ next|date:'Y-m' }}" class="btn btn-secondary btn-sm" aria-label="Next month">&rsaquo;</a>
     </nav>
 </div>
-{% if household %}<nav class="mn-seg" aria-label="Which budget">
-    <a href="?scope=household&amp;month={{ v.month|date:'Y-m' }}" class="mn-seg__item{% if scope == 'household' %} is-on{% endif %}"{% if scope == "household" %} aria-current="page"{% endif %}>{{ household.name }}</a>
-    <a href="?scope=personal&amp;month={{ v.month|date:'Y-m' }}" class="mn-seg__item{% if scope == 'personal' %} is-on{% endif %}"{% if scope == "personal" %} aria-current="page"{% endif %}>Personal</a>
-</nav>{% endif %}
+{% include "albright_labs/_space_switch.html" %}
 
 <section class="mn-stats" aria-label="Totals">
     <div class="card mn-stat" id="mn-income"><span class="card__label">Income</span>

@@ -1,0 +1,14 @@
+{% comment %}
+The space switcher (Meals and Money headers): "Personal · Albright Family" - only when there's more than one space to
+show. request.spaces / request.space come from the app (albright_labs.circles.visible_spaces / current_space); the
+pick is remembered per person. extra: "all" adds Money's "All my spaces" overview.
+{% endcomment %}
+{% if request.spaces|length > 1 %}
+<nav class="space-switch" aria-label="Space" id="space-switch">
+    <span class="space-switch__label">Showing</span>
+    <span class="space-switch__tabs">
+        {% for s in request.spaces %}<a href="?space={{ s.pk }}" class="space-switch__item{% if s.pk == request.space.pk and not all_spaces %} is-on{% endif %}"{% if s.pk == request.space.pk and not all_spaces %} aria-current="true"{% endif %}>{{ s.name }}</a>{% endfor %}
+        {% if all_url %}<a href="{{ all_url }}" class="space-switch__item{% if all_spaces %} is-on{% endif %}"{% if all_spaces %} aria-current="true"{% endif %}>All my spaces</a>{% endif %}
+    </span>
+</nav>
+{% endif %}

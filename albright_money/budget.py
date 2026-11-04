@@ -7,7 +7,7 @@
                scope's first budgeted month - months with no budget plan 0.
   bar: green under 90% of available, amber from 90% to 100%, red over.
   "left this month" (the dashboard's "safe to spend", the launcher and Home): the remaining across every
-  spending category of the household's budget and the user's personal one, this month.
+  spending category of the space's budget and the user's personal one, this month.
 """
 from datetime import date, timedelta
 from decimal import Decimal
@@ -39,13 +39,13 @@ def this_month():
     return month_start(timezone.localdate())
 
 
-def get_budget(owner, household, month):
-    return Budget.objects.filter(money.scope_filter(owner, household), month=month).first()
+def get_budget(owner, space, month):
+    return Budget.objects.filter(money.scope_filter(owner, space), month=month).first()
 
 
-def _planned_by_month(owner, household, first, last):
+def _planned_by_month(owner, space, first, last):
     """{(month, category pk): planned} for the scope's budgets from first to last."""
-    lines = BudgetLine.objects.filter(budget__in=Budget.objects.filter(money.scope_filter(owner, household),
+    lines = BudgetLine.objects.filter(budget__in=Budget.objects.filter(money.scope_filter(owner, space),
                                                                        month__gte=first, month__lte=last))
     return {(line.budget.month, line.category_id): line.planned for line in lines.select_related("budget")}
 
@@ -86,14 +86,14 @@ def bar(spent, available):
     return int(spent / available * 100)
 
 
-def month_view(owner, household, month):
+def month_view(owner, space, month):
     """The budget page's numbers for one scope and month."""
-    categories = list(money.ensure_categories(owner, household))
-    budget = get_budget(owner, household, month)
-    first_budget = Budget.objects.filter(money.scope_filter(owner, household)).order_by("month") \
+    categories = list(money.ensure_categories(owner, space))
+    budget = get_budget(owner, space, month)
+    first_budget = Budget.objects.filter(money.scope_filter(owner, space)).order_by("month") \
         .values_list("month", flat=True).first()
     start = min(first_budget, month) if first_budget else month
-    planned = _planned_by_month(owner, household, start, month)
+    planned = _planned_by_month(owner, space, start, month)
     net = _net_by_month(categories, start, month_end(month))
     rows, income = [], []
     for c in categories:
@@ -124,42 +124,41 @@ def month_view(owner, household, month):
     }
 
 
-def save_plan(owner, household, month, planned):
+def save_plan(owner, space, month, planned):
     """Store the month's plan: {category pk: Decimal}. Returns the budget."""
-    budget, _ = Budget.objects.get_or_create(owner=owner, household=household, month=month) if household is None \
-        else Budget.objects.get_or_create(household=household, month=month, defaults={"owner": owner})
-    allowed = {c.pk for c in money.ensure_categories(owner, household)}
+    budget, _ = Budget.objects.get_or_create(space=space, month=month, defaults={"owner": owner})
+    allowed = {c.pk for c in money.ensure_categories(owner, space)}
     for pk, amount in planned.items():
         if pk in allowed:
             BudgetLine.objects.update_or_create(budget=budget, category_id=pk, defaults={"planned": amount})
     return budget
 
 
-def copy_last_month(owner, household, month):
+def copy_last_month(owner, space, month):
     """Copy last month's plan into this month (categories already planned this month keep theirs). Returns how
     many lines were copied, or None if last month has no budget."""
-    last = get_budget(owner, household, add_months(month, -1))
+    last = get_budget(owner, space, add_months(month, -1))
     if last is None:
         return None
-    current = {line.category_id for line in BudgetLine.objects.filter(budget=get_budget(owner, household, month))}
+    current = {line.category_id for line in BudgetLine.objects.filter(budget=get_budget(owner, space, month))}
     plan = {line.category_id: line.planned for line in last.lines.all() if line.category_id not in current}
-    save_plan(owner, household, month, plan)
+    save_plan(owner, space, month, plan)
     return len(plan)
 
 
 def budgets_for(user, month):
-    """[(label, household or None, month_view)] for the scopes with a budget this month."""
+    """[(label, space, month_view)] for the spaces with a budget this month."""
     out = []
-    for label, household in money.scopes(user):
-        if get_budget(user, household, month):
-            out.append((label, household, month_view(user, household, month)))
+    for label, space in money.scopes(user):
+        if get_budget(user, space, month):
+            out.append((label, space, month_view(user, space, month)))
     return out
 
 
 def left_this_month(user):
-    """What's left this month across the spending categories of the user's budgets (household and personal), or
+    """What's left this month across the spending categories of the user's budgets (space and personal), or
     None when there's no budget this month."""
     views = budgets_for(user, this_month())
     if not views:
         return None
-    return sum((v["remaining"] for _label, _household, v in views), ZERO)
+    return sum((v["remaining"] for _label, _space, v in views), ZERO)

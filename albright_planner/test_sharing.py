@@ -230,7 +230,7 @@ class DefaultShareTests(SharedBase):
         from albright_notes.models import Note
         note = Note.objects.create(owner=self.me, title="Packing", body="x")
         self.client.post(url("from_note", note.pk), {"date": TODAY.isoformat()})
-        line = GroceryItem.objects.create(household=self.kitchen, name="milk")
+        line = GroceryItem.objects.create(space=self.kitchen, name="milk")
         self.client.post(url("from_groceries"), {"item": [line.pk], "date": TODAY.isoformat()})
         for title in ("Packing", "Grocery run"):
             self.assertTrue(ItemShare.objects.filter(item__title=title, user=self.wife, permission="edit").exists(), title)

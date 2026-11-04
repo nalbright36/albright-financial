@@ -1,7 +1,7 @@
 """Fitness food pages (/fitness/food/, /fitness/targets/): the diary, adding food (USDA search, My foods, Recent,
 Quick add, a Meals recipe, today's meal plan), copying yesterday's meal, and macro targets.
 
-Private: a diary, its targets, body info and My foods are their owner's alone - even within a household; anything
+Private: a diary, its targets, body info and My foods are their owner's alone - even within a circle; anything
 else is a 404 (every lookup is through owner=request.user). Recipes and plan entries are only ever ones the user can
 read in Meals (albright_meals.scope)."""
 from datetime import date, timedelta
@@ -72,28 +72,28 @@ def _back(request, on, slot=None):
     return redirect(_diary_url(on, slot))
 
 
-def _household(user):
-    from albright_labs.models import household_of
-    return household_of(user)
+def _meal_spaces(user):
+    """Every Meals space this person sees (albright_labs.circles)."""
+    from albright_meals import scope
+    return scope.space_ids(user)
 
 
 def _readable_recipes(user):
-    """Recipes the user can read in Meals that have nutrition - their household's, shared with them, the library."""
+    """Recipes the user can read in Meals that have nutrition - in their spaces, shared with them, the library."""
     from albright_meals import scope
-    household = _household(user)
-    if household is None:
+    if not _meal_spaces(user):
         return None
-    return scope.readable(user, household).filter(nutrition__isnull=False).select_related("nutrition")
+    return scope.readable(user).filter(nutrition__isnull=False).select_related("nutrition")
 
 
 def _plan_today(user, on):
-    """The household's planned meals that day with known nutrition, and whether I've logged each."""
+    """The planned meals that day, in every Meals space I see, with known nutrition - and whether I've logged each."""
     from albright_meals.models import MealPlanEntry
     from albright_meals.recipe_nutrition import per_serving
-    household = _household(user)
-    if household is None:
+    spaces = _meal_spaces(user)
+    if not spaces:
         return []
-    entries = (MealPlanEntry.objects.filter(household=household, date=on, recipe__isnull=False).exclude(status="skipped")
+    entries = (MealPlanEntry.objects.filter(space_id__in=spaces, date=on, recipe__isnull=False).exclude(status="skipped")
                .select_related("recipe", "recipe__nutrition"))
     logged = set(FoodLogEntry.objects.filter(owner=user, date=on, plan_entry__in=entries).values_list("plan_entry_id", flat=True))
     order = {key: i for i, (key, _label) in enumerate(FoodLogEntry.SLOTS)}
@@ -255,18 +255,18 @@ def log(request):
     elif kind in ("recipe", "plan"):
         from albright_meals import scope
         from albright_meals.models import MealPlanEntry
-        household = _household(user)
-        if household is None:
+        spaces = _meal_spaces(user)
+        if not spaces:
             raise Http404
         plan_entry = None
         if kind == "plan":
             plan_entry = get_object_or_404(MealPlanEntry.objects.select_related("recipe"), pk=request.POST.get("entry") or 0,
-                                           household=household, recipe__isnull=False)
+                                           space_id__in=spaces, recipe__isnull=False)
             recipe = plan_entry.recipe
             if not request.POST.get("slot"):
                 slot = PLAN_SLOT.get(plan_entry.slot, FoodLogEntry.SNACK)
         else:
-            recipe, _editable = scope.readable_recipe(user, household, request.POST.get("recipe") or 0)
+            recipe, _editable = scope.readable_recipe(user, None, request.POST.get("recipe") or 0)
         if servings:
             entry = _log_recipe(user, recipe, servings, on, slot, plan_entry)
             if entry is None:

@@ -3,7 +3,7 @@ projection only with a supportive trend, measurements, the weekly weigh-in remin
 and its change, sets per muscle, 1RM trends, exercises not done lately, food averages, streaks and the calendar),
 the Fitness Bot API (every endpoint with and without its scope, always as the token owner; text workouts check off
 the Planner occurrence; food by recipe / my food / quick macros, with suggestions and nothing logged for unmatched
-names), and privacy (404 for anyone else, household members included)."""
+names), and privacy (404 for anyone else, space members included)."""
 import json
 from datetime import timedelta
 from decimal import Decimal
@@ -45,7 +45,7 @@ class Base(TestCase):
                                            ["fitness", "meals", "planner"]))
         self.wife = allow_api_keys(with_apps(User.objects.create_user(username="sam", password=PASSWORD, first_name="Sam"),
                                              ["fitness", "meals", "planner"]))
-        self.household = kitchen(self.me, self.wife)
+        self.space = kitchen(self.me, self.wife)
         self.client.force_login(self.me)
         self.today = timezone.localdate()
 
@@ -291,7 +291,7 @@ class BotApiTests(Base):
 
     def test_food_by_recipe_my_food_quick_and_suggestions(self):
         raw = self.token(["fitness:write"])
-        chili = Recipe.objects.create(household=self.household, title="Turkey chili", created_by=self.me, servings=4)
+        chili = Recipe.objects.create(space=self.space, title="Turkey chili", created_by=self.me, servings=4)
         recipe_nutrition.set_manual(chili, {"calories": D(400), "protein": D(30), "carbs": None, "fat": None, "fiber": None}, self.me)
         r = self.call("POST", "fitness/food", raw, {"recipe": "turkey CHILI", "servings": 1.5, "slot": "dinner"})
         self.assertEqual(r.status_code, 201)
