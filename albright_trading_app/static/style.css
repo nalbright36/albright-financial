@@ -2371,3 +2371,78 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .meals-nut-manual summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; }
 .meals-nut-manual__form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); margin-top: var(--space-3); }
 .meals-nut-manual__form .btn { grid-column: 1 / -1; justify-self: start; }
+
+/* ---------- Meals: Convert (albright_meals/_converter.html, static/meals/converter.js) ---------- */
+/* The floating button: Meals orange, bottom right, above the iPhone's home indicator. */
+.meals-convert-fab {
+  position: fixed; z-index: 90; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px));
+  display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border: 0; border-radius: 999px;
+  background: var(--accent-solid); color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--glow-accent, 0 8px 24px rgba(0, 0, 0, .3));
+}
+.meals-convert-fab:hover { filter: brightness(1.06); }
+.meals-convert-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.meals-convert-fab svg { width: 20px; height: 20px; }
+.meals-page { padding-bottom: 96px; }                       /* room for the button under the last line */
+/* The icon by each ingredient line. */
+.meals-ingredient-line { display: list-item; }
+.meals-convert-line {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: 6px; vertical-align: middle;
+  border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--accent); cursor: pointer; padding: 0;
+}
+.meals-convert-line:hover { background: var(--surface-hover); }
+.meals-convert-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.meals-pick-row .meals-convert-line { margin-left: auto; }
+@media (max-width: 639.98px) { .meals-convert-line { width: 40px; height: 40px; } }
+
+/* The dialog: centered on a desktop, a bottom sheet on phones - a solid background either way. */
+.meals-converter {
+  width: min(480px, calc(100vw - 32px)); max-height: min(86vh, 760px); padding: 0 16px 16px; overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--border); border-radius: 16px; background: var(--glass-bg-solid, var(--surface-raised)); color: var(--text-primary);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+}
+.meals-converter::backdrop { background: rgba(0, 0, 0, .5); }
+.meals-converter__grip { display: none; }
+.meals-converter__head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 0 -16px; padding: 12px 16px 8px; background: var(--glass-bg-solid, var(--surface-raised)); }
+.meals-converter__title { margin: 0; font-size: 1.125rem; }
+.meals-converter__close { width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--text-secondary);
+  font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.meals-converter__close:hover { background: var(--surface-hover); color: var(--text-primary); }
+.meals-converter__from { margin: 0 0 8px; font-size: var(--text-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.meals-converter__tabs { display: flex; gap: 2px; padding: 3px; margin-bottom: 12px; border-radius: 11px; background: var(--surface-hover); border: 1px solid var(--border); }
+.meals-converter__tab { flex: 1; min-height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary);
+  font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.meals-converter__tab[aria-selected="true"] { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.meals-converter__inputs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.meals-converter__inputs .field { margin: 0; }
+.meals-converter .ledger-input { min-height: 44px; background: var(--bg-elevated); border-color: var(--border-strong); font-size: 1rem; }
+.meals-converter .ledger-input[aria-invalid="true"] { border-color: var(--warn); }
+.meals-converter__label { display: block; margin: 0 0 4px; font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
+.meals-converter__scale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; }
+.meals-converter__scale .meals-converter__label { margin: 0 4px 0 0; }
+.meals-converter__chip { min-width: 48px; min-height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--text-primary); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.meals-converter__chip:hover { background: var(--surface-hover); }
+.meals-converter__chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hover); }
+.meals-converter .ledger-input.meals-converter__scale-input { width: 72px; min-height: 40px; text-align: center; }
+.meals-converter__practical { min-height: 1.4em; margin: 4px 0 8px; font-size: 1rem; }
+.meals-converter__results { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.meals-converter__row { display: flex; align-items: baseline; gap: 6px; min-height: 44px; padding: 8px 10px; border-radius: 10px;
+  background: var(--surface-hover); font-variant-numeric: tabular-nums; }
+.meals-converter__value { font-weight: 700; font-size: 1.0625rem; }
+.meals-converter__unit { color: var(--text-secondary); font-size: var(--text-sm); }
+.meals-converter__ingredient { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.meals-converter__ingredient .meals-hint { margin: 6px 0 0; }
+.meals-converter__results--cross { margin-top: 6px; }
+.meals-converter__temp { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 639.98px) {
+  .meals-converter {
+    width: 100%; max-width: 100%; max-height: 88vh; max-height: 88dvh; margin: auto 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    border-radius: 16px 16px 0 0; border-bottom: 0; transition: transform .2s ease;
+  }
+  .meals-converter__grip { display: flex; justify-content: center; padding: 8px 0 0; touch-action: pan-x; cursor: grab; }
+  .meals-converter__grip span { width: 40px; height: 5px; border-radius: 999px; background: var(--border-strong); }
+  .meals-converter__head { touch-action: pan-x; }
+  .meals-converter__results { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .meals-converter { transition: none; } }

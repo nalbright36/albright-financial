@@ -63,7 +63,7 @@
         <section class="card meals-section" id="ingredients">
             <h2 class="meals-section__title">Ingredients</h2>
             {% if ingredients and not editable %}
-            <ul class="meals-ingredients">{% for i in ingredients %}<li>{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}</li>{% endfor %}</ul>
+            <ul class="meals-ingredients">{% for i in ingredients %}<li class="meals-ingredient-line">{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}{% if i.quantity or i.unit %}<button type="button" class="meals-convert-line" data-convert-open data-convert-qty="{{ i.quantity }}" data-convert-unit="{{ i.unit }}" data-convert-name="{{ i.name }}" aria-label="Convert {{ i.quantity }} {{ i.unit }} {{ i.name }}" title="Convert"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg></button>{% endif %}</li>{% endfor %}</ul>
             {% elif ingredients %}
             {# Tick the ones to buy (static/meals/recipe.js keeps the count; without JS it's a plain form). Ones already on the list (unchecked) start unticked, with what's there. #}
             <form method="post" action="{% url 'albright_meals:recipe_groceries' recipe.pk %}" id="ingredient-form">{% csrf_token %}
@@ -72,7 +72,7 @@
                 <ul class="meals-ingredients meals-ingredients--pick">
                     {% for i in ingredients %}<li class="meals-pick-row{% if i.on_list %} is-on-list{% endif %}">
                         <label class="meals-pick"><input type="checkbox" name="ingredient" value="{{ i.index }}"{% if i.name and not i.on_list %} checked{% endif %}{% if not i.name %} disabled{% endif %} data-pick-box>
-                            <span>{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}</span></label>
+                            <span>{% if i.original %}{{ i.original }}{% else %}{% if i.quantity or i.unit %}<strong>{{ i.quantity }}{% if i.unit %} {{ i.unit }}{% endif %}</strong> {% endif %}{{ i.name }}{% if i.note %} <span class="meals-hint">({{ i.note }})</span>{% endif %}{% endif %}</span></label>{% if i.quantity or i.unit %}<button type="button" class="meals-convert-line" data-convert-open data-convert-qty="{{ i.quantity }}" data-convert-unit="{{ i.unit }}" data-convert-name="{{ i.name }}" aria-label="Convert {{ i.quantity }} {{ i.unit }} {{ i.name }}" title="Convert"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg></button>{% endif %}
                         {% if i.on_list %}<span class="meals-chip meals-chip--on" data-on-list>On list: {{ i.on_list|join:"; " }}</span>{% endif %}
                     </li>{% endfor %}
                 </ul>
@@ -94,6 +94,7 @@
     </article>
 </div>
 {% if editable %}{% include "albright_meals/_share_dialog.html" %}{% endif %}
+{% include "albright_meals/_converter.html" %}
 <script src="{% static_version 'meals/recipe.js' %}" defer></script>
 <script src="{% static_version 'meals/ratings.js' %}" defer></script>
 {% endblock %}

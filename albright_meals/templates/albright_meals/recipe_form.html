@@ -23,4 +23,5 @@
     </form>
 </div>
 {% if not recipe %}<script src="{% static_version 'meals/recipe_import.js' %}" defer></script>{% endif %}
+{% include "albright_meals/_converter.html" %}
 {% endblock %}

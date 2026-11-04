@@ -1,0 +1,72 @@
+{% load cache_bust %}
+{% comment %}
+Convert (static/meals/converter.js + convert_math.js; front-end only): the floating button (bottom right; "C" on a
+desktop) and its dialog - a centered dialog on desktop, a bottom sheet on phones. Volume / Weight / Temperature,
+fractions in and out, a multiplier, and approximate ingredient weights. Any element with data-convert-open opens it
+(the icon by each ingredient passes data-convert-qty / -unit / -name).
+{% endcomment %}
+<button type="button" class="meals-convert-fab" id="meals-convert-open" data-convert-open aria-haspopup="dialog" aria-controls="meals-converter" title="Convert measurements (C)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v18M5 21h14M6 7h12M6 7l-3 7a3 3 0 0 0 6 0L6 7zM18 7l-3 7a3 3 0 0 0 6 0l-3-7z"/></svg>
+    <span>Convert</span>
+</button>
+
+<dialog class="meals-converter" id="meals-converter" aria-labelledby="meals-converter-h">
+    <div class="meals-converter__grip" data-convert-grip aria-hidden="true"><span></span></div>
+    <div class="meals-converter__head">
+        <h2 class="meals-converter__title" id="meals-converter-h">Convert</h2>
+        <button type="button" class="meals-converter__close" data-convert-close aria-label="Close the converter">&times;</button>
+    </div>
+    <p class="meals-converter__from" id="convert-from" hidden></p>
+
+    <div class="meals-converter__tabs" role="tablist" aria-label="What to convert">
+        <button type="button" role="tab" class="meals-converter__tab" data-convert-tab="volume" aria-selected="true" aria-controls="convert-amounts" id="convert-tab-volume">Volume</button>
+        <button type="button" role="tab" class="meals-converter__tab" data-convert-tab="weight" aria-selected="false" aria-controls="convert-amounts" id="convert-tab-weight">Weight</button>
+        <button type="button" role="tab" class="meals-converter__tab" data-convert-tab="temperature" aria-selected="false" aria-controls="convert-temperature" id="convert-tab-temperature">Temperature</button>
+    </div>
+
+    <div class="meals-converter__panel" id="convert-amounts" role="tabpanel">
+        <div class="meals-converter__inputs">
+            <div class="field"><label for="convert-amount">Amount</label>
+                <input type="text" id="convert-amount" class="ledger-input" inputmode="decimal" autocomplete="off" placeholder="1 1/2" value="1" aria-describedby="convert-amount-hint"></div>
+            <div class="field"><label for="convert-unit">Unit</label>
+                <select id="convert-unit" class="ledger-input"></select></div>
+        </div>
+        <p class="meals-hint" id="convert-amount-hint">Fractions work: 1/3, 1 1/2, &frac12;.</p>
+        <div class="meals-converter__scale" role="group" aria-labelledby="convert-scale-label">
+            <span class="meals-converter__label" id="convert-scale-label">Scale</span>
+            <button type="button" class="meals-converter__chip" data-convert-scale="0.5" aria-pressed="false">&frac12;&times;</button>
+            <button type="button" class="meals-converter__chip" data-convert-scale="1" aria-pressed="true">1&times;</button>
+            <button type="button" class="meals-converter__chip" data-convert-scale="2" aria-pressed="false">2&times;</button>
+            <button type="button" class="meals-converter__chip" data-convert-scale="3" aria-pressed="false">3&times;</button>
+            <label for="convert-scale" class="visually-hidden">Custom multiplier</label>
+            <input type="text" id="convert-scale" class="ledger-input meals-converter__scale-input" inputmode="decimal" autocomplete="off" placeholder="1.5" aria-label="Custom multiplier">
+        </div>
+        <div class="meals-converter__practical" id="convert-practical" aria-live="polite"></div>
+        <ul class="meals-converter__results" id="convert-results" aria-live="polite" aria-label="In every unit"></ul>
+        <div class="meals-converter__ingredient">
+            <label for="convert-ingredient" class="meals-converter__label">Ingredient (volume &harr; weight)</label>
+            <select id="convert-ingredient" class="ledger-input"><option value="">None</option></select>
+            <div id="convert-cross" aria-live="polite"></div>
+            <p class="meals-hint">Approximate: varies by brand and how it's packed.</p>
+        </div>
+    </div>
+
+    <div class="meals-converter__panel" id="convert-temperature" role="tabpanel" hidden>
+        <div class="meals-converter__inputs">
+            <div class="field"><label for="convert-temp">Temperature</label>
+                <input type="text" id="convert-temp" class="ledger-input" inputmode="decimal" autocomplete="off" value="350"></div>
+            <div class="field"><label for="convert-temp-unit">From</label>
+                <select id="convert-temp-unit" class="ledger-input"><option value="F">&deg;F</option><option value="C">&deg;C</option></select></div>
+        </div>
+        <div class="meals-converter__scale" role="group" aria-label="Oven presets">
+            <button type="button" class="meals-converter__chip" data-convert-oven="325">325&deg;F</button>
+            <button type="button" class="meals-converter__chip" data-convert-oven="350">350&deg;F</button>
+            <button type="button" class="meals-converter__chip" data-convert-oven="375">375&deg;F</button>
+            <button type="button" class="meals-converter__chip" data-convert-oven="400">400&deg;F</button>
+            <button type="button" class="meals-converter__chip" data-convert-oven="425">425&deg;F</button>
+        </div>
+        <p class="meals-converter__temp" id="convert-temp-result" aria-live="polite"></p>
+    </div>
+</dialog>
+<script src="{% static_version 'meals/convert_math.js' %}" defer></script>
+<script src="{% static_version 'meals/converter.js' %}" defer></script>
