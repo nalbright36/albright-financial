@@ -1,0 +1,32 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}{{ food.name }} · {% endblock %}
+{% block fitness %}
+{% comment %}
+One USDA food (food_views.usda_food): what's in 100 g, then an amount - grams, or how many of one of its
+household portions ("1 cup") - and the meal. fitness.js shows the macros for the amount as you type.
+{% endcomment %}
+<div class="fx-narrow">
+<h1 class="fx-head__title fx-food-name">{{ food.name }}</h1>
+<p class="fx-head__sub">{% if food.brand %}{{ food.brand }} &middot; {% endif %}{{ food.data_type }} &middot; USDA FoodData Central</p>
+
+<form method="post" class="card fx-card fx-form" id="fx-amount" data-per100="{% for label, value, unit in per100 %}{{ value|default_if_none:'' }}{% if not forloop.last %},{% endif %}{% endfor %}">{% csrf_token %}
+    <input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}">
+    <div class="fx-amount-row">
+        <div class="field"><label for="fx-amount-n">Amount</label><input type="number" name="amount" id="fx-amount-n" class="ledger-input" value="{% if food.portions %}1{% else %}100{% endif %}" min="0.1" max="5000" step="any" inputmode="decimal" required></div>
+        <div class="field"><label for="fx-portion">Of</label>
+            <select name="portion" id="fx-portion" class="ledger-input">
+                {% for p in food.portions %}<option value="{{ forloop.counter0 }}" data-grams="{{ p.grams }}"{% if forloop.first %} selected{% endif %}>{{ p.label }} ({{ p.grams|floatformat:0 }} g)</option>{% endfor %}
+                <option value="g" data-grams="1"{% if not food.portions %} selected{% endif %}>grams</option>
+            </select></div>
+    </div>
+    <div class="field"><label for="fx-usda-slot">Meal</label><select name="slot" id="fx-usda-slot" class="ledger-input">{% for key, label in slots %}<option value="{{ key }}"{% if key == slot %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <p class="fx-preview" id="fx-amount-preview" aria-live="polite"></p>
+    <button type="submit" class="btn btn-primary">Log it</button>
+</form>
+
+<section class="card fx-card" aria-labelledby="fx-per100-h">
+    <h2 class="fx-card__title" id="fx-per100-h">In 100 g</h2>
+    {% for label, value, unit in per100 %}<div class="fx-row"><span class="fx-row__title">{{ label }}</span><span class="fx-row__ind">{% if value is None %}not listed{% else %}{{ value|floatformat:1 }} {{ unit }}{% endif %}</span></div>{% endfor %}
+</section>
+</div>
+{% endblock %}

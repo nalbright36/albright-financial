@@ -36,10 +36,12 @@ def todays(user, today=None):
 
 
 def status_line(user):
-    """The launcher's and Home's line: "Today: Upper A" or "Rest day"."""
+    """The launcher's and Home's line: "Today: Upper A", or on a day with no workout "Protein 92/150 g" (when a
+    target is set - nutrition.status_line), else "Rest day"."""
     plan = todays(user)
     if not plan:
-        return "Rest day"
+        from .nutrition import status_line as food_line
+        return food_line(user) or "Rest day"
     names = ", ".join(d.name for d, _w in plan)
     return f"Done today: {names}" if all(w for _d, w in plan) else f"Today: {names}"
 

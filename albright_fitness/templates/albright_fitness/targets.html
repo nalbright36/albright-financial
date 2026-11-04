@@ -1,0 +1,59 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Targets · {% endblock %}
+{% block fitness %}
+{% comment %}
+Macro targets (food_views.targets): units; the calculator (Mifflin-St Jeor x activity, the goal, protein per lb -
+never below the resting rate or more than a 20% deficit); the targets themselves (typed, or "Use these"); and
+which macros to track (calories can be hidden). Private: only you see this page.
+{% endcomment %}
+<div class="fx-narrow">
+<h1 class="fx-head__title">Targets</h1>
+<p class="fx-head__sub">Only you see your targets and body info.</p>
+
+<form method="post" class="card fx-card fx-row-form" id="fx-units">{% csrf_token %}<input type="hidden" name="action" value="units">
+    <span class="fx-label">Units</span>
+    <label class="visually-hidden" for="fx-wu">Weight unit</label>
+    <select name="weight_unit" id="fx-wu" class="ledger-input fx-unit-select" data-autosubmit><option value="lb"{% if profile.weight_unit == "lb" %} selected{% endif %}>lb</option><option value="kg"{% if profile.weight_unit == "kg" %} selected{% endif %}>kg</option></select>
+    <label class="visually-hidden" for="fx-hu">Height unit</label>
+    <select name="height_unit" id="fx-hu" class="ledger-input fx-unit-select" data-autosubmit><option value="in"{% if profile.height_unit == "in" %} selected{% endif %}>in</option><option value="cm"{% if profile.height_unit == "cm" %} selected{% endif %}>cm</option></select>
+    <noscript><button type="submit" class="btn btn-secondary btn-sm">Save</button></noscript>
+</form>
+
+<details class="card fx-card" id="fx-calculator"{% if suggestion or not profile.target_calories and not profile.target_protein %} open{% endif %}>
+    <summary class="fx-card__title">Calculator</summary>
+    <form method="post" class="fx-form">{% csrf_token %}
+        <div class="fx-macro-inputs">
+            <div class="field"><label for="fx-sex">Sex</label><select name="sex" id="fx-sex" class="ledger-input"><option value="">-</option>{% for k, l in sexes %}<option value="{{ k }}"{% if profile.sex == k %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+            <div class="field"><label for="fx-age">Age</label><input type="number" name="age" id="fx-age" class="ledger-input" min="13" max="110" value="{{ profile.age|default_if_none:'' }}" inputmode="numeric"></div>
+            <div class="field"><label for="fx-height">Height ({{ profile.height_unit }})</label><input type="number" name="height" id="fx-height" class="ledger-input" step="0.1" min="1" value="{{ height|default_if_none:'' }}" inputmode="decimal"></div>
+            <div class="field"><label for="fx-weight">Weight ({{ profile.weight_unit }})</label><input type="number" name="weight" id="fx-weight" class="ledger-input" step="0.1" min="1" value="{{ weight|default_if_none:'' }}" inputmode="decimal"></div>
+        </div>
+        <div class="field"><label for="fx-activity">Activity</label><select name="activity" id="fx-activity" class="ledger-input">{% for k, l in activity %}<option value="{{ k }}"{% if profile.activity == k %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="fx-goal">Goal</label><select name="goal" id="fx-goal" class="ledger-input">{% for k, l in goals %}<option value="{{ k }}"{% if profile.goal == k %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="fx-ppl">Protein per lb of body weight (0.7-1.0 g)</label><input type="number" name="protein_per_lb" id="fx-ppl" class="ledger-input" min="0.7" max="1" step="0.05" value="{{ profile.protein_per_lb }}" inputmode="decimal"></div>
+        <button type="submit" name="action" value="calculate" class="btn btn-secondary">Calculate</button>
+        {% if suggestion %}
+        <div class="fx-suggestion" id="fx-suggestion" role="status">
+            <p class="fx-suggestion__nums"><strong>{{ suggestion.calories }}</strong> kcal &middot; <strong>{{ suggestion.protein }}</strong> g protein &middot; <strong>{{ suggestion.carbs }}</strong> g carbs &middot; <strong>{{ suggestion.fat }}</strong> g fat &middot; <strong>{{ suggestion.fiber }}</strong> g fiber</p>
+            <p class="fx-help">Resting rate about {{ suggestion.bmr }} kcal; with your activity about {{ suggestion.tdee }} kcal a day.{% if suggestion.limited %} The goal's deficit was kept to what's sensible: never below your resting rate or more than 20% under what you burn.{% endif %} Estimates - adjust to how you feel and what the scale does over a few weeks.</p>
+            <button type="submit" name="action" value="use" class="btn btn-primary">Use these</button>
+        </div>
+        {% endif %}
+    </form>
+</details>
+
+<form method="post" class="card fx-card fx-form" id="fx-targets">{% csrf_token %}<input type="hidden" name="action" value="targets">
+    <h2 class="fx-card__title">My targets</h2>
+    {% if note %}<p class="fx-note" role="note" id="fx-low-note">{{ note }}</p>{% endif %}
+    {% for key, label, unit, value, tracked in macros %}
+    <div class="fx-target-row">
+        <label for="fx-t-{{ key }}" class="fx-target-row__label">{{ label }} ({{ unit }}){% if key == "fiber" %} <span class="fx-muted">optional</span>{% endif %}</label>
+        <input type="number" name="{{ key }}" id="fx-t-{{ key }}" class="ledger-input" min="1" step="1" value="{{ value|default_if_none:'' }}" inputmode="numeric">
+        <label class="fx-check"><input type="checkbox" name="track_{{ key }}" value="1"{% if tracked %} checked{% endif %}> Track</label>
+    </div>
+    {% endfor %}
+    <p class="fx-help">Untick Calories to hide them everywhere and track just protein (or any macros you pick).</p>
+    <button type="submit" class="btn btn-primary">Save targets</button>
+</form>
+</div>
+{% endblock %}

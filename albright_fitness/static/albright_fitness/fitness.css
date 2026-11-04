@@ -203,3 +203,48 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-mini { display: flex; flex-direction: column; gap: 2px; width: 58px; font-size: 0.6875rem; color: var(--text-secondary); }
 .fx-mini .ledger-input { width: 100%; text-align: center; padding: 0 4px; }
 .fx-day .fx-row form { margin: 0; }
+
+/* ---------- Food: the diary, adding food, targets (food_views) ---------- */
+/* Macros vs targets: one bar per macro from a shared baseline, numbers in text colors. Over a target is information,
+   not an alarm - the bar just fills, in the same calm tones (never red). */
+.fx-macros { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.fx-macro { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label nums" "track track" "left left"; gap: 2px 8px; }
+.fx-macro__label { grid-area: label; font-size: var(--text-sm); font-weight: 600; }
+.fx-macro__nums { grid-area: nums; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.fx-macro__track { grid-area: track; display: block; height: 10px; border-radius: 999px; background: var(--surface-hover); overflow: hidden; }
+.fx-macro__bar { display: block; height: 100%; min-width: 4px; border-radius: 999px; background: var(--accent); }
+.fx-macro__left { grid-area: left; font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fx-title-link { color: inherit; }
+.fx-daynav { display: flex; gap: 6px; }
+.fx-daynav .btn { min-width: 44px; }
+.fx-meal__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.fx-meal__head .fx-card__title { margin-bottom: var(--space-2); }
+.fx-meal__sum { font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-meal__actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: var(--space-2); }
+.fx-meal__actions form { margin: 0; }
+.fx-food-row form, .fx-plan-row, .fx-card > form.fx-row { margin: 0; }
+.fx .ledger-input.fx-servings { width: 76px; flex: 0 0 76px; min-height: 36px; text-align: center; }
+.fx-tabs { display: flex; gap: 2px; padding: 3px; margin: var(--space-3) 0; border-radius: 11px; background: var(--surface-hover);
+  border: 1px solid var(--border); overflow-x: auto; }
+.fx-tabs__item { flex: 1 0 auto; padding: 8px 10px; border-radius: 8px; text-align: center; font-size: var(--text-sm); font-weight: 600;
+  color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
+.fx-tabs__item.is-on { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+@media (max-width: 420px) { .fx-tabs__item { padding: 8px 6px; font-size: 0.8125rem; } }
+.fx-slot-pick { margin-top: var(--space-3); }
+.fx-slot-pick .fx-label { margin: 0; }
+.fx-note { margin: 0 0 var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--text-primary);
+  font-size: var(--text-sm); }
+.fx-results { margin-top: var(--space-2); }
+.fx-macro-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); }
+.fx-amount-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr); gap: var(--space-3); }
+.fx-preview { min-height: 1.25em; margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fx-food-name { overflow-wrap: anywhere; }
+.fx-unit-select { width: auto; flex: 0 0 auto; }
+.fx-card.fx-row-form { margin-bottom: var(--space-4); }
+.fx-suggestion { margin-top: var(--space-3); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--accent); background: var(--accent-soft); }
+.fx-suggestion__nums { margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+.fx-target-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; align-items: center; gap: 8px; min-height: 52px; border-top: 1px solid var(--border); }
+.fx-target-row:first-of-type { border-top: 0; }
+.fx-target-row__label { font-size: var(--text-sm); font-weight: 600; }
+.fx-check { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: var(--text-sm); white-space: nowrap; }
+.fx-grid--today { margin-bottom: var(--space-4); }

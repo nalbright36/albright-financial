@@ -37,4 +37,9 @@ urlpatterns = [
     path("recipes/<int:pk>/share/", views.recipe_share, name="recipe_share"),
     path("recipes/<int:pk>/groceries/", views.recipe_groceries, name="recipe_groceries"),
     path("recipes/<int:pk>/reimport/", views.recipe_reimport, name="recipe_reimport"),
+    path("recipes/<int:pk>/nutrition/", views.recipe_nutrition_page, name="recipe_nutrition"),
+    path("recipes/<int:pk>/nutrition/calculate/", views.recipe_nutrition_calculate, name="recipe_nutrition_calculate"),
+    path("recipes/<int:pk>/nutrition/lines/<int:line_id>/", views.recipe_nutrition_line, name="recipe_nutrition_line"),
+    path("recipes/<int:pk>/nutrition/confirm/", views.recipe_nutrition_confirm, name="recipe_nutrition_confirm"),
+    path("recipes/<int:pk>/nutrition/manual/", views.recipe_nutrition_manual, name="recipe_nutrition_manual"),
 ]

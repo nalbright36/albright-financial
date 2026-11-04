@@ -1,0 +1,15 @@
+{% comment %}
+Today's macros vs targets (nutrition.progress) - the diary and the dashboard. One bar per tracked macro from a
+shared baseline; the numbers are text-colored. Over a target is just information: the bar fills and says "over",
+in the same calm colors (never red).
+{% endcomment %}
+<ul class="fx-macros" role="list">{% for r in progress %}
+    <li class="fx-macro{% if r.over %} is-over{% endif %}" data-macro="{{ r.name }}">
+        <span class="fx-macro__label">{{ r.label }}</span>
+        <span class="fx-macro__nums">{{ r.total }}{% if r.target %} <span class="fx-muted">/ {{ r.target }}</span>{% endif %} {{ r.unit }}</span>
+        {% if r.target %}<span class="fx-macro__track" role="progressbar" aria-label="{{ r.label }}" aria-valuemin="0" aria-valuemax="{{ r.target }}" aria-valuenow="{{ r.total }}"><span class="fx-macro__bar" style="width: {{ r.pct }}%;"></span></span>
+        <span class="fx-macro__left">{% if r.over %}{{ r.over }} {{ r.unit }} over{% else %}{{ r.left }} {{ r.unit }} left{% endif %}</span>
+        {% else %}<span class="fx-macro__left fx-muted">no target</span>{% endif %}
+    </li>{% empty %}
+    <li class="fx-empty">Pick what to track on <a href="{% url 'albright_fitness:targets' %}">Targets</a>.</li>{% endfor %}
+</ul>

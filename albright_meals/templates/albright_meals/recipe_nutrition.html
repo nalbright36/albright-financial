@@ -1,0 +1,88 @@
+{% extends "index.html" %}
+{% block page_title %}Nutrition: {{ recipe.title }} · {% endblock %}
+{% block content %}
+{% comment %}
+A recipe's nutrition, for its household to work out (views.recipe_nutrition_page, recipe_nutrition.py): "Calculate
+nutrition" matches every ingredient line to a USDA food and grams; this table lets you change a match or the grams,
+ignore a line ("salt to taste"), and confirm. Or type the numbers per serving instead. Shared exactly as the recipe is.
+{% endcomment %}
+<div class="container meals-page meals-narrow">
+    <a href="{% url 'albright_meals:recipe' recipe.pk %}" class="meals-back">&larr; {{ recipe.title }}</a>
+    <h1 class="meals-head__title">Nutrition</h1>
+    <p class="meals-head__sub">{{ recipe.title }} &middot; {{ servings }} serving{{ servings|pluralize }}{% if not recipe.servings %} (no servings set - counted as one){% endif %}</p>
+    {% if not configured %}<p class="meals-note" role="status" id="nutrition-not-set">{{ not_set }} You can still type the nutrition in below.</p>{% endif %}
+
+    {% if row %}
+    <section class="card meals-nut-totals" id="nutrition-totals">
+        <div class="meals-nut-totals__head">
+            <span class="card__label">Per serving</span>
+            {% if row.status == "review" %}<span class="badge warn" id="nutrition-review">Needs review</span>{% elif row.status == "manual" %}<span class="badge">Typed in</span>{% else %}<span class="badge gain">Confirmed</span>{% endif %}
+        </div>
+        <p class="meals-nut-big">{{ row.serving_calories|floatformat:0|default:"?" }} <span>kcal</span> &middot; {{ row.serving_protein|floatformat:0|default:"?" }} <span>g protein</span></p>
+        <p class="meals-hint">{{ row.serving_carbs|floatformat:0|default:"?" }} g carbs &middot; {{ row.serving_fat|floatformat:0|default:"?" }} g fat{% if row.serving_fiber is not None %} &middot; {{ row.serving_fiber|floatformat:0 }} g fiber{% endif %} &middot; whole recipe {{ row.total_calories|floatformat:0|default:"?" }} kcal</p>
+        {% if unmatched and row.status != "manual" %}<p class="meals-note" role="note">{{ unmatched|length }} line{{ unmatched|length|pluralize }} without a match or grams count as nothing - fix or ignore {{ unmatched|length|pluralize:"it,them" }}.</p>{% endif %}
+        {% if row.status == "review" %}<form method="post" action="{% url 'albright_meals:recipe_nutrition_confirm' recipe.pk %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm">Confirm matches</button></form>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if picking %}
+    <section class="card meals-nut-picker" id="picker" aria-labelledby="picker-h">
+        <h2 class="meals-section__title" id="picker-h">Match: {{ picking.ingredient }}</h2>
+        <form method="get" class="meals-inline-form">
+            <input type="hidden" name="line" value="{{ picking.pk }}">
+            <label for="picker-q" class="visually-hidden">Search USDA foods</label>
+            <input type="search" name="q" id="picker-q" class="ledger-input" value="{{ q }}" maxlength="100" placeholder="Search USDA foods" autocomplete="off">
+            <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+        </form>
+        {% if search_error %}<p class="meals-note" role="alert">{{ search_error }}</p>{% endif %}
+        <ul class="meals-nut-candidates">{% for f in candidates %}
+            <li><form method="post" action="{% url 'albright_meals:recipe_nutrition_line' recipe.pk picking.pk %}">{% csrf_token %}<input type="hidden" name="fdc_id" value="{{ f.fdc_id }}">
+                <button type="submit" class="meals-nut-candidate"><span class="meals-nut-candidate__name">{{ f.name }}{% if f.brand %} <span class="meals-hint">{{ f.brand }}</span>{% endif %}</span><span class="meals-hint">{{ f.calories|floatformat:0|default:"?" }} kcal / 100 g</span></button></form></li>
+        {% empty %}{% if q %}<li class="meals-hint">No foods match.</li>{% endif %}{% endfor %}</ul>
+        <a href="{% url 'albright_meals:recipe_nutrition' recipe.pk %}" class="meals-hint">Cancel</a>
+    </section>
+    {% endif %}
+
+    {% if lines %}
+    <section class="card" id="nutrition-lines" aria-labelledby="nutrition-lines-h">
+        <h2 class="meals-section__title" id="nutrition-lines-h">Ingredients</h2>
+        <ol class="meals-nut-lines">{% for line in lines %}
+            <li class="meals-nut-line{% if line.ignored %} is-ignored{% endif %}" id="line-{{ line.pk }}">
+                <div class="meals-nut-line__top">
+                    <span class="meals-nut-line__text">{{ line.ingredient }}</span>
+                    <form method="post" action="{% url 'albright_meals:recipe_nutrition_line' recipe.pk line.pk %}">{% csrf_token %}<input type="hidden" name="ignored" value="{% if line.ignored %}0{% else %}1{% endif %}"><button type="submit" class="btn btn-secondary btn-sm">{% if line.ignored %}Count it{% else %}Ignore{% endif %}</button></form>
+                </div>
+                {% if not line.ignored %}
+                <div class="meals-nut-line__match">
+                    <a href="?line={{ line.pk }}&amp;q={{ line.food.name|default:line.ingredient|urlencode }}#picker" class="meals-nut-line__food">{% if line.food %}{{ line.food.name }}{% else %}No match - pick one{% endif %}</a>
+                    <form method="post" action="{% url 'albright_meals:recipe_nutrition_line' recipe.pk line.pk %}" class="meals-nut-grams">{% csrf_token %}
+                        <label for="grams-{{ line.pk }}" class="visually-hidden">Grams of {{ line.ingredient }}</label>
+                        <input type="number" name="grams" id="grams-{{ line.pk }}" class="ledger-input" value="{{ line.grams|default_if_none:'' }}" min="0" max="20000" step="0.1" inputmode="decimal" placeholder="?"><span class="meals-hint">g</span>
+                        <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+                    </form>
+                    <span class="meals-nut-line__macros">{% if line.calories is not None %}{{ line.calories|floatformat:0 }} kcal &middot; {{ line.protein|floatformat:0 }} g P{% else %}&ndash;{% endif %}</span>
+                </div>
+                {% endif %}
+            </li>{% endfor %}</ol>
+    </section>
+    {% endif %}
+
+    <section class="card" id="nutrition-actions">
+        <form method="post" action="{% url 'albright_meals:recipe_nutrition_calculate' recipe.pk %}"{% if lines %} data-confirm="Match every line again? Your changes to the matches are replaced."{% endif %}>{% csrf_token %}
+            <button type="submit" class="btn btn-primary"{% if not configured %} disabled{% endif %}>{% if lines %}Match again{% else %}Calculate nutrition{% endif %}</button>
+            <p class="meals-hint">Matches each ingredient line to a food from USDA FoodData Central and works out the grams from its amount.</p>
+        </form>
+        <details class="meals-nut-manual"{% if row.status == "manual" %} open{% endif %}>
+            <summary>Type the numbers per serving instead</summary>
+            <form method="post" action="{% url 'albright_meals:recipe_nutrition_manual' recipe.pk %}" class="meals-nut-manual__form">{% csrf_token %}
+                <div class="field"><label for="m-calories">Calories</label><input type="number" name="calories" id="m-calories" class="ledger-input" min="0" max="10000" step="1" value="{{ row.serving_calories|floatformat:0|default:'' }}" inputmode="numeric"></div>
+                <div class="field"><label for="m-protein">Protein (g)</label><input type="number" name="protein" id="m-protein" class="ledger-input" min="0" max="10000" step="0.1" value="{{ row.serving_protein|default_if_none:'' }}" inputmode="decimal"></div>
+                <div class="field"><label for="m-carbs">Carbs (g)</label><input type="number" name="carbs" id="m-carbs" class="ledger-input" min="0" max="10000" step="0.1" value="{{ row.serving_carbs|default_if_none:'' }}" inputmode="decimal"></div>
+                <div class="field"><label for="m-fat">Fat (g)</label><input type="number" name="fat" id="m-fat" class="ledger-input" min="0" max="10000" step="0.1" value="{{ row.serving_fat|default_if_none:'' }}" inputmode="decimal"></div>
+                <div class="field"><label for="m-fiber">Fiber (g)</label><input type="number" name="fiber" id="m-fiber" class="ledger-input" min="0" max="10000" step="0.1" value="{{ row.serving_fiber|default_if_none:'' }}" inputmode="decimal"></div>
+                <button type="submit" class="btn btn-secondary">Save per serving</button>
+            </form>
+        </details>
+    </section>
+</div>
+{% endblock %}

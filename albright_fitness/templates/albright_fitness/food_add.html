@@ -1,0 +1,95 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Add food · {% endblock %}
+{% block fitness %}
+{% comment %}
+Add food (food_views.add): which meal, then one of five ways - USDA search (pick a food, then an amount),
+Recent (what I log most - one tap), My foods (servings), Quick add (just the numbers), a Meals recipe (servings).
+{% endcomment %}
+<div class="fx-narrow">
+<h1 class="fx-head__title">Add food</h1>
+
+<form method="get" class="fx-row-form fx-slot-pick" id="fx-slot-form">
+    <input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="tab" value="{{ tab }}">{% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+    <label for="fx-slot" class="fx-label">To</label>
+    <select name="slot" id="fx-slot" class="ledger-input fx-select" data-autosubmit>{% for key, label in slots %}<option value="{{ key }}"{% if key == slot %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <noscript><button type="submit" class="btn btn-secondary btn-sm">Change</button></noscript>
+</form>
+
+<nav class="fx-tabs" aria-label="How to add">{% for key, label in tabs %}<a href="?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}&amp;tab={{ key }}" class="fx-tabs__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+
+{% if tab == "search" %}
+<section class="card fx-card" id="fx-usda">
+    {% if not configured %}<p class="fx-note" role="status" id="fx-usda-not-set">{{ not_set }}</p>{% endif %}
+    <form method="get" class="fx-row-form">
+        <input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot }}"><input type="hidden" name="tab" value="search">
+        <label for="fx-q" class="visually-hidden">Search foods</label>
+        <input type="search" name="q" id="fx-q" class="ledger-input fx-input-wide" value="{{ q }}" placeholder="Search USDA foods (e.g. greek yogurt)" maxlength="100" autocomplete="off"{% if not configured %} disabled{% endif %}>
+        <button type="submit" class="btn btn-primary"{% if not configured %} disabled{% endif %}>Search</button>
+    </form>
+    {% if search_error %}<p class="fx-note" role="alert">{{ search_error }}</p>{% endif %}
+    {% if q and not search_error %}
+    <div class="fx-results">{% for f in results %}
+        <a href="{% url 'albright_fitness:food_usda' f.fdc_id %}?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}" class="fx-row fx-row--link">
+            <span class="fx-row__title">{{ f.name }}{% if f.brand %} <span class="fx-muted fx-small">{{ f.brand }}</span>{% endif %}</span>
+            <span class="fx-row__ind">{% if f.calories is not None %}{{ f.calories|floatformat:0 }} kcal{% endif %}{% if f.protein is not None %} &middot; {{ f.protein|floatformat:0 }} g P{% endif %} / 100 g</span>
+        </a>
+    {% empty %}<p class="fx-empty">No foods match "{{ q }}".</p>{% endfor %}</div>
+    <p class="fx-help">From USDA FoodData Central.</p>
+    {% endif %}
+</section>
+
+{% elif tab == "recent" %}
+<section class="card fx-card" id="fx-recent">
+    {% for e, times in recent %}
+    <form method="post" action="{% url 'albright_fitness:food_log' %}" class="fx-row">{% csrf_token %}
+        <input type="hidden" name="kind" value="recent"><input type="hidden" name="entry" value="{{ e.pk }}"><input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot }}">
+        <span class="fx-row__title">{{ e.label }} <span class="fx-muted fx-small">{% if e.portion_label %}{{ e.portion_label }}{% elif e.grams %}{{ e.grams|floatformat:0 }} g{% endif %}</span></span>
+        <span class="fx-row__ind">{% if e.calories is not None %}{{ e.calories|floatformat:0 }} kcal{% endif %}{% if times > 1 %} &middot; &times;{{ times }}{% endif %}</span>
+        <button type="submit" class="btn btn-primary btn-sm">Log</button>
+    </form>
+    {% empty %}<p class="fx-empty">What you log shows up here for one-tap re-logging.</p>{% endfor %}
+</section>
+
+{% elif tab == "mine" %}
+<section class="card fx-card" id="fx-mine">
+    {% for f in my_foods %}
+    <form method="post" action="{% url 'albright_fitness:food_log' %}" class="fx-row">{% csrf_token %}
+        <input type="hidden" name="kind" value="custom"><input type="hidden" name="food" value="{{ f.pk }}"><input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot }}">
+        <span class="fx-row__title">{{ f.name }} <span class="fx-muted fx-small">{{ f.serving_label }} &middot; {{ f.calories|floatformat:0 }} kcal</span></span>
+        <label class="visually-hidden" for="fx-mine-{{ f.pk }}">Servings of {{ f.name }}</label>
+        <input type="number" name="servings" id="fx-mine-{{ f.pk }}" class="ledger-input fx-servings" value="1" min="0.25" max="50" step="0.25" inputmode="decimal">
+        <button type="submit" class="btn btn-primary btn-sm">Log</button>
+    </form>
+    {% empty %}<p class="fx-empty">No foods of your own yet.</p>{% endfor %}
+    <a href="{% url 'albright_fitness:my_foods' %}" class="fx-more">Add or manage My foods &rarr;</a>
+</section>
+
+{% elif tab == "quick" %}
+<form method="post" action="{% url 'albright_fitness:food_log' %}" class="card fx-card fx-form" id="fx-quick-add">{% csrf_token %}
+    <input type="hidden" name="kind" value="quick"><input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot }}">
+    <div class="field"><label for="fx-qa-label">Label</label><input type="text" name="label" id="fx-qa-label" class="ledger-input" maxlength="200" placeholder="Coffee with milk"></div>
+    <div class="fx-macro-inputs">
+        <div class="field"><label for="fx-qa-calories">Calories</label><input type="number" name="calories" id="fx-qa-calories" class="ledger-input" min="0" max="10000" step="1" inputmode="numeric"></div>
+        <div class="field"><label for="fx-qa-protein">Protein (g)</label><input type="number" name="protein" id="fx-qa-protein" class="ledger-input" min="0" max="10000" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="fx-qa-carbs">Carbs (g)</label><input type="number" name="carbs" id="fx-qa-carbs" class="ledger-input" min="0" max="10000" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="fx-qa-fat">Fat (g)</label><input type="number" name="fat" id="fx-qa-fat" class="ledger-input" min="0" max="10000" step="0.1" inputmode="decimal"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Log it</button>
+</form>
+
+{% elif tab == "recipes" %}
+<section class="card fx-card" id="fx-recipes">
+    {% if recipes is None %}<p class="fx-empty">Recipes come from Meals - you're not in a household there yet.</p>
+    {% else %}{% for r in recipes %}
+    <form method="post" action="{% url 'albright_fitness:food_log' %}" class="fx-row">{% csrf_token %}
+        <input type="hidden" name="kind" value="recipe"><input type="hidden" name="recipe" value="{{ r.pk }}"><input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot }}">
+        <span class="fx-row__title">{{ r.title }} <span class="fx-muted fx-small">{{ r.nutrition.serving_calories|floatformat:0 }} kcal &middot; {{ r.nutrition.serving_protein|floatformat:0 }} g P / serving</span></span>
+        <label class="visually-hidden" for="fx-recipe-{{ r.pk }}">Servings of {{ r.title }}</label>
+        <input type="number" name="servings" id="fx-recipe-{{ r.pk }}" class="ledger-input fx-servings" value="1" min="0.25" max="50" step="0.25" inputmode="decimal">
+        <button type="submit" class="btn btn-primary btn-sm">Log</button>
+    </form>
+    {% empty %}<p class="fx-empty">No recipes with nutrition yet - open one in Meals and tap "Calculate nutrition".</p>{% endfor %}{% endif %}
+</section>
+{% endif %}
+</div>
+{% endblock %}

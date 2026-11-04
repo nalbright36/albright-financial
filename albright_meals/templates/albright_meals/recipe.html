@@ -37,6 +37,8 @@
         {% if standard_tags %}<div class="meals-tags meals-tags--standard" id="recipe-standard-tags">{% for label in standard_tags %}<span class="meals-tag meals-tag--standard">{{ label }}</span>{% endfor %}</div>{% endif %}
         {% if recipe.tags %}<div class="meals-tags">{% for t in recipe.tags %}<a href="{% url 'albright_meals:recipes' %}?tag={{ t|urlencode }}" class="meals-tag">{{ t }}</a>{% endfor %}</div>{% endif %}
 
+        {% include "albright_meals/_nutrition_box.html" %}
+
         {% if editable %}<div class="meals-recipe__actions">
             <form method="post" action="{% url 'albright_meals:recipe_plan' recipe.pk %}" class="meals-inline" id="recipe-plan-form">{% csrf_token %}
                 <div class="field"><label for="{{ plan_form.date.id_for_label }}">Day</label>{{ plan_form.date }}</div>

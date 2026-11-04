@@ -160,4 +160,30 @@
             dots.forEach(function (d) { d.classList.remove("is-on"); });
         });
     });
+
+    // A USDA food's amount (food_usda.html): the macros for what's typed, as you type. data-per100 is calories,
+    // protein, carbs, fat, fiber per 100 g; each portion option carries its grams.
+    var amountForm = document.getElementById("fx-amount");
+    if (amountForm) {
+        var per100 = amountForm.getAttribute("data-per100").split(",").map(function (v) { return v === "" ? null : parseFloat(v); });
+        var amount = document.getElementById("fx-amount-n"), portion = document.getElementById("fx-portion");
+        var preview = document.getElementById("fx-amount-preview");
+        var showPreview = function () {
+            var option = portion.options[portion.selectedIndex];
+            var grams = (parseFloat(amount.value) || 0) * (parseFloat(option.getAttribute("data-grams")) || 0);
+            if (!grams) { preview.textContent = ""; return; }
+            var part = function (i, unit, label) {
+                return per100[i] === null ? null : Math.round(per100[i] * grams / 100) + unit + label;
+            };
+            preview.textContent = [Math.round(grams) + " g", part(0, " kcal", ""), part(1, " g", " protein"), part(2, " g", " carbs"),
+                                   part(3, " g", " fat")].filter(Boolean).join(" \u00b7 ");
+        };
+        amount.addEventListener("input", showPreview);
+        portion.addEventListener("change", function () {
+            if (portion.value === "g" && parseFloat(amount.value) < 10) amount.value = 100;
+            else if (portion.value !== "g" && parseFloat(amount.value) >= 10) amount.value = 1;
+            showPreview();
+        });
+        showPreview();
+    }
 })();

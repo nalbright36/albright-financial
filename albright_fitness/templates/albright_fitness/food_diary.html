@@ -1,0 +1,65 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}Food · {% endblock %}
+{% block fitness %}
+{% comment %}
+The food diary (food_views.diary): one day - totals vs targets, "From my meal plan" (the household's planned
+recipes that day, one tap with servings), then Breakfast, Lunch, Dinner and Snacks with Add and "Copy yesterday's".
+Private to its owner.
+{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head">
+    <div>
+        <h1 class="fx-head__title">{% if on == today %}Today{% else %}{{ on|date:"l" }}{% endif %}</h1>
+        <p class="fx-head__sub">{{ on|date:"F j, Y" }}</p>
+    </div>
+    <nav class="fx-daynav" aria-label="Day">
+        <a href="{% url 'albright_fitness:food_day' prev|date:'Y-m-d' %}" class="btn btn-secondary btn-sm" aria-label="Previous day">&lsaquo;</a>
+        {% if on != today %}<a href="{% url 'albright_fitness:food' %}" class="btn btn-secondary btn-sm">Today</a>{% endif %}
+        <a href="{% url 'albright_fitness:food_day' next|date:'Y-m-d' %}" class="btn btn-secondary btn-sm" aria-label="Next day">&rsaquo;</a>
+    </nav>
+</div>
+
+<section class="card fx-card" id="fx-food-totals" aria-labelledby="fx-food-totals-h">
+    <h2 class="fx-card__title" id="fx-food-totals-h">{% if on == today %}Today's{% else %}This day's{% endif %} totals</h2>
+    {% include "albright_fitness/_macro_bars.html" %}
+    {% if not has_targets %}<p class="fx-help"><a href="{% url 'albright_fitness:targets' %}">Set your targets</a> to see what's left.</p>{% endif %}
+</section>
+
+{% if plan %}
+<section class="card fx-card" id="fx-plan" aria-labelledby="fx-plan-h">
+    <h2 class="fx-card__title" id="fx-plan-h">From my meal plan</h2>
+    {% for p in plan %}
+    <form method="post" action="{% url 'albright_fitness:food_log' %}" class="fx-row fx-plan-row">{% csrf_token %}
+        <input type="hidden" name="kind" value="plan"><input type="hidden" name="entry" value="{{ p.entry.pk }}"><input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}">
+        <span class="fx-row__title">{{ p.entry.recipe.title }} <span class="fx-muted fx-small">{{ p.entry.get_slot_display }}{% if "calories" in tracked %} &middot; {{ p.amounts.calories|floatformat:0 }} kcal{% endif %} &middot; {{ p.amounts.protein|floatformat:0 }} g protein / serving</span></span>
+        {% if p.logged %}<span class="fx-pill fx-pill--done" title="Already in your diary">Logged &#x2713;</span>{% endif %}
+        <label class="visually-hidden" for="fx-plan-{{ p.entry.pk }}">Servings of {{ p.entry.recipe.title }}</label>
+        <input type="number" name="servings" id="fx-plan-{{ p.entry.pk }}" class="ledger-input fx-servings" value="1" min="0.25" max="50" step="0.25" inputmode="decimal">
+        <button type="submit" class="btn btn-primary btn-sm">Log</button>
+    </form>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% for key, label, rows, slot_totals in slots %}
+<section class="card fx-card fx-meal" id="slot-{{ key }}" aria-labelledby="slot-{{ key }}-h">
+    <div class="fx-meal__head">
+        <h2 class="fx-card__title" id="slot-{{ key }}-h">{{ label }}</h2>
+        {% if rows %}<span class="fx-meal__sum">{% if "calories" in tracked %}{{ slot_totals.calories|floatformat:0 }} kcal{% endif %}{% if "protein" in tracked %}{% if "calories" in tracked %} &middot; {% endif %}{{ slot_totals.protein|floatformat:0 }} g protein{% endif %}</span>{% endif %}
+    </div>
+    {% for e in rows %}
+    <div class="fx-row fx-food-row">
+        <span class="fx-row__title">{{ e.label }}{% if e.portion_label or e.grams %} <span class="fx-muted fx-small">{% if e.portion_label %}{{ e.portion_label }}{% else %}{{ e.grams|floatformat:0 }} g{% endif %}</span>{% endif %}</span>
+        <span class="fx-row__ind">{% if "calories" in tracked and e.calories is not None %}{{ e.calories|floatformat:0 }} kcal{% endif %}{% if e.protein is not None %}{% if "calories" in tracked and e.calories is not None %} &middot; {% endif %}{{ e.protein|floatformat:0 }} g P{% endif %}</span>
+        <form method="post" action="{% url 'albright_fitness:food_delete' e.pk %}">{% csrf_token %}<button type="submit" class="fx-icon-btn" aria-label="Remove {{ e.label }}" title="Remove">&times;</button></form>
+    </div>
+    {% empty %}<p class="fx-empty fx-small">Nothing yet.</p>{% endfor %}
+    <div class="fx-meal__actions">
+        <a href="{% url 'albright_fitness:food_add' %}?date={{ on|date:'Y-m-d' }}&amp;slot={{ key }}" class="btn btn-secondary btn-sm">+ Add food</a>
+        <form method="post" action="{% url 'albright_fitness:food_copy' %}">{% csrf_token %}<input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ key }}"><button type="submit" class="fx-link-btn">Copy yesterday's {{ label|lower }}</button></form>
+    </div>
+</section>
+{% endfor %}
+<p class="fx-help"><a href="{% url 'albright_fitness:my_foods' %}">My foods</a> &middot; <a href="{% url 'albright_fitness:targets' %}">Targets</a> &middot; Only you can see your diary.</p>
+</div>
+{% endblock %}

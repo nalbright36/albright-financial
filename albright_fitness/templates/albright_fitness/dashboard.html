@@ -2,7 +2,8 @@
 {% block page_title %}Today · {% endblock %}
 {% block fitness %}
 {% comment %}
-The dashboard (views.dashboard, stats.py): today's planned workout with Start, this week's done vs planned, the
+The dashboard (views.dashboard, stats.py): today's planned workout with Start, today's food vs targets (and the
+7-day average calories and protein), this week's done vs planned, the
 streak (weeks with every planned workout done), this week's working sets by muscle group, recent records, and the
 quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
 {% endcomment %}
@@ -13,6 +14,7 @@ quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
 
 {% if open_workout %}<a href="{% url 'albright_fitness:workout' open_workout.pk %}" class="card fx-resume" id="fx-resume"><strong>Continue {{ open_workout.title }}</strong> <span class="fx-muted">started {{ open_workout.date|date:"M j" }}</span> &rarr;</a>{% endif %}
 
+<div class="fx-grid fx-grid--today">
 <section class="card fx-card fx-today" id="fx-today" aria-labelledby="fx-today-h">
     <h2 class="fx-card__title" id="fx-today-h">Today</h2>
     {% for day, done in today %}
@@ -25,6 +27,12 @@ quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
     <p class="fx-empty">Rest day.{% if not programs %} <a href="{% url 'albright_fitness:programs' %}">Pick a program</a> to plan your week.{% endif %}</p>
     {% endfor %}
 </section>
+<section class="card fx-card" id="fx-food-today" aria-labelledby="fx-food-today-h">
+    <h2 class="fx-card__title" id="fx-food-today-h"><a href="{% url 'albright_fitness:food' %}" class="fx-title-link">Today's food &rarr;</a></h2>
+    {% include "albright_fitness/_macro_bars.html" %}
+    {% if food_average %}<p class="fx-help" id="fx-food-average">7-day average{% if food_average.days < 7 %} ({{ food_average.days }} day{{ food_average.days|pluralize }} logged){% endif %}: {% if "calories" in tracked %}{{ food_average.calories }} kcal &middot; {% endif %}{{ food_average.protein }} g protein</p>{% endif %}
+</section>
+</div>
 
 <section class="fx-stats" aria-label="This week">
     <div class="card fx-stat" id="fx-week"><span class="card__label">This week</span>

@@ -1,0 +1,32 @@
+{% comment %}
+A recipe's nutrition per serving (recipe page; recipe_nutrition.py) - shown wherever the recipe can be read. Its
+household works it out ("Calculate nutrition" / "Review"); anyone with Fitness can log it to their own diary.
+{% endcomment %}
+<section class="card meals-nutrition" id="recipe-nutrition" aria-labelledby="recipe-nutrition-h">
+    <div class="meals-nutrition__head">
+        <h2 class="meals-section__title" id="recipe-nutrition-h">Nutrition</h2>
+        {% if nutrition.needs_review %}<span class="badge warn">Needs review</span>{% endif %}
+    </div>
+    {% if per_serving %}
+    <p class="meals-nut-big" id="recipe-per-serving">{{ per_serving.calories|floatformat:0|default:"?" }} <span>kcal</span> &middot; {{ per_serving.protein|floatformat:0|default:"?" }} <span>g protein</span> <span class="meals-hint">per serving</span></p>
+    <p class="meals-hint">{{ per_serving.carbs|floatformat:0|default:"?" }} g carbs &middot; {{ per_serving.fat|floatformat:0|default:"?" }} g fat{% if per_serving.fiber is not None %} &middot; {{ per_serving.fiber|floatformat:0 }} g fiber{% endif %}{% if nutrition.status == "manual" %} &middot; typed in{% endif %}</p>
+    {% elif not editable %}<p class="meals-hint">Not worked out yet.</p>{% endif %}
+    <div class="meals-nutrition__actions">
+        {% if editable %}{% if nutrition %}<a href="{% url 'albright_meals:recipe_nutrition' recipe.pk %}" class="btn btn-secondary btn-sm">Review nutrition</a>
+        {% else %}<form method="post" action="{% url 'albright_meals:recipe_nutrition_calculate' recipe.pk %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="recipe-calculate">Calculate nutrition</button></form>
+        <a href="{% url 'albright_meals:recipe_nutrition' recipe.pk %}" class="meals-hint">or type it in</a>{% endif %}{% endif %}
+    </div>
+    {% if per_serving and can_log %}
+    <form method="post" action="{% url 'albright_fitness:food_log' %}" class="meals-log-form" id="recipe-log">{% csrf_token %}
+        <input type="hidden" name="kind" value="recipe"><input type="hidden" name="recipe" value="{{ recipe.pk }}">
+        <input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <span class="meals-log-form__label">Log to my diary</span>
+        <label for="recipe-log-servings" class="visually-hidden">Servings</label>
+        <input type="number" name="servings" id="recipe-log-servings" class="ledger-input" value="1" min="0.25" max="50" step="0.25" inputmode="decimal">
+        <span class="meals-hint">serving(s) at</span>
+        <label for="recipe-log-slot" class="visually-hidden">Meal</label>
+        <select name="slot" id="recipe-log-slot" class="ledger-input">{% for key, label in diary_slots %}<option value="{{ key }}"{% if key == "dinner" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <button type="submit" class="btn btn-primary btn-sm">Log</button>
+    </form>
+    {% endif %}
+</section>

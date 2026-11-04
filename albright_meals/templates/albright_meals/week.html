@@ -22,13 +22,14 @@ or removes it. Every action is a plain form, so it all works without JS.
     </div>
 
     <div class="meals-week" id="meals-week">
-        {% for day, slot_rows, has_meals in days %}
+        {% for day, slot_rows, has_meals, day_macros in days %}
         <section class="card meals-day{% if day == today %} is-today{% endif %}" data-day="{{ day|date:'Y-m-d' }}" aria-label="{{ day|date:'l, F j' }}">
             <header class="meals-day__head">
                 <span class="meals-day__name">{{ day|date:"D" }}</span>
                 <span class="meals-day__date">{{ day|date:"M j" }}</span>
                 {% if day == today %}<span class="badge meals-today-badge">Today</span>{% endif %}
             </header>
+            {% if day_macros.known %}<p class="meals-day__macros" data-macros>Planned: {{ day_macros.calories }} kcal &middot; {{ day_macros.protein }} g protein{% if day_macros.known < day_macros.count %} <span class="meals-hint">({{ day_macros.known }} of {{ day_macros.count }} meals known)</span>{% endif %}</p>{% endif %}
             <ul class="meals-day__list">
                 {% for slot, slot_label, entry in slot_rows %}{% if entry %}
                 <li class="meals-meal meals-meal--{{ entry.status }}" data-entry="{{ entry.pk }}">
@@ -47,7 +48,7 @@ or removes it. Every action is a plain form, so it all works without JS.
                             <form method="post" action="{% url 'albright_meals:plan_move' entry.pk %}" class="meals-move">{% csrf_token %}
                                 <label class="visually-hidden" for="move-day-{{ entry.pk }}">Move to day</label>
                                 <select name="date" id="move-day-{{ entry.pk }}" class="ledger-input">
-                                    {% for other_day, _rows, _has in days %}<option value="{{ other_day|date:'Y-m-d' }}"{% if other_day == day %} selected{% endif %}>{{ other_day|date:"D M j" }}</option>{% endfor %}
+                                    {% for other_day, _rows, _has, _macros in days %}<option value="{{ other_day|date:'Y-m-d' }}"{% if other_day == day %} selected{% endif %}>{{ other_day|date:"D M j" }}</option>{% endfor %}
                                     <option value="{{ next|date:'Y-m-d' }}">Next {{ next|date:"D M j" }}</option>
                                 </select>
                                 <label class="visually-hidden" for="move-slot-{{ entry.pk }}">Slot</label>

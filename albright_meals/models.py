@@ -274,3 +274,59 @@ class MealsSettings(models.Model):
     @classmethod
     def load(cls, household):
         return cls.objects.get_or_create(household=household)[0]
+
+
+NUTRITION_FIELDS = ("calories", "protein", "carbs", "fat", "fiber")
+_AMOUNT = {"max_digits": 9, "decimal_places": 2, "null": True, "blank": True}
+
+
+class RecipeNutrition(models.Model):
+    """A recipe's nutrition - it belongs to the recipe, so it's shared exactly as the recipe is (its household; the
+    library or a share when the recipe is). Worked out by matching each ingredient line to a USDA food
+    (albright_fitness.nutrition - the lines below), or typed in per serving (MANUAL). NEEDS_REVIEW until someone in
+    the household confirms the matches. total_*: the whole recipe; serving_*: per serving (the recipe's servings, or
+    the whole recipe as one serving when it has none)."""
+    NEEDS_REVIEW, CONFIRMED, MANUAL = "review", "confirmed", "manual"
+    STATUSES = [(NEEDS_REVIEW, "Needs review"), (CONFIRMED, "Confirmed"), (MANUAL, "Typed in")]
+    recipe = models.OneToOneField(Recipe, on_delete=models.CASCADE, related_name="nutrition")
+    status = models.CharField(max_length=9, choices=STATUSES, default=NEEDS_REVIEW)
+    total_calories = models.DecimalField(**_AMOUNT)
+    total_protein = models.DecimalField(**_AMOUNT)
+    total_carbs = models.DecimalField(**_AMOUNT)
+    total_fat = models.DecimalField(**_AMOUNT)
+    total_fiber = models.DecimalField(**_AMOUNT)
+    serving_calories = models.DecimalField(**_AMOUNT)
+    serving_protein = models.DecimalField(**_AMOUNT)
+    serving_carbs = models.DecimalField(**_AMOUNT)
+    serving_fat = models.DecimalField(**_AMOUNT)
+    serving_fiber = models.DecimalField(**_AMOUNT)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Nutrition: {self.recipe}"
+
+    @property
+    def needs_review(self):
+        return self.status == self.NEEDS_REVIEW
+
+
+class RecipeNutritionLine(models.Model):
+    """One ingredient line, matched to a USDA food and an amount in grams (or ignored - "salt to taste")."""
+    nutrition = models.ForeignKey(RecipeNutrition, on_delete=models.CASCADE, related_name="lines")
+    order = models.PositiveSmallIntegerField(default=0)
+    ingredient = models.CharField(max_length=500)
+    food = models.ForeignKey("albright_fitness.Food", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    grams = models.DecimalField(null=True, blank=True, max_digits=8, decimal_places=1, validators=[MinValueValidator(0)])
+    ignored = models.BooleanField(default=False)
+    calories = models.DecimalField(**_AMOUNT)
+    protein = models.DecimalField(**_AMOUNT)
+    carbs = models.DecimalField(**_AMOUNT)
+    fat = models.DecimalField(**_AMOUNT)
+    fiber = models.DecimalField(**_AMOUNT)
+
+    class Meta:
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return self.ingredient

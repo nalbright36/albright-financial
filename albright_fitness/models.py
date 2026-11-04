@@ -6,6 +6,10 @@ through the querysets below).
 
 Built-in exercises have no owner (seeded by migration 0002); a person's own ones are theirs alone. Built-in
 programs aren't rows: they're templates in programs.py that a person copies into their own Program.
+
+Nutrition (Phase 2): Food is a shared cache of USDA FoodData Central foods (public data - usda.py fills it). Everything
+else is private to its owner, even within a household: NutritionProfile (body info, units, macro targets), CustomFood
+("My foods") and FoodLogEntry (the diary). A recipe's nutrition lives with the recipe (albright_meals.RecipeNutrition).
 """
 from decimal import Decimal
 
@@ -238,3 +242,139 @@ class PersonalRecord(models.Model):
     class Meta:
         ordering = ["-achieved_on", "-pk"]
         indexes = [models.Index(fields=["owner", "exercise", "kind"])]
+
+
+# ---------------------------------------------------------------------------
+# Nutrition: the USDA food cache, targets, My foods, the diary
+# ---------------------------------------------------------------------------
+
+NUTRIENTS = ("calories", "protein", "carbs", "fat", "fiber", "sugar", "sodium")    # sodium in mg, the rest g / kcal
+MACROS = ("calories", "protein", "carbs", "fat", "fiber")
+AMOUNT = {"max_digits": 9, "decimal_places": 2, "null": True, "blank": True}
+
+
+class Food(models.Model):
+    """A food from USDA FoodData Central, cached so a repeat lookup never calls the API. Nutrients are per 100 g
+    (empty: USDA doesn't list it). portions: [{"label": "1 cup", "grams": 240.0}, ...]. detailed: the full record
+    (with household portions) has been fetched - a search result alone has nutrients but often no portions."""
+    fdc_id = models.PositiveIntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    brand = models.CharField(max_length=120, blank=True)
+    data_type = models.CharField(max_length=30, blank=True)
+    calories = models.DecimalField(**AMOUNT)   # per 100 g (sodium mg)
+    protein = models.DecimalField(**AMOUNT)
+    carbs = models.DecimalField(**AMOUNT)
+    fat = models.DecimalField(**AMOUNT)
+    fiber = models.DecimalField(**AMOUNT)
+    sugar = models.DecimalField(**AMOUNT)
+    sodium = models.DecimalField(**AMOUNT)
+    portions = models.JSONField(default=list, blank=True)
+    detailed = models.BooleanField(default=False)
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "pk"]
+
+    def __str__(self):
+        return f"{self.name} ({self.brand})" if self.brand else self.name
+
+
+class NutritionProfile(models.Model):
+    """One person's units, body info (for the calculator) and macro targets - theirs alone. tracked: which of
+    MACROS the diary and dashboard show (e.g. protein only, calories hidden)."""
+    MALE, FEMALE = "male", "female"
+    SEXES = [(MALE, "Male"), (FEMALE, "Female")]
+    ACTIVITY = [("sedentary", "Sedentary (desk job, little exercise)"), ("light", "Light (exercise 1-3 days a week)"),
+                ("moderate", "Moderate (exercise 3-5 days a week)"), ("active", "Active (hard exercise 6-7 days a week)"),
+                ("very", "Very active (physical job plus training)")]
+    MAINTAIN, LOSE, GAIN = "maintain", "lose", "gain"
+    GOALS = [(MAINTAIN, "Maintain"), (LOSE, "Slow loss (~0.5 lb a week)"), (GAIN, "Slow gain (~0.5 lb a week)")]
+    IN, CM = "in", "cm"
+    HEIGHT_UNITS = [(IN, "in"), (CM, "cm")]
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_nutrition")
+    weight_unit = models.CharField(max_length=2, choices=UNITS, default=LB)
+    height_unit = models.CharField(max_length=2, choices=HEIGHT_UNITS, default=IN)
+    sex = models.CharField(max_length=6, choices=SEXES, blank=True)
+    age = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(13), MaxValueValidator(110)])
+    height_cm = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1,
+                                    validators=[MinValueValidator(90), MaxValueValidator(250)])
+    weight_kg = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1,
+                                    validators=[MinValueValidator(30), MaxValueValidator(350)])
+    activity = models.CharField(max_length=10, choices=ACTIVITY, default="light")
+    goal = models.CharField(max_length=8, choices=GOALS, default=MAINTAIN)
+    protein_per_lb = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.8"),
+                                         validators=[MinValueValidator(Decimal("0.7")), MaxValueValidator(Decimal("1.0"))])
+    target_calories = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(10000)])
+    target_protein = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(1000)])
+    target_carbs = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(2000)])
+    target_fat = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(1000)])
+    target_fiber = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(300)])
+    tracked = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Nutrition for {self.user}"
+
+    @classmethod
+    def load(cls, user):
+        return cls.objects.get_or_create(user=user, defaults={"tracked": ["calories", "protein", "carbs", "fat"]})[0]
+
+    def target(self, name):
+        return getattr(self, f"target_{name}")
+
+
+class CustomFood(models.Model):
+    """One of "My foods": the person's own food with macros per serving. Theirs alone."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_foods")
+    name = models.CharField(max_length=100)
+    serving_label = models.CharField(max_length=40, default="1 serving")
+    serving_grams = models.DecimalField(null=True, blank=True, max_digits=7, decimal_places=1, validators=[MinValueValidator(0)])
+    calories = models.DecimalField(**AMOUNT)   # per serving
+    protein = models.DecimalField(**AMOUNT)
+    carbs = models.DecimalField(**AMOUNT)
+    fat = models.DecimalField(**AMOUNT)
+    fiber = models.DecimalField(**AMOUNT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "pk"]
+
+    def __str__(self):
+        return self.name
+
+
+class FoodLogEntry(models.Model):
+    """One line in a person's food diary - theirs alone. The amounts are worked out when it's logged and kept
+    (editing a food or recipe later doesn't rewrite the diary). Where it came from: a USDA food (grams, maybe a
+    household portion), one of My foods (servings), a quick add (just the numbers), or a Meals recipe (servings -
+    from the meal plan when plan_entry is set)."""
+    BREAKFAST, LUNCH, DINNER, SNACK = "breakfast", "lunch", "dinner", "snack"
+    SLOTS = [(BREAKFAST, "Breakfast"), (LUNCH, "Lunch"), (DINNER, "Dinner"), (SNACK, "Snacks")]
+    USDA, CUSTOM, QUICK, RECIPE = "usda", "custom", "quick", "recipe"
+    SOURCES = [(USDA, "USDA food"), (CUSTOM, "My food"), (QUICK, "Quick add"), (RECIPE, "Recipe")]
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_food_log")
+    date = models.DateField()
+    slot = models.CharField(max_length=9, choices=SLOTS, default=SNACK)
+    source = models.CharField(max_length=6, choices=SOURCES)
+    label = models.CharField(max_length=200)
+    food = models.ForeignKey(Food, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    custom_food = models.ForeignKey(CustomFood, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    recipe = models.ForeignKey("albright_meals.Recipe", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    plan_entry = models.ForeignKey("albright_meals.MealPlanEntry", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+    grams = models.DecimalField(null=True, blank=True, max_digits=8, decimal_places=1)
+    portion_label = models.CharField(max_length=60, blank=True)      # "1 cup" when logged by a household portion
+    servings = models.DecimalField(null=True, blank=True, max_digits=6, decimal_places=2)
+    calories = models.DecimalField(**AMOUNT)   # this entry's total
+    protein = models.DecimalField(**AMOUNT)
+    carbs = models.DecimalField(**AMOUNT)
+    fat = models.DecimalField(**AMOUNT)
+    fiber = models.DecimalField(**AMOUNT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+        indexes = [models.Index(fields=["owner", "date"])]
+
+    def __str__(self):
+        return f"{self.date} {self.slot}: {self.label}"

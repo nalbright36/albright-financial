@@ -21,11 +21,11 @@ from django.views.decorators.http import require_POST
 from albright_labs import households
 from albright_labs.models import household_of
 
-from . import groceries, importer, plan, scope
+from . import groceries, importer, plan, recipe_nutrition, scope
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
-from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe, RecipeRating, RecipeShare, SLOTS,
-                     STANDARD_TAGS)
+from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
+                     RecipeNutritionLine, RecipeRating, RecipeShare, SLOTS, STANDARD_TAGS)
 
 TABS = [("mine", "My recipes"), ("shared", "Shared with me"), ("library", "Recipe library")]
 
@@ -86,10 +86,14 @@ def week(request):
     household = request.household
     start = plan.week_start(plan.parse_day(request.GET.get("start"), timezone.localdate()))
     settings_form = MealsSettingsForm(instance=MealsSettings.load(household)) if request.user.is_superuser else None
+    week = plan.week(household, start)
+    macros = recipe_nutrition.planned_macros(
+        MealPlanEntry.objects.filter(household=household, date__gte=start, date__lt=start + timedelta(days=7))
+        .select_related("recipe__nutrition"))
     return render(request, "albright_meals/week.html", {
         "start": start, "end": start + timedelta(days=6), "slots": SLOTS,
-        "days": [(day, [(slot, label, meals.get(slot)) for slot, label in SLOTS], bool(meals))
-                 for day, meals in plan.week(household, start)],
+        "days": [(day, [(slot, label, meals.get(slot)) for slot, label in SLOTS], bool(meals), macros.get(day))
+                 for day, meals in week],
         "today": timezone.localdate(), "this_week": plan.week_start(), "prev": start - timedelta(days=7), "next": start + timedelta(days=7),
         "recipes": scope.own(household).only("pk", "title"), "settings_form": settings_form, "notices": _notices(request),
     })
@@ -111,6 +115,18 @@ def plan_add(request):
     return redirect(_week_url(day))
 
 
+def _can_log(user):
+    """Can open Fitness - where "Log to my diary" goes."""
+    from albright_labs import app_access
+    from albright_labs.models import UserPreference
+    return app_access.can_use(user, UserPreference.for_user(user), "fitness")
+
+
+def _diary_slots():
+    from albright_fitness.models import FoodLogEntry
+    return FoodLogEntry.SLOTS
+
+
 def _entry(request, pk):
     return get_object_or_404(MealPlanEntry.objects.select_related("recipe", "created_by"), pk=pk, household=request.household)
 
@@ -124,8 +140,11 @@ def plan_entry(request, pk):
         form.save()
         messages.success(request, "Saved.")
         return redirect(_week_url(entry.date))
+    row = getattr(entry.recipe, "nutrition", None) if entry.recipe_id else None
     return render(request, "albright_meals/entry.html", {
-        "entry": entry, "form": form, "move_form": PlanSlotForm(initial={"date": entry.date, "slot": entry.slot})})
+        "entry": entry, "form": form, "move_form": PlanSlotForm(initial={"date": entry.date, "slot": entry.slot}),
+        "nutrition": row, "per_serving": recipe_nutrition.per_serving(row), "can_log": _can_log(request.user),
+        "diary_slots": _diary_slots()})
 
 
 @login_required
@@ -398,7 +417,7 @@ def recipes(request):
     tag = (request.GET.get("tag") or "").strip().lower()[:50]
     filters = scope.parse_filters(request.GET, user, household)
     base = {"mine": scope.own(household), "shared": scope.shared_with(user, household), "library": scope.library()}[tab]
-    qs = base.select_related("created_by", "household").prefetch_related("shares__shared_with")
+    qs = base.select_related("created_by", "household", "nutrition").prefetch_related("shares__shared_with")
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(notes__icontains=q))
     qs = scope.apply_filters(qs, filters, user, household).distinct()
@@ -414,6 +433,7 @@ def recipes(request):
                 others.setdefault(recipe_pk, []).append(rating)
     shares = {s.recipe_id: s for s in RecipeShare.objects.filter(shared_with=user, recipe__in=rows).select_related("shared_by")}
     cards = [{"recipe": r, "mine": mine_by_recipe.get(r.pk), "others": others.get(r.pk, []), "own": r.household_id == household.pk,
+              "nutrition": recipe_nutrition.per_serving(getattr(r, "nutrition", None)),
               "share": shares.get(r.pk)} for r in rows]
     tags = sorted({t.lower() for r in base.only("tags") for t in (r.tags or [])})
     return render(request, "albright_meals/recipes.html", {
@@ -456,6 +476,8 @@ def recipe(request, pk):
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
         "shares": obj.shares.select_related("shared_with") if editable else [],
+        "nutrition": getattr(obj, "nutrition", None), "per_serving": recipe_nutrition.per_serving(getattr(obj, "nutrition", None)),
+        "can_log": _can_log(request.user), "diary_slots": _diary_slots(), "today": timezone.localdate(),
         "picked_count": sum(1 for i in ingredients if i["name"] and not i["on_list"])})
 
 
@@ -706,4 +728,119 @@ def recipe_reimport(request, pk):
     else:
         messages.success(request, f"Re-imported {obj.title} from {obj.source_name or 'its source'}."
                                   + (" It's marked \"Needs review\"." if obj.needs_review else ""))
+    return redirect("albright_meals:recipe", pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# Recipe nutrition (recipe_nutrition.py; USDA via albright_fitness.usda) - the owning household works it out and
+# reviews it; it's shown wherever the recipe can be read.
+# ---------------------------------------------------------------------------
+
+def _nutrition_row(obj):
+    return RecipeNutrition.objects.filter(recipe=obj).prefetch_related("lines__food").first()
+
+
+@login_required
+@scope.kitchen_required
+@never_cache
+def recipe_nutrition_page(request, pk):
+    """The review table: each ingredient line, its USDA match, grams and macros - change the match or grams, ignore
+    a line, confirm; or type per-serving numbers instead. ?line=<id>&q=<words> lists other matches for a line."""
+    from albright_fitness import usda
+    obj = scope.own_recipe(request.household, pk)
+    row = _nutrition_row(obj)
+    candidates, picking, search_error = [], None, ""
+    if row and request.GET.get("line"):
+        picking = row.lines.filter(pk=request.GET.get("line") if request.GET.get("line").isdigit() else 0).first()
+        q = usda.clean_query(request.GET.get("q", ""))
+        if picking and q:
+            try:
+                candidates = usda.search(q)[:8]
+            except usda.UsdaError as exc:
+                search_error = exc.message
+    return render(request, "albright_meals/recipe_nutrition.html", {
+        "recipe": obj, "row": row, "lines": list(row.lines.all()) if row else [], "candidates": candidates,
+        "picking": picking, "q": request.GET.get("q", ""), "search_error": search_error,
+        "unmatched": recipe_nutrition.unmatched(row) if row else [], "configured": usda.configured(), "not_set": usda.NOT_SET,
+        "servings": recipe_nutrition.servings_of(obj)})
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_nutrition_calculate(request, pk):
+    from albright_fitness import usda
+    obj = scope.own_recipe(request.household, pk)
+    if not obj.ingredients:
+        messages.error(request, "This recipe has no ingredients to match - add them, or type the nutrition in.")
+        return redirect("albright_meals:recipe_nutrition", pk=pk)
+    try:
+        recipe_nutrition.calculate(obj, request.user)
+    except usda.UsdaError as exc:
+        messages.error(request, exc.message)
+    else:
+        messages.success(request, "Matched each ingredient to a USDA food - check the matches, then confirm.")
+    return redirect("albright_meals:recipe_nutrition", pk=pk)
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_nutrition_line(request, pk, line_id):
+    """One line: a new match (fdc_id), new grams, or ignore / count it."""
+    from albright_fitness import nutrition, usda
+    obj = scope.own_recipe(request.household, pk)
+    line = get_object_or_404(RecipeNutritionLine.objects.select_related("nutrition", "food"), pk=line_id, nutrition__recipe=obj)
+    food = grams = ignored = None
+    if request.POST.get("fdc_id", "").isdigit():
+        try:
+            food = usda.food(int(request.POST["fdc_id"]))
+        except usda.UsdaError as exc:
+            messages.error(request, exc.message)
+            return redirect("albright_meals:recipe_nutrition", pk=pk)
+        if line.grams is None:
+            quantity_unit = groceries.parse_line(line.ingredient)
+            grams = nutrition.to_grams(quantity_unit["quantity"] or 1, quantity_unit["unit"], food.portions, quantity_unit["name"])
+    if request.POST.get("grams", "") != "":
+        grams = nutrition.dec(request.POST["grams"])
+        if grams is None or grams < 0 or grams > 20000:
+            messages.error(request, "Grams should be a number from 0 to 20,000.")
+            return redirect("albright_meals:recipe_nutrition", pk=pk)
+    if "ignored" in request.POST:
+        ignored = request.POST.get("ignored") == "1"
+    recipe_nutrition.set_line(line, request.user, food=food, grams=grams, ignored=ignored)
+    return redirect(reverse("albright_meals:recipe_nutrition", args=[pk]) + f"#line-{line.pk}")
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_nutrition_confirm(request, pk):
+    obj = scope.own_recipe(request.household, pk)
+    row = get_object_or_404(RecipeNutrition, recipe=obj)
+    recipe_nutrition.confirm(row, request.user)
+    messages.success(request, "Nutrition confirmed.")
+    return redirect("albright_meals:recipe", pk=pk)
+
+
+@login_required
+@scope.kitchen_required
+@require_POST
+def recipe_nutrition_manual(request, pk):
+    """Per-serving numbers typed in instead of matched (blank leaves that one unknown)."""
+    from albright_fitness import nutrition
+    obj = scope.own_recipe(request.household, pk)
+    values = {}
+    for name in NUTRITION_FIELDS:
+        raw = (request.POST.get(name) or "").strip()
+        value = nutrition.dec(raw, "0.01") if raw else None
+        if raw and (value is None or value < 0 or value > 10000):
+            messages.error(request, "Each number should be from 0 to 10,000.")
+            return redirect("albright_meals:recipe_nutrition", pk=pk)
+        values[name] = value
+    if values["calories"] is None and values["protein"] is None:
+        messages.error(request, "Type at least the calories or protein per serving.")
+        return redirect("albright_meals:recipe_nutrition", pk=pk)
+    recipe_nutrition.set_manual(obj, values, request.user)
+    messages.success(request, "Saved the nutrition per serving.")
     return redirect("albright_meals:recipe", pk=pk)

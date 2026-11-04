@@ -119,6 +119,7 @@
                         {% elif in_fitness_app %}
                         {% with page=request.resolver_match.url_name %}
                         <a href="{% url 'albright_fitness:dashboard' %}"{% if page == 'dashboard' %} class="active" aria-current="page"{% endif %}>Today</a>
+                        <a href="{% url 'albright_fitness:food' %}"{% if page in 'food food_day food_add food_usda my_foods targets' %} class="active" aria-current="page"{% endif %}>Food</a>
                         <a href="{% url 'albright_fitness:history' %}"{% if page in 'history summary workout' %} class="active" aria-current="page"{% endif %}>History</a>
                         <a href="{% url 'albright_fitness:programs' %}"{% if page in 'programs program start' %} class="active" aria-current="page"{% endif %}>Programs</a>
                         <a href="{% url 'albright_fitness:exercises' %}"{% if page in 'exercises exercise' %} class="active" aria-current="page"{% endif %}>Exercises</a>

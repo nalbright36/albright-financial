@@ -238,6 +238,10 @@ ALLOWED_HOSTS = ["www.sportslabalgo.com", "127.0.0.1", "natealbright36.pythonany
 # OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
+# USDA FoodData Central - Fitness food search and recipe nutrition (albright_fitness/usda.py). Optional: without it
+# the food search says "USDA key not set" and everything else works.
+USDA_API_KEY = os.environ.get("USDA_API_KEY", "").strip()
+
 # Reselling: Auction Scanner (coins & bullion) - see albright_reselling_app/scanner/
 RESELLING_SCANNER = {
     "SOURCES": {

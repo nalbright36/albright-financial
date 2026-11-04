@@ -17,9 +17,9 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import programs, stats, training
-from .models import (EQUIPMENT, MUSCLES, Exercise, PersonalRecord, Program, ProgramDay, ProgramExercise, Workout,
-                     WorkoutExercise, WorkoutSet, WorkoutShare)
+from . import nutrition, programs, stats, training
+from .models import (EQUIPMENT, MUSCLES, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord, Program, ProgramDay,
+                     ProgramExercise, Workout, WorkoutExercise, WorkoutSet, WorkoutShare)
 
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -58,8 +58,11 @@ def dashboard(request):
     data = stats.dashboard(request.user)
     top = max([r["sets"] for r in data["volume"]] or [1])
     open_workout = Workout.objects.filter(owner=request.user, finished_at__isnull=True).first()
+    profile = NutritionProfile.load(request.user)
+    eaten = nutrition.totals(FoodLogEntry.objects.filter(owner=request.user, date=timezone.localdate()))
     return render(request, "albright_fitness/dashboard.html", {
-        **data, "volume_max": top, "open_workout": open_workout,
+        **data, "volume_max": top, "open_workout": open_workout, "progress": nutrition.progress(profile, eaten),
+        "food_average": nutrition.averages(request.user), "tracked": profile.tracked or [],
         "records_text": [(r, training.record_text(r)) for r in data["records"]],
         "recent": Workout.objects.filter(owner=request.user, finished_at__isnull=False).select_related("program_day")[:5]})
 

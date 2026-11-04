@@ -1,0 +1,34 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}My foods · {% endblock %}
+{% block fitness %}
+{% comment %}My foods (food_views.my_foods): your own foods with macros per serving - only you see them.{% endcomment %}
+<div class="fx-narrow">
+<h1 class="fx-head__title">My foods</h1>
+<p class="fx-head__sub">Your own foods, with what's in one serving. Only you see them.</p>
+
+<section class="card fx-card" id="fx-my-foods">
+    {% for f in foods %}
+    <div class="fx-row">
+        <span class="fx-row__title">{{ f.name }} <span class="fx-muted fx-small">{{ f.serving_label }}</span></span>
+        <span class="fx-row__ind">{{ f.calories|floatformat:0 }} kcal{% if f.protein is not None %} &middot; {{ f.protein|floatformat:0 }} g P{% endif %}</span>
+        <form method="post" action="{% url 'albright_fitness:my_food_delete' f.pk %}" data-confirm="Remove {{ f.name }} from My foods? Your diary keeps what you logged.">{% csrf_token %}<button type="submit" class="fx-icon-btn" aria-label="Remove {{ f.name }}" title="Remove">&times;</button></form>
+    </div>
+    {% empty %}<p class="fx-empty">None yet.</p>{% endfor %}
+</section>
+
+<form method="post" class="card fx-card fx-form" id="fx-my-food-form">{% csrf_token %}
+    <h2 class="fx-card__title">Add one</h2>
+    <div class="field"><label for="fx-mf-name">Name</label><input type="text" name="name" id="fx-mf-name" class="ledger-input" maxlength="100" required placeholder="Protein shake"></div>
+    <div class="fx-macro-inputs">
+        <div class="field"><label for="fx-mf-serving">Serving</label><input type="text" name="serving_label" id="fx-mf-serving" class="ledger-input" maxlength="40" placeholder="1 scoop"></div>
+        <div class="field"><label for="fx-mf-grams">Serving grams (optional)</label><input type="number" name="serving_grams" id="fx-mf-grams" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="fx-mf-calories">Calories</label><input type="number" name="calories" id="fx-mf-calories" class="ledger-input" min="0" max="10000" step="1" required inputmode="numeric"></div>
+        <div class="field"><label for="fx-mf-protein">Protein (g)</label><input type="number" name="protein" id="fx-mf-protein" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="fx-mf-carbs">Carbs (g)</label><input type="number" name="carbs" id="fx-mf-carbs" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="fx-mf-fat">Fat (g)</label><input type="number" name="fat" id="fx-mf-fat" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="fx-mf-fiber">Fiber (g, optional)</label><input type="number" name="fiber" id="fx-mf-fiber" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add to My foods</button>
+</form>
+</div>
+{% endblock %}
