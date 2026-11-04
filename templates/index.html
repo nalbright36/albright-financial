@@ -1,6 +1,6 @@
 {% load static cache_bust %}
 <!DOCTYPE html>
-{# data-app-key / data-app-label / data-nav-user: js/app_nav.js (Back, the return chip, resume and Recent - signed in only). #}
+{# data-app-key / data-app-label / data-nav-user: js/app_nav.js (Back, the return chip and resume - signed in only). #}
 <html data-app-key="{{ current_app_key }}" data-app-label="{% if current_app_key == 'home' %}Home{% else %}{{ app_label }}{% endif %}"{% if user.is_authenticated %} data-nav-user="{{ user.pk }}"{% endif %}>
     <head>
         <meta charset="utf-8">
@@ -166,12 +166,6 @@
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="3" cy="3" r="1.6"/><circle cx="8" cy="3" r="1.6"/><circle cx="13" cy="3" r="1.6"/><circle cx="3" cy="8" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="13" cy="8" r="1.6"/><circle cx="3" cy="13" r="1.6"/><circle cx="8" cy="13" r="1.6"/><circle cx="13" cy="13" r="1.6"/></svg>
                         </button>
                         <div class="app-launcher__menu" id="app-launcher-panel" role="menu" aria-label="Apps" hidden>
-                            {# Recent: your last 4 pages across apps (js/app_nav.js fills it; it stays hidden until there are some). #}
-                            <div class="app-launcher__recent" id="app-launcher-recent" hidden>
-                                <p class="app-launcher__heading" id="app-launcher-recent-h">Recent</p>
-                                <div class="app-launcher__recent-list" id="app-launcher-recent-list" aria-labelledby="app-launcher-recent-h"></div>
-                                <div class="app-launcher__sep" aria-hidden="true"></div>
-                            </div>
                             <div class="app-launcher__grid">
                                 {% for app in launcher_apps %}<a href="{% if app.href %}{{ app.href }}{% else %}{% url app.url_name %}{% endif %}" class="app-launcher__tile{% if app.current %} is-current{% endif %}" role="menuitem" tabindex="-1" data-app-key="{{ app.key }}" data-app-target="{{ app.accent }}" title="{{ app.brand }}"{% if app.current %} aria-current="page"{% endif %} data-no-return>
                                     <span class="app-launcher__icon" aria-hidden="true">{% include "_app_icon.html" with key=app.key %}</span>
@@ -179,8 +173,10 @@
                                     <span class="app-launcher__line" data-line-for="{{ app.key }}">{{ app.line|default:"" }}</span>
                                 </a>{% endfor %}
                             </div>
-                            <div class="app-launcher__sep" aria-hidden="true"></div>
-                            <a href="{% url 'labs:account' %}#nav-form" class="app-launcher__customize" role="menuitem" tabindex="-1">Customize</a>
+                            {# Stays in view at the bottom while the tiles scroll (labs/launcher.css). #}
+                            <div class="app-launcher__footer">
+                                <a href="{% url 'labs:account' %}#nav-form" class="app-launcher__customize" role="menuitem" tabindex="-1">Customize</a>
+                            </div>
                         </div>
                     </div>
                     {% endif %}

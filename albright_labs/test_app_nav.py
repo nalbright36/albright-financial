@@ -1,6 +1,7 @@
 """Getting around without browser buttons (the iPhone home screen app): the header's Back button (its fallback is
 the app's main page; it hides on a main page with no history), the "Back to <app>" return chip, the launcher's
-Recent row and tiles that resume each app's last page (js/app_nav.js - same-site URLs only, kept per user), and
+tiles that resume each app's last page (js/app_nav.js - same-site URLs only, kept per user) and its fit on screen
+(no Recent row), and
 the header collapsing into the hamburger the same way on every page - Planner Day, Week and Month included."""
 import pathlib
 import re
@@ -173,23 +174,30 @@ class ReturnChipTests(Base):
         self.assertTrue(all("data-no-return" in pick for pick in picks))
 
 
-class ResumeAndRecentTests(Base):
-    def test_the_launcher_has_a_recent_row_above_the_tiles(self):
+class ResumeTests(Base):
+    def test_no_recent_row_and_the_panel_fits_the_screen(self):
         page = self.page(reverse("albright_planner:day"))
-        panel = page.split('id="app-launcher-panel"', 1)[1]
-        self.assertLess(panel.index('id="app-launcher-recent"'), panel.index('class="app-launcher__grid"'))
-        self.assertIn('<div class="app-launcher__recent" id="app-launcher-recent" hidden>', panel)
-        self.assertIn('id="app-launcher-recent-list"', panel)
+        panel = page.split('id="app-launcher-panel"', 1)[1].split('<div class="navbar__dropdown navbar__account">', 1)[0]
+        self.assertNotIn("recent", panel.lower())
+        self.assertLess(panel.index('class="app-launcher__grid"'), panel.index('class="app-launcher__footer"'))
+        self.assertIn("Customize", panel.split('class="app-launcher__footer"', 1)[1])
+        css = static("labs/launcher.css")
+        self.assertNotIn("recent", css.lower())
+        self.assertIn("max-height: calc(100dvh - var(--launcher-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));", css)
+        self.assertIn("max-height: calc(100vh - var(--launcher-top, 72px)", css)        # where dvh isn't supported
+        self.assertIn("overscroll-behavior: contain", css)
+        self.assertRegex(css, r"\.app-launcher__footer \{\s*position: sticky; bottom: 0;")
+        self.assertIn("--launcher-top", static("labs/launcher.js"))
         self.assertLess(page.index("labs/launcher.js"), page.index("js/app_nav.js"))
         self.assertLess(page.index("js/app_nav.js"), page.index("albright_planner/planner.js"))
 
-    def test_tiles_resume_the_last_page_and_recent_shows_four(self):
+    def test_tiles_resume_the_last_page(self):
         js = static("js/app_nav.js")
         self.assertIn('".app-launcher__tile[data-app-key]"', js)          # the launcher's tiles
         self.assertIn('".labs-pick[data-key] [data-pick-link]"', js)      # Home's tiles
         self.assertIn('key !== KEY && key !== "home" && sameSite(url)', js)
-        self.assertIn("RECENT_SHOW = 4", js)
-        self.assertIn('LAST = "nav_last:" + user, RECENT = "nav_recent:" + user', js)   # kept per user
+        self.assertIn('LAST = "nav_last:" + user', js)                    # kept per user
+        self.assertNotIn("showRecent", js)
         hub = self.page(reverse("labs:hub"))
         self.assertRegex(hub, r'<li class="labs-pick[^"]*" data-key="planner"')
 

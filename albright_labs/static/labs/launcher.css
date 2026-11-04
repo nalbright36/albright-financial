@@ -20,21 +20,26 @@
 .app-launcher__button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 .app-launcher__button svg { width: 16px; height: 16px; display: block; }
 
-/* .menu + .b .menu */
+/* .menu + .b .menu - never taller than the screen below it: --launcher-top is where the panel starts (set by
+   labs/launcher.js when it opens; 72px until then), less a 24px margin and the iPhone's home-indicator area. The
+   tiles scroll inside it (not the page behind - overscroll-behavior), and Customize stays pinned at the bottom. */
 .app-launcher__menu {
-  display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 330px; padding: 12px;
+  display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 330px; padding: 10px 10px 0;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+  max-height: calc(100vh - var(--launcher-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - var(--launcher-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
 .app-launcher.open .app-launcher__menu { display: block; }
 .app-launcher__menu[hidden] { display: none; }
 
 /* .grid */
-.app-launcher__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.app-launcher__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 
 /* .tile */
 .app-launcher__tile {
-  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 7px; border-radius: 12px;
   text-decoration: none; color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: 1.3;
   border: 1px solid transparent; text-align: center; min-width: 0;
 }
@@ -55,48 +60,24 @@
 .app-launcher__tile[data-app-target="fitness"] { --app-color: var(--app-fitness); }
 .app-launcher__tile[data-app-target="admin"] { --app-color: var(--app-admin); }
 .app-launcher__icon {
-  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0;
   color: var(--app-color); background: color-mix(in srgb, var(--app-color) 18%, transparent);
 }
-.app-launcher__icon svg { width: 19px; height: 19px; display: block; }
+.app-launcher__icon svg { width: 18px; height: 18px; display: block; }
 
 .app-launcher__label { font-size: 13px; font-weight: 500; }
 
-/* .tile span (the live line) */
+/* .tile span (the live line) - one line, "…" when it's longer */
 .app-launcher__line {
   font-size: 11px; color: var(--text-secondary); font-weight: 400; min-height: 1.3em; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Recent (js/app_nav.js): your last 4 pages across apps, above the tiles - the app's icon and the page's name. */
-.app-launcher__recent[hidden] { display: none; }
-.app-launcher__heading {
-  margin: 0 4px 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--text-secondary);
+/* My account > Show in my navigation - a footer that sticks to the panel's bottom while the tiles scroll */
+.app-launcher__footer {
+  position: sticky; bottom: 0; margin: 6px -10px 0; padding: 6px 10px 8px; background: var(--surface-raised);
+  border-top: 1px solid var(--border); border-radius: 0 0 12px 12px;
 }
-.app-launcher__recent-list { display: flex; flex-direction: column; gap: 2px; }
-.app-launcher__recent-item {
-  --app-color: var(--app-labs); display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 6px;
-  border-radius: 10px; text-decoration: none; color: var(--text-primary); font-size: 13px; min-width: 0;
-}
-.app-launcher__recent-item[data-app-target="trading"] { --app-color: var(--app-trading); }
-.app-launcher__recent-item[data-app-target="reselling"] { --app-color: var(--app-reselling); }
-.app-launcher__recent-item[data-app-target="opportunities"] { --app-color: var(--app-opportunities); }
-.app-launcher__recent-item[data-app-target="meals"] { --app-color: var(--app-meals); }
-.app-launcher__recent-item[data-app-target="notes"] { --app-color: var(--app-notes); }
-.app-launcher__recent-item[data-app-target="planner"] { --app-color: var(--app-planner); }
-.app-launcher__recent-item[data-app-target="money"] { --app-color: var(--app-money); }
-.app-launcher__recent-item[data-app-target="fitness"] { --app-color: var(--app-fitness); }
-.app-launcher__recent-item[data-app-target="admin"] { --app-color: var(--app-admin); }
-.app-launcher__recent-item:hover, .app-launcher__recent-item:focus-visible {
-  background: var(--surface-hover); outline: none; text-decoration: none; color: var(--text-primary); box-shadow: none;
-}
-.app-launcher__recent-item .app-launcher__icon { width: 30px; height: 30px; border-radius: 9px; }
-.app-launcher__recent-item .app-launcher__icon svg { width: 15px; height: 15px; }
-.app-launcher__recent-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* My account > Show in my navigation (below a .sep line) */
-.app-launcher__sep { height: 1px; background: var(--border); margin: 8px 4px 6px; }
 .app-launcher__customize {
   display: block; padding: 6px 10px; border-radius: 9px; text-align: center; text-decoration: none;
   font-size: 12px; color: var(--text-secondary);
@@ -111,6 +92,10 @@
   .app-launcher { position: static; }
   .app-launcher__menu {
     left: 0; right: 0; top: 100%; width: auto; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px;
-    max-height: calc(100vh - 80px); overflow-y: auto;
+    padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
+  .app-launcher__footer {
+    margin-left: calc(-1 * max(10px, env(safe-area-inset-left, 0px)));
+    margin-right: calc(-1 * max(10px, env(safe-area-inset-right, 0px)));
   }
 }

@@ -352,16 +352,17 @@ class LauncherRenderingTests(Base):
     def test_files_follow_the_reference(self):
         css = LAUNCHER_CSS.read_text(encoding="utf-8")
         self.assertIn("display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 330px; "
-                      "padding: 12px;", css)
+                      "padding: 10px 10px 0;", css)
+        self.assertIn("overflow-y: auto; overscroll-behavior: contain;", css)            # fits the screen, scrolls inside
         self.assertIn(".app-launcher.open .app-launcher__menu { display: block; }", css)
         self.assertIn(".app-launcher__menu[hidden] { display: none; }", css)
         self.assertIn("width: 38px; height: 38px;", css)
         self.assertIn("border-radius: 10px;", css)
         self.assertIn(".app-launcher__button svg { width: 16px; height: 16px; display: block; }", css)
-        self.assertIn(".app-launcher__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }", css)
-        self.assertIn("width: 42px; height: 42px; border-radius: 12px;", css)
+        self.assertIn(".app-launcher__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }", css)   # compact
+        self.assertIn("width: 38px; height: 38px; border-radius: 11px;", css)
         self.assertIn("color-mix(in srgb, var(--app-color) 18%, transparent)", css)
-        self.assertIn(".app-launcher__icon svg { width: 19px; height: 19px; display: block; }", css)
+        self.assertIn(".app-launcher__icon svg { width: 18px; height: 18px; display: block; }", css)
         self.assertIn(".app-launcher__label { font-size: 13px; font-weight: 500; }", css)
         self.assertIn("font-size: 11px; color: var(--text-secondary);", css)
         self.assertIn("@media (max-width: 639.98px)", css)

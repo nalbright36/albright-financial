@@ -5,7 +5,9 @@
 // outside, Tab moving focus out, or choosing an app closes it, and Escape puts
 // focus back on the button. Only one header menu is open at a time (the inline
 // script's navDropdowns). Each tile's live line is fetched once, after the panel
-// first opens, from data-lines-url (albright_labs.views.launcher_lines).
+// first opens, from data-lines-url (albright_labs.views.launcher_lines). While open,
+// --launcher-top holds where the panel starts on screen, so launcher.css keeps it
+// within the screen (it scrolls inside when there are many apps).
 (function () {
     var launcher = document.getElementById('app-launcher');
     if (!launcher) return;
@@ -15,6 +17,11 @@
 
     function items() { return Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]')); }
     function isOpen() { return launcher.classList.contains('open'); }
+
+    function fit() {
+        if (!isOpen()) return;
+        menu.style.setProperty('--launcher-top', Math.max(0, Math.round(menu.getBoundingClientRect().top)) + 'px');
+    }
 
     function close(refocus) {
         if (!isOpen()) return;
@@ -46,6 +53,8 @@
         if (nav && toggle && nav.classList.contains('navbar--menu-open')) toggle.click();   // the phone Menu
         launcher.classList.add('open');
         menu.hidden = false;
+        fit();
+        menu.scrollTop = 0;
         button.setAttribute('aria-expanded', 'true');
         var list = items(), current = menu.querySelector('.app-launcher__tile.is-current');
         (current || list[0]) && (current || list[0]).focus();
@@ -76,4 +85,5 @@
     document.addEventListener('click', function (e) {
         if (!launcher.contains(e.target)) close(false);
     });
+    window.addEventListener('resize', fit);                 // rotation, the iOS toolbar showing / hiding
 })();

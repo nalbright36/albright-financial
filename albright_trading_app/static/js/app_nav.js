@@ -9,12 +9,11 @@
  *                 - otherwise "← Back" (phones and the home screen app - style.css): back when the previous page
  *                   was on this site, else this app's main page (its href); hidden on one of the app's main pages
  *                   when there's nothing of this site to go back to.
- *   resume        the launcher's tiles and Home's app tiles open each app at the last page you visited in it;
- *                 the launcher's "Recent" row lists your last 4 pages across apps (app icon + page name).
+ *   resume        the launcher's tiles and Home's app tiles open each app at the last page you visited in it.
  *
  * Only same-site URLs ("/path", never "//host" or another origin) are stored or followed. sessionStorage (this
  * tab): the trail of pages and the return chip; localStorage (kept per signed-in user, so someone else signing
- * in on this device never sees yours): the last page per app and Recent. Every read and write is wrapped -
+ * in on this device never sees yours): the last page per app. Every read and write is wrapped -
  * private browsing just goes without. Nothing here touches touch events, so iOS's edge swipe back still works.
  */
 (function () {
@@ -24,8 +23,8 @@
     var user = root.getAttribute("data-nav-user");
     if (!user) return;                                             // signed out
     var KEY = root.getAttribute("data-app-key") || "", LABEL = root.getAttribute("data-app-label") || "";
-    var LAST = "nav_last:" + user, RECENT = "nav_recent:" + user;
-    var RECENT_KEEP = 12, RECENT_SHOW = 4, FROM_FRESH_MS = 10 * 60 * 1000;
+    var LAST = "nav_last:" + user;
+    var FROM_FRESH_MS = 10 * 60 * 1000;
 
     function sameSite(url) {
         if (typeof url !== "string" || url.charAt(0) !== "/" || url.charAt(1) === "/" || url.charAt(1) === "\\") return false;
@@ -44,14 +43,6 @@
         } catch (e) { /* storage off or full */ }
     }
     function here() { return window.location.pathname + window.location.search; }
-    // "Monday, November 2 · Albright Planner" -> "Monday, November 2" ("Camping trip · Notes · Albright Notes" ->
-    // "Camping trip"); a page with no title of its own -> the app.
-    function pageName() {
-        var title = document.title || "", cut = title.lastIndexOf(" · ");
-        var name = cut > 0 ? title.slice(0, cut) : "", suffix = " · " + LABEL;
-        if (name.slice(-suffix.length) === suffix) name = name.slice(0, -suffix.length);
-        return name || LABEL;
-    }
 
     // ---------- This tab's trail, and Back ----------
     var hasPrevious = false, backHidden = false;
@@ -129,18 +120,14 @@
         showBack(null);                                             // plain "← Back" again
     });
 
-    // ---------- Resume each app where you were, and Recent ----------
+    // ---------- Resume each app where you were ----------
     function remember() {
-        var url = here(), last = read("localStorage", LAST, {}), recent = read("localStorage", RECENT, []);
+        var last = read("localStorage", LAST, {});
         if (typeof last !== "object" || Array.isArray(last)) last = {};
-        if (!Array.isArray(recent)) recent = [];
-        if (KEY) last[KEY] = url;
-        recent = [{url: url, key: KEY, name: pageName()}].concat(recent.filter(function (r) {
-            return r && r.url !== url && sameSite(r.url);
-        })).slice(0, RECENT_KEEP);
+        if (KEY) last[KEY] = here();
         write("localStorage", LAST, last);
-        write("localStorage", RECENT, recent);
-        return {last: last, recent: recent};
+        write("localStorage", "nav_recent:" + user, null);         // the old Recent list (removed) - tidy it away
+        return last;
     }
     function resumeLinks(last) {
         // The launcher's tiles and Home's tiles: each app at its last page - not the app you're in (its tile
@@ -156,42 +143,10 @@
             point(link, link.closest(".labs-pick").getAttribute("data-key"));
         });
     }
-    function showRecent(recent) {
-        var box = document.getElementById("app-launcher-recent"), list = document.getElementById("app-launcher-recent-list");
-        if (!box || !list) return;
-        var url = here(), shown = [];
-        recent.forEach(function (r) {
-            if (shown.length >= RECENT_SHOW || r.url === url || !sameSite(r.url)) return;
-            var tile = document.querySelector('.app-launcher__tile[data-app-key="' + String(r.key).replace(/[^a-z0-9_-]/gi, "") + '"]');
-            if (tile) shown.push({entry: r, tile: tile});           // only apps you can open (they have a tile)
-        });
-        list.textContent = "";
-        shown.forEach(function (s) {
-            var link = document.createElement("a");
-            link.className = "app-launcher__recent-item";
-            link.href = s.entry.url;
-            link.setAttribute("role", "menuitem");
-            link.setAttribute("tabindex", "-1");
-            link.setAttribute("data-no-return", "");
-            link.setAttribute("data-app-target", s.tile.getAttribute("data-app-target") || "");
-            var icon = s.tile.querySelector(".app-launcher__icon");
-            if (icon) link.appendChild(icon.cloneNode(true));
-            var name = document.createElement("span");
-            name.className = "app-launcher__recent-name";
-            name.textContent = String(s.entry.name || "");
-            link.title = name.textContent;
-            link.appendChild(name);
-            list.appendChild(link);
-        });
-        box.hidden = !shown.length;
-    }
-
     function run() {
         visit();
         showBack(returnTo());
-        var memory = remember();
-        resumeLinks(memory.last);
-        showRecent(memory.recent);
+        resumeLinks(remember());
     }
     run();
     // Back / Forward from the back-forward cache: the page wasn't reloaded, so bring it up to date.
