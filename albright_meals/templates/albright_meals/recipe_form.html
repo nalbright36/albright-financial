@@ -1,9 +1,15 @@
 {% extends "index.html" %}
+{% load cache_bust %}
 {% block page_title %}{% if recipe %}Edit {{ recipe.title }}{% else %}New recipe{% endif %} · {% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
     <a href="{% if recipe %}{% url 'albright_meals:recipe' recipe.pk %}{% else %}{% url 'albright_meals:recipes' %}{% endif %}" class="meals-back">&larr; {% if recipe %}{{ recipe.title }}{% else %}Recipes{% endif %}</a>
     <h1 class="meals-head__title">{% if recipe %}Edit recipe{% else %}New recipe{% endif %}</h1>
+    {% if not recipe %}
+    {% comment %}Add a recipe: Import from link first (?url=<link> pre-fills it and starts the import), then the manual form.{% endcomment %}
+    {% include "albright_meals/_import_box.html" %}
+    <p class="meals-or" role="separator"><span>or enter it yourself</span></p>
+    {% endif %}
     <form method="post" class="card meals-form" id="recipe-form">{% csrf_token %}
         {% for field in form %}
         <div class="field">
@@ -16,4 +22,5 @@
         <button type="submit" class="btn btn-primary">Save recipe</button>
     </form>
 </div>
+{% if not recipe %}<script src="{% static_version 'meals/recipe_import.js' %}" defer></script>{% endif %}
 {% endblock %}

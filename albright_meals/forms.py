@@ -115,7 +115,7 @@ class ImportLinkForm(forms.Form):
 
 
 class ImportPreviewForm(forms.Form):
-    """The import preview (Recipes > Import from link): what was read from the page, to fix before saving."""
+    """The import preview (Add a recipe > Import from link): what was read from the page, to fix before saving."""
     MINUTES = {"required": False, "min_value": 0, "max_value": importer.MAX_MINUTES,
                "widget": forms.NumberInput(attrs={**INPUT, "inputmode": "numeric"})}
     import_id = forms.CharField(max_length=40, widget=forms.HiddenInput)

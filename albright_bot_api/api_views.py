@@ -240,6 +240,8 @@ POST meals/recipes/import                             scope: meals:write
   (schema.org JSON-LD or microdata), or - if it has none - the AI reads the page's visible text, keeping only
   what is on the page; those recipes are marked "needs review". A link that's already saved (tracking
   parameters like utm_* and #fragments ignored) returns the saved recipe instead of a copy.
+  To hand a link to a person to check first instead, send them to Meals > Add a recipe with ?url=<link>
+  (/meals/recipes/new/?url=...): the page fills in the link and starts the same import there.
   Body: {"url": http(s) URL (required, <=2000), "add_to_plan": {"date": "YYYY-MM-DD", "slot":
   "breakfast"|"lunch"|"dinner"|"snack"} (optional), "add_to_groceries": bool (optional - adds the ingredients
   not already on the list from this recipe, merged with unchecked items of the same name and unit)}.

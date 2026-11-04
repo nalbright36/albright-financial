@@ -471,7 +471,12 @@ def recipe_edit(request, pk=None):
         saved.save()
         messages.success(request, f"Saved {saved.title}.")
         return redirect("albright_meals:recipe", pk=saved.pk)
-    return render(request, "albright_meals/recipe_form.html", {"form": form, "recipe": obj})
+    context = {"form": form, "recipe": obj}
+    if obj is None:
+        # Add a recipe opens with Import from link; ?url=<link> (a bookmark, a bot) pre-fills it and starts it.
+        link = (request.GET.get("url") or "").strip()[:importer.MAX_URL]
+        context.update(import_url=link, import_autostart=link.lower().startswith(("http://", "https://")))
+    return render(request, "albright_meals/recipe_form.html", context)
 
 
 @login_required
@@ -610,7 +615,7 @@ def recipe_share(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# Import from link (Recipes) - importer.py does the reading
+# Import from link (top of Add a recipe) - importer.py does the reading
 # ---------------------------------------------------------------------------
 
 IMPORTS_SESSION_KEY = "meals_imports"
@@ -671,7 +676,7 @@ def recipe_import_save(request):
     data = imports.get(import_id)
     if data is None:
         messages.error(request, "That preview has expired - import the link again.")
-        return redirect("albright_meals:recipes")
+        return redirect("albright_meals:recipe_add")
     if not form.is_valid():
         return render(request, "albright_meals/recipe_import.html", {
             "import_status": "needs_review" if data["needs_review"] else "preview", "import_data": data,

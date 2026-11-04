@@ -2093,6 +2093,10 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-review-badge { vertical-align: middle; font-size: 0.6875rem; }
 /* Recipes > Import from link */
 .meals-import { margin-bottom: var(--space-4); }
+/* Add a recipe: "or enter it yourself" between Import from link and the manual form. */
+.meals-or { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0; color: var(--text-secondary);
+  font-size: var(--text-sm); }
+.meals-or::before, .meals-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .meals-import__form { display: flex; gap: var(--space-2); }
 .meals-import__form input { flex: 1; min-width: 0; min-height: 44px; }
 .meals-import__result:empty { display: none; }

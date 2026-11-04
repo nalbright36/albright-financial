@@ -1,8 +1,9 @@
 /*
- * Recipes > Import from link (albright_meals/_import_box.html). Vanilla JS.
+ * Add a recipe > Import from link (albright_meals/_import_box.html). Vanilla JS.
  *  - Import sends the link (fetch POST) and puts the answer - the preview to
  *    fix and save, "Already saved", or why it couldn't - under the box, with
  *    no page reload. Saving the preview is a normal form post.
+ *  - Opened with ?url=<link> (data-autostart), the import starts by itself.
  *  - Without JS the form opens the same preview as its own page.
  */
 (function () {
@@ -51,4 +52,10 @@
             message("Couldn't import that link just now - try again.");
         }).then(finish);
     });
+
+    var link = document.getElementById("recipe-import-url");
+    if (form.hasAttribute("data-autostart") && link && link.value && link.checkValidity()) {
+        if (form.requestSubmit) form.requestSubmit(button);
+        else form.dispatchEvent(new Event("submit", {cancelable: true}));
+    }
 })();

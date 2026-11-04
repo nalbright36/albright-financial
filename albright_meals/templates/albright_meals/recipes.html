@@ -21,7 +21,6 @@ saves on change without opening the recipe (static/meals/ratings.js), and my hou
 
     <nav class="meals-tabs" aria-label="Which recipes">{% for key, label in tabs %}<a href="?{% if key != 'mine' %}tab={{ key }}{% endif %}" class="meals-tabs__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if key == "shared" and shared_count %} <span class="meals-tabs__count">{{ shared_count }}</span>{% endif %}</a>{% endfor %}</nav>
 
-    {% if tab == "mine" %}{% include "albright_meals/_import_box.html" %}{% endif %}
 
     <form method="get" class="meals-filters" id="recipe-filters" role="search">
         {% if tab != "mine" %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
@@ -87,6 +86,5 @@ saves on change without opening the recipe (static/meals/ratings.js), and my hou
     </ul>
 </div>
 {% include "albright_meals/_share_dialog.html" %}
-<script src="{% static_version 'meals/recipe_import.js' %}" defer></script>
 <script src="{% static_version 'meals/ratings.js' %}" defer></script>
 {% endblock %}

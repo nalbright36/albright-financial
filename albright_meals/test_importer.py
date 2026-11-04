@@ -1,4 +1,4 @@
-"""Import a recipe from a link (importer.py, the Recipes page's import box,
+"""Import a recipe from a link (importer.py, the Add a recipe page's import box,
 Re-import, and the Bot API's meals/recipes/import). No real network: fetch()
 gets a fake session, DNS is faked, and the pages are saved HTML fixtures
 (test_fixtures/). The AI fallback gets a fake OpenAI client.
@@ -415,11 +415,32 @@ class WebsiteImportTests(Base):
     def preview(self, url=CHILI_URL, **headers):
         return self.client.post(reverse("albright_meals:recipe_import"), {"url": url}, **(headers or self.XHR))
 
-    def test_recipes_page_has_the_import_box(self):
-        response = self.client.get(reverse("albright_meals:recipes"))
-        self.assertContains(response, 'id="recipe-import-form"')
-        self.assertContains(response, f'action="{reverse("albright_meals:recipe_import")}"')
-        self.assertRegex(response.content.decode(), r'<script src="/static/meals/recipe_import\.js\?v=\d+" defer>')
+    def test_import_box_is_at_the_top_of_add_a_recipe_not_the_recipes_list(self):
+        for tab in ("", "?tab=shared", "?tab=library"):
+            page = self.client.get(reverse("albright_meals:recipes") + tab).content.decode()
+            self.assertNotIn('id="recipe-import-form"', page, tab)
+            self.assertNotIn("Import from link", page, tab)
+            self.assertNotIn("recipe_import.js", page, tab)
+        page = self.client.get(reverse("albright_meals:recipe_add")).content.decode()
+        self.assertIn(f'action="{reverse("albright_meals:recipe_import")}"', page)
+        self.assertRegex(page, r'<script src="/static/meals/recipe_import\.js\?v=\d+" defer>')
+        self.assertLess(page.index('id="recipe-import-form"'), page.index("or enter it yourself"))
+        self.assertLess(page.index("or enter it yourself"), page.index('id="recipe-form"'))
+        self.assertIn('"Needs review"', page)
+        self.assertNotIn("data-autostart", page)
+        edit = self.client.get(reverse("albright_meals:recipe_edit", args=[self.recipe("Chili", []).pk])).content.decode()
+        self.assertNotIn('id="recipe-import-form"', edit)                     # editing: just the form
+
+    def test_add_a_recipe_with_a_link_prefills_and_starts_the_import(self):
+        page = self.client.get(reverse("albright_meals:recipe_add"), {"url": CHILI_URL}).content.decode()
+        self.assertIn('id="recipe-import-form" data-autostart>', page)
+        self.assertIn(f'value="{CHILI_URL}"', page)
+        page = self.client.get(reverse("albright_meals:recipe_add"), {"url": "javascript:alert(1)"}).content.decode()
+        self.assertNotIn("data-autostart", page)                               # only http(s) links start by themselves
+
+    def test_expired_preview_goes_back_to_add_a_recipe(self):
+        response = self.client.post(reverse("albright_meals:recipe_import_save"), {"import_id": "gone", "title": "X"})
+        self.assertRedirects(response, reverse("albright_meals:recipe_add"))
 
     def test_preview_then_save(self):
         with fetching(fixture("jsonld_graph.html")) as fetch:
