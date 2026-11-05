@@ -11,8 +11,8 @@ from django.urls import reverse
 
 from albright_control.models import AuditEntry
 from albright_labs.models import UserPreference
-from albright_labs.testing import allow_api_keys, kitchen, with_apps
-from albright_planner.models import ItemShare, ScheduleItem
+from albright_labs.testing import allow_api_keys, grants_of, kitchen, share_with, with_apps
+from albright_planner.models import ScheduleItem
 
 from .models import BotRequestLog, BotToken, hash_token
 
@@ -61,19 +61,18 @@ class ActsAsOwnerTests(Base):
         _response, raw = self.create_key(["schedule:read"])
         ScheduleItem.objects.create(owner=self.boss, title="Surprise party plans", date=TODAY)
         shared = ScheduleItem.objects.create(owner=self.boss, title="Family dinner", date=TODAY)
-        ItemShare.objects.create(item=shared, user=self.wife)
+        share_with(shared, self.wife, "view")
         titles = [o["title"] for o in self.call("GET", f"schedule?start={TODAY}&end={TODAY}", raw).json()["occurrences"]]
         self.assertEqual(titles, ["Family dinner"])
         row = self.call("GET", f"schedule?start={TODAY}&end={TODAY}", raw).json()["occurrences"][0]
         self.assertEqual((row["owner"], row["mine"]), ("Nathan", False))
 
     def test_new_items_use_her_default_share(self):
-        from albright_planner.models import PlannerSettings
-        PlannerSettings.objects.update_or_create(user=self.wife, defaults={"default_shares": {str(self.boss.pk): "edit"}})
+        from albright_labs import sharing
+        sharing.save_default(self.wife, "planner", "people", people={str(self.boss.pk): "edit"})
         _response, raw = self.create_key(["schedule:write"])
         self.call("POST", "schedule", raw, {"title": "Vet", "date": TODAY.isoformat()})
-        self.assertEqual(list(ScheduleItem.objects.get(title="Vet").shares.values_list("user", "permission")),
-                         [(self.boss.pk, "edit")])
+        self.assertEqual(grants_of(ScheduleItem.objects.get(title="Vet")), [(self.boss.pk, "edit")])
 
     def test_notes_and_meals_act_as_her(self):
         _response, raw = self.create_key(["notes:write", "meals:write"])

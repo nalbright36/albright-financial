@@ -14,16 +14,18 @@ from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.cache import cache
 from django.core.management import call_command
-from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+
+from albright_labs.models import ShareGrant
+from django.test import Client, TestCase, override_settings
 
 from albright_bot_api.models import SCOPE_KEYS, BotRequestLog, BotToken
 from albright_labs import app_access, apps_registry, tiles
 from albright_labs.models import UserPreference
-from albright_labs.testing import allow_api_keys, kitchen, launcher_links, launcher_tiles, with_apps
+from albright_labs.testing import allow_api_keys, grants_of, kitchen, launcher_links, launcher_tiles, share_with, with_apps
 
 from . import links, notes, render
-from .models import ME, Note, NoteLink, NoteShare
+from .models import ME, Note, NoteLink
 
 PASSWORD = "pw-not-real-12345"
 OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -80,7 +82,7 @@ class CreateEditTests(Base):
 
     def test_autosave_conflict_when_someone_else_saved_meanwhile(self):
         note = self.note()
-        NoteShare.objects.create(note=note, user=self.wife, permission="edit")
+        share_with(note, self.wife, "edit")
         self.assertEqual(self.post_json(url("save", note.pk), {"body": "hers", "version": 1}, self.as_user(self.wife)).status_code, 200)
         response = self.post_json(url("save", note.pk), {"body": "mine", "version": 1})
         self.assertEqual(response.status_code, 409)
@@ -120,7 +122,7 @@ class CreateEditTests(Base):
     def test_list_row_shows_preview_tags_shared_icon_chips_and_time(self):
         from albright_meals.models import Recipe
         note = self.note(title="Taco night", body="## Plan\nBuy **tortillas** first", tags=["food"])
-        NoteShare.objects.create(note=note, user=self.wife)
+        share_with(note, self.wife, "view")
         links.add(note, links.BY_KEY[("meals", "recipe")], Recipe.objects.create(space=self.kitchen, title="Fish tacos"))
         row = self.client.get(url("list")).content.decode().split(f'id="note-{note.pk}"', 1)[1].split("</a>", 1)[0]
         self.assertIn("<p>Plan</p>", row)
@@ -163,9 +165,10 @@ class SharingTests(Base):
         note = self.note()
         stranger = self.as_user(self.stranger)
         self.assertEqual(stranger.get(url("note", note.pk)).status_code, 404)
-        for name in ("pin", "archive", "delete", "share_add", "link_add"):
+        for name in ("pin", "archive", "delete", "link_add"):
             with self.subTest(name=name):
                 self.assertEqual(stranger.post(url(name, note.pk)).status_code, 404)
+        self.assertEqual(stranger.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "add", "target": "person", "who": "stranger"}).status_code, 404)
         for name in ("save", "check"):
             self.assertEqual(self.post_json(url(name, note.pk), {"body": "x", "index": 0, "checked": True, "version": 1}, stranger).status_code, 404)
         self.assertNotContains(stranger.get(url("list")), "Groceries")
@@ -173,7 +176,7 @@ class SharingTests(Base):
 
     def test_view_share_can_read_but_not_change(self):
         note = self.note(body="- [ ] milk")
-        NoteShare.objects.create(note=note, user=self.wife, permission="view")
+        share_with(note, self.wife, "view")
         wife = self.as_user(self.wife)
         page = wife.get(url("note", note.pk)).content.decode()
         self.assertIn("view only", page)
@@ -187,11 +190,12 @@ class SharingTests(Base):
 
     def test_edit_share_can_change_content_but_not_share_or_delete(self):
         note = self.note()
-        NoteShare.objects.create(note=note, user=self.wife, permission="edit")
+        share_with(note, self.wife, "edit")
         wife = self.as_user(self.wife)
         self.assertIn('id="nt-body"', wife.get(url("note", note.pk)).content.decode())
         self.assertEqual(self.post_json(url("save", note.pk), {"body": "eggs", "version": 1}, wife).status_code, 200)
-        self.assertEqual(wife.post(url("share_add", note.pk), {"user": self.stranger.pk}).status_code, 404)
+        wife.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "add", "target": "person", "who": self.stranger.username})
+        self.assertEqual(grants_of(note), [(self.wife.pk, "edit")])                  # editors can't reshare
         self.assertEqual(wife.post(url("delete", note.pk)).status_code, 404)
         self.assertEqual(wife.post(url("archive", note.pk)).status_code, 404)
 
@@ -199,18 +203,17 @@ class SharingTests(Base):
         note = self.note()
         no_notes = with_apps(User.objects.create_user(username="meals_only", password=PASSWORD), ["meals"])
         page = self.client.get(url("note", note.pk)).content.decode()
-        self.assertIn(f'<option value="{self.wife.pk}">sam</option>', page)
-        self.assertNotIn("meals_only", page)
-        self.client.post(url("share_add", note.pk), {"user": no_notes.pk, "permission": "edit"})
-        self.assertFalse(NoteShare.objects.exists())
-        self.client.post(url("share_add", note.pk), {"user": self.wife.pk, "permission": "edit"})
-        share = NoteShare.objects.get()
-        self.assertEqual((share.user, share.permission), (self.wife, "edit"))
-        self.client.post(url("share_update", note.pk, share.pk), {"permission": "view"})
-        share.refresh_from_db()
-        self.assertEqual(share.permission, "view")
-        self.client.post(url("share_update", note.pk, share.pk), {"remove": "1"})
-        self.assertFalse(NoteShare.objects.exists())
+        self.assertIn('id="share-box"', page)                                         # the one Share control
+        self.assertNotIn("meals_only", page)                                           # nobody is listed
+        self.client.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "add", "target": "person", "who": no_notes.username, "permission": "edit"})
+        self.assertEqual(grants_of(note), [])
+        self.client.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "add", "target": "person", "who": "sam", "permission": "edit"})
+        self.assertEqual(grants_of(note), [(self.wife.pk, "edit")])
+        grant = ShareGrant.objects.get()
+        self.client.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "permission", "grant": grant.pk, "permission": "view"})
+        self.assertEqual(grants_of(note), [(self.wife.pk, "view")])
+        self.client.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "remove", "grant": grant.pk})
+        self.assertEqual(grants_of(note), [])
         self.assertEqual(self.as_user(self.wife).get(url("note", note.pk)).status_code, 404)
 
 
@@ -302,13 +305,13 @@ class LinkTests(Base):
         self.client.post(url("link_add", self.note_.pk), {"url": "https://evil.example/meals/recipes/1/"})
         self.client.post(url("link_add", self.note_.pk), {"app": "admin", "type": "idea", "id": 1})
         self.assertFalse(NoteLink.objects.exists())
-        NoteShare.objects.create(note=self.note_, user=self.wife, permission="edit")
+        share_with(self.note_, self.wife, "edit")
         self.as_user(self.wife).post(url("link_add", self.note_.pk), {"app": "meals", "type": "recipe", "id": self.recipe.pk})
         self.assertFalse(NoteLink.objects.exists())
 
     def test_shared_viewer_sees_only_the_app_of_a_record_they_cant_open(self):
         links.add(self.note_, links.BY_KEY[("resell", "ledger")], self.mine)
-        NoteShare.objects.create(note=self.note_, user=self.wife)
+        share_with(self.note_, self.wife, "view")
         page = self.as_user(self.wife).get(url("note", self.note_.pk)).content.decode()
         self.assertNotIn("Morgan dollar", page)
         self.assertIn("Reselling record", page)
@@ -392,7 +395,7 @@ class BotApiTests(TestCase):
         mine = notes.create(self.owner, "Water heater", "anode rod", tags=["house"])
         notes.create(self.owner, "Gift ideas", tags=["xmas"])
         theirs = notes.create(other, "Their private note")
-        NoteShare.objects.create(note=theirs, user=self.owner, permission="edit")
+        share_with(theirs, self.owner, "edit")
         archived = notes.create(self.owner, "Old")
         Note.objects.filter(pk=archived.pk).update(archived=True)
         titles = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]]
@@ -407,9 +410,9 @@ class BotApiTests(TestCase):
         mine = notes.create(self.owner, "Written by me")
         other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
         shared_edit = notes.create(other, "Shared to edit")
-        NoteShare.objects.create(note=shared_edit, user=self.owner, permission="edit")
+        share_with(shared_edit, self.owner, "edit")
         shared_view = notes.create(other, "Shared to view")
-        NoteShare.objects.create(note=shared_view, user=self.owner, permission="view")
+        share_with(shared_view, self.owner, "view")
         response = self.call("PATCH", reverse("bot_api_v1:note", args=[own.pk]), {"append": "line two", "tags": ["B"]})
         self.assertEqual(response.status_code, 200, response.content)
         own.refresh_from_db()
@@ -528,7 +531,7 @@ class WorkspaceTests(Base):
         archived = self.note(title="Old", tags=["home"])
         Note.objects.filter(pk=archived.pk).update(archived=True)
         theirs = self.note(owner=self.wife, title="Gift ideas")
-        NoteShare.objects.create(note=theirs, user=self.me)
+        share_with(theirs, self.me, "view")
         page = self.client.get(url("list")).content.decode()
         counts = dict(re.findall(r'data-folder="(\w+)"(?: aria-current="page")?><span>.*?</span> <span class="nt-muted">(\d+)</span>', page))
         self.assertEqual(counts, {"all": "3", "pinned": "1", "shared": "1", "checklists": "1", "archived": "1"})
@@ -552,7 +555,7 @@ class WorkspaceTests(Base):
         for panel in ("nt-pop-link", "nt-pop-share", "nt-pop-more"):
             self.assertRegex(page, rf'<section class="nt-pop" id="{panel}"[^>]*hidden>')
         # Someone it's shared with to view: no formatting, no panels, no editor.
-        NoteShare.objects.create(note=note, user=self.wife)
+        share_with(note, self.wife, "view")
         page = self.as_user(self.wife).get(url("note", note.pk)).content.decode()
         self.assertNotIn("data-fmt=", page)
         self.assertNotIn('id="nt-pop-', page)

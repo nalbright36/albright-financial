@@ -304,7 +304,7 @@ def task_from_groceries(user, lines, title, day, start_time=None, note=""):
         TaskChecklistItem(task=task, order=n, text=grocery_text(line), grocery_item=line)
         for n, line in enumerate(lines)])
     from .planner import apply_default_shares
-    apply_default_shares(task)               # shared as the owner chose by default
+    apply_default_shares(task)               # shared the way its owner shares new items
     reevaluate(task, task.date, user)        # already all bought: done from the start
     return task
 

@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_bot_api.models import BotRequestLog, BotToken
-from albright_labs.testing import allow_api_keys, kitchen, with_apps
+from albright_labs.testing import allow_api_keys, grants_of, kitchen, with_apps
 from albright_meals import recipe_nutrition
 from albright_meals.models import Recipe
 from albright_planner.models import ItemCompletion, ScheduleItem
@@ -151,7 +151,7 @@ class WeightTests(Base):
         self.client.post(url("body_settings"), {"weight_unit": "lb", "height_unit": "in", "weigh_in_reminder": "1", "weigh_in_weekday": "4"})
         item = ScheduleItem.objects.get(owner=self.me, source_app="fitness", source_id="weigh-in")
         self.assertEqual((item.title, item.recurrence, item.archived), ("Weigh in", "FREQ=WEEKLY;BYDAY=FR", False))
-        self.assertFalse(item.shares.exists())
+        self.assertFalse(bool(grants_of(item)))
         self.client.post(url("body_settings"), {"weight_unit": "lb", "height_unit": "in"})
         item.refresh_from_db()
         self.assertTrue(item.archived or item.recurrence_until == self.today)

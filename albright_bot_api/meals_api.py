@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from . import share_field
 from .auth import ApiError, bot_endpoint, json_body
 from .links_check import is_http_url
 
@@ -431,6 +432,7 @@ def recipes_upsert(request, token):
     space = _space(token, request)
     data = json_body(request)
     title = _str(data, "title", 200, required=True)
+    share_field.validate(token, "meals", data)
     fields = {}
     for key, limit in (("description", 5000), ("notes", 5000)):
         if key in data:
@@ -455,7 +457,8 @@ def recipes_upsert(request, token):
         for key, value in fields.items():
             setattr(recipe, key, value)
         recipe.save()
-    return ({"id": recipe.pk, "created": created}, 201 if created else 200,
+    shared = share_field.apply(token, recipe, data) if created else None
+    return ({"id": recipe.pk, "created": created, **({"shared_with": shared} if created else {})}, 201 if created else 200,
             f"{'created' if created else 'updated'} recipe #{recipe.pk}: {title[:80]}")
 
 
@@ -498,7 +501,10 @@ def recipes_import(request, token):
         raise ApiError(400, '"add_to_groceries" must be true or false.', "rejected: bad add_to_groceries")
     host = (urlsplit(url).hostname or "")[:80]
     try:
+        share_field.validate(token, "meals", data)
         recipe, status = importer.import_url(url, space, token=token, user=token.owner)
+        if status != "already_saved":
+            share_field.apply(token, recipe, data)
     except importer.RecipeImportError as exc:
         raise ApiError(IMPORT_ERROR_STATUS.get(exc.code, 422), exc.message,
                        f"import from {host} failed: {exc.code}") from exc

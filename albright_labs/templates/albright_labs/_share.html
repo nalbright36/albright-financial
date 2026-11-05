@@ -1,0 +1,72 @@
+{% comment %}
+The one Share control (albright_labs.sharing.control -> `share`), on every shareable thing's page, edit screen and
+"New" form - Planner items, notes, recipes, workouts. labs/share.js saves without reloading; without JS each form
+posts and comes back.
+  - A thing that exists: "Only me" or a chip per person / circle (View / Edit, remove) - changing them is the
+    owner's alone; others see who shared it with them. Add: one of my circles that share this app, or a person's
+    exact username or email (nobody is listed or suggested). One line each says what they'll see.
+  - A "New" form (share.obj is None): fields inside that form - the default ("Default: Albright Family"), Only me, a
+    circle, or a person - applied when it's created (sharing.apply_posted).
+Must sit OUTSIDE another <form> when share.obj exists (it has its own).
+{% endcomment %}
+{% if share.obj %}
+<section class="share-box" data-share id="share-box" aria-labelledby="share-box-h">
+    <h2 class="share-box__title" id="share-box-h">Sharing</h2>
+    {% if not share.owner %}<p class="share-box__note">Shared with you by <strong>{{ share.owner_name }}</strong>. Only they can change who sees it.</p>{% endif %}
+    {% if share.rows %}
+    <ul class="share-chips" role="list">{% for r in share.rows %}
+        <li class="share-chip" data-grant="{{ r.grant.pk }}">
+            <span class="share-chip__who">{% if r.is_circle %}<span class="share-chip__icon" aria-hidden="true">&#9711;</span>{% else %}<span class="share-chip__avatar" aria-hidden="true">{{ r.initials }}</span>{% endif %}<span class="share-chip__name">{{ r.name }}</span></span>
+            {% if share.owner %}
+            <form method="post" action="{{ share.url }}" class="share-chip__form" data-share-form>{% csrf_token %}
+                <input type="hidden" name="action" value="permission"><input type="hidden" name="grant" value="{{ r.grant.pk }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <label class="visually-hidden" for="share-perm-{{ r.grant.pk }}">What {{ r.name }} can do</label>
+                <select name="permission" id="share-perm-{{ r.grant.pk }}" class="ledger-input share-chip__perm" data-share-autosave>
+                    <option value="view"{% if r.grant.permission == "view" %} selected{% endif %}>View</option>
+                    <option value="edit"{% if r.grant.permission == "edit" %} selected{% endif %}>Edit</option>
+                </select>
+                <noscript><button type="submit" class="btn btn-secondary btn-sm">Save</button></noscript>
+            </form>
+            <form method="post" action="{{ share.url }}" class="share-chip__form" data-share-form>{% csrf_token %}
+                <input type="hidden" name="action" value="remove"><input type="hidden" name="grant" value="{{ r.grant.pk }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="share-chip__remove" aria-label="Stop sharing with {{ r.name }}" title="Stop sharing">&times;</button>
+            </form>
+            {% else %}<span class="share-chip__perm-text">{{ r.grant.get_permission_display }}</span>{% endif %}
+            <span class="share-chip__explain">{{ r.explain }}</span>
+        </li>{% endfor %}
+    </ul>
+    {% else %}<p class="share-box__only" data-share-only>Only {% if share.owner %}me{% else %}its owner{% endif %}</p>{% endif %}
+    {% if share.owner %}
+    <form method="post" action="{{ share.url }}" class="share-add" data-share-form>{% csrf_token %}
+        <input type="hidden" name="action" value="add"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <label class="visually-hidden" for="share-target">Share with</label>
+        <select name="target" id="share-target" class="ledger-input share-add__target" data-share-target>
+            {% for c in share.circles %}<option value="circle:{{ c.pk }}">{{ c.name }} (circle)</option>{% endfor %}
+            <option value="person"{% if not share.circles %} selected{% endif %}>A person…</option>
+        </select>
+        <label class="visually-hidden" for="share-who">Their exact username or email</label>
+        <input type="text" name="who" id="share-who" class="ledger-input share-add__who" placeholder="Exact username or email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" data-share-who{% if share.circles %} hidden{% endif %}>
+        <label class="visually-hidden" for="share-perm">Permission</label>
+        <select name="permission" id="share-perm" class="ledger-input share-add__perm"><option value="view">View</option><option value="edit">Edit</option></select>
+        <button type="submit" class="btn btn-secondary btn-sm">Share</button>
+    </form>
+    <p class="share-box__status" data-share-status role="status" aria-live="polite"></p>
+    {% endif %}
+</section>
+{% else %}
+<fieldset class="share-new" data-share-new>
+    <legend class="share-box__title">Sharing</legend>
+    <label class="visually-hidden" for="share-mode">Share with</label>
+    <select name="share_mode" id="share-mode" class="ledger-input" data-share-mode>
+        <option value="default" selected>Default: {{ share.default }}</option>
+        <option value="me">Only me</option>
+        {% for c in share.circles %}<option value="circle:{{ c.pk }}">{{ c.name }} (circle)</option>{% endfor %}
+        <option value="person">A person…</option>
+    </select>
+    <label class="visually-hidden" for="share-new-who">Their exact username or email</label>
+    <input type="text" name="share_who" id="share-new-who" class="ledger-input" placeholder="Exact username or email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" data-share-new-who hidden>
+    <label class="visually-hidden" for="share-new-perm">Permission</label>
+    <select name="share_perm" id="share-new-perm" class="ledger-input" data-share-new-perm><option value="view">View</option><option value="edit">Edit</option></select>
+    <p class="share-box__note">Change your default in <a href="{% url 'labs:sharing_defaults' %}">Sharing defaults</a>.</p>
+</fieldset>
+{% endif %}

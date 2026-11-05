@@ -1,0 +1,28 @@
+{% extends "index.html" %}
+{% block page_title %}Shared with me · {% endblock %}
+{% block content %}
+{% comment %}
+My account > Circles > Shared with me (labs.share_views.shared_with_me, sharing.shared_with_me): everything others
+shared with me - directly or through a circle - across Planner, Notes, Recipes and Fitness. Filter by app and circle.
+{% endcomment %}
+<div class="container circles-page">
+    <h1 class="circles-title">Shared with me</h1>
+    <form method="get" class="circles-inline circles-form" role="search">
+        <label for="swm-app" class="visually-hidden">App</label>
+        <select name="app" id="swm-app" class="ledger-input" data-share-filter><option value="">All apps</option>{% for key, label in apps %}<option value="{{ key }}"{% if key == app %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <label for="swm-circle" class="visually-hidden">Circle</label>
+        <select name="circle" id="swm-circle" class="ledger-input" data-share-filter><option value="">Any circle or person</option>{% for c in circles %}<option value="{{ c.pk }}"{% if c.pk == circle %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+        <noscript><button type="submit" class="btn btn-secondary btn-sm">Filter</button></noscript>
+    </form>
+    <section class="card circles-card" id="shared-list">
+        {% for r in rows %}
+        <a href="{{ r.url }}" class="circles-row swm-row" data-app="{{ r.kind.app }}">
+            <span class="swm-icon" aria-hidden="true">{% include "_app_icon.html" with key=r.kind.app %}</span>
+            <span class="circles-row__main"><strong>{{ r.title }}</strong>
+                <span class="circles-muted">{{ r.shared_by }}{% if r.circle %} &middot; {{ r.circle.name }}{% endif %} &middot; {% if r.grant.permission == "edit" %}can edit{% else %}can view{% endif %} &middot; {{ r.grant.created_at|date:"M j" }}</span></span>
+        </a>
+        {% empty %}<p class="circles-muted">Nothing's shared with you{% if app or circle %} here{% endif %} yet.</p>{% endfor %}
+    </section>
+    <p><a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:sharing_defaults' %}">Sharing defaults</a></p>
+</div>
+{% endblock %}

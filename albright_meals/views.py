@@ -2,8 +2,10 @@
 Everything belongs to a space - someone's Personal space or a circle's (scope.py, which asks albright_labs.circles).
 Each page shows one space (the switcher; ?space=<id>, remembered); changing something works in any space you see, and
 anything in a space you don't see is a 404 (Meals access itself is checked first - albright_labs.app_access). A
-recipe in the library or shared with someone is read-only to them; they can save a copy."""
+recipe in the library is read-only to everyone else; one shared with someone (albright_labs.sharing) is theirs to read
+or edit as shared, and they can save a copy."""
 import secrets
+from types import SimpleNamespace
 from datetime import timedelta
 from urllib.parse import urlencode, urlsplit
 
@@ -19,13 +21,14 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import circles
+from albright_labs import circles, sharing
+from albright_labs.models import ShareGrant
 
 from . import groceries, importer, plan, recipe_nutrition, scope
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
 from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
-                     RecipeNutritionLine, RecipeRating, RecipeShare, SLOTS, STANDARD_TAGS)
+                     RecipeNutritionLine, RecipeRating, SLOTS, STANDARD_TAGS)
 
 TABS = [("mine", "My recipes"), ("shared", "Shared with me"), ("library", "Recipe library")]
 
@@ -44,16 +47,24 @@ def _person(user):
 
 
 def _notices(request):
-    """"Nathan shared Family Meatballs with you" - shares not seen yet."""
-    return RecipeShare.objects.filter(shared_with=request.user, seen_at__isnull=True) \
-        .exclude(recipe__space_id__in=scope.space_ids(request.user)).select_related("recipe", "shared_by")[:5]
+    """"Nathan shared Family Meatballs with you" - recipes shared with me (as a person) I haven't seen yet."""
+    grants = list(_recipe_grants().filter(user=request.user, seen_at__isnull=True).select_related("created_by")[:20])
+    recipes = Recipe.objects.in_bulk([g.object_id for g in grants])
+    mine = scope.space_ids(request.user)
+    return [SimpleNamespace(shared_by=g.created_by, recipe=recipes[g.object_id]) for g in grants
+            if g.object_id in recipes and recipes[g.object_id].space_id not in mine][:5]
+
+
+def _recipe_grants():
+    from django.contrib.contenttypes.models import ContentType
+    return ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(Recipe))
 
 
 @login_required
 @scope.space_required
 @require_POST
 def notices_seen(request):
-    RecipeShare.objects.filter(shared_with=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
+    _recipe_grants().filter(user=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
     return JsonResponse({"ok": True}) if _wants_json(request) else redirect(request.POST.get("next") or "albright_meals:week")
 
 
@@ -399,7 +410,7 @@ def recipes(request):
     tag = (request.GET.get("tag") or "").strip().lower()[:50]
     filters = scope.parse_filters(request.GET, user, space)
     base = {"mine": scope.own(space), "shared": scope.shared_with(user, space), "library": scope.library()}[tab]
-    qs = base.select_related("created_by", "space__circle", "space__user", "nutrition").prefetch_related("shares__shared_with")
+    qs = base.select_related("created_by", "space__circle", "space__user", "nutrition")
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(notes__icontains=q))
     qs = scope.apply_filters(qs, filters, user, space).distinct()
@@ -413,7 +424,8 @@ def recipes(request):
                 mine_by_recipe[recipe_pk] = rating
             else:
                 others.setdefault(recipe_pk, []).append(rating)
-    shares = {s.recipe_id: s for s in RecipeShare.objects.filter(shared_with=user, recipe__in=rows).select_related("shared_by")}
+    shares = {g.object_id: g for g in sharing.grants_reaching(user, Recipe)
+              .filter(object_id__in=[r.pk for r in rows]).select_related("created_by")}
     visible = scope.space_ids(user)
     cards = [{"recipe": r, "mine": mine_by_recipe.get(r.pk), "others": others.get(r.pk, []), "own": r.space_id in visible,
               "nutrition": recipe_nutrition.per_serving(getattr(r, "nutrition", None)),
@@ -424,6 +436,12 @@ def recipes(request):
         "filters": filters, "filtering": scope.filters_active(filters), "query": _filter_query(request, filters, tab, q, tag),
         "members": [m for m in circles.space_members(space, scope.APP) if m.pk != user.pk], "rating_levels": RecipeRating.choices(),
         "notices": _notices(request), "shared_count": scope.shared_with(user, space).count()})
+
+
+def _target_space(request, recipe):
+    """Where planning or shopping for a recipe goes: its own space when the user sees it (it's theirs), else the space
+    they're looking at (a recipe shared with them)."""
+    return recipe.space if recipe.space_id in scope.space_ids(request.user) else request.space
 
 
 def _ingredients_for(space, obj):
@@ -443,22 +461,24 @@ def _ingredients_for(space, obj):
 @scope.space_required
 def recipe(request, pk):
     obj, editable = scope.readable_recipe(request.user, request.space, pk)
-    RecipeShare.objects.filter(recipe=obj, shared_with=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
-    ingredients = _ingredients_for(obj.space if editable else request.space, obj)
+    _recipe_grants().filter(object_id=obj.pk, user=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
+    ingredients = _ingredients_for(obj.space if obj.space_id in scope.space_ids(request.user) else request.space, obj)
     source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
     host = (urlsplit(source_link).hostname or "") if source_link else ""
     mine = RecipeRating.objects.filter(recipe=obj, user=request.user).first()
     others = [r for r in scope.stamps([obj], obj.space, request.user).get(obj.pk, []) if r.user_id != request.user.pk]
     labels = dict(STANDARD_TAGS)
-    share = RecipeShare.objects.filter(recipe=obj, shared_with=request.user).select_related("shared_by").first()
+    owned = obj.space_id in scope.space_ids(request.user)
+    shared_grant = None if owned else sharing.grants_reaching(request.user, Recipe).filter(
+        object_id=obj.pk).select_related("created_by").first()
     return render(request, "albright_meals/recipe.html", {
         "my_rating": mine, "others": others, "rating_levels": RecipeRating.choices(), "needs_tweaks": RecipeRating.NEEDS_TWEAKS,
         "standard_tags": [labels[key] for key in obj.standard_tags or [] if key in labels],
-        "recipe": obj, "editable": editable, "share": share, "ingredients": ingredients,
+        "recipe": obj, "editable": editable, "owned": owned, "shared_grant": shared_grant, "ingredients": ingredients,
+        "share": sharing.control(request.user, obj), "move_spaces": [s for s in request.spaces if s.pk != obj.space_id] if owned else [],
         "step_groups": importer.step_groups(obj.steps),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
-        "shares": obj.shares.select_related("shared_with") if editable else [],
         "nutrition": getattr(obj, "nutrition", None), "per_serving": recipe_nutrition.per_serving(getattr(obj, "nutrition", None)),
         "can_log": _can_log(request.user), "diary_slots": _diary_slots(), "today": timezone.localdate(),
         "picked_count": sum(1 for i in ingredients if i["name"] and not i["on_list"])})
@@ -471,12 +491,18 @@ def recipe_edit(request, pk=None):
     form = RecipeForm(request.POST or None, instance=obj)
     if request.method == "POST" and form.is_valid():
         saved = form.save(commit=False)
-        if not saved.pk:
+        new = not saved.pk
+        if new:
             saved.created_by, saved.space = request.user, request.space
         saved.save()
+        if new:
+            try:
+                sharing.apply_posted(request, saved)
+            except sharing.ShareError as exc:
+                messages.error(request, f"Not shared: {exc}")
         messages.success(request, f"Saved {saved.title}.")
         return redirect("albright_meals:recipe", pk=saved.pk)
-    context = {"form": form, "recipe": obj}
+    context = {"form": form, "recipe": obj, "share": sharing.control(request.user, obj, "meals")}
     if obj is None:
         # Add a recipe opens with Import from link; ?url=<link> (a bookmark, a bot) pre-fills it and starts it.
         link = (request.GET.get("url") or "").strip()[:importer.MAX_URL]
@@ -524,7 +550,7 @@ def recipe_plan(request, pk):
         messages.error(request, "Pick the day and slot.")
         return redirect("albright_meals:recipe", pk=pk)
     day, slot = form.cleaned_data["date"], form.cleaned_data["slot"]
-    plan.set_slot(obj.space, day, slot, recipe=obj, user=request.user)
+    plan.set_slot(_target_space(request, obj), day, slot, recipe=obj, user=request.user)
     messages.success(request, f"Planned {obj.title} for {day:%a %b} {day.day}.")
     return redirect(_week_url(day))
 
@@ -542,10 +568,10 @@ def recipe_groceries(request, pk):
         if not indexes:
             messages.error(request, "Tick the ingredients to add first.")
         else:
-            counts = groceries.add_selected(obj.space, obj, indexes, user=request.user)
+            counts = groceries.add_selected(_target_space(request, obj), obj, indexes, user=request.user)
             messages.success(request, groceries.summary(counts) + ".")
         return redirect(reverse("albright_meals:recipe", args=[pk]) + "#ingredients")
-    added, merged, skipped = groceries.add_recipes(obj.space, [obj], user=request.user, skip_listed=True)
+    added, merged, skipped = groceries.add_recipes(_target_space(request, obj), [obj], user=request.user, skip_listed=True)
     if not added and not merged and skipped:
         messages.info(request, "Everything from this recipe is already on the grocery list.")
     else:
@@ -579,7 +605,7 @@ def recipe_save_copy(request, pk):
 def recipe_visibility(request, pk):
     """Put one of our recipes in the shared library (read-only for every Meals user), or take it out. Copies others
     saved stay theirs."""
-    obj = scope.editable_recipe(request.user, pk)
+    obj = scope.owned_recipe(request.user, pk)
     obj.visibility = Recipe.LIBRARY if request.POST.get("visibility") == Recipe.LIBRARY else Recipe.HOUSEHOLD
     obj.save(update_fields=["visibility", "updated_at"])
     messages.success(request, "In the shared library - everyone with Meals can read it and save a copy."
@@ -590,33 +616,18 @@ def recipe_visibility(request, pk):
 @login_required
 @scope.space_required
 @require_POST
-def recipe_share(request, pk):
-    """Share one of our recipes with one person outside the space (their exact username or email - nobody is
-    ever listed or suggested), or stop sharing it. They must be able to open Meals."""
-    from albright_labs import app_access
-    from albright_labs.models import UserPreference
-    obj = scope.editable_recipe(request.user, pk)
-    action = request.POST.get("action", "add")
-    result = {"ok": True}
-    if action == "remove":
-        RecipeShare.objects.filter(recipe=obj, shared_with_id=request.POST.get("user") or 0).delete()
-        result["message"] = "No longer shared."
-    else:
-        person = circles.find_person(request.POST.get("who", ""))
-        if person is None or not app_access.can_use(person, UserPreference.for_user(person), "meals"):
-            result = {"ok": False, "error": "No one with Meals matches that exactly - check their username or email."}
-        elif circles.can_see(person, scope.APP, obj.space):
-            result = {"ok": False, "error": "They already see this recipe's space."}
-        else:
-            _share, created = RecipeShare.objects.get_or_create(recipe=obj, shared_with=person,
-                                                                defaults={"shared_by": request.user})
-            result["message"] = f"Shared with {_person(person)}." if created else f"Already shared with {_person(person)}."
-    result["shares"] = [{"user": s.shared_with_id, "name": _person(s.shared_with)}
-                        for s in obj.shares.select_related("shared_with")]
-    if _wants_json(request):
-        return JsonResponse(result, status=200 if result["ok"] else 400)
-    (messages.success if result["ok"] else messages.error)(request, result.get("message") or result.get("error"))
-    return redirect(request.POST.get("next") or reverse("albright_meals:recipe", args=[pk]))
+def recipe_move(request, pk):
+    """Move to space: the recipe itself goes into another of my spaces (Personal or a circle) - unlike sharing, which
+    only shows it to others. Its ratings then show to that space's people; copies others saved stay theirs."""
+    obj = scope.owned_recipe(request.user, pk)
+    target = next((s for s in request.spaces if str(s.pk) == request.POST.get("to")), None)
+    if target is None:
+        messages.error(request, "Pick one of your spaces.")
+    elif target.pk != obj.space_id:
+        obj.space = target
+        obj.save(update_fields=["space", "updated_at"])
+        messages.success(request, f"Moved {obj.title} to {target.name}.")
+    return redirect("albright_meals:recipe", pk=pk)
 
 
 # ---------------------------------------------------------------------------

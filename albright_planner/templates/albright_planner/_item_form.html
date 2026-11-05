@@ -70,21 +70,7 @@ editor). It posts to the page that rendered it.
             <span class="pl-help">&ldquo;This occurrence only&rdquo; changes its title, day and start time; the rest applies to the series.</span>
         </div>
         {% endif %}
-        {% if share_rows %}
-        {# Share with (the owner only): each person who can open the Planner - not shared, View or Edit. #}
-        <div class="pl-share-with" id="pl-share-with" role="group" aria-labelledby="pl-share-with-h">
-            <span class="pl-label" id="pl-share-with-h">Share with</span>
-            <input type="hidden" name="share_section" value="1">
-            {% for row in share_rows %}
-            <label class="pl-share-row" for="pl-share-{{ row.user.pk }}"><span class="pl-share-row__name">{{ row.name }}</span>
-                <select name="share_{{ row.user.pk }}" id="pl-share-{{ row.user.pk }}" class="pl-input pl-select">
-                    <option value="">Not shared</option>{% for value, label in permissions %}<option value="{{ value }}"{% if row.perm == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-                </select></label>
-            {% endfor %}
-            <label class="pl-toggle"><input type="checkbox" name="remember_shares" value="1" id="pl-remember-shares"> Remember as my default for new items</label>
-            <span class="pl-help">View: they see it and its checklist. Edit: they can also change it, move it, check it off and add to its checklist. Only you can delete it or change who it's shared with.</span>
-        </div>
-        {% elif is_owner %}<p class="pl-muted pl-small">Nobody else can open the Planner yet - give someone access in Admin &rarr; Users to share with them.</p>{% endif %}
+        {% if not item %}{% include "albright_labs/_share.html" %}{% endif %}
         {% if not item or can_edit %}<div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">{% if item %}Save{% else %}Add{% endif %}</button> <a href="{{ back_url|default:next }}" class="pl-btn pl-btn--ghost" data-form-cancel>Cancel</a></div>{% endif %}
     </fieldset>
 </form>

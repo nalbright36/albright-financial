@@ -16,13 +16,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_labs import apps_registry, launcher, tiles
-from albright_labs.testing import with_apps
+from albright_labs.testing import grants_of, with_apps
 from albright_planner import recurrence
 from albright_planner.models import ItemCompletion, ScheduleItem
 
 from . import programs, seed, stats, training
-from .models import (Exercise, PersonalRecord, Program, ProgramDay, ProgramExercise, Workout, WorkoutExercise, WorkoutSet,
-                     WorkoutShare)
+from .models import (Exercise, PersonalRecord, Program, ProgramDay, ProgramExercise, Workout, WorkoutExercise, WorkoutSet)
 
 PASSWORD = "pw-not-real-12345"
 D = Decimal
@@ -306,7 +305,7 @@ class ProgramTests(Base):
         self.assertEqual((upper.recurrence, upper.kind, upper.checkable), ("FREQ=WEEKLY;BYDAY=MO", "task", True))
         self.assertEqual(upper.date.weekday(), 0)
         self.assertIsNotNone(upper.recurrence_until)                        # not one-at-a-time: ends after its weeks
-        self.assertFalse(upper.shares.exists())                             # private
+        self.assertFalse(bool(grants_of(upper)))                             # private
         self.assertEqual([r.text for r in upper.checklist.all()][:2], ["Barbell Bench Press - 4 × 6", "Barbell Row - 4 × 6"])
         self.assertTrue(upper.source_url.startswith("/fitness/start/?day="))
         # Again: updated in place, never doubled.
@@ -363,6 +362,15 @@ class ProgramTests(Base):
 # Privacy and sharing
 # ---------------------------------------------------------------------------
 
+
+def grants_of_ids(obj):
+    from django.contrib.contenttypes.models import ContentType
+
+    from albright_labs.models import ShareGrant
+    return list(ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(type(obj)), object_id=obj.pk)
+                .values_list("pk", flat=True))
+
+
 class PrivacyTests(Base):
     def test_private_by_default_and_shared_view_only(self):
         w = self.workout(sets=[(225, 5)], name="Leg day")
@@ -370,8 +378,8 @@ class PrivacyTests(Base):
         for path in (url("workout", w.pk), url("summary", w.pk)):
             self.assertEqual(kim.get(path).status_code, 404)
         self.assertNotIn("Leg day", kim.get(url("history")).content.decode())
-        self.client.post(url("share", w.pk), {"user": self.friend.pk})
-        self.assertTrue(WorkoutShare.objects.filter(workout=w, user=self.friend).exists())
+        self.client.post(reverse("labs:share", args=["albright_fitness.Workout", w.pk]), {"action": "add", "target": "person", "who": self.friend.username})
+        self.assertEqual(grants_of(w), [(self.friend.pk, "view")])
         page = kim.get(url("workout", w.pk)).content.decode()
         self.assertIn("Nate's workout (view only)", page.replace("&#x27;", "'"))
         self.assertNotIn("data-set-form", page)                              # nothing to change
@@ -380,7 +388,7 @@ class PrivacyTests(Base):
         self.assertEqual(kim.post(url("finish", w.pk)).status_code, 404)
         self.assertEqual(kim.post(url("delete_workout", w.pk)).status_code, 404)
         self.assertIn("Leg day", kim.get(url("history")).content.decode())
-        self.client.post(url("share", w.pk), {"user": self.friend.pk, "action": "remove"})
+        self.client.post(reverse("labs:share", args=["albright_fitness.Workout", w.pk]), {"action": "remove", "grant": grants_of_ids(w)[0]})
         self.assertEqual(kim.get(url("workout", w.pk)).status_code, 404)
 
     def test_programs_and_records_are_never_shared(self):
@@ -395,7 +403,8 @@ class PrivacyTests(Base):
     def test_only_people_with_fitness_access_can_be_shared_with(self):
         w = self.workout(sets=[(225, 5)])
         outsider = with_apps(User.objects.create_user(username="pat", password=PASSWORD), ["notes"])
-        self.assertEqual(self.client.post(url("share", w.pk), {"user": outsider.pk}).status_code, 404)
+        self.client.post(reverse("labs:share", args=["albright_fitness.Workout", w.pk]), {"action": "add", "target": "person", "who": outsider.username})
+        self.assertEqual(grants_of(w), [])
 
 
 # ---------------------------------------------------------------------------

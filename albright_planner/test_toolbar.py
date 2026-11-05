@@ -7,7 +7,10 @@ import pathlib
 import re
 
 from django.contrib.staticfiles import finders
+from django.urls import reverse
 from django.test import Client
+
+from albright_labs.testing import share_with
 
 from .models import ItemCompletion, PlannerSettings, ScheduleItem
 from .tests import TODAY, Base, url
@@ -62,9 +65,8 @@ class ToolbarTests(Base):
         self.assertEqual(re.findall(r'name="who" value="(\w*)"[^>]*><span>([^<]+)</span>', options),
                          [("", "All"), ("mine", "Mine"), ("shared", "Shared with me")])
         self.assertRegex(options, r'Show meals</span><input type="checkbox" name="show_meals" value="1" role="switch"[^>]* checked>')
-        self.assertIn("Default sharing for new items", options)
-        self.assertIn('<option value="" selected>Only me</option>', options)
-        self.assertIn(f'<option value="{self.wife.pk}">Shared with Sam</option>', options)
+        self.assertIn("New items: Only me", options)                                  # the default lives in Circles
+        self.assertNotIn('name="default_share"', options)
         self.assertIn('href="/planner/settings/" class="pl-opt-link"', options)
         self.assertIn(">Save</button>", options)
         self.assertIn("data-options-cancel>Cancel</button>", options)
@@ -102,17 +104,16 @@ class ViewOptionsSaveTests(Base):
         done = self.item("Finished task")
         ItemCompletion.objects.create(item=done, occurrence_date=TODAY)
         self.item("Team event", kind=ScheduleItem.EVENT)
-        self.item("Sam task", owner=self.wife).shares.create(user=self.me, permission="view")
+        share_with(self.item("Sam task", owner=self.wife), self.me, "view")
 
     def save(self, **fields):
-        data = {"view": "day", "date": TODAY.isoformat(), "kind": "", "who": "", "share": "keep", **fields}
+        data = {"view": "day", "date": TODAY.isoformat(), "kind": "", "who": "", **fields}
         return self.client.post(url("view_options"), data)
 
     def test_save_stores_them_for_the_account(self):
-        response = self.save(view="week", kind="task", hide_done="1", who="mine", share=str(self.wife.pk))
+        response = self.save(view="week", kind="task", hide_done="1", who="mine")
         prefs = PlannerSettings.for_user(self.me)
         self.assertEqual((prefs.filter_kind, prefs.hide_done, prefs.filter_who, prefs.show_meals), ("task", True, "mine", False))
-        self.assertEqual(prefs.default_shares, {str(self.wife.pk): "edit"})
         self.assertRedirects(response, url("week"), fetch_redirect_response=False)   # the chosen view, today
         self.assertEqual(response.cookies["planner_view"].value, "week")          # /planner/ opens it next time
 
@@ -144,22 +145,21 @@ class ViewOptionsSaveTests(Base):
         self.assertNotIn("Open task", titles(page))
 
     def test_bad_values_fall_back_to_the_defaults(self):
-        self.save(kind="everything", who="others", view="year", share="9999")
+        self.save(kind="everything", who="others", view="year")
         prefs = PlannerSettings.for_user(self.me)
         self.assertEqual((prefs.filter_kind, prefs.filter_who), ("", ""))
-        self.assertEqual(prefs.default_shares, {})
         self.assertEqual(self.save(view="year")["Location"], url("day"))
 
-    def test_only_me_clears_the_default_sharing_and_keep_leaves_it(self):
-        prefs = PlannerSettings.for_user(self.me)
-        prefs.default_shares = {str(self.wife.pk): "view"}
-        prefs.save()
-        self.save(share="keep")
-        self.assertEqual(PlannerSettings.for_user(self.me).default_shares, {str(self.wife.pk): "view"})
-        self.save(share=str(self.wife.pk))                                         # the same person: keeps "view"
-        self.assertEqual(PlannerSettings.for_user(self.me).default_shares, {str(self.wife.pk): "view"})
-        self.save(share="")
-        self.assertEqual(PlannerSettings.for_user(self.me).default_shares, {})
+    def test_view_options_link_to_the_sharing_default(self):
+        from albright_labs import sharing
+        self.wife.first_name = "Sam"
+        self.wife.save()
+        page = self.client.get(url("day")).content.decode()
+        self.assertIn("New items: Only me", page)
+        self.assertIn(reverse("labs:sharing_defaults") + "#default-planner", page)
+        sharing.save_default(self.me, "planner", "people", people={str(self.wife.pk): "view"})
+        self.save(view="day")                                                        # View options leave it alone
+        self.assertEqual(sharing.default_text(self.me, "planner"), "Sam")
 
     def test_post_only_and_signed_in_only(self):
         self.assertEqual(self.client.get(url("view_options")).status_code, 405)
@@ -190,8 +190,8 @@ class FilteredDotTests(Base):
         self.assertNotIn('id="pl-options-dot" hidden', self.client.get(url("week")).content.decode())
 
     def test_view_and_sharing_are_not_filters(self):
-        PlannerSettings.for_user(self.me)
-        PlannerSettings.objects.filter(user=self.me).update(default_shares={str(self.wife.pk): "edit"})
+        from albright_labs import sharing
+        sharing.save_default(self.me, "planner", "people", people={str(self.wife.pk): "edit"})
         self.assertIn('id="pl-options-dot" hidden', self.client.get(url("month")).content.decode())
 
     def test_the_script_uses_the_same_rule_live(self):

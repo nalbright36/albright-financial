@@ -7,11 +7,11 @@ from datetime import time
 from django.contrib.auth.models import User
 from django.urls import reverse
 
-from albright_labs.testing import kitchen, with_apps
+from albright_labs.testing import kitchen, share_with, with_apps
 from albright_meals.models import GroceryItem
 
 from . import checklist
-from .models import ChecklistItemCompletion, ItemCompletion, ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
+from .models import ChecklistItemCompletion, ItemCompletion, PlannerSettings, ScheduleItem, TaskChecklistItem
 from .tests import PASSWORD, TODAY, Base, url
 
 
@@ -193,18 +193,18 @@ class PermissionTests(Fixtures):
         html = cook.get(reverse("albright_meals:grocery_list")).json()["html"]
         self.assertNotIn("In task:", html)                                   # someone else's task: no chip
         self.assertNotIn("Grocery run", html)
-        ItemShare.objects.create(item=self.task_obj, user=self.cook, permission=ItemShare.VIEW)
+        share_with(self.task_obj, self.cook, "view")
         self.assertIn("In task: Grocery run", cook.get(reverse("albright_meals:grocery_list")).json()["html"])
         self.assertEqual(self.toggle_row(self.row, client=cook).status_code, 404)   # view only
         page = cook.get(url("edit", self.task_obj.pk)).content.decode()
         self.assertNotIn(url("checklist_toggle", self.task_obj.pk, self.row.pk), page)
 
     def test_editors_check_rows_but_grocery_rows_need_meals(self):
-        ItemShare.objects.create(item=self.task_obj, user=self.cook, permission=ItemShare.EDIT)
+        share_with(self.task_obj, self.cook, "edit")
         self.assertEqual(self.toggle_row(self.row, client=self.as_user(self.cook)).status_code, 302)
         self.milk.refresh_from_db()
         self.assertTrue(self.milk.checked)
-        ItemShare.objects.create(item=self.task_obj, user=self.wife, permission=ItemShare.EDIT)   # Planner only
+        share_with(self.task_obj, self.wife, "edit")   # Planner only
         wife = self.as_user(self.wife)
         self.assertEqual(self.toggle_row(self.task_obj.checklist.get(grocery_item=self.eggs), client=wife).status_code, 404)
         page = wife.get(url("edit", self.task_obj.pk)).content.decode()
@@ -214,7 +214,7 @@ class PermissionTests(Fixtures):
     def test_grocery_rows_are_read_only_outside_the_household(self):
         outsider = with_apps(User.objects.create_user(username="outsider", password=PASSWORD), ["meals", "planner"])
         kitchen(outsider, name="Elsewhere")
-        ItemShare.objects.create(item=self.task_obj, user=outsider, permission=ItemShare.EDIT)
+        share_with(self.task_obj, outsider, "edit")
         self.assertEqual(self.toggle_row(self.row, client=self.as_user(outsider)).status_code, 404)
         self.milk.refresh_from_db()
         self.assertFalse(self.milk.checked)

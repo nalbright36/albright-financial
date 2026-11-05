@@ -1,0 +1,40 @@
+{% extends "index.html" %}
+{% block page_title %}Sharing defaults · {% endblock %}
+{% block content %}
+{% comment %}
+My account > Circles > Sharing defaults (labs.share_views.defaults): for each app, who NEW items are shared with -
+Only me, one of my circles (View or Edit), or specific people (each View or Edit). Used on the site, by quick add
+and by my bots (albright_labs.sharing.apply_defaults). People are added by exact username or email only.
+{% endcomment %}
+<div class="container circles-page">
+    <h1 class="circles-title">Sharing defaults</h1>
+    <p class="circles-lead">Who new things are shared with when you make them - on the site, by quick add, and by your bots. You can always change it on each one.</p>
+    {% for r in rows %}
+    <section class="card circles-card" id="default-{{ r.app }}" aria-labelledby="default-{{ r.app }}-h">
+        <h2 class="circles-card__title" id="default-{{ r.app }}-h">{{ r.label }} <span class="circles-muted">now: {{ r.text }}</span></h2>
+        <form method="post" class="circles-form circles-inline">{% csrf_token %}<input type="hidden" name="app" value="{{ r.app }}">
+            <label for="mode-{{ r.app }}" class="visually-hidden">New {{ r.label }} items are shared with</label>
+            <select name="mode" id="mode-{{ r.app }}" class="ledger-input">
+                <option value="me"{% if not r.default or r.default.mode == "me" %} selected{% endif %}>Only me</option>
+                {% for c in r.circles %}<option value="circle:{{ c.pk }}"{% if r.default.mode == "circle" and r.default.circle_id == c.pk %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                <option value="people"{% if r.default.mode == "people" %} selected{% endif %}>Specific people</option>
+            </select>
+            <label for="perm-{{ r.app }}" class="visually-hidden">Permission</label>
+            <select name="permission" id="perm-{{ r.app }}" class="ledger-input" style="flex: 0 0 auto;">
+                <option value="view"{% if r.default.permission != "edit" %} selected{% endif %}>View</option>
+                <option value="edit"{% if r.default.permission == "edit" %} selected{% endif %}>Edit</option>
+            </select>
+            <label for="who-{{ r.app }}" class="visually-hidden">Add a person (exact username or email)</label>
+            <input type="text" name="who" id="who-{{ r.app }}" class="ledger-input" placeholder="Add a person: exact username or email" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </form>
+        {% if r.people %}<ul class="share-chips" role="list">{% for p in r.people %}
+            <li class="share-chip"><span class="share-chip__who"><span class="share-chip__name">{{ p.name }}</span></span><span class="share-chip__perm-text">{% if p.permission == "edit" %}Edit{% else %}View{% endif %}</span>
+                <form method="post" class="share-chip__form">{% csrf_token %}<input type="hidden" name="app" value="{{ r.app }}"><input type="hidden" name="mode" value="people"><input type="hidden" name="drop" value="{{ p.key }}">
+                    <button type="submit" class="share-chip__remove" aria-label="Remove {{ p.name }}">&times;</button></form></li>{% endfor %}</ul>{% endif %}
+        <p class="circles-muted">Only circles that share {{ r.label }} and that you've joined it in are listed.</p>
+    </section>
+    {% empty %}<p class="circles-muted">None of your apps can share things yet.</p>{% endfor %}
+    <p><a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:shared_with_me' %}">Shared with me</a></p>
+</div>
+{% endblock %}

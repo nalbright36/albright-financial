@@ -13,10 +13,10 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from albright_bot_api.models import BotToken
-from albright_labs.testing import allow_api_keys, with_apps
+from albright_labs.testing import allow_api_keys, share_with, with_apps
 
 from . import planner
-from .models import ItemCompletion, ItemException, ItemShare, ScheduleItem
+from .models import ItemCompletion, ItemException, ScheduleItem
 
 PASSWORD = "pw-not-real-12345"
 MONDAYS = "FREQ=WEEKLY;BYDAY=MO"
@@ -269,7 +269,7 @@ class OtherActionsTests(Base):
 class SharedTests(Base):
     def test_a_check_off_moves_it_on_for_everyone(self):
         item = self.task(start=d(11, 9))
-        ItemShare.objects.create(item=item, user=self.wife, permission=ItemShare.EDIT)
+        share_with(item, self.wife, "edit")
         wife = Client()
         wife.force_login(self.wife)
         self.assertEqual(self.shown(item, d(11, 1), d(11, 30), user=self.wife), [(d(11, 9), False)])

@@ -89,3 +89,24 @@ def personal(user):
     """The user's Personal space."""
     from .circles import personal_space
     return personal_space(user)
+
+
+def share_with(obj, user=None, permission="view", circle=None, by=None):
+    """Share a Planner item / note / recipe / workout with a person (or a circle) straight in the database - the
+    one Share system (albright_labs.sharing). Returns the ShareGrant."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from .models import ShareGrant
+    target = {"circle": circle} if circle is not None else {"user": user}
+    owner = getattr(obj, "owner", None) or getattr(obj, "created_by", None)
+    return ShareGrant.objects.update_or_create(content_type=ContentType.objects.get_for_model(type(obj)), object_id=obj.pk,
+                                               **target, defaults={"permission": permission, "created_by": by or owner})[0]
+
+
+def grants_of(obj):
+    """[(user id or None, permission)] - who a thing is shared with (person grants first, by user id)."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from .models import ShareGrant
+    rows = ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(type(obj)), object_id=obj.pk)
+    return sorted(((g.user_id, g.permission) for g in rows), key=lambda r: (r[0] is None, r[0] or 0))

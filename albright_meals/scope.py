@@ -7,7 +7,8 @@ here, and here asks albright_labs.circles (the one place membership is checked).
   - Each page shows one space at a time - the switcher in the Meals header (space_required: ?space=<id>, remembered
     per person), Personal by default.
   - A recipe can also be read - never changed - by every Meals user when it's in the "Recipe library", and by one
-    person at a time it's shared with (RecipeShare). They can save a copy into their own space.
+    person or circle it's shared with (albright_labs.sharing - view, or edit its content). They can save a copy into
+    their own space; moving a recipe into another space is the owner's "Move to space".
   - Ratings are people's own stamps, shown only to the people who see the recipe's space.
 """
 from functools import wraps
@@ -15,9 +16,9 @@ from functools import wraps
 from django.db.models import Count, Exists, OuterRef, Q
 from django.http import Http404
 
-from albright_labs import circles
+from albright_labs import circles, sharing
 
-from .models import Recipe, RecipeRating, RecipeShare
+from .models import Recipe, RecipeRating
 
 APP = "meals"
 HIGH = (RecipeRating.FAVORITE, RecipeRating.STAPLE)
@@ -63,8 +64,8 @@ def own(space):
 
 
 def shared_with(user, space=None):
-    """Recipes shared with this person from spaces they don't see."""
-    return Recipe.objects.filter(shares__shared_with=user).exclude(space_id__in=space_ids(user))
+    """Recipes shared with this person (directly or through a circle) from spaces they don't see."""
+    return sharing.shared_with_queryset(user, Recipe).exclude(space_id__in=space_ids(user))
 
 
 def library():
@@ -73,16 +74,17 @@ def library():
 
 def readable(user, space=None):
     """Every recipe this person may read: in any space they see, the library, and ones shared with them."""
-    shared = RecipeShare.objects.filter(recipe=OuterRef("pk"), shared_with=user)
-    return Recipe.objects.filter(Q(space_id__in=space_ids(user)) | Q(visibility=Recipe.LIBRARY) | Exists(shared))
+    return Recipe.objects.filter(Q(space_id__in=space_ids(user)) | Q(visibility=Recipe.LIBRARY)
+                                 | Q(pk__in=sharing.shared_ids(user, Recipe)))
 
 
 def readable_recipe(user, space, pk):
-    """(recipe, editable) - editable when it's in a space they see; Http404 when they can't read it at all."""
+    """(recipe, editable) - editable when it's in a space they see or shared with them to edit; Http404 when they
+    can't read it at all."""
     recipe = readable(user).select_related("created_by", "space__circle", "space__user").filter(pk=pk).first()
     if recipe is None:
         raise Http404
-    return recipe, recipe.space_id in space_ids(user)
+    return recipe, recipe.space_id in space_ids(user) or sharing.can_edit(user, recipe)
 
 
 def own_recipe(space, pk, queryset=None):
@@ -94,7 +96,15 @@ def own_recipe(space, pk, queryset=None):
 
 
 def editable_recipe(user, pk, queryset=None):
-    """A recipe in any space this person sees (to change) - else 404."""
+    """A recipe this person may change: in a space they see, or shared with them to edit - else 404."""
+    recipe = sharing.editable_queryset(user, Recipe, queryset if queryset is not None else Recipe.objects.all()).filter(pk=pk).first()
+    if recipe is None:
+        raise Http404
+    return recipe
+
+
+def owned_recipe(user, pk, queryset=None):
+    """A recipe in a space this person sees - its owners (share it, the library, move it) - else 404."""
     recipe = (queryset if queryset is not None else Recipe.objects).filter(space_id__in=space_ids(user), pk=pk).first()
     if recipe is None:
         raise Http404

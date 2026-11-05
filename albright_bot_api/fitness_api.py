@@ -151,13 +151,16 @@ def workouts(request, token):
     if not good:
         raise ApiError(422, "Nothing could be logged - check the exercise names.", "rejected: nothing parsed",
                        extra={"unknown": unknown})
+    from . import share_field
+    share_field.validate(token, "fitness", data)
     workout, records, day = programs.log_parsed(user, good, name=_str(data, "name", 100) or "Quick log")
+    shared = share_field.apply(token, workout, data)
     exercises = [{"exercise": we.exercise.name, "sets": [_set_json(s) for s in we.sets.all()]}
                  for we in workout.exercises.select_related("exercise").prefetch_related("sets")]
     return ({"id": workout.pk, "date": workout.date.isoformat(), "name": workout.title, "exercises": exercises,
              "unknown": unknown, "records": [{"exercise": r.exercise.name, "kind": r.kind, "text": training.record_text(r)}
                                              for r in records],
-             "program_day": day.name if day else None, "planner_completed": bool(workout.planner_item_id),
+             "program_day": day.name if day else None, "planner_completed": bool(workout.planner_item_id), "shared_with": shared,
              "url": reverse("albright_fitness:summary", args=[workout.pk])},
             201, f"logged workout #{workout.pk} ({len(exercises)} exercises{', ' + str(len(unknown)) + ' unknown' if unknown else ''})")
 

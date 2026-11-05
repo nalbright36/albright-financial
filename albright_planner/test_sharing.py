@@ -1,17 +1,23 @@
 """Sharing in the Planner: items shared with you appear everywhere yours do (Day, Week, Month, overdue, Home's Today
 panel, the launcher's count, the Bot API) - one-off and repeating; a check-off is shared, with "Done by <name>";
 the owner's initial and "Shared by <name>", a dashed border, the "shared" mark on your own shared items, and the
-All / Mine / Shared with me filter; "Share with" on the new and edit forms with "Remember as my default", which
-new items and quick add use; View vs Edit; only the owner deletes or changes sharing."""
+All / Mine / Shared with me filter; the one Share control on the new form, the edit screen and the view panel;
+the Planner's sharing default (My account > Circles > Sharing defaults), which new items, quick add, notes,
+groceries and bots use; View vs Edit; only the owner deletes or changes sharing."""
 import json
 from datetime import date, timedelta
 
 from django.test import Client, override_settings
+from django.urls import reverse
+
+from albright_labs.testing import grants_of, share_with
 
 from albright_bot_api.models import BotToken
+from albright_labs import sharing
+from albright_labs.models import ShareGrant, SharingDefault
 
 from . import planner
-from .models import ItemCompletion, ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
+from .models import ItemCompletion, PlannerSettings, ScheduleItem, TaskChecklistItem
 from .tests import TODAY, Base, url
 
 SAM_ITEM = "Pilates with Sam"
@@ -32,7 +38,7 @@ class SharedBase(Base):
 
     def hers(self, title=SAM_ITEM, permission="view", **fields):
         item = self.item(title=title, owner=self.wife, **fields)
-        ItemShare.objects.create(item=item, user=self.me, permission=permission)
+        share_with(item, self.me, permission)
         return item
 
     def page(self, view, day=TODAY, client=None, query=""):
@@ -129,9 +135,9 @@ class OwnerBadgeAndFilterTests(SharedBase):
     def test_my_shared_items_get_the_shared_mark(self):
         mine = self.item(title="Family dinner")
         plain = self.item(title="Solo errand")
-        ItemShare.objects.create(item=mine, user=self.wife)
+        share_with(mine, self.wife, "view")
         day = self.page("day")
-        self.assertIn('title="Shared with Sam" aria-label="Shared"', day.split(f'data-item="{mine.pk}"', 1)[1].split("</li>", 1)[0])
+        self.assertIn('title="Shared" aria-label="Shared"', day.split(f'data-item="{mine.pk}"', 1)[1].split("</li>", 1)[0])
         self.assertNotIn("pl-shared-out", day.split(f'data-item="{plain.pk}"', 1)[1].split("</li>", 1)[0])
         self.assertNotIn("is-shared-in", day.split(f'data-item="{mine.pk}"', 1)[0].rsplit("<li", 1)[1])
         self.assertIn('id="pl-shared-with">Shared with Sam', self.client.get(url("edit", mine.pk)).content.decode())
@@ -153,76 +159,70 @@ class OwnerBadgeAndFilterTests(SharedBase):
 
 class ShareOnCreateAndEditTests(SharedBase):
     FORM = {"title": "Date night", "kind": "event", "date": "2026-11-07", "repeat": "none", "ends": "never",
-            "priority": "none", "share_section": "1"}
+            "priority": "none"}
 
     def test_new_item_shared_as_chosen(self):
-        self.client.post(url("new"), {**self.FORM, f"share_{self.wife.pk}": "edit"})
+        self.client.post(url("new"), {**self.FORM, "share_mode": "person", "share_who": "sam", "share_perm": "edit"})
         item = ScheduleItem.objects.get(title="Date night")
-        self.assertEqual(list(item.shares.values_list("user", "permission")), [(self.wife.pk, "edit")])
+        self.assertEqual(grants_of(item), [(self.wife.pk, "edit")])
         self.assertIn("Date night", self.page("day", d(7), client=self.wife_client))
-        self.assertEqual(PlannerSettings.for_user(self.me).default_shares, {})      # not remembered
+        self.assertFalse(SharingDefault.objects.exists())                                   # not remembered
 
-    def test_new_item_form_lists_planner_people_with_view_or_edit(self):
+    def test_new_item_form_has_the_share_control(self):
         page = self.client.get(url("new")).content.decode()
-        self.assertIn(f'name="share_{self.wife.pk}"', page)
-        self.assertIn(f'name="share_{self.stranger.pk}"', page)
-        self.assertIn('<option value="view">', page)
-        self.assertIn('<option value="edit">', page)
-        self.assertIn('name="remember_shares"', page)
+        self.assertIn('name="share_mode"', page)
+        self.assertIn("Default: Only me", page)
+        self.assertNotIn(f'name="share_{self.wife.pk}"', page)                              # nobody is listed
 
-    def test_edit_changes_sharing_owner_only(self):
+    def test_edit_screen_and_view_panel_have_it_owner_only(self):
         item = self.item(title="Plan trip")
-        form = {**self.FORM, "title": "Plan trip", "kind": "task", "date": TODAY.isoformat(),
-                f"share_{self.wife.pk}": "view"}
-        self.client.post(url("edit", item.pk), form)
-        self.assertEqual(item.shares.get().permission, "view")
-        page = self.client.get(url("edit", item.pk)).content.decode()
-        self.assertIn('<option value="view" selected>', page.split(f'name="share_{self.wife.pk}"', 1)[1].split("</select>", 1)[0])
-        self.client.post(url("edit", item.pk), {**form, f"share_{self.wife.pk}": ""})
-        self.assertFalse(item.shares.exists())
-        # An editor's save never touches sharing, even if they send the fields.
-        ItemShare.objects.create(item=item, user=self.wife, permission="edit")
-        self.wife_client.post(url("edit", item.pk), {**form, f"share_{self.wife.pk}": "", f"share_{self.stranger.pk}": "edit"})
-        self.assertEqual(list(item.shares.values_list("user", flat=True)), [self.wife.pk])
-        self.assertNotIn("share_section", self.wife_client.get(url("edit", item.pk)).content.decode())
+        for page in (self.client.get(url("edit", item.pk)).content.decode(), self.client.get(url("item", item.pk)).content.decode()):
+            self.assertIn('id="share-box"', page)
+            self.assertIn('class="share-add"', page)
+        share_with(item, self.wife, "edit")
+        hers = self.wife_client.get(url("edit", item.pk)).content.decode()
+        self.assertIn("Shared with you by <strong>Nathan</strong>", hers)
+        self.assertNotIn('class="share-add"', hers)
+        # An editor's save never touches sharing.
+        self.wife_client.post(url("edit", item.pk), {**self.FORM, "title": "Plan trip", "kind": "task",
+                                                     "date": TODAY.isoformat(), "share_mode": "me"})
+        self.assertEqual(grants_of(item), [(self.wife.pk, "edit")])
 
     def test_only_people_with_the_planner(self):
         from django.contrib.auth.models import User
         from albright_labs.testing import with_apps
-        notes_only = with_apps(User.objects.create_user(username="notes_only", password="pw-not-real-12345"), ["notes"])
-        self.client.post(url("new"), {**self.FORM, f"share_{notes_only.pk}": "edit"})
-        self.assertFalse(ItemShare.objects.exists())
+        with_apps(User.objects.create_user(username="notes_only", password="pw-not-real-12345"), ["notes"])
+        self.client.post(url("new"), {**self.FORM, "share_mode": "person", "share_who": "notes_only", "share_perm": "edit"})
+        self.assertTrue(ScheduleItem.objects.filter(title="Date night").exists())           # made, just not shared
+        self.assertFalse(ShareGrant.objects.exists())
 
 
 class DefaultShareTests(SharedBase):
     def remember(self):
-        self.client.post(url("new"), {**ShareOnCreateAndEditTests.FORM, f"share_{self.wife.pk}": "edit",
-                                      "remember_shares": "1"})
+        sharing.save_default(self.me, "planner", "people", people={str(self.wife.pk): "edit"})
 
-    def test_remembered_default_preselects_the_new_form(self):
+    def test_the_default_shows_on_the_new_form_and_view_options(self):
         self.remember()
-        self.assertEqual(PlannerSettings.for_user(self.me).default_shares, {str(self.wife.pk): "edit"})
-        page = self.client.get(url("new")).content.decode()
-        self.assertIn('<option value="edit" selected>', page.split(f'name="share_{self.wife.pk}"', 1)[1].split("</select>", 1)[0])
+        self.assertIn("Default: Sam", self.client.get(url("new")).content.decode())
+        day = self.page("day")
+        self.assertIn("New items: Sam", day)
+        self.assertIn(reverse("labs:sharing_defaults"), day)
 
-    def test_quick_add_uses_the_default_with_a_chip(self):
+    def test_quick_add_uses_the_default(self):
         self.remember()
         day = self.page("day")
-        self.assertIn("Shared with Sam.</p>", day.split('id="pl-quick-help"', 1)[1])        # New item's quick add
-        self.assertIn(f'<option value="{self.wife.pk}" selected>Shared with Sam</option>', day)   # View options
-        self.client.post(url("quick_add"), {"text": "Call plumber tomorrow"})          # no chip fields: the default
+        self.assertIn("Shared with Sam.</p>", day.split('id="pl-quick-help"', 1)[1])
+        self.client.post(url("quick_add"), {"text": "Call plumber tomorrow"})
         item = ScheduleItem.objects.get(title__icontains="plumber")
-        self.assertEqual(list(item.shares.values_list("user", "permission")), [(self.wife.pk, "edit")])
-        # A post that says otherwise (the full form's Share with): not shared this time.
-        self.client.post(url("quick_add"), {"text": "Buy gift", "share_section": "1", f"share_{self.wife.pk}": ""})
-        self.assertFalse(ScheduleItem.objects.get(title__icontains="gift").shares.exists())
+        self.assertEqual(grants_of(item), [(self.wife.pk, "edit")])
+        self.client.post(url("new"), {**ShareOnCreateAndEditTests.FORM, "title": "Buy gift", "share_mode": "me"})
+        self.assertFalse(bool(grants_of(ScheduleItem.objects.get(title="Buy gift"))))     # "Only me" this time
 
     def test_quick_add_without_a_default_is_private(self):
         day = self.page("day")
         self.assertIn("Only me.</p>", day.split('id="pl-quick-help"', 1)[1])
-        self.assertIn('<option value="" selected>Only me</option>', day)
         self.client.post(url("quick_add"), {"text": "Read book"})
-        self.assertFalse(ItemShare.objects.exists())
+        self.assertFalse(ShareGrant.objects.exists())
 
     def test_items_from_notes_groceries_and_bots_use_the_default(self):
         self.remember()
@@ -233,7 +233,19 @@ class DefaultShareTests(SharedBase):
         line = GroceryItem.objects.create(space=self.kitchen, name="milk")
         self.client.post(url("from_groceries"), {"item": [line.pk], "date": TODAY.isoformat()})
         for title in ("Packing", "Grocery run"):
-            self.assertTrue(ItemShare.objects.filter(item__title=title, user=self.wife, permission="edit").exists(), title)
+            self.assertEqual(grants_of(ScheduleItem.objects.get(title=title)), [(self.wife.pk, "edit")], title)
+
+    def test_a_circle_default(self):
+        from albright_labs import circles
+        from albright_labs.testing import with_apps
+        with_apps(self.wife, ["planner"])
+        family = circles.create(self.me, "Family", ["planner"])
+        invite, _raw, _s, _r = circles.invite(self.me, family, "sam")
+        circles.accept(self.wife, invite, ["planner"])
+        sharing.save_default(self.me, "planner", "circle", family.pk, "edit")
+        self.client.post(url("quick_add"), {"text": "Take out recycling"})
+        item = ScheduleItem.objects.get(title__icontains="recycling")
+        self.assertTrue(sharing.can_edit(self.wife, item))
 
 
 class PermissionTests(SharedBase):
@@ -269,12 +281,16 @@ class PermissionTests(SharedBase):
     def test_only_the_owner_deletes_or_reshares(self):
         item = self.hers(permission="edit")
         self.assertEqual(self.client.post(url("remove", item.pk), {"scope": "all"}).status_code, 404)
-        self.assertEqual(self.client.post(url("share_add", item.pk), {"user": self.stranger.pk}).status_code, 404)
-        share = item.shares.get()
-        self.assertEqual(self.client.post(url("share_update", item.pk, share.pk), {"remove": "1"}).status_code, 404)
+        share_url = reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk])
+        response = self.client.post(share_url, {"action": "add", "target": "person", "who": "stranger"},
+                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 400)                                       # editors don't reshare
+        grant = ShareGrant.objects.get()
+        self.client.post(share_url, {"action": "remove", "grant": grant.pk})
+        self.assertEqual(grants_of(item), [(self.me.pk, "edit")])
         page = self.client.get(url("edit", item.pk)).content.decode()
         self.assertNotIn('id="pl-delete"', page)
-        self.assertNotIn('id="pl-share-with"', page)
+        self.assertNotIn('class="share-add"', page)
         self.assertTrue(ScheduleItem.objects.filter(pk=item.pk).exists())
         self.wife_client.post(url("remove", item.pk), {"scope": "all"})                  # the owner can
         self.assertFalse(ScheduleItem.objects.filter(pk=item.pk).exists())

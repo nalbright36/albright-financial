@@ -31,6 +31,7 @@ behavior: albright_notes/notes.js; views.workspace.
             </form>
             <div class="nt-notes" id="nt-notes">
             {% for r in rows %}{% with n=r.note %}
+                {% if view == "shared" %}{% ifchanged r.group %}<h3 class="nt-group">{{ r.group }}</h3>{% endifchanged %}{% endif %}
                 <a href="{% url 'albright_notes:note' n.pk %}{{ query }}" class="nt-note{% if open and open.pk == n.pk %} on{% endif %}" id="note-{{ n.pk }}"{% if open and open.pk == n.pk %} aria-current="true"{% endif %}>
                     <b>{% if n.pinned %}<span class="nt-pin" aria-hidden="true">📌</span><span class="visually-hidden">Pinned: </span> {% endif %}{{ n.title }}</b>
                     <p>{{ r.summary }}</p>
@@ -107,35 +108,7 @@ behavior: albright_notes/notes.js; views.workspace.
             {% endif %}
             {% if is_owner %}
             <section class="nt-pop" id="nt-pop-share" aria-label="Sharing" hidden>
-                <ul class="nt-shares" id="nt-shares">
-                    {% for s in shares %}
-                    <li class="nt-row">
-                        <span class="nt-share-who">{{ s.user.get_username }}</span>
-                        <form method="post" action="{% url 'albright_notes:share_update' open.pk s.pk %}" class="nt-row">{% csrf_token %}
-                            <label for="nt-perm-{{ s.pk }}" class="visually-hidden">Permission for {{ s.user.get_username }}</label>
-                            <select name="permission" id="nt-perm-{{ s.pk }}" class="nt-input nt-select" data-autosubmit>
-                                {% for value, label in permissions %}<option value="{{ value }}"{% if value == s.permission %} selected{% endif %}>{{ label }}</option>{% endfor %}
-                            </select>
-                            <button type="submit" class="nt-btn sm nt-nojs">Save</button>
-                            <button type="submit" name="remove" value="1" class="nt-btn sm">Stop sharing</button>
-                        </form>
-                    </li>
-                    {% empty %}<li class="nt-muted nt-small">Only you can see this note.</li>{% endfor %}
-                </ul>
-                {% if share_choices %}
-                <form method="post" action="{% url 'albright_notes:share_add' open.pk %}" class="nt-row" id="nt-share-add">{% csrf_token %}
-                    <label for="nt-share-user" class="visually-hidden">Share with</label>
-                    <select name="user" id="nt-share-user" class="nt-input nt-select" required>
-                        <option value="">Share with…</option>
-                        {% for u in share_choices %}<option value="{{ u.pk }}">{{ u.get_username }}</option>{% endfor %}
-                    </select>
-                    <label for="nt-share-perm" class="visually-hidden">Permission</label>
-                    <select name="permission" id="nt-share-perm" class="nt-input nt-select">
-                        {% for value, label in permissions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-                    </select>
-                    <button type="submit" class="nt-btn sm primary">Share</button>
-                </form>
-                {% elif not shares %}<p class="nt-muted nt-small">Nobody else can open Notes yet - give someone access in Admin &rarr; Users.</p>{% endif %}
+                {% include "albright_labs/_share.html" %}
             </section>
             {% endif %}
 

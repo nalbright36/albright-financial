@@ -15,10 +15,10 @@ from django.urls import reverse
 
 from albright_labs import app_access, apps_registry
 from albright_labs.models import UserPreference
-from albright_labs.testing import kitchen, launcher_tiles, with_apps
+from albright_labs.testing import grants_of, kitchen, launcher_tiles, share_with, with_apps
 
 from . import planner, quickadd, recurrence
-from .models import ItemCompletion, ItemException, ItemShare, ScheduleItem
+from .models import ItemCompletion, ItemException, ScheduleItem
 
 PASSWORD = "pw-not-real-12345"
 TODAY = date(2026, 11, 4)                       # a Wednesday
@@ -305,7 +305,7 @@ class ViewTests(Base):
         self.item(title="A task")
         self.item(title="An event", kind="event", checkable=False)
         theirs = self.item(title="Shared one", owner=self.wife)
-        ItemShare.objects.create(item=theirs, user=self.me)
+        share_with(theirs, self.me, "view")
         body = lambda q: self.client.get(url("day") + q).content.decode().split('id="pl-day"')[1]
         self.assertNotIn("An event", body("?kind=task"))
         self.assertNotIn("A task", body("?kind=event"))
@@ -348,7 +348,7 @@ class MoveTests(Base):
     def test_others_cant_move(self):
         item = self.item()
         self.assertEqual(self.post(item, {"date": TODAY.isoformat(), "to": "2026-11-06"}, self.as_user(self.stranger)).status_code, 404)
-        ItemShare.objects.create(item=item, user=self.wife, permission="view")
+        share_with(item, self.wife, "view")
         self.assertEqual(self.post(item, {"date": TODAY.isoformat(), "to": "2026-11-06"}, self.as_user(self.wife)).status_code, 404)
 
 
@@ -357,16 +357,16 @@ class SharingTests(Base):
         item = self.item(title="Private")
         stranger = self.as_user(self.stranger)
         self.assertEqual(stranger.get(url("edit", item.pk)).status_code, 404)
-        for name, data in (("toggle", {"date": TODAY.isoformat()}), ("remove", {"date": TODAY.isoformat()}),
-                           ("share_add", {"user": self.stranger.pk})):
+        for name, data in (("toggle", {"date": TODAY.isoformat()}), ("remove", {"date": TODAY.isoformat()})):
             with self.subTest(name=name):
                 self.assertEqual(stranger.post(url(name, item.pk), data).status_code, 404)
+        self.assertEqual(stranger.post(reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk]), {"action": "add", "target": "person", "who": "stranger"}).status_code, 404)
         self.assertNotIn("Private", stranger.get(url("day")).content.decode())
         self.assertTrue(ScheduleItem.objects.filter(pk=item.pk).exists())
 
     def test_view_share_is_read_only(self):
         item = self.item(title="Family dinner")
-        ItemShare.objects.create(item=item, user=self.wife, permission="view")
+        share_with(item, self.wife, "view")
         wife = self.as_user(self.wife)
         self.assertIn("Family dinner", wife.get(url("day")).content.decode())
         page = wife.get(url("edit", item.pk)).content.decode()
@@ -377,7 +377,7 @@ class SharingTests(Base):
 
     def test_edit_share_can_check_off_and_edit_but_not_delete_or_share(self):
         item = self.item(title="Groceries")
-        ItemShare.objects.create(item=item, user=self.wife, permission="edit")
+        share_with(item, self.wife, "edit")
         wife = self.as_user(self.wife)
         self.assertEqual(wife.post(url("toggle", item.pk), {"date": TODAY.isoformat()},
                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest").json()["done"], True)
@@ -387,18 +387,19 @@ class SharingTests(Base):
         item.refresh_from_db()
         self.assertEqual(item.title, "Groceries + milk")
         self.assertEqual(wife.post(url("remove", item.pk), {"scope": "all"}).status_code, 404)
-        self.assertEqual(wife.post(url("share_add", item.pk), {"user": self.stranger.pk}).status_code, 404)
+        wife.post(reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk]), {"action": "add", "target": "person", "who": "stranger"})
+        self.assertEqual(grants_of(item), [(self.wife.pk, "edit")])                  # editors can't reshare
 
     def test_owner_shares_with_planner_users_only(self):
         item = self.item()
         no_planner = with_apps(User.objects.create_user(username="notes_only", password=PASSWORD), ["notes"])
         page = self.client.get(url("edit", item.pk)).content.decode()
-        self.assertIn(f'name="share_{self.wife.pk}"', page)                # "Share with" in the form
-        self.assertNotIn("notes_only", page)
-        self.client.post(url("share_add", item.pk), {"user": no_planner.pk})
-        self.assertFalse(ItemShare.objects.exists())
-        self.client.post(url("share_add", item.pk), {"user": self.wife.pk, "permission": "edit"})
-        self.assertEqual(ItemShare.objects.get().permission, "edit")
+        self.assertIn('id="share-box"', page)                              # the Share control
+        self.assertNotIn("notes_only", page)                                # nobody is listed
+        self.client.post(reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk]), {"action": "add", "target": "person", "who": no_planner.username})
+        self.assertEqual(grants_of(item), [])
+        self.client.post(reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk]), {"action": "add", "target": "person", "who": "sam", "permission": "edit"})
+        self.assertEqual(grants_of(item), [(self.wife.pk, "edit")])
 
 
 class HomeTests(Base):

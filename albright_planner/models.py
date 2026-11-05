@@ -11,7 +11,7 @@ stored per occurrence:
 A repeating task with no end (ScheduleItem.one_at_a_time) shows only its
 current occurrence - the earliest not done or skipped - and the next appears
 once that one is done (next_due / repeat_anchor; planner.current_occurrence).
-Items are private to their owner unless shared (ItemShare: view or edit);
+Items are private to their owner unless shared (albright_labs.sharing - a person or a circle, view or edit);
 everyone else gets a 404 (ScheduleItem.objects.visible_to).
 
 Links to the other apps:
@@ -47,14 +47,14 @@ class ItemQuerySet(models.QuerySet):
     def visible_to(self, user):
         if not (user and user.is_authenticated):
             return self.none()
-        shared = ItemShare.objects.filter(user=user).values("item_id")
-        return self.filter(Q(owner=user) | Q(pk__in=shared))
+        from albright_labs import sharing
+        return sharing.visible_queryset(user, ScheduleItem, self)
 
     def editable_by(self, user):
         if not (user and user.is_authenticated):
             return self.none()
-        shared = ItemShare.objects.filter(user=user, permission=ItemShare.EDIT).values("item_id")
-        return self.filter(Q(owner=user) | Q(pk__in=shared)).exclude(source_app__in=LOCKED_SOURCES)
+        from albright_labs import sharing
+        return sharing.editable_queryset(user, ScheduleItem, self).exclude(source_app__in=LOCKED_SOURCES)
 
 
 # An item's notes (Markdown): the model, the form and the Bot API all allow this many characters.
@@ -99,8 +99,6 @@ class ScheduleItem(models.Model):
     from_bot = models.BooleanField(default=False)
     bot_token = models.ForeignKey("albright_bot_api.BotToken", on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name="+")
-    shared_with = models.ManyToManyField(settings.AUTH_USER_MODEL, through="ItemShare", related_name="planner_shared_items",
-                                         blank=True)
     archived = models.BooleanField(default=False)
     created_by = models.CharField(max_length=150, default=ME)     # the username, or a bot's name
     created_at = models.DateTimeField(auto_now_add=True)
@@ -153,20 +151,10 @@ class ScheduleItem(models.Model):
     def can_edit(self, user):
         if self.locked:
             return False
-        return self.owner_id == user.pk or self.shares.filter(user=user, permission=ItemShare.EDIT).exists()
+        from albright_labs import sharing
+        return sharing.can_edit(user, self)
 
 
-class ItemShare(models.Model):
-    VIEW, EDIT = "view", "edit"
-    PERMISSIONS = [(VIEW, "Can view"), (EDIT, "Can edit")]
-    item = models.ForeignKey(ScheduleItem, on_delete=models.CASCADE, related_name="shares")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_shares")
-    permission = models.CharField(max_length=4, choices=PERMISSIONS, default=VIEW)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["user__username"]
-        constraints = [models.UniqueConstraint(fields=["item", "user"], name="planner_one_share_per_user")]
 
 
 class ItemCompletion(models.Model):
@@ -210,8 +198,6 @@ class PlannerSettings(models.Model):
     # A task with a checklist checks itself off when every row is checked (and reopens when one is unchecked).
     complete_when_checklist_done = models.BooleanField(default=True,
                                                        verbose_name="Complete task when all items are checked")
-    # "Remember as my default" on the Share with section: {user pk (str): "view" | "edit"} for new items.
-    default_shares = models.JSONField(default=dict, blank=True)
     synced_at = models.DateTimeField(null=True, blank=True)      # sources last brought up to date
 
     @classmethod

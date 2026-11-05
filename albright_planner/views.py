@@ -23,9 +23,11 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
+from albright_labs import sharing
+
 from . import checklist, planner, quickadd, recurrence, sources
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
-from .models import NOTES_MAX, ItemShare, PlannerSettings, ScheduleItem
+from .models import NOTES_MAX, PlannerSettings, ScheduleItem
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -158,18 +160,10 @@ def _frame(request, view, day, prev_day, next_day, title):
 
 
 def _default_sharing(user):
-    """View options' "Default sharing for new items": Only me, or Shared with one person (a default saved with
-    several people - the form's "Remember as my default" - shows as itself and is kept unless changed). Quick add
-    uses it as is."""
-    rows = planner.share_rows(user, planner.default_shares(user))
-    chosen = [r for r in rows if r["perm"]]
-    choices = [("", "Only me")] + [(str(r["user"].pk), f"Shared with {r['name']}") for r in rows]
-    current = str(chosen[0]["user"].pk) if len(chosen) == 1 else ""
-    if len(chosen) > 1:
-        choices.append(("keep", "Shared with " + ", ".join(r["name"] for r in chosen)))
-        current = "keep"
-    return {"share_choices": choices if rows else [], "share_current": current,
-            "quick_share_label": planner.share_summary(rows)}
+    """New items' sharing (My account > Circles > Sharing defaults - View options links there): quick add uses it."""
+    from albright_labs import sharing
+    text = sharing.default_text(user, "planner")
+    return {"default_sharing": text, "quick_share_label": "Only me" if text == "Only me" else f"Shared with {text}"}
 
 
 def _remember(response, view):
@@ -283,9 +277,7 @@ def quick_add(request):
         fields.update(kind=ScheduleItem.TASK, checkable=True)
     item = ScheduleItem.objects.create(owner=request.user, created_by=request.user.get_username(), **fields)
     checklist.create_rows(item, subtasks)
-    # The chip's choices when it was on the page (share_section), else the default share.
-    planner.set_shares(item, planner.posted_shares(request.POST, request.user) if request.POST.get("share_section")
-                       else planner.default_shares(request.user))
+    planner.apply_default_shares(item, request.user)             # shared the way new Planner items are
     when = recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count) or \
         f"{item.date:%a %b} {item.date.day}"
     if item.start_time:
@@ -308,17 +300,14 @@ def new_item(request):
         item.save()
         if item.kind == ScheduleItem.TASK:
             checklist.create_rows(item, [text for _pk, text in checklist.posted_rows(request.POST)])
-        _save_shares(request, item)
+        _share_new(request, item)
         messages.success(request, f"Added “{item.title}”.")
         return redirect(_next(request))
-    chosen = planner.posted_shares(request.POST, request.user) if request.method == "POST" \
-        else planner.default_shares(request.user)
     # ?panel=1: just the form - the New item dialog's "More options" (planner.js); it posts here like the page.
     template = "albright_planner/_item_form.html" if request.method == "GET" and request.GET.get("panel") == "1" \
         else "albright_planner/form.html"
     return render(request, template, {"form": form, "item": None, "next": _next(request),
-                                      "share_rows": planner.share_rows(request.user, chosen),
-                                      "permissions": ItemShare.PERMISSIONS,
+                                      "share": sharing.control(request.user, None, "planner"),
                                       "checklist_edit": _editor_rows(request, [])})
 
 
@@ -332,17 +321,12 @@ def _editor_rows(request, rows):
     return [{"pk": r.pk, "text": r.text, "grocery": bool(r.grocery_item_id)} for r in rows]
 
 
-def _save_shares(request, *items):
-    """The form's "Share with" section (owner only): share each item as chosen, and remember it as the default
-    when "Remember as my default" is ticked."""
-    if not request.POST.get("share_section"):
-        return
-    chosen = planner.posted_shares(request.POST, request.user)
-    for item in items:
-        if item is not None and item.owner_id == request.user.pk:
-            planner.set_shares(item, chosen)
-    if request.POST.get("remember_shares"):
-        planner.save_default_shares(request.user, chosen)
+def _share_new(request, item):
+    """The New form's Sharing (albright_labs/_share.html): the default, Only me, a circle or a person."""
+    try:
+        sharing.apply_posted(request, item)
+    except sharing.ShareError as exc:
+        messages.error(request, f"Not shared: {exc}")
 
 
 @login_required
@@ -370,7 +354,7 @@ def view_item(request, pk):
     occ = planner.occurrence_for(item, occurrence, request.user)
     can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
     rows = checklist.occurrence_rows(item, occurrence)
-    shared_with = [s.user for s in item.shares.select_related("user")] if is_owner else []
+    shared_with = planner.shared_names(item) if is_owner else []
     can_skip = item.repeats and can_edit
     can_delete = is_owner and (can_edit or item.locked)
     template = "albright_planner/_view_panel.html" if request.GET.get("panel") == "1" else "albright_planner/item.html"
@@ -381,6 +365,7 @@ def view_item(request, pk):
         "edit_url": reverse("albright_planner:edit", args=[item.pk]) + "?" + urlencode(
             {"date": occurrence.isoformat(), "next": back, "then": "view"}) if can_edit else "",
         "repeat_text": planner.plain_repeat(item), "shared_with": shared_with,
+        "share": sharing.control(request.user, item),
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "can_check_groceries": sources.can_open(request.user, "meals"),
         "linked_note": planner.linked_note(item, request.user, full=True),
@@ -423,21 +408,18 @@ def edit_item(request, pk):
             changed = planner.change(item, occurrence, scope, changes)
             if request.POST.get("cl_section") and changed.kind == ScheduleItem.TASK:
                 checklist.save_rows(changed, checklist.posted_rows(request.POST))
-            if is_owner:
-                _save_shares(request, item, changed if changed is not None and changed.pk != item.pk else None)
             messages.success(request, "Saved." if not item.repeats else
                              {"this": "Saved this occurrence.", "following": "Saved this and the following occurrences.",
                               "all": "Saved every occurrence."}[scope])
             return redirect(_after_edit(request, changed, changes, scope, occurrence))
-    shares = list(item.shares.select_related("user")) if is_owner else []
-    taken = {s.user_id for s in shares} | {item.owner_id}
+    shared_with = planner.shared_names(item) if is_owner else []
     completion = item.completions.select_related("completed_by").filter(occurrence_date=occurrence).first()
     can_note = can_edit and sources.can_open(request.user, "notes")
     rows = checklist.occurrence_rows(item, occurrence)
     return render(request, "albright_planner/form.html", {
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "checklist_edit": _editor_rows(request, checklist.current_rows(item)),
-        "checklist_from": checklist.edit_from(item), "show_done_by": is_owner and bool(shares) or not is_owner,
+        "checklist_from": checklist.edit_from(item), "show_done_by": is_owner and bool(shared_with) or not is_owner,
         "can_check_groceries": sources.can_open(request.user, "meals"),
         "linked_note": planner.linked_note(item, request.user), "can_note": can_note,
         "note_choices": planner.attachable_notes(request.user) if can_note else [],
@@ -448,10 +430,7 @@ def edit_item(request, pk):
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
         "done": completion is not None, "done_by": planner.person(completion.completed_by) if completion else "",
         "owner_name": planner.person(item.owner), "next": _next(request), **_then(request, item, occurrence),
-        "share_rows": planner.share_rows(request.user, {s.user_id: s.permission for s in shares}) if is_owner else [],
-        "shared_with": [planner.person(s.user) for s in item.shares.select_related("user")] if is_owner else [],
-        "shares": shares, "permissions": ItemShare.PERMISSIONS,
-        "share_choices": [u for u in planner.planner_users() if u.pk not in taken] if is_owner else [],
+        "shared_with": shared_with, "share": sharing.control(request.user, item),
     })
 
 
@@ -517,7 +496,7 @@ def checklist_toggle(request, pk, row_id):
     if _wants_json(request):
         rows = checklist.occurrence_rows(item, occurrence)
         now = next(r for r in rows if r.pk == row.pk)
-        shared = item.owner_id != request.user.pk or item.shares.exists()      # "Done by <name>" only then
+        shared = item.owner_id != request.user.pk or bool(planner.shared_names(item))   # "Done by <name>" only then
         return JsonResponse({"ok": True, "checked": now.checked, "progress": checklist.progress(rows)["label"],
                              "open": checklist.progress(rows)["open"], "progress_title": checklist.progress(rows)["title"],
                              "done_by": planner.person(now.done_by) if now.checked and now.done_by and shared else "",
@@ -617,38 +596,6 @@ def remove(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# Sharing (owner only)
-# ---------------------------------------------------------------------------
-
-@login_required
-@require_POST
-def share_add(request, pk):
-    item = _owned(request, pk)
-    permission = request.POST.get("permission", ItemShare.VIEW)
-    target = planner.planner_users().exclude(pk=request.user.pk).filter(pk=request.POST.get("user") or 0).first()
-    if target is None or permission not in dict(ItemShare.PERMISSIONS):
-        messages.error(request, "Pick someone who can open the Planner.")
-    else:
-        ItemShare.objects.update_or_create(item=item, user=target, defaults={"permission": permission})
-        messages.success(request, f"Shared with {target.get_username()}.")
-    return redirect(reverse("albright_planner:edit", args=[item.pk]) + "#sharing")
-
-
-@login_required
-@require_POST
-def share_update(request, pk, share_id):
-    item = _owned(request, pk)
-    share = get_object_or_404(ItemShare, pk=share_id, item=item)
-    if request.POST.get("remove"):
-        share.delete()
-        messages.success(request, f"Stopped sharing with {share.user.get_username()}.")
-    elif request.POST.get("permission") in dict(ItemShare.PERMISSIONS):
-        share.permission = request.POST["permission"]
-        share.save(update_fields=["permission"])
-    return redirect(reverse("albright_planner:edit", args=[item.pk]) + "#sharing")
-
-
-# ---------------------------------------------------------------------------
 # Notes (an item stores the note's id - edits in either app show in both)
 # ---------------------------------------------------------------------------
 
@@ -722,7 +669,7 @@ def toggle_meals(request):
 @login_required
 @require_POST
 def view_options(request):
-    """View options' Save: the filters, Show meals and the default sharing for new items - stored for the account,
+    """View options' Save: the filters and Show meals - stored for the account,
     so they're the same on phone and computer - then the chosen view (remembered like any other visit)."""
     prefs = PlannerSettings.for_user(request.user)
     kind, who = request.POST.get("kind", ""), request.POST.get("who", "")
@@ -734,12 +681,6 @@ def view_options(request):
         prefs.show_meals = request.POST.get("show_meals") == "1"
         fields.append("show_meals")
     prefs.save(update_fields=fields)
-    share = request.POST.get("share", "keep")
-    if share == "":
-        planner.save_default_shares(request.user, {})
-    elif share in {str(p.pk) for p in planner.share_people(request.user)}:
-        current = planner.default_shares(request.user)
-        planner.save_default_shares(request.user, {int(share): current.get(int(share)) or ItemShare.EDIT})
     view = request.POST.get("view")
     view = view if view in VIEWS else "day"
     day = _day(request.POST.get("date"), planner.today())

@@ -300,3 +300,65 @@ class RateLimitHit(models.Model):
     class Meta:
         indexes = [models.Index(fields=["scope", "ip", "created_at"])]
 
+
+
+# ---------------------------------------------------------------------------
+# Sharing - one system for Planner items, notes, recipes and workouts (albright_labs.sharing enforces it)
+# ---------------------------------------------------------------------------
+
+SHARE_APPS = ("planner", "notes", "meals", "fitness")
+
+
+class ShareGrant(models.Model):
+    """One shared thing (any model - content type + id) shown to one person or one circle, to view or to edit.
+    A circle grant counts only for its ACTIVE members who opted in to the thing's app (albright_labs.circles).
+    seen_at: when a person saw the "<name> shared <thing> with you" notice (person grants)."""
+    VIEW, EDIT = "view", "edit"
+    PERMISSIONS = [(VIEW, "Can view"), (EDIT, "Can edit")]
+    content_type = models.ForeignKey("contenttypes.ContentType", on_delete=models.CASCADE, related_name="+")
+    object_id = models.PositiveBigIntegerField()
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+                             related_name="share_grants")
+    circle = models.ForeignKey(Circle, on_delete=models.CASCADE, null=True, blank=True, related_name="share_grants")
+    permission = models.CharField(max_length=4, choices=PERMISSIONS, default=VIEW)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    seen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        indexes = [models.Index(fields=["content_type", "object_id"])]
+        constraints = [
+            models.CheckConstraint(condition=(models.Q(user__isnull=False, circle__isnull=True)
+                                              | models.Q(user__isnull=True, circle__isnull=False)),
+                                   name="labs_share_user_or_circle"),
+            models.UniqueConstraint(fields=["content_type", "object_id", "user"], condition=models.Q(user__isnull=False),
+                                    name="labs_share_once_per_user"),
+            models.UniqueConstraint(fields=["content_type", "object_id", "circle"], condition=models.Q(circle__isnull=False),
+                                    name="labs_share_once_per_circle"),
+        ]
+
+    def __str__(self):
+        return f"{self.content_type.model} #{self.object_id} -> {self.user or self.circle} ({self.permission})"
+
+
+class SharingDefault(models.Model):
+    """What a person's new items in one app are shared with: only them, one of their circles, or specific people
+    (people: {user id (str): "view" | "edit"}). permission is the circle's. Applied on the site, by quick add and by
+    their bots (albright_labs.sharing.apply_defaults)."""
+    ONLY_ME, CIRCLE, PEOPLE = "me", "circle", "people"
+    MODES = [(ONLY_ME, "Only me"), (CIRCLE, "A circle"), (PEOPLE, "Specific people")]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sharing_defaults")
+    app = models.CharField(max_length=10)                     # SHARE_APPS
+    mode = models.CharField(max_length=6, choices=MODES, default=ONLY_ME)
+    circle = models.ForeignKey(Circle, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    permission = models.CharField(max_length=4, choices=ShareGrant.PERMISSIONS, default=ShareGrant.VIEW)
+    people = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "app"], name="labs_one_default_per_app")]
+
+    def __str__(self):
+        return f"{self.user} {self.app}: {self.mode}"

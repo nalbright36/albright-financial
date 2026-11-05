@@ -48,10 +48,13 @@ def user_label(user):
 
 def create(owner, title, body="", tags=(), pinned=False, token=None, author=None):
     """A new note. token: the bot that wrote it (labeled with its name); author: the person, if not a bot."""
-    return Note.objects.create(
+    note = Note.objects.create(
         owner=owner, title=(title or "").strip()[:200] or UNTITLED, body=(body or "")[:MAX_BODY],
         tags=clean_tags(tags), pinned=bool(pinned), created_by=token.name[:100] if token else ME, bot_token=token,
         updated_by=token.name if token else user_label(author or owner))
+    from albright_labs import sharing
+    sharing.apply_defaults(note, owner)            # shared the way its owner shares new notes
+    return note
 
 
 def save(note, by, base_version=None, **fields):

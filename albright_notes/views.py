@@ -29,8 +29,10 @@ from django.views.decorators.http import require_GET, require_POST
 from albright_control.review_list import ago
 from albright_crypto_app.links import is_web_url, link_status
 
+from albright_labs import sharing
+
 from . import links, notes, render as md
-from .models import Note, NoteLink, NoteShare
+from .models import Note, NoteLink
 
 # The sidebar's folders: (key, label, icon) - Option A's order and glyphs.
 VIEWS = [("all", "All notes", ""), ("pinned", "Pinned", "\U0001F4CC"), ("shared", "Shared with me", "\U0001F465"),
@@ -100,18 +102,39 @@ def _folder(qs, view, user):
     return qs
 
 
-def _row(note, user, now, allowed):
+def _shared_out(notes_list):
+    """Ids of these notes that are shared with anyone (the "Shared" chip on my own)."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from albright_labs.models import ShareGrant
+    return set(ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(Note),
+                                         object_id__in=[n.pk for n in notes_list]).values_list("object_id", flat=True))
+
+
+def _groups(user, notes_list):
+    """"Shared with me", grouped: {note id: "<circle name>" or "From <person>"} - a person share first."""
+    out = {}
+    for g in sharing.grants_reaching(user, Note).filter(object_id__in=[n.pk for n in notes_list]).select_related("circle"):
+        if g.user_id or g.object_id not in out:
+            out[g.object_id] = g.circle.name if g.circle_id else ""
+    owners = {n.pk: n.owner for n in notes_list}
+    return {pk: label or f"From {sharing.person_name(owners[pk])}" for pk, label in out.items() if pk in owners}
+
+
+def _row(note, user, now, allowed, shared_out=(), groups=None):
+    groups = groups or {}
     tasks = md.checklist_lines(note.body)
     done = sum(1 for _line, checked in tasks if checked)
     shared_with_me = note.owner_id != user.pk
     if shared_with_me:
-        summary = f"Shared by {note.owner.get_username()} \u00b7 edited {ago(note.updated_at, now)}"
+        summary = f"Shared by {sharing.person_name(note.owner)} \u00b7 edited {ago(note.updated_at, now)}"
     elif tasks:
         summary = f"{done} of {len(tasks)} done"                       # a checklist shows its progress
     else:
         summary = md.preview(note.body) or f"Edited {ago(note.updated_at, now)}"
     return {"note": note, "summary": summary, "updated": ago(note.updated_at, now),
-            "shared": shared_with_me or bool(note.shares.all()), "chips": links.chips(user, list(note.links.all()), allowed)}
+            "shared": shared_with_me or note.pk in shared_out, "chips": links.chips(user, list(note.links.all()), allowed),
+            "group": groups.get(note.pk, "")}
 
 
 @login_required
@@ -132,7 +155,11 @@ def workspace(request, pk=None):
     if tag:
         qs = qs.filter(tags__contains=[tag])
     qs = notes.search(qs, q) if q else qs.order_by("-pinned", "-updated_at", "-pk")
-    rows = list(qs.select_related("owner").prefetch_related("links", "shares")[:LIST_LIMIT])
+    rows = list(qs.select_related("owner").prefetch_related("links")[:LIST_LIMIT])
+    shared_out = _shared_out([n for n in rows if n.owner_id == user.pk])
+    groups = _groups(user, [n for n in rows if n.owner_id != user.pk]) if view == "shared" else {}
+    if view == "shared":                              # by circle and by person
+        rows.sort(key=lambda n: (groups.get(n.pk, ""), -n.updated_at.timestamp()))
 
     open_note = _visible(request, pk) if pk else (rows[0] if rows else None)
     allowed = links._allowed_apps(user)
@@ -145,7 +172,7 @@ def workspace(request, pk=None):
     keep = {k: v for k, v in (("view", "" if view == "all" else view), ("tag", tag), ("q", q)) if v}
     query = ("?" + urlencode(keep)) if keep else ""
     context = {
-        "rows": [_row(n, user, now, allowed) for n in rows], "view": view, "tag": tag, "q": q, "query": query,
+        "rows": [_row(n, user, now, allowed, shared_out, groups) for n in rows], "view": view, "tag": tag, "q": q, "query": query,
         "folders": [{"key": k, "label": l, "icon": i, "count": _folder(visible, k, user).count(),
                      "url": reverse("albright_notes:list") + ("" if k == "all" else "?view=" + k)} for k, l, i in VIEWS],
         "tags": sorted(tag_counts.items()), "open": open_note, "list_url": reverse("albright_notes:list"),
@@ -157,8 +184,6 @@ def workspace(request, pk=None):
 
 def _editor(note, user, now, allowed):
     can_edit, is_owner = note.can_edit(user), note.owner_id == user.pk
-    shares = list(note.shares.select_related("user")) if is_owner else []
-    shared_ids = {s.user_id for s in shares} | {note.owner_id}
     # The Planner links to notes by id (ScheduleItem.note): "Add to schedule", and a chip per linked item.
     can_schedule = "planner" in allowed
     if can_schedule:
@@ -170,9 +195,8 @@ def _editor(note, user, now, allowed):
         "schedule_form": FromNoteForm(initial={"date": timezone.localdate()}) if can_schedule else None,
         "can_edit": can_edit, "is_owner": is_owner, "html": md.render(note.body, editable=can_edit),
         "chips": links.chips(user, list(note.links.all()), allowed), "words": word_count(note.body),
-        "shares": shares, "share_choices": [u for u in notes.notes_users() if u.pk not in shared_ids] if is_owner else [],
-        "permissions": NoteShare.PERMISSIONS, "updated": ago(note.updated_at, now),
-        "my_permission": None if is_owner else note.shares.filter(user=user).values_list("permission", flat=True).first(),
+        "share": sharing.control(user, note), "updated": ago(note.updated_at, now),
+        "my_permission": None if is_owner else sharing.permission_for(user, note),
     }
 
 
@@ -282,35 +306,6 @@ def note_delete(request, pk):
 # ---------------------------------------------------------------------------
 # Sharing (owner only)
 # ---------------------------------------------------------------------------
-
-@login_required
-@require_POST
-def share_add(request, pk):
-    note = _owned(request, pk)
-    permission = request.POST.get("permission", NoteShare.VIEW)
-    target = notes.notes_users().exclude(pk=request.user.pk).filter(pk=request.POST.get("user") or 0).first()
-    if target is None or permission not in dict(NoteShare.PERMISSIONS):
-        messages.error(request, "Pick someone who can open Notes.")
-        return _back(request, note)
-    NoteShare.objects.update_or_create(note=note, user=target, defaults={"permission": permission})
-    messages.success(request, f"Shared with {target.get_username()} ({dict(NoteShare.PERMISSIONS)[permission].lower()}).")
-    return _back(request, note)
-
-
-@login_required
-@require_POST
-def share_update(request, pk, share_id):
-    note = _owned(request, pk)
-    share = get_object_or_404(NoteShare, pk=share_id, note=note)
-    if request.POST.get("remove"):
-        share.delete()
-        messages.success(request, f"Stopped sharing with {share.user.get_username()}.")
-    elif request.POST.get("permission") in dict(NoteShare.PERMISSIONS):
-        share.permission = request.POST["permission"]
-        share.save(update_fields=["permission"])
-        messages.success(request, f"{share.user.get_username()}: {share.get_permission_display().lower()}.")
-    return _back(request, note)
-
 
 # ---------------------------------------------------------------------------
 # Links to records in other apps

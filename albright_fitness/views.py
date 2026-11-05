@@ -16,9 +16,11 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
+from albright_labs import sharing
+
 from . import body, insights, nutrition, programs, stats, training
 from .models import (EQUIPMENT, MUSCLES, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord, Program, ProgramDay,
-                     ProgramExercise, Workout, WorkoutExercise, WorkoutSet, WorkoutShare)
+                     ProgramExercise, Workout, WorkoutExercise, WorkoutSet)
 
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -28,13 +30,18 @@ def _json(request):
 
 
 def _mine(request, pk):
-    """One of my workouts (to change) - anyone else's is a 404, even one shared with me."""
+    """A workout I may change: mine, or shared with me to edit - anything else is a 404."""
+    return get_object_or_404(sharing.editable_queryset(request.user, Workout), pk=pk)
+
+
+def _owned(request, pk):
+    """One of MY workouts - deleting it is the owner's alone."""
     return get_object_or_404(Workout, pk=pk, owner=request.user)
 
 
 def _set_of_mine(request, pk):
     return get_object_or_404(WorkoutSet.objects.select_related("workout_exercise__workout", "workout_exercise__exercise"),
-                             pk=pk, workout_exercise__workout__owner=request.user)
+                             pk=pk, workout_exercise__workout__in=sharing.editable_queryset(request.user, Workout))
 
 
 def fitness_users():
@@ -205,13 +212,12 @@ def _set_text(s):
 @never_cache
 def workout(request, pk):
     w = get_object_or_404(Workout.objects.visible_to(request.user).select_related("owner", "program_day"), pk=pk)
-    editable = w.owner_id == request.user.pk
+    editable = sharing.can_edit(request.user, w)
     library = Exercise.objects.visible_to(request.user) if editable else []
     return render(request, "albright_fitness/workout.html", {
         "w": w, "editable": editable, "blocks": _blocks(w, request.user, editable), "library": library,
         "kinds": Exercise.KINDS, "owner_name": _person(w.owner),
-        "shares": w.shares.select_related("user") if editable else [],
-        "share_choices": fitness_users().exclude(pk=request.user.pk) if editable else []})
+        "is_owner": w.owner_id == request.user.pk, "share": sharing.control(request.user, w)})
 
 
 @login_required
@@ -238,7 +244,7 @@ def remove_exercise(request, pk, we_pk):
 def add_set(request, we_pk):
     """"+ Set": a copy of the exercise's last set (or a blank one)."""
     we = get_object_or_404(WorkoutExercise.objects.select_related("exercise", "workout"), pk=we_pk,
-                           workout__owner=request.user)
+                           workout__in=sharing.editable_queryset(request.user, Workout))
     last = we.sets.order_by("-order", "-pk").first()
     order = training.next_order(we)
     new = training.copy_set(last, order) if last else WorkoutSet.objects.create(workout_exercise=we, order=order)
@@ -320,7 +326,7 @@ def edit_workout(request, pk):
 @login_required
 @require_POST
 def delete_workout(request, pk):
-    _mine(request, pk).delete()
+    _owned(request, pk).delete()
     messages.success(request, "Workout deleted.")
     return redirect("albright_fitness:history")
 
@@ -343,21 +349,6 @@ def summary(request, pk):
         "records": [(r, training.record_text(r)) for r in records], "set_text": _set_text,
         "lines": [(b["we"], ", ".join(_set_text(s) for s in b["sets"])) for b in blocks],
         "editable": w.owner_id == request.user.pk})
-
-
-@login_required
-@require_POST
-def share(request, pk):
-    """Show this workout (view only) to someone with Fitness access - or stop showing it."""
-    w = _mine(request, pk)
-    other = get_object_or_404(fitness_users().exclude(pk=request.user.pk), pk=request.POST.get("user") or 0)
-    if request.POST.get("action") == "remove":
-        WorkoutShare.objects.filter(workout=w, user=other).delete()
-        messages.success(request, f"No longer shared with {_person(other)}.")
-    else:
-        WorkoutShare.objects.get_or_create(workout=w, user=other)
-        messages.success(request, f"Shared with {_person(other)} (view only).")
-    return redirect("albright_fitness:workout", pk=w.pk)
 
 
 # ---------------------------------------------------------------------------

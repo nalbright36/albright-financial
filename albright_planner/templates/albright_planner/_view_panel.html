@@ -46,7 +46,7 @@ tick right here (saved to the note) for someone who can edit it.
     </p>
 
     {% if o.shared_in %}<p class="pl-view__shared" id="pl-view-shared"><span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> Shared by {{ item.owner|person }}{% if not can_edit %} <span class="pl-muted">&middot; view only</span>{% endif %}</p>
-    {% elif shared_with %}<p class="pl-view__shared" id="pl-view-shared"><span class="pl-view__avatars" aria-hidden="true">{% for u in shared_with %}<span class="pl-avatar" style="--pl-avatar: {{ u|avatar_color }};">{{ u|initial }}</span>{% endfor %}</span> Shared with {% for u in shared_with %}{{ u|person }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    {% elif shared_with %}<p class="pl-view__shared" id="pl-view-shared">Shared with {{ shared_with|join:", " }}</p>{% endif %}
 
     {% if checklist %}
     <section class="pl-view__section" id="pl-view-checklist" aria-labelledby="pl-view-cl-h">
@@ -75,6 +75,8 @@ tick right here (saved to the note) for someone who can edit it.
     </section>
     {% endif %}
     </div>
+
+    {% if share %}{% include "albright_labs/_share.html" %}{% endif %}
 
     <footer class="pl-view__foot">
         {% if edit_url %}<a href="{{ edit_url }}" class="pl-btn pl-btn--primary" id="pl-view-edit" data-view-edit title="Edit (E)">Edit</a>{% endif %}

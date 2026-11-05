@@ -1,7 +1,7 @@
 """Albright Fitness: the exercise library, logged workouts (exercises and sets), personal records and programs.
 
-Privacy: everything is its owner's. A workout can be shared view-only with specific people (WorkoutShare) -
-never anything else (no programs, no records, no body data). Anyone else gets a 404 (views look everything up
+Privacy: everything is its owner's. A workout - and nothing else - can be shared with a person or a circle, to view
+or edit (albright_labs.sharing); never programs, records, the food diary, targets or body data. Anyone else gets a 404 (views look everything up
 through the querysets below).
 
 Built-in exercises have no owner (seeded by migration 0002); a person's own ones are theirs alone. Built-in
@@ -133,8 +133,9 @@ class ProgramExercise(models.Model):
 
 class WorkoutQuerySet(models.QuerySet):
     def visible_to(self, user):
-        """Mine, and ones shared with me (view only)."""
-        return self.filter(Q(owner=user) | Q(shares__user=user)).distinct()
+        """Mine, and ones shared with me (a person or a circle - albright_labs.sharing)."""
+        from albright_labs import sharing
+        return sharing.visible_queryset(user, Workout, self)
 
 
 class Workout(models.Model):
@@ -170,14 +171,6 @@ class Workout(models.Model):
         return self.finished_at is not None
 
 
-class WorkoutShare(models.Model):
-    """A workout shown, view only, to one other person."""
-    workout = models.ForeignKey(Workout, on_delete=models.CASCADE, related_name="shares")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_shared_workouts")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [models.UniqueConstraint(fields=["workout", "user"], name="fitness_share_once")]
 
 
 class WorkoutExercise(models.Model):

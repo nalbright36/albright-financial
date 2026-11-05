@@ -16,8 +16,6 @@ urlpatterns = [
     path("<int:pk>/pin/", views.note_pin, name="pin"),
     path("<int:pk>/archive/", views.note_archive, name="archive"),
     path("<int:pk>/delete/", views.note_delete, name="delete"),
-    path("<int:pk>/share/", views.share_add, name="share_add"),
-    path("<int:pk>/share/<int:share_id>/", views.share_update, name="share_update"),
     path("<int:pk>/links/", views.link_add, name="link_add"),
     path("<int:pk>/links/<int:link_id>/remove/", views.link_remove, name="link_remove"),
 ]

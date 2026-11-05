@@ -50,14 +50,8 @@ vibrates where the phone can). Someone it's shared with sees it read-only.
         <div class="field"><label for="fx-w-notes">Notes</label><textarea name="notes" id="fx-w-notes" class="ledger-input" rows="3" maxlength="4000">{{ w.notes }}</textarea></div>
         <button type="submit" class="btn btn-secondary btn-sm">Save</button>
     </form>
-    <h3 class="fx-label">Shared with (view only)</h3>
-    {% for sh in shares %}<form method="post" action="{% url 'albright_fitness:share' w.pk %}" class="fx-share-row">{% csrf_token %}<input type="hidden" name="user" value="{{ sh.user.pk }}"><input type="hidden" name="action" value="remove"><span>{{ sh.user.first_name|default:sh.user.username }}</span><button type="submit" class="btn btn-secondary btn-sm">Stop sharing</button></form>
-    {% empty %}<p class="fx-muted fx-small">Only you.</p>{% endfor %}
-    {% if share_choices %}<form method="post" action="{% url 'albright_fitness:share' w.pk %}" class="fx-row-form">{% csrf_token %}
-        <label for="fx-share-user" class="visually-hidden">Share with</label>
-        <select name="user" id="fx-share-user" class="ledger-input fx-select">{% for u in share_choices %}<option value="{{ u.pk }}">{{ u.first_name|default:u.username }}</option>{% endfor %}</select>
-        <button type="submit" class="btn btn-secondary btn-sm">Share</button></form>{% endif %}
-    <form method="post" action="{% url 'albright_fitness:delete_workout' w.pk %}" class="fx-delete" data-confirm="Delete this workout and its sets?">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm fx-danger">Delete workout</button></form>
+    {% include "albright_labs/_share.html" %}
+    {% if is_owner %}<form method="post" action="{% url 'albright_fitness:delete_workout' w.pk %}" class="fx-delete" data-confirm="Delete this workout and its sets?">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm fx-danger">Delete workout</button></form>{% endif %}
 </details>
 
 {% if not w.finished %}

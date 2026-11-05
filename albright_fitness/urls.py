@@ -17,7 +17,6 @@ urlpatterns = [
     path("workouts/<int:pk>/exercises/<int:we_pk>/remove/", views.remove_exercise, name="remove_exercise"),
     path("workouts/<int:pk>/finish/", views.finish, name="finish"),
     path("workouts/<int:pk>/summary/", views.summary, name="summary"),
-    path("workouts/<int:pk>/share/", views.share, name="share"),
     path("exercise-sets/<int:we_pk>/add/", views.add_set, name="add_set"),
     path("sets/<int:pk>/", views.update_set, name="update_set"),
     path("sets/<int:pk>/delete/", views.delete_set, name="delete_set"),

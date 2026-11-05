@@ -8,8 +8,8 @@ import re
 from django.contrib.auth.models import User
 from django.test import Client
 
-from albright_labs.testing import with_apps
-from albright_notes.models import Note, NoteShare
+from albright_labs.testing import share_with, with_apps
+from albright_notes.models import Note
 
 from .tests import PASSWORD, Base, url
 
@@ -79,9 +79,8 @@ class LinkedNoteTests(Base):
     def test_view_only_note_is_read_only_here(self):
         sam = self.wife
         with_apps(sam, ["planner", "notes"])
-        NoteShare.objects.create(note=self.note, user=sam, permission=NoteShare.VIEW)
-        from .models import ItemShare
-        ItemShare.objects.create(item=self.task, user=sam, permission=ItemShare.EDIT)
+        share_with(self.note, sam, "view")
+        share_with(self.task, sam, "edit")
         client = Client()
         client.force_login(sam)
         section = note_section(self.panel(self.task, client))

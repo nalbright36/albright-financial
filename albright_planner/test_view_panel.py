@@ -7,11 +7,13 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.urls import reverse
 
+from albright_labs.testing import share_with
+
 from albright_labs.models import UserPreference
 from albright_notes.models import Note
 
 from . import checklist
-from .models import ItemCompletion, ItemShare, ScheduleItem
+from .models import ItemCompletion, ScheduleItem
 from .tests import TODAY, Base, d, url
 
 
@@ -120,7 +122,7 @@ class LayoutTests(Fixtures):
         item = self.item("Camping", notes="- tent\n- stove\n\nLeave by 8", note=note)
         checklist.create_rows(item, ["Tent", "Stove", "Lantern"])
         checklist.set_checked(item.checklist.get(text="Tent"), TODAY, True, self.me)
-        ItemShare.objects.create(item=item, user=self.wife, permission=ItemShare.EDIT)
+        share_with(item, self.wife, "edit")
         panel = self.panel(item)
         self.assertIn('id="pl-view-checklist"', panel)
         self.assertIn("1 of 3 done", panel)
@@ -135,7 +137,7 @@ class LayoutTests(Fixtures):
 
     def test_shared_by_shows_the_owner(self):
         item = self.item("Groceries", owner=self.wife)
-        ItemShare.objects.create(item=item, user=self.me, permission=ItemShare.EDIT)
+        share_with(item, self.me, "edit")
         panel = self.panel(item)
         self.assertRegex(panel, r'id="pl-view-shared"><span class="pl-avatar"[^>]*>S</span> Shared by sam')
         self.assertNotIn("view only", panel)
@@ -211,7 +213,7 @@ class ActionTests(Fixtures):
 
     def test_view_only_can_duplicate_into_their_own_item(self):
         item = self.item("Dinner plans")
-        ItemShare.objects.create(item=item, user=self.wife, permission=ItemShare.VIEW)
+        share_with(item, self.wife, "view")
         self.as_user(self.wife).post(url("duplicate", item.pk))
         self.assertEqual(ScheduleItem.objects.get(owner=self.wife).title, "Dinner plans")
 
@@ -281,7 +283,7 @@ class PermissionTests(Fixtures):
     def test_view_only_shows_no_edit_and_cant_complete(self):
         item = self.item("Dinner plans", notes="Tacos")
         checklist.create_rows(item, ["Shells"])
-        ItemShare.objects.create(item=item, user=self.wife, permission=ItemShare.VIEW)
+        share_with(item, self.wife, "view")
         wife = self.as_user(self.wife)
         panel = self.panel(item, client=wife)
         self.assertNotIn('id="pl-view-edit"', panel)
@@ -299,7 +301,7 @@ class PermissionTests(Fixtures):
 
     def test_edit_share_can_complete_and_edit_but_not_delete(self):
         item = self.item("Groceries")
-        ItemShare.objects.create(item=item, user=self.wife, permission=ItemShare.EDIT)
+        share_with(item, self.wife, "edit")
         wife = self.as_user(self.wife)
         panel = self.panel(item, client=wife)
         self.assertIn('id="pl-view-edit"', panel)

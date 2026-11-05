@@ -19,7 +19,7 @@ from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
 from . import recurrence
-from .models import DeletedSourceItem, ItemCompletion, ItemException, ItemShare, ScheduleItem
+from .models import DeletedSourceItem, ItemCompletion, ItemException, ScheduleItem
 
 THIS, FOLLOWING, ALL = "this", "following", "all"
 # The views' "Show" filter: everything I can see, only mine, or only what others shared with me.
@@ -49,8 +49,26 @@ def _candidates(user, start, end):
     moved_in = Q(exceptions__action=ItemException.MOVE, exceptions__new_date__gte=start, exceptions__new_date__lte=end)
     ids = ScheduleItem.objects.visible_to(user).filter(archived=False).filter(one_off | repeating | moved_in) \
         .values_list("pk", flat=True).distinct()
-    return ScheduleItem.objects.filter(pk__in=list(ids)).select_related("owner").prefetch_related(
-        "exceptions", "shares__user", Prefetch("completions", queryset=ItemCompletion.objects.select_related("completed_by")))
+    return _with_sharing(ScheduleItem.objects.filter(pk__in=list(ids))).select_related("owner").prefetch_related(
+        "exceptions", Prefetch("completions", queryset=ItemCompletion.objects.select_related("completed_by")))
+
+
+def _with_sharing(qs):
+    """has_shares: shared with anyone (albright_labs.sharing) - the "shared" mark on your own items."""
+    from django.contrib.contenttypes.models import ContentType
+    from django.db.models import Exists, OuterRef
+
+    from albright_labs.models import ShareGrant
+    grants = ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(ScheduleItem), object_id=OuterRef("pk"))
+    return qs.annotate(has_shares=Exists(grants))
+
+
+def _has_shares(item):
+    if hasattr(item, "has_shares"):
+        return item.has_shares
+    from albright_labs import sharing
+    item.has_shares = bool(sharing.grants(item))
+    return item.has_shares
 
 
 def _by_owner(items, user, who):
@@ -64,7 +82,7 @@ def _by_owner(items, user, who):
 def _mark_sharing(occ, user):
     """shared_in: someone else's item (shown with their initial); shared_out: mine, shared with others."""
     occ.shared_in = occ.item.owner_id != user.pk
-    occ.shared_out = not occ.shared_in and bool(occ.item.shares.all())
+    occ.shared_out = not occ.shared_in and _has_shares(occ.item)
     occ.shared = occ.shared_in or occ.shared_out          # shows "Done by <name>" on it and its subtasks
 
 
@@ -206,7 +224,7 @@ def duplicate(item, user):
             copy.note = None                              # a note the new owner can't see isn't linked
     copy.save()
     checklist.create_rows(copy, [r.text for r in checklist.current_rows(item)])
-    apply_default_shares(copy)
+    apply_default_shares(copy, user)
     return copy
 
 
@@ -227,19 +245,19 @@ def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
     day = day or today()
     if kind == ScheduleItem.EVENT:
         return []
-    qs = ScheduleItem.objects.visible_to(user).filter(archived=False, recurrence="", kind=ScheduleItem.TASK,
+    qs = _with_sharing(ScheduleItem.objects.visible_to(user)).filter(archived=False, recurrence="", kind=ScheduleItem.TASK,
                                                       checkable=True, date__lt=day) \
-        .exclude(completions__occurrence_date=F("date")).select_related("owner").prefetch_related("shares__user") \
+        .exclude(completions__occurrence_date=F("date")).select_related("owner") \
         .order_by("date", "start_time", "pk")
     who = SHARED if shared_only else who
     if who == SHARED:
         qs = qs.exclude(owner=user)
     elif who == MINE:
         qs = qs.filter(owner=user)
-    series = ScheduleItem.objects.visible_to(user).filter(
+    series = _with_sharing(ScheduleItem.objects.visible_to(user)).filter(
         archived=False, kind=ScheduleItem.TASK, checkable=True, date__lt=day, recurrence_until__isnull=True,
         recurrence_count__isnull=True).exclude(recurrence="").select_related("owner").prefetch_related(
-        "shares__user", "exceptions", "completions")
+        "exceptions", "completions")
     if who == SHARED:
         series = series.exclude(owner=user)
     elif who == MINE:
@@ -399,8 +417,8 @@ def change(item, occurrence_date, scope, changes):
         _apply(new, changes)
         _set_rule(new, changes, moved_from=occurrence_date)
         new.save()
-        for share in item.shares.all():
-            ItemShare.objects.create(item=new, user=share.user, permission=share.permission)
+        from albright_labs import sharing
+        sharing.copy_grants(item, new)
         for row in list(item.completions.filter(occurrence_date__gte=occurrence_date)) + \
                 list(item.exceptions.filter(occurrence_date__gte=occurrence_date)):
             row.item, row.occurrence_date = new, row.occurrence_date + delta
@@ -456,7 +474,7 @@ def planner_users():
 
 
 # ---------------------------------------------------------------------------
-# Sharing: "Share with" on the new / edit forms and quick add, and the remembered default
+# Sharing (albright_labs.sharing) - what's left here is the Planner's own words
 # ---------------------------------------------------------------------------
 
 def person(user):
@@ -464,65 +482,17 @@ def person(user):
     return (user.first_name or user.get_username()).strip() if user else ""
 
 
-def share_people(owner):
-    """Who the owner can share with: everyone else who can open the Planner."""
-    return list(planner_users().exclude(pk=owner.pk))
+def apply_default_shares(item, user=None):
+    """A new item - from the form's default, quick add, a note, the grocery list, the Bot API: shared the way its
+    owner shares new Planner items (My account > Circles > Sharing defaults)."""
+    from albright_labs import sharing
+    return sharing.apply_defaults(item, user or item.owner)
 
 
-def default_shares(user):
-    """The user's remembered "Share with" choice, {user pk: "view" | "edit"} - only people who still can open
-    the Planner."""
-    from .models import PlannerSettings
-    saved = PlannerSettings.for_user(user).default_shares or {}
-    people = {str(p.pk) for p in share_people(user)}
-    return {int(pk): perm for pk, perm in saved.items() if pk in people and perm in dict(ItemShare.PERMISSIONS)}
-
-
-def save_default_shares(user, choices):
-    from .models import PlannerSettings
-    prefs = PlannerSettings.for_user(user)
-    prefs.default_shares = {str(pk): perm for pk, perm in choices.items() if perm}
-    prefs.save(update_fields=["default_shares"])
-
-
-def posted_shares(post, owner):
-    """{user pk: "view" | "edit" | ""} from a form's "Share with" selects (share_<pk>); "" = not shared."""
-    out = {}
-    for p in share_people(owner):
-        perm = post.get(f"share_{p.pk}", "")
-        out[p.pk] = perm if perm in dict(ItemShare.PERMISSIONS) else ""
-    return out
-
-
-def set_shares(item, choices):
-    """Share the item exactly as chosen ({user pk: perm or ""}) - only with people who can open the Planner."""
-    allowed = {p.pk for p in share_people(item.owner)}
-    for pk, perm in choices.items():
-        if pk not in allowed:
-            continue
-        if perm:
-            ItemShare.objects.update_or_create(item=item, user_id=pk, defaults={"permission": perm})
-        else:
-            ItemShare.objects.filter(item=item, user_id=pk).delete()
-
-
-def apply_default_shares(item):
-    """A new item made outside the form (from a note, the grocery list, the Bot API): shared as its owner chose
-    by default."""
-    set_shares(item, default_shares(item.owner))
-
-
-def share_rows(owner, chosen):
-    """The "Share with" section's rows: [{"user", "name", "perm"}] for everyone the owner can share with."""
-    return [{"user": p, "name": person(p), "perm": chosen.get(p.pk, "")} for p in share_people(owner)]
-
-
-def share_summary(rows):
-    """"Shared with Kim" / "Shared with Kim +1" / "Only me" - quick add's chip."""
-    names = [r["name"] for r in rows if r["perm"]]
-    if not names:
-        return "Only me"
-    return f"Shared with {names[0]}" + (f" +{len(names) - 1}" if len(names) > 1 else "")
+def shared_names(item):
+    """"Albright Family, Kim" - who an item is shared with."""
+    from albright_labs import sharing
+    return [g.circle.name if g.circle_id else person(g.user) for g in sharing.grants(item)]
 
 
 # ---------------------------------------------------------------------------

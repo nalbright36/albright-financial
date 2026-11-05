@@ -12,9 +12,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_bot_api.models import BotRequestLog, BotToken
-from albright_labs.testing import allow_api_keys, with_apps
+from albright_labs.testing import allow_api_keys, share_with, with_apps
 from albright_meals.models import MealPlanEntry
-from albright_notes.models import Note, NoteShare
+from albright_notes.models import Note
 
 from . import services, sources
 from .models import ItemCompletion, PlannerSettings, ScheduleItem
@@ -127,7 +127,7 @@ class NoteLinkTests(Base):
         self.client.post(url("item_note", self.task.pk), {"action": "attach", "note": theirs.pk})
         self.task.refresh_from_db()
         self.assertIsNone(self.task.note)
-        NoteShare.objects.create(note=theirs, user=self.me)          # shared with me: now it's attachable
+        share_with(theirs, self.me, "view")          # shared with me: now it's attachable
         self.client.post(url("item_note", self.task.pk), {"action": "attach", "note": theirs.pk})
         self.task.refresh_from_db()
         self.assertEqual(self.task.note, theirs)
@@ -142,7 +142,7 @@ class NoteLinkTests(Base):
     def test_a_viewer_who_cant_see_the_note_sees_only_that_one_is_linked(self):
         self.task.note = self.note
         self.task.save()
-        self.task.shares.create(user=self.wife)
+        share_with(self.task, self.wife, "view")
         page = self.edit_page(client=self.as_user(self.wife))
         self.assertIn("isn't shared with you", page)
         self.assertNotIn("Ask about the crown", page)

@@ -102,6 +102,8 @@ def start_workout(user, day=None, planner_item=None, planner_date=None, name="")
     workout = Workout.objects.create(owner=user, date=planner_date or now.date(), start_time=now.time().replace(microsecond=0),
                                      name=name or (day.name if day else ""), program_day=day,
                                      planner_item=planner_item, planner_date=planner_date if planner_item else None)
+    from albright_labs import sharing
+    sharing.apply_defaults(workout, user)              # shared the way its owner shares new workouts
     if day is not None:
         for pe in day.exercises.select_related("exercise"):
             we = WorkoutExercise.objects.create(workout=workout, exercise=pe.exercise, order=pe.order,
@@ -135,6 +137,8 @@ def log_parsed(user, parsed, name="Quick log", today=None):
     item, when = planner_occurrence(user, day, today) if day else (None, None)
     workout = Workout.objects.create(owner=user, date=today, name=name if not day else "", program_day=day,
                                      planner_item=item, planner_date=when)
+    from albright_labs import sharing
+    sharing.apply_defaults(workout, user)
     training.save_quick(workout, parsed)
     return workout, finish(workout), day
 

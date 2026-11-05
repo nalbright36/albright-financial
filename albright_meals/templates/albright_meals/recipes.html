@@ -63,7 +63,7 @@ saves on change without opening the recipe (static/meals/ratings.js), and the sp
             {# The title is the card's link (it covers the card); the rating, stamps and Share sit above it, so using them never opens the recipe. #}
             <a href="{% url 'albright_meals:recipe' r.pk %}" class="meals-recipe-card__link"><strong class="meals-recipe-card__title">{{ r.title }}{% if r.needs_review %} <span class="badge warn meals-review-badge">Needs review</span>{% endif %}</strong></a>
             {% if r.description %}<span class="meals-recipe-card__desc">{{ r.description|truncatechars:110 }}</span>{% endif %}
-            <span class="meals-hint">{% if not c.own %}{% if c.share %}Shared by <span class="meals-by">{{ c.share.shared_by.first_name|default:c.share.shared_by.username|default:"someone" }}</span>{% else %}{{ r.space.label }}{% endif %} &middot; {% endif %}{% if r.saved_from_name %}Saved from {{ r.saved_from_name }} &middot; {% endif %}{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
+            <span class="meals-hint">{% if not c.own %}{% if c.share %}Shared by <span class="meals-by">{{ c.share.created_by.first_name|default:c.share.created_by.username|default:"someone" }}</span>{% else %}{{ r.space.label }}{% endif %} &middot; {% endif %}{% if r.saved_from_name %}Saved from {{ r.saved_from_name }} &middot; {% endif %}{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
             {% if c.nutrition %}<span class="meals-card-nutrition" data-nutrition>{{ c.nutrition.calories|floatformat:0|default:"?" }} kcal &middot; {{ c.nutrition.protein|floatformat:0|default:"?" }} g protein <span class="meals-hint">per serving{% if r.nutrition.needs_review %} &middot; needs review{% endif %}</span></span>{% endif %}
             {% if r.tags %}<span class="meals-tags meals-tags--small">{% for t in r.tags|slice:":4" %}<span class="meals-tag">{{ t }}</span>{% endfor %}</span>{% endif %}
             <div class="meals-card-rating">
@@ -78,7 +78,7 @@ saves on change without opening the recipe (static/meals/ratings.js), and the sp
                     <span class="meals-card-rate__status" role="status" aria-live="polite"></span>
                 </form>
                 {% if c.others %}<span class="meals-stamps">{% for r in c.others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</span>{% endif %}
-                {% if c.own %}<button type="button" class="btn btn-secondary btn-sm meals-card-share" data-share-open="{% url 'albright_meals:recipe_share' r.pk %}" data-share-title="{{ r.title }}" data-share-link="{% url 'albright_meals:recipe' r.pk %}" data-share-list='[{% for s in r.shares.all %}{"user": {{ s.shared_with_id }}, "name": "{{ s.shared_with.first_name|default:s.shared_with.username|escapejs }}"}{% if not forloop.last %}, {% endif %}{% endfor %}]'>Share</button>{% endif %}
+                {% if c.own %}<a href="{% url 'albright_meals:recipe' r.pk %}#share-box" class="btn btn-secondary btn-sm meals-card-share">Share</a>{% endif %}
             </div>
             <p class="meals-stamp-note" data-stamp-note hidden></p>
         </article></li>
@@ -87,6 +87,5 @@ saves on change without opening the recipe (static/meals/ratings.js), and the sp
         {% endfor %}
     </ul>
 </div>
-{% include "albright_meals/_share_dialog.html" %}
 <script src="{% static_version 'meals/ratings.js' %}" defer></script>
 {% endblock %}

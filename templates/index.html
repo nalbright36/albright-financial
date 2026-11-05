@@ -398,6 +398,7 @@
             })();
         </script>
         <script src="{% static_version 'labs/launcher.js' %}"></script>
+        {% if user.is_authenticated %}<script src="{% static_version 'labs/share.js' %}" defer></script>{% endif %}
         <script src="{% static_version 'js/app_nav.js' %}"></script>
         {# The shared Markdown editor (templates/_md_editor.html; Notes' notes.js uses it too) - before the app's script. #}
         <script src="{% static_version 'js/md_editor.js' %}"></script>

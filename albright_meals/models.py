@@ -1,7 +1,7 @@
 """Albright Meals: meal plans, recipes, meal ideas and grocery lists - each in a space (albright_labs.Space): someone's
 Personal space, or a circle's when the circle shares Meals. Who sees which space is decided by albright_labs.circles
 (scope.py asks it - anything else is a 404). Recipes can also be shared beyond the space: put in the "Recipe library"
-(every Meals user can read it and save a copy) or shared with one person (RecipeShare). A recipe's plan, grocery
+(every Meals user can read it and save a copy) or shared with a person or circle (albright_labs.ShareGrant). A recipe's plan, grocery
 list, ideas and ratings stay with its space."""
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -157,18 +157,6 @@ class RecipeRating(models.Model):
         return self.INFO[self.level][2]
 
 
-class RecipeShare(models.Model):
-    """One recipe shown, read-only, to one person outside its space (they can save a copy). seen_at: when they
-    saw the "<name> shared <recipe> with you" notice."""
-    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="shares")
-    shared_with = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="meals_shared_recipes")
-    shared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
-    created_at = models.DateTimeField(auto_now_add=True)
-    seen_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at", "-pk"]
-        constraints = [models.UniqueConstraint(fields=["recipe", "shared_with"], name="meals_share_once")]
 
 
 class MealPlanEntry(_Authored):

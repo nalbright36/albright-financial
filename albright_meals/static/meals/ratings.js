@@ -1,12 +1,10 @@
 /*
- * Ratings on the recipe cards, the space's stamps, and sharing a recipe (albright_meals/recipes.html, recipe.html).
+ * Ratings on the recipe cards and the space's stamps (albright_meals/recipes.html, recipe.html).
  * Vanilla JS; without it every form posts normally.
  *
  *   card rating  my rating drop-down on each card saves as soon as it changes (views.recipe_rate) and shows a small
  *                "Saved" check - the card's link is underneath, so using the drop-down never opens the recipe
  *   stamps       tapping someone's stamp shows their label and note under the card
- *   share        the Share button opens the dialog for its recipe: add someone by their exact username or email,
- *                Remove, Copy link (views.recipe_share answers with who it's shared with now)
  */
 (function () {
     "use strict";
@@ -67,74 +65,4 @@
         note.textContent = text;
     });
 
-    // ---------- Sharing ----------
-    var dialog = document.getElementById("share-dialog");
-    if (!dialog || !dialog.showModal) return;
-    var form = document.getElementById("share-form"), list = document.getElementById("share-list");
-    var status = document.getElementById("share-status"), name = dialog.querySelector("[data-share-name]");
-    var current = null;
-
-    function render(shares) {
-        list.textContent = "";
-        if (!shares.length) {
-            var none = document.createElement("li");
-            none.className = "meals-hint";
-            none.textContent = "Nobody outside this space yet.";
-            list.appendChild(none);
-        }
-        shares.forEach(function (s) {
-            var li = document.createElement("li"), label = document.createElement("span"), remove = document.createElement("button");
-            label.textContent = s.name;
-            remove.type = "button";
-            remove.className = "btn btn-secondary btn-sm";
-            remove.textContent = "Remove";
-            remove.setAttribute("aria-label", "Stop sharing with " + s.name);
-            remove.addEventListener("click", function () {
-                var body = new FormData();
-                body.append("action", "remove");
-                body.append("user", s.user);
-                post(current.getAttribute("data-share-open"), body).then(done);
-            });
-            li.append(label, remove);
-            list.appendChild(li);
-        });
-        if (current) current.setAttribute("data-share-list", JSON.stringify(shares));
-    }
-    function done(data) {
-        status.textContent = data.ok ? (data.message || "") : (data.error || "Not saved - try again.");
-        status.classList.toggle("is-error", !data.ok);
-        if (data.shares) render(data.shares);
-    }
-    document.addEventListener("click", function (event) {
-        var open = event.target.closest && event.target.closest("[data-share-open]");
-        if (!open) return;
-        current = open;
-        name.textContent = open.getAttribute("data-share-title");
-        status.textContent = "";
-        form.reset();
-        var shares = [];
-        try { shares = JSON.parse(open.getAttribute("data-share-list") || "[]"); } catch (e) { shares = []; }
-        render(shares);
-        dialog.showModal();
-        form.elements.who.focus();
-    });
-    form.addEventListener("submit", function (event) {
-        event.preventDefault();
-        var body = new FormData(form);
-        body.append("action", "add");
-        post(current.getAttribute("data-share-open"), body).then(function (data) {
-            done(data);
-            if (data.ok) form.elements.who.value = "";
-        }).catch(function () { done({ok: false}); });
-    });
-    dialog.addEventListener("click", function (event) {
-        if (event.target === dialog || event.target.closest("[data-share-close]")) dialog.close();
-        var copy = event.target.closest("[data-share-copy]");
-        if (copy && current) {
-            var url = new URL(current.getAttribute("data-share-link"), window.location.origin).href;
-            (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () {
-                status.textContent = "Link copied - it opens only for people it's shared with.";
-            }).catch(function () { status.textContent = url; });
-        }
-    });
 })();

@@ -14,7 +14,10 @@ from django.utils import timezone
 from albright_bot_api.models import BotToken
 from albright_labs.testing import allow_api_keys, kitchen, with_apps
 
-from .models import GroceryItem, MealIdea, MealPlanEntry, Recipe, RecipeRating, RecipeShare
+from albright_labs.models import ShareGrant
+from albright_labs.testing import grants_of, personal
+
+from .models import GroceryItem, MealIdea, MealPlanEntry, Recipe, RecipeRating
 
 PASSWORD = "pw-not-real-12345"
 API = "/api/bot/v1/"
@@ -78,7 +81,7 @@ class IsolationTests(Base):
                            (url("grocery_merge", self.milk.pk), {}), (url("idea_plan", self.idea.pk), {"date": self.today, "slot": "dinner"}),
                            (url("idea_decline", self.idea.pk), {}), (url("recipe_rate", self.meatballs.pk), {"level": "1"}),
                            (url("recipe_plan", self.meatballs.pk), {"date": self.today, "slot": "dinner"}),
-                           (url("recipe_groceries", self.meatballs.pk), {}), (url("recipe_share", self.meatballs.pk), {"who": "kim"}),
+                           (url("recipe_groceries", self.meatballs.pk), {}), (reverse("labs:share", args=["albright_meals.Recipe", self.meatballs.pk]), {"action": "add", "who": "kim"}),
                            (url("recipe_save_copy", self.meatballs.pk), {}), (url("recipe_visibility", self.meatballs.pk), {"visibility": "library"})):
             self.assertEqual(kim.post(path, data).status_code, 404, path)
         for path in (url("week"), url("groceries"), url("ideas"), url("recipes")):
@@ -181,9 +184,10 @@ class LibraryTests(Base):
 # ---------------------------------------------------------------------------
 
 class ShareTests(Base):
-    def share(self, who, recipe=None):
-        return self.client.post(url("recipe_share", (recipe or self.meatballs).pk), {"who": who},
-                                HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+    def share(self, who, recipe=None, client=None, permission="view"):
+        return (client or self.client).post(reverse("labs:share", args=["albright_meals.Recipe", (recipe or self.meatballs).pk]),
+                                            {"action": "add", "target": "person", "who": who, "permission": permission},
+                                            HTTP_X_REQUESTED_WITH="XMLHttpRequest")
 
     def setUp(self):
         super().setUp()
@@ -193,20 +197,21 @@ class ShareTests(Base):
         for partial in ("ki", "Kim Smith", "kim@example", "@example.com", ""):
             response = self.share(partial)
             self.assertEqual(response.status_code, 400, partial)
-        self.assertFalse(RecipeShare.objects.exists())
-        self.assertEqual(self.share("KIM").json()["shares"], [{"user": self.kim.pk, "name": "Kim"}])   # any case
-        RecipeShare.objects.all().delete()
+        self.assertFalse(ShareGrant.objects.exists())
+        self.assertTrue(self.share("KIM").json()["ok"])                                   # any case
+        self.assertEqual(grants_of(self.meatballs), [(self.kim.pk, "view")])
+        ShareGrant.objects.all().delete()
         self.assertTrue(self.share("kim@example.com").json()["ok"])
         no_meals = with_apps(User.objects.create_user(username="quill-no-meals", password=PASSWORD), ["notes"])
         self.assertEqual(self.share(no_meals.username).status_code, 400)          # needs Meals
-        self.assertEqual(self.share("sam").status_code, 400)                    # already in our space
+        self.assertEqual(self.share("sam").status_code, 400)                    # already sees its space
         page = self.client.get(url("recipe", self.meatballs.pk)).content.decode()
-        self.assertNotIn("quill-no-meals", page)                                           # nobody is ever listed
+        self.assertNotIn("quill-no-meals", page)                                # nobody is ever listed
 
     def test_recipient_reads_saves_and_gets_a_notice(self):
         self.share("kim")
-        share = RecipeShare.objects.get()
-        self.assertEqual((share.shared_by, share.shared_with), (self.nate, self.kim))
+        grant = ShareGrant.objects.get()
+        self.assertEqual((grant.created_by, grant.user), (self.nate, self.kim))
         kim = self.as_user(self.kim)
         week = kim.get(url("week")).content.decode()
         self.assertIn("<strong>Nathan</strong> shared", week)
@@ -215,33 +220,55 @@ class ShareTests(Base):
         self.assertIn("Shared by <span class=\"meals-by\">Nathan</span>", tab)
         page = kim.get(url("recipe", self.meatballs.pk)).content.decode()
         self.assertIn("shared this with you", page)
+        self.assertIn("read-only", page)
         self.assertNotIn(url("recipe_edit", self.meatballs.pk), page)
-        self.assertEqual(kim.post(url("recipe_plan", self.meatballs.pk), {"date": self.today, "slot": "dinner"}).status_code, 404)
-        self.assertEqual(kim.post(url("recipe_share", self.meatballs.pk), {"who": "nate"}).status_code, 404)  # can't reshare
-        share.refresh_from_db()
-        self.assertIsNotNone(share.seen_at)                                     # opening it clears the notice
+        self.assertEqual(kim.get(url("recipe_edit", self.meatballs.pk)).status_code, 404)
+        self.assertEqual(self.share("nate", client=kim).status_code, 400)        # can't reshare
+        grant.refresh_from_db()
+        self.assertIsNotNone(grant.seen_at)                                     # opening it clears the notice
         self.assertNotIn("with you", kim.get(url("week")).content.decode())
         kim.post(url("recipe_save_copy", self.meatballs.pk))
         self.assertTrue(Recipe.objects.filter(space=self.theirs, saved_from=self.meatballs).exists())
+
+    def test_an_edit_share_changes_the_recipe_not_its_space(self):
+        self.share("kim", permission="edit")
+        kim = self.as_user(self.kim)
+        self.assertEqual(kim.get(url("recipe_edit", self.meatballs.pk)).status_code, 200)
+        kim.post(url("recipe_edit", self.meatballs.pk), {"title": "Family Meatballs (Kim's tweak)", "servings": "4"})
+        self.meatballs.refresh_from_db()
+        self.assertEqual((self.meatballs.title, self.meatballs.space), ("Family Meatballs (Kim's tweak)", self.ours))
+        self.assertEqual(kim.post(url("recipe_visibility", self.meatballs.pk), {"visibility": "library"}).status_code, 404)
+        self.assertEqual(kim.post(url("recipe_move", self.meatballs.pk), {"to": self.theirs.pk}).status_code, 404)
+        kim.post(url("recipe_plan", self.meatballs.pk), {"date": self.today, "slot": "dinner"})
+        self.assertTrue(MealPlanEntry.objects.filter(space=self.theirs, recipe=self.meatballs).exists())   # her plan
+        self.assertFalse(MealPlanEntry.objects.filter(space=self.ours).exists())
 
     def test_removing_hides_it_again_but_copies_stay(self):
         self.share("kim")
         kim = self.as_user(self.kim)
         kim.post(url("recipe_save_copy", self.meatballs.pk))
-        response = self.client.post(url("recipe_share", self.meatballs.pk), {"action": "remove", "user": self.kim.pk},
-                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertEqual(response.json()["shares"], [])
+        grant = ShareGrant.objects.get()
+        self.client.post(reverse("labs:share", args=["albright_meals.Recipe", self.meatballs.pk]), {"action": "remove", "grant": grant.pk})
         self.assertEqual(kim.get(url("recipe", self.meatballs.pk)).status_code, 404)
         self.assertNotIn("Family Meatballs", kim.get(url("recipes") + "?tab=shared").content.decode()
                          .split('id="recipe-list"', 1)[1])
         self.assertTrue(Recipe.objects.filter(space=self.theirs).exists())
 
-    def test_share_dialog_never_lists_people(self):
-        page = self.client.get(url("recipes")).content.decode()
-        dialog = page.split('id="share-dialog"', 1)[1].split("</dialog>", 1)[0]
-        self.assertNotIn("<datalist", dialog)
-        self.assertNotIn("kim", dialog.lower())
-        self.assertIn('autocomplete="off"', dialog)
+    def test_the_share_control_never_lists_people(self):
+        page = self.client.get(url("recipe", self.meatballs.pk)).content.decode()
+        box = page.split('id="share-box"', 1)[1].split("</section>", 1)[0]
+        self.assertNotIn("<datalist", box)
+        self.assertNotIn("kim", box.lower())
+        self.assertIn('autocomplete="off"', box)
+
+    def test_move_to_space_is_not_sharing(self):
+        mine = self.recipe("Solo soup", space=personal(self.nate))
+        self.rate(self.nate, mine, FAV)
+        self.client.post(url("recipe_move", mine.pk), {"to": self.ours.pk})
+        mine.refresh_from_db()
+        self.assertEqual(mine.space, self.ours)                                 # now the circle's
+        self.assertEqual(self.as_user(self.wife).get(url("recipe", mine.pk)).status_code, 200)
+        self.assertEqual(grants_of(mine), [])                                   # no share was made
 
 
 # ---------------------------------------------------------------------------

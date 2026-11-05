@@ -48,10 +48,7 @@ Keys (desktop): D / W / M switch views, T today, N New item.
                     <div class="pl-seg">{% for value, label in who_choices %}<label class="pl-seg__item"><input type="radio" name="who" value="{{ value }}"{% if filters.who == value %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div>
                 </fieldset>
                 {% if meals_toggle %}<label class="pl-opt pl-opt--switch"><span><span class="pl-meal-icon" aria-hidden="true">{% include "albright_planner/_fork.html" %}</span> Show meals</span><input type="checkbox" name="show_meals" value="1" role="switch" class="pl-switch" id="pl-opt-meals"{% if meals_on %} checked{% endif %}></label>{% endif %}
-                {% if share_choices %}<div class="pl-opt">
-                    <label for="pl-opt-share" class="pl-label">Default sharing for new items</label>
-                    <select name="share" id="pl-opt-share" class="pl-input pl-select">{% for value, label in share_choices %}<option value="{{ value }}"{% if share_current == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-                </div>{% endif %}
+                <p class="pl-opt pl-small" id="pl-opt-share">New items: {{ default_sharing }} &middot; <a href="{% url 'labs:sharing_defaults' %}#default-planner">Change</a></p>
                 <a href="{% url 'albright_planner:settings' %}" class="pl-opt-link" id="pl-settings-link">All Planner settings &rarr;</a>
             </div>
             <div class="pl-sheet__foot">

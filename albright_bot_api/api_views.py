@@ -70,6 +70,17 @@ max bid; add or remove watchlist items; create, delete or edit ledger entries; c
 applications or proposals; read credentials, API keys, tokens or the owner's personal profile.
 Your suggestions are stored for the owner to review; a price suggestion changes nothing until the owner accepts it.
 
+SHARING (Planner items, notes, recipes, workouts): you always act as the token's owner - you see what they can see
+(their own things, and things a person or one of their circles shared with them, while they're active in the circle
+and have opted in to that app) and change only what they may edit. Things you CREATE are shared the way the owner
+shares new things in that app (their Sharing defaults). Create endpoints (POST schedule, POST notes, POST
+meals/recipes, POST meals/recipes/import, POST fitness/workouts) also take an optional
+"share": {"circle": <one of the owner's circle ids>, "permission": "view"|"edit"} or
+"share": {"user": "<exact username or email>", "permission": "view"|"edit"} - checked before anything is made (400
+if the owner can't share with them); the answer's "shared_with" lists who it's shared with. Example: POST schedule
+{"title": "Take out recycling", "date": "2026-11-06", "share": {"circle": 3, "permission": "edit"}}.
+Only the owner can change who something is shared with - there's no endpoint for that.
+
 ENDPOINTS
 ---------
 GET  docs

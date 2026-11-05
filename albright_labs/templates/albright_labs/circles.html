@@ -10,6 +10,7 @@ nobody is ever listed or suggested.
 <div class="container circles-page">
     <h1 class="circles-title">Circles</h1>
     <p class="circles-lead">Groups of people who choose to share some apps. Your personal things stay yours - nobody in a circle (owners included) sees them.</p>
+    <nav class="circles-links" aria-label="Sharing"><a href="{% url 'labs:shared_with_me' %}" class="btn btn-secondary btn-sm">Shared with me</a> <a href="{% url 'labs:sharing_defaults' %}" class="btn btn-secondary btn-sm">Sharing defaults</a></nav>
 
     {% if pending %}
     <section class="card circles-card" id="circle-invites" aria-labelledby="circle-invites-h">

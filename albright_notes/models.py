@@ -7,7 +7,6 @@ A note is only ever visible to its owner and the people it's shared with
 site itself don't belong here: they stay in Admin > Ideas."""
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
 
 ME = "me"                 # Note.created_by for a note its owner wrote on the site
 MAX_TAGS = 20
@@ -20,14 +19,14 @@ class NoteQuerySet(models.QuerySet):
         """Notes this user owns or that are shared with them (view or edit)."""
         if not (user and user.is_authenticated):
             return self.none()
-        shared = NoteShare.objects.filter(user=user).values("note_id")
-        return self.filter(Q(owner=user) | Q(pk__in=shared))
+        from albright_labs import sharing
+        return sharing.visible_queryset(user, Note, self)
 
     def editable_by(self, user):
         if not (user and user.is_authenticated):
             return self.none()
-        shared = NoteShare.objects.filter(user=user, permission=NoteShare.EDIT).values("note_id")
-        return self.filter(Q(owner=user) | Q(pk__in=shared))
+        from albright_labs import sharing
+        return sharing.editable_queryset(user, Note, self)
 
 
 class Note(models.Model):
@@ -62,20 +61,10 @@ class Note(models.Model):
         return self.created_by != ME
 
     def can_edit(self, user):
-        return self.owner_id == user.pk or self.shares.filter(user=user, permission=NoteShare.EDIT).exists()
+        from albright_labs import sharing
+        return sharing.can_edit(user, self)
 
 
-class NoteShare(models.Model):
-    VIEW, EDIT = "view", "edit"
-    PERMISSIONS = [(VIEW, "Can view"), (EDIT, "Can edit")]
-    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name="shares")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shared_notes")
-    permission = models.CharField(max_length=4, choices=PERMISSIONS, default=VIEW)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["user__username"]
-        constraints = [models.UniqueConstraint(fields=["note", "user"], name="notes_one_share_per_user")]
 
 
 class NoteLink(models.Model):

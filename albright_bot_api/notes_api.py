@@ -105,11 +105,14 @@ def notes_create(request, token):
     if not isinstance(pinned, bool):
         raise ApiError(400, '"pinned" must be true or false.', "rejected: bad pinned")
     found = _link(request, token, data["link"]) if data.get("link") else None
+    from . import share_field
+    share_field.validate(token, "notes", data)
     note = notes.create(token.owner, title, body, tags, pinned=pinned, token=token)
+    shared = share_field.apply(token, note, data)
     if found:
         links.add(note, *found)
     return ({**_note_json(note), "url": request.build_absolute_uri(reverse("albright_notes:note", args=[note.pk])),
-             "linked": found[0].title(found[1]) if found else None}, 201, f"note #{note.pk}: {note.title[:80]}")
+             "linked": found[0].title(found[1]) if found else None, "shared_with": shared}, 201, f"note #{note.pk}: {note.title[:80]}")
 
 
 @bot_endpoint("notes:write", methods=("PATCH",))
@@ -118,8 +121,8 @@ def note_update(request, token, note_id):
     _require_notes_access(token)
     models = _models()
     note = models.Note.objects.filter(pk=note_id).first()
-    shared_edit = note is not None and models.NoteShare.objects.filter(
-        note=note, user=token.owner, permission=models.NoteShare.EDIT).exists()
+    from albright_labs import sharing
+    shared_edit = note is not None and note.owner_id != token.owner_id and sharing.can_edit(token.owner, note)
     if note is None or not (note.bot_token_id == token.pk or shared_edit):
         # Someone else's note, or one this bot didn't write: same answer as a missing one.
         raise ApiError(404, f"No note {note_id} this bot can change.", "rejected: note not found or not the bot's")

@@ -8,11 +8,11 @@ from datetime import date
 from django.test import Client
 
 from albright_bot_api.models import BotToken
-from albright_labs.testing import allow_api_keys
+from albright_labs.testing import allow_api_keys, share_with
 from albright_meals.models import GroceryItem
 
 from . import checklist, planner
-from .models import ChecklistItemCompletion, ItemCompletion, ItemShare, PlannerSettings, ScheduleItem, TaskChecklistItem
+from .models import ChecklistItemCompletion, ItemCompletion, PlannerSettings, ScheduleItem, TaskChecklistItem
 from .tests import TODAY, Base, url
 
 
@@ -195,7 +195,7 @@ class GroceryTests(Fixtures):
 class SharedTests(Fixtures):
     def test_editors_tick_and_it_shows_who(self):
         task = self.task()
-        ItemShare.objects.create(item=task, user=self.wife, permission=ItemShare.EDIT)
+        share_with(task, self.wife, "edit")
         wife = self.as_user(self.wife)
         self.assertEqual(self.tick(task, "Tent", TODAY, client=wife).json()["done_by"], "sam")
         self.assertEqual(ChecklistItemCompletion.objects.get().done_by, self.wife)
@@ -204,7 +204,7 @@ class SharedTests(Fixtures):
 
     def test_view_only_cannot_tick(self):
         task = self.task()
-        ItemShare.objects.create(item=task, user=self.wife, permission=ItemShare.VIEW)
+        share_with(task, self.wife, "view")
         self.assertEqual(self.tick(task, "Tent", TODAY, client=self.as_user(self.wife)).status_code, 404)
         self.assertFalse(ChecklistItemCompletion.objects.exists())
 

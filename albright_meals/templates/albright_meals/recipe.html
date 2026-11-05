@@ -3,11 +3,11 @@
 {% block page_title %}{{ recipe.title }} · {% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
-    <a href="{% url 'albright_meals:recipes' %}{% if not editable %}?tab={% if share %}shared{% else %}library{% endif %}{% endif %}" class="meals-back">&larr; Recipes</a>
+    <a href="{% url 'albright_meals:recipes' %}{% if not owned %}?tab={% if shared_grant %}shared{% else %}library{% endif %}{% endif %}" class="meals-back">&larr; Recipes</a>
     <article class="meals-recipe">
-        {# Not ours (the library, or shared with me): read-only - "Save to my recipes" makes our own copy. #}
-        {% if not editable %}<div class="card meals-readonly" id="recipe-readonly">
-            <p>{% if share %}<strong>{{ share.shared_by.first_name|default:share.shared_by.username|default:"Someone" }}</strong> shared this with you{% else %}From the <strong>Recipe library</strong>{% endif %} &middot; {{ recipe.space.label }}'s recipe, read-only.</p>
+        {# Not in my spaces (the library, or shared with me): "Save to my recipes" makes my own copy. #}
+        {% if not owned %}<div class="card meals-readonly" id="recipe-readonly">
+            <p>{% if shared_grant %}<strong>{{ shared_grant.created_by.first_name|default:shared_grant.created_by.username|default:"Someone" }}</strong> shared this with you{% else %}From the <strong>Recipe library</strong>{% endif %} &middot; {{ recipe.space.label }}'s recipe, {% if editable %}you can edit it{% else %}read-only{% endif %}.</p>
             <form method="post" action="{% url 'albright_meals:recipe_save_copy' recipe.pk %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm" id="recipe-save-copy">Save to my recipes</button></form>
         </div>{% endif %}
         {# Rating: this person's own (others never see it here); blank until they pick one. Saves on change (static/meals/recipe.js); without JS, Save. #}
@@ -39,7 +39,7 @@
 
         {% include "albright_meals/_nutrition_box.html" %}
 
-        {% if editable %}<div class="meals-recipe__actions">
+        {% if owned %}<div class="meals-recipe__actions">
             <form method="post" action="{% url 'albright_meals:recipe_plan' recipe.pk %}" class="meals-inline" id="recipe-plan-form">{% csrf_token %}
                 <div class="field"><label for="{{ plan_form.date.id_for_label }}">Day</label>{{ plan_form.date }}</div>
                 <div class="field"><label for="{{ plan_form.slot.id_for_label }}">Slot</label>{{ plan_form.slot }}</div>
@@ -52,11 +52,15 @@
             </form>
             {% endif %}
             <div class="meals-share-actions">
-                <button type="button" class="btn btn-secondary btn-sm" data-share-open="{% url 'albright_meals:recipe_share' recipe.pk %}" data-share-title="{{ recipe.title }}" data-share-link="{% url 'albright_meals:recipe' recipe.pk %}" data-share-list='[{% for s in shares %}{"user": {{ s.shared_with_id }}, "name": "{{ s.shared_with.first_name|default:s.shared_with.username|escapejs }}"}{% if not forloop.last %}, {% endif %}{% endfor %}]'>Share</button>
                 <form method="post" action="{% url 'albright_meals:recipe_visibility' recipe.pk %}" class="meals-inline-form">{% csrf_token %}
                     <input type="hidden" name="visibility" value="{% if recipe.visibility == 'library' %}household{% else %}library{% endif %}">
                     <button type="submit" class="btn btn-secondary btn-sm" id="recipe-visibility">{% if recipe.visibility == "library" %}Take out of the library{% else %}Put in the shared library{% endif %}</button>
                 </form>
+                {% if move_spaces %}<form method="post" action="{% url 'albright_meals:recipe_move' recipe.pk %}" class="meals-inline-form" id="recipe-move" data-confirm="Move {{ recipe.title }}? It will belong to the space you pick - its people see and change it there. (Sharing instead only shows it to them.)">{% csrf_token %}
+                    <label for="recipe-move-to" class="visually-hidden">Move to space</label>
+                    <select name="to" id="recipe-move-to" class="ledger-input">{% for s in move_spaces %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select>
+                    <button type="submit" class="btn btn-secondary btn-sm">Move to space</button>
+                </form>{% endif %}
             </div>
         </div>{% endif %}
 
@@ -93,7 +97,7 @@
         <p class="meals-hint">{% if source_link %}<a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">Original recipe</a>{% if editable %} &middot; {% endif %}{% endif %}{% if editable %}<a href="{% url 'albright_meals:recipe_edit' recipe.pk %}">Edit this recipe</a>{% endif %}</p>
     </article>
 </div>
-{% if editable %}{% include "albright_meals/_share_dialog.html" %}{% endif %}
+{% include "albright_labs/_share.html" %}
 {% include "albright_meals/_converter.html" %}
 <script src="{% static_version 'meals/recipe.js' %}" defer></script>
 <script src="{% static_version 'meals/ratings.js' %}" defer></script>

@@ -21,7 +21,6 @@ def forward(apps, schema_editor):
     ScheduleItem = apps.get_model("albright_planner", "ScheduleItem")
     ItemCompletion = apps.get_model("albright_planner", "ItemCompletion")
     ItemException = apps.get_model("albright_planner", "ItemException")
-    ItemShare = apps.get_model("albright_planner", "ItemShare")
     DeletedSourceItem = apps.get_model("albright_planner", "DeletedSourceItem")
     items = auto_items(ScheduleItem)
     ids = [item.pk for item in items]
@@ -30,7 +29,10 @@ def forward(apps, schema_editor):
                                                 source_id=item.source_id)
     ItemCompletion.objects.filter(item_id__in=ids).delete()
     ItemException.objects.filter(item_id__in=ids).delete()
-    ItemShare.objects.filter(item_id__in=ids).delete()
+    try:  # ItemShare was replaced by albright_labs.ShareGrant (planner 0013)
+        apps.get_model("albright_planner", "ItemShare").objects.filter(item_id__in=ids).delete()
+    except LookupError:
+        pass
     ScheduleItem.objects.filter(pk__in=ids).delete()
 
 

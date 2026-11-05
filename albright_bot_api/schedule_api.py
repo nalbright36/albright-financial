@@ -241,16 +241,17 @@ def schedule_create(request, token):
     if from_completion and not (rule and kind == ScheduleItem.TASK and not until and not count):
         raise ApiError(400, '"repeat_from_completion" is for a repeating task with no end.',
                        "rejected: repeat_from_completion without an open-ended task")
+    from . import share_field
+    share_field.validate(token, "planner", data)
     item = ScheduleItem.objects.create(
         owner=token.owner, title=title, date=start, start_time=start_time, end_time=end_time, kind=kind,
         checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", NOTES_MAX),
         recurrence=rule, recurrence_until=until, recurrence_count=count, repeat_from_completion=from_completion,
         created_by=token.name[:150], from_bot=True, bot_token=token)
     from albright_planner.checklist import create_rows
-    from albright_planner.planner import apply_default_shares
     create_rows(item, subtasks)
-    apply_default_shares(item)                       # shared as the owner chose by default
-    return _item_json(request, item), 201, f"item #{item.pk}: {item.title[:80]}" + (f" ({rule})" if rule else "")
+    shared = share_field.apply(token, item, data)    # the owner's default, plus "share"
+    return {**_item_json(request, item), "shared_with": shared}, 201, f"item #{item.pk}: {item.title[:80]}" + (f" ({rule})" if rule else "")
 
 
 def _set_done(request, token, item_id, done):
