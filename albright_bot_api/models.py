@@ -162,13 +162,13 @@ class OpportunityNote(_BotWrite):
 class SiteSuggestion(_BotWrite):
     """POST site-suggestions - a website idea for the Admin inbox
     (/control/suggestions/). I set the status and add my own notes."""
-    APPS = [("trade", "Trading"), ("resell", "Reselling"), ("opps", "Opportunities"), ("all", "Whole site")]
+    APPS = [("trade", "Trading"), ("resell", "Reselling"), ("opps", "Opportunities"), ("planner", "Planner"), ("meals", "Meals"), ("money", "Money"), ("fitness", "Fitness"), ("ideas", "Ideas"), ("all", "Whole site")]
     PRIORITIES = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
     # The same statuses as Admin > Ideas (albright_control.models.Idea.STATUSES) - migration 0004
     # moved the old ones over (accepted -> planned).
     STATUSES = [("new", "New"), ("considering", "Considering"), ("planned", "Planned"),
                 ("in_progress", "In progress"), ("done", "Done"), ("declined", "Declined")]
-    app = models.CharField(max_length=6, choices=APPS)
+    app = models.CharField(max_length=10, choices=APPS)
     area = models.CharField(max_length=100, blank=True)
     title = models.CharField(max_length=200)
     description = models.TextField()
