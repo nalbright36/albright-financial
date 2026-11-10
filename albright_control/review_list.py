@@ -48,7 +48,9 @@ STATUS_KEYS = {"considering": "C", "planned": "P", "in_progress": "I", "declined
 # Undo puts a row back to new.
 SUGGESTION_TABS = SiteSuggestion.STATUSES + [("all", "All")]
 SUGGESTION_SHORTCUTS = [
+    (["P"], "Promote to Idea", "promote"),
     (["X"], "Declined", "declined"),
+    (["D"], "Delete", "delete"),
     (["N"], "Add a note", "note"),
     (["Y"], "Copy as Claude Code prompt", "copy"),
     (["→", "Space"], "Skip", "skip"),

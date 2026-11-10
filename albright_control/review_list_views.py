@@ -166,6 +166,8 @@ def suggestion_delete(request, pk):
     suggestion = get_object_or_404(SiteSuggestion, pk=pk)
     audit(request, "suggestion_deleted", f'#{pk} "{suggestion.title[:80]}"')
     suggestion.delete()
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "id": pk, "counts": KINDS["suggestions"].counts(), "new_counts": new_counts()})
     messages.success(request, "Suggestion deleted.")
     return _back(request, "suggestions")
 

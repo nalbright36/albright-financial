@@ -238,6 +238,56 @@
         }).catch(function () {});
     }
 
+    // Suggestions: Promote and Delete stay on the page - saved in the background, then the next one shows.
+    function promote(id, url) {
+        var item = rowFor(id), previous = item ? item.dataset.status : "new";
+        showRowStatus(id, "promoted");
+        return post(url, {}).then(function (res) {
+            if (!res.ok) throw new Error("save failed");
+            updateCounts(res.data.counts);
+            updateNav(res.data.new_counts);
+            var detail = detailFor(id);
+            if (detail) {
+                var form = detail.querySelector("[data-promote-form]");
+                if (form) {
+                    var link = el("a", "ib-sbtn", "Promoted to Idea #" + res.data.idea);
+                    link.href = res.data.idea_url;
+                    form.replaceWith(link);
+                }
+                var statusForm = detail.querySelector("[data-status-form]");
+                if (statusForm) statusForm.hidden = true;
+            }
+            toast("Promoted to Idea #" + res.data.idea);
+            return res.data;
+        }).catch(function (err) {
+            showRowStatus(id, previous);
+            toast("Couldn't promote that - try again.");
+            throw err;
+        });
+    }
+
+    function removeItem(id, url) {
+        return post(url, {}).then(function (res) {
+            if (!res.ok) throw new Error("delete failed");
+            var item = rowFor(id), detail = detailFor(id);
+            if (item) {
+                var list = visibleItems(), at = list.indexOf(item), wasSel = item.classList.contains("sel");
+                if (!item.hidden) adjustTotal(-1);
+                item.remove();
+                if (detail) detail.remove();
+                if (wasSel) select(list[at + 1] || list[at - 1] || null);
+                refreshEmpty();
+            }
+            updateCounts(res.data.counts);
+            updateNav(res.data.new_counts);
+            toast("Suggestion deleted.");
+            return res.data;
+        }).catch(function (err) {
+            toast("Couldn't delete that - try again.");
+            throw err;
+        });
+    }
+
     // An idea's detail tabs (Details | Planner | Notes): one pane shows; the choice is remembered for the session so
     // a form that posts and comes back (a Planner check-off, a new subtask) opens on the same tab.
     var DTAB_KEY = "ib-dtab";
@@ -282,6 +332,12 @@
         if (form.matches("[data-status-form]") && event.submitter && event.submitter.name === "status") {
             event.preventDefault();
             moveTo(form.closest(".ib-detail").dataset.id, event.submitter.value);
+        } else if (form.matches("[data-promote-form]")) {
+            event.preventDefault();
+            promote(form.closest(".ib-detail").dataset.id, form.action).catch(function () {});
+        } else if (form.matches("[data-delete-form]")) {
+            event.preventDefault();
+            if (window.confirm(form.dataset.ask)) removeItem(form.closest(".ib-detail").dataset.id, form.action).catch(function () {});
         } else if (form.matches("[data-notes-form]")) {
             event.preventDefault();
             var id = form.closest(".ib-detail").dataset.id;
@@ -362,7 +418,7 @@
         var box = byId("rv-status");
         var st = decided[item.id];
         box.hidden = !st;
-        box.textContent = st ? "Moved to " + (LABELS[st] || st) + " - press U to undo" : "";
+        box.textContent = st ? (st === "promoted" ? "Promoted to an Idea" : "Moved to " + (LABELS[st] || st) + " - press U to undo") : "";
     }
 
     function render() {
@@ -523,6 +579,33 @@
         KEYS[key] = status;
         ACTIONS[status] = function () { decide(status); };
     });
+    ACTIONS.promote = function () {
+        var item = currentItem();
+        if (!item || !item.urls.move) return;
+        flash("promote");
+        if (decided[item.id] !== "promoted") {
+            decided[item.id] = "promoted";
+            undoStack = undoStack.filter(function (u) { return u.item !== item; });
+            promote(item.id, item.urls.move).catch(function () {
+                delete decided[item.id];
+                if (currentItem() === item) renderStatus(item);
+            });
+        }
+        next();
+    };
+    ACTIONS["delete"] = function () {
+        var item = currentItem();
+        if (!item || !item.urls.delete || !window.confirm("Delete this suggestion? This can't be undone.")) return;
+        flash("delete");
+        removeItem(item.id, item.urls.delete).then(function () {
+            var at = queue.indexOf(item);
+            if (at !== -1) queue.splice(at, 1);
+            undoStack = undoStack.filter(function (u) { return u.item !== item; });
+            if (at !== -1 && at < index) index -= 1;
+            render();
+        }).catch(function () {});
+    };
+    if (byId("rv-legend").querySelector('[data-legend="promote"]')) { KEYS.p = "promote"; KEYS.d = "delete"; }   // suggestions only
 
     document.addEventListener("keydown", function (event) {
         if (!reviewing || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;

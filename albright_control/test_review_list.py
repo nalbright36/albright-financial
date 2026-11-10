@@ -150,6 +150,9 @@ class TabsTests(ReviewListTestCase):
         self.assertIn('<button type="submit" class="ib-sbtn">Promote</button>', detail)
         self.assertIn(reverse("albright_control:suggestion_to_idea", args=[suggestion.pk]), detail)
         self.assertNotIn("Move to Ideas", detail)
+        self.assertIn("data-promote-form", detail)
+        self.assertIn("data-delete-form", detail)
+        self.assertNotIn('data-confirm="Promote', detail)
         self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), detail)
         self.assertNotIn(">Merge</button>", detail)
 
@@ -265,6 +268,22 @@ class StatusChangeTests(ReviewListTestCase):
         self.assertTrue(details[0][1].endswith("new -> declined"))
         self.assertTrue(details[1][1].endswith("declined -> new (undo)"))
 
+    def test_promote_and_delete_stay_on_the_page(self):
+        ajax = {"content_type": "application/json", "HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
+        s = self.items["suggestions"]["Middle new"]
+        r = self.client.post(reverse("albright_control:suggestion_to_idea", args=[s.pk]), "{}", **ajax)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        s.refresh_from_db()
+        self.assertEqual((s.status, s.promoted_idea_id), ("promoted", data["idea"]))
+        self.assertEqual(data["idea_url"], reverse("albright_control:idea", args=[data["idea"]]))
+        self.assertIn("promoted", data["counts"])
+        self.assertIn("suggestions", data["new_counts"])
+        other = self.items["suggestions"]["Newest new"]
+        r = self.client.post(reverse("albright_control:suggestion_delete", args=[other.pk]), "{}", **ajax)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(SiteSuggestion.objects.filter(pk=other.pk).exists())
+
     def test_idea_status_changed_at_follows(self):
         idea = self.items["ideas"]["Oldest new"]
         before = idea.status_changed_at
@@ -369,7 +388,7 @@ class ReviewModeTests(ReviewListTestCase):
         # Suggestions: X declines; no Idea statuses.
         other = self.page("suggestions").content.decode().split('id="rv-legend"', 1)[1].split("</aside>", 1)[0]
         self.assertEqual([action for _keys, _label, action in SUGGESTION_SHORTCUTS],
-                         ["declined", "note", "copy", "skip", "back", "undo", "help"])
+                         ["promote", "declined", "delete", "note", "copy", "skip", "back", "undo", "help"])
         for action in ("considering", "planned", "in_progress"):
             self.assertNotIn(f'data-legend="{action}"', other)
         self.assertIn('class="review-layout"', content)          # the reseller review queue's layout and card

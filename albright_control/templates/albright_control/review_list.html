@@ -171,10 +171,10 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                     {% if r.promoted_idea %}
                     <a href="{{ r.promoted_url }}" class="ib-sbtn">Promoted to Idea #{{ r.promoted_idea }}</a>
                     {% elif r.status != "promoted" %}
-                    <form method="post" action="{{ r.urls.move }}" data-confirm="Promote this suggestion to an Idea? It stays here as Promoted, linked to the new idea.">{% csrf_token %}
+                    <form method="post" action="{{ r.urls.move }}" data-promote-form>{% csrf_token %}
                         <button type="submit" class="ib-sbtn">Promote</button></form>
                     {% endif %}
-                    <form method="post" action="{{ r.urls.delete }}" data-confirm="Delete this suggestion? This can't be undone.">{% csrf_token %}
+                    <form method="post" action="{{ r.urls.delete }}" data-delete-form data-ask="Delete this suggestion? This can't be undone.">{% csrf_token %}
                         <input type="hidden" name="next" value="{{ next }}">
                         <button type="submit" class="ib-sbtn decline">Delete</button></form>
                 </div>

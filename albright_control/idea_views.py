@@ -3,7 +3,9 @@ Claude Code prompt, my Planner tasks for it), and "Promote" from the Bot
 suggestions inbox. The list itself is review_list_views.py. Superusers only."""
 from django import forms
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -219,5 +221,11 @@ def _detail_context(request, idea, form, task_form=None, sub_form=None):
 def suggestion_to_idea(request, pk):
     suggestion = get_object_or_404(SiteSuggestion, pk=pk)
     idea = from_suggestion(suggestion, user=request.user)
+    from .review_list_views import _wants_json
+    if _wants_json(request):        # the Suggestions page stays put; the next one shows
+        from .review_list import KINDS, new_counts
+        return JsonResponse({"ok": True, "id": suggestion.pk, "idea": idea.pk,
+                             "idea_url": reverse("albright_control:idea", args=[idea.pk]),
+                             "counts": KINDS["suggestions"].counts(), "new_counts": new_counts()})
     messages.success(request, f"Promoted to Idea #{idea.pk}")
     return redirect("albright_control:idea", pk=idea.pk)
