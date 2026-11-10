@@ -37,6 +37,9 @@
         <ul style="list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px;" id="idea-task-list">
             {% for t in planner_tasks %}
             <li class="idea-task{% if t.done %} is-done{% endif %}" data-item="{{ t.item.pk }}" style="display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 0.875rem;">
+                <form method="post" action="{% url 'albright_planner:toggle' t.item.pk %}" style="display: inline; margin: 0;">{% csrf_token %}
+                    <input type="hidden" name="date" value="{{ t.date|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-secondary btn-sm" aria-pressed="{{ t.done|yesno:'true,false' }}" aria-label="{% if t.done %}Mark not done{% else %}Mark done{% endif %}: {{ t.item.title }}">{% if t.done %}&#9745;{% else %}&#9744;{% endif %}</button></form>
                 <span class="badge {% if t.done %}gain{% else %}neutral{% endif %}">{% if t.done %}Done{% else %}Open{% endif %}</span>
                 <a href="{% url 'albright_planner:item' t.item.pk %}?date={{ t.date|date:'Y-m-d' }}" style="overflow-wrap: anywhere;">{{ t.item.title }}</a>
                 <span style="color: var(--text-secondary);">{{ t.date|date:"D, M j, Y" }}</span>

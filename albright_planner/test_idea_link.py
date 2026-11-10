@@ -124,13 +124,65 @@ class IdeaTaskTests(TestCase):
         self.assertRedirects(response, self.page_url, fetch_redirect_response=False)
         self.assertTrue(ScheduleItem.objects.filter(idea=self.idea, title="Elsewhere").exists())
 
-    def test_ideas_list_has_the_add_to_planner_form(self):
-        content = self.client.get(reverse("albright_control:ideas")).content.decode()
+    # Steps in the ideas list --------------------------------------------------
+    def steps_panel(self, client=None):
+        content = (client or self.client).get(reverse("albright_control:ideas")).content.decode()
         detail = content.split(f'id="rl-detail-{self.idea.pk}"', 1)[1].split("</section>", 1)[0]
-        self.assertIn('<button type="submit" class="ib-sbtn">Add to Planner</button>', detail)
-        self.assertIn('<input type="hidden" name="action" value="add_task">', detail)
-        self.assertIn(f'name="date" value="{self.today.isoformat()}"', detail)
-        self.assertIn('name="title" value="Dark charts"', detail)
+        return detail.split('<div class="ib-steps">', 1)[1]
+
+    def step_form(self, panel, item):
+        return panel.split(reverse("albright_planner:toggle", args=[item.pk]), 1)[1].split("</form>", 1)[0]
+
+    def test_ideas_list_has_the_steps_form(self):
+        panel = self.steps_panel()
+        self.assertIn("No steps yet.", panel)
+        self.assertIn('<button type="submit" class="ib-sbtn">Add step</button>', panel)
+        self.assertIn('<input type="hidden" name="action" value="add_task">', panel)
+        self.assertIn(f'name="date" value="{self.today.isoformat()}"', panel)
+        self.assertIn('placeholder="Add a step…"', panel)
+        self.assertNotIn('value="Dark charts"', panel)                  # no longer prefilled
+        first, _second = self.two_tasks()
+        form = self.step_form(self.steps_panel(), first)
+        self.assertIn('aria-pressed="false">&#9744;</button>', form)
+        self.assertIn(f"<span>{first.title}</span>", form)
+        self.assertIn(f'name="date" value="{first.date.isoformat()}"', form)
+
+    def test_check_a_step_from_the_list(self):
+        first, second = self.two_tasks()
+        back = "/control/ideas/"
+        response = self.client.post(reverse("albright_planner:toggle", args=[first.pk]),
+                                    {"date": first.date.isoformat(), "next": back})
+        self.assertRedirects(response, back, fetch_redirect_response=False)
+        self.assertTrue(ItemCompletion.objects.filter(item=first, occurrence_date=first.date).exists())
+        panel = self.steps_panel()
+        self.assertIn('aria-pressed="true">&#9745;</button>', self.step_form(panel, first))
+        self.assertIn("text-decoration: line-through", self.step_form(panel, first))
+        self.assertIn('aria-pressed="false">&#9744;</button>', self.step_form(panel, second))
+        day = self.client.get(reverse("albright_planner:day") + f"?date={first.date.isoformat()}").content.decode()
+        row = day.split(f'data-item="{first.pk}"', 1)[0].rsplit("<li", 1)[1]
+        self.assertIn("is-done", row)
+
+    def test_checked_in_the_planner_shows_checked_in_the_list(self):
+        first, _second = self.two_tasks()
+        self.client.post(reverse("albright_planner:toggle", args=[first.pk]), {"date": first.date.isoformat()})
+        self.assertIn('aria-pressed="true">&#9745;</button>', self.step_form(self.steps_panel(), first))
+        # ...and on the Idea page, which has the same toggle.
+        page = self.client.get(self.page_url).content.decode()
+        self.assertIn(reverse("albright_planner:toggle", args=[first.pk]), page)
+        self.assertIn(f'aria-label="Mark not done: {first.title}"', page)
+
+    def test_two_steps_listed_another_user_sees_none(self):
+        first, second = self.two_tasks()
+        panel = self.steps_panel()
+        self.assertIn("Steps (2)", panel)
+        for item in (first, second):
+            self.assertIn(item.title, panel)
+        client = Client()
+        client.force_login(self.other)
+        theirs = self.steps_panel(client)
+        self.assertIn("No steps yet.", theirs)
+        for item in (first, second):
+            self.assertNotIn(item.title, theirs)
 
     def test_bad_task_form_shows_errors(self):
         response = self.client.post(self.page_url, {"action": "add_task", "title": "", "date": "not a date"})

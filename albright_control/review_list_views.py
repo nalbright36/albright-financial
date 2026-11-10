@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 from albright_bot_api.models import SiteSuggestion
 
 from .access import audit, superuser_required
+from .models import Idea
 from .review_list import DEFAULT_TAB, KINDS, LIST_LIMIT, new_counts
 
 TEXT_LIMIT = 5000
@@ -51,12 +52,24 @@ def list_page(request, kind):
     status = status if status in tabs else DEFAULT_TAB
     values = k.filter_values(request.GET)
     qs = k.queryset(values, status)
-    rows = [k.row(obj) for obj in qs[:LIST_LIMIT]]
+    if kind == "ideas":
+        # Steps: my Planner tasks for each idea (idea_views._planner_tasks - never anyone else's).
+        from .idea_views import _planner_tasks
+        rows = [{**k.row(obj), "steps": _planner_tasks(obj, request.user)} for obj in qs[:LIST_LIMIT]]
+    else:
+        rows = [k.row(obj) for obj in qs[:LIST_LIMIT]]
     keep = {name: value for name, value in values.items() if value}
     queue = []
     if status == "new":
         # Review mode: the same New items (with the same filters), oldest first.
         queue = [k.row(obj) for obj in k.queryset({**values, "sort": "oldest"}, "new")[:LIST_LIMIT]]
+        if kind == "ideas":
+            # The same steps, as plain values - review mode gets the queue as JSON.
+            from .idea_views import _planner_tasks
+            by_id = {obj.pk: obj for obj in Idea.objects.filter(pk__in=[r["id"] for r in queue])}
+            for r in queue:
+                r["steps"] = [{"id": s["item"].pk, "title": s["item"].title, "date": s["date"].isoformat(),
+                               "done": s["done"]} for s in _planner_tasks(by_id[r["id"]], request.user)]
     counts = k.counts()
     return render(request, "albright_control/review_list.html", {
         "kind": k, "status": status, "status_label": tabs[status], "rows": rows, "total": qs.count(),
@@ -72,7 +85,7 @@ def list_page(request, kind):
         "merge_targets": (k.model.objects.exclude(status__in=("done", "declined")).only("pk", "title")[:LIST_LIMIT]
                           if kind == "ideas" else []),
         "next": request.get_full_path(),
-        "today": today(),
+        "today": today(request.user),
     })
 
 
