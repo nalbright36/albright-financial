@@ -118,6 +118,14 @@ class OneShowsTests(Base):
         self.assertEqual(planner.today_panel(self.me)["overdue"], 1)
         self.assertEqual([(o.item.pk, o.date) for o in planner.today_panel(self.me)["tasks"]], [(item.pk, d(10, 5))])
 
+    def test_overdue_from_before_this_week_shows_on_week_today(self):
+        """Week view used to hide an overdue one-at-a-time task whose date fell outside the seven days."""
+        item = self.task(start=d(10, 5))
+        self.on(d(11, 9))                                      # Monday of this week
+        week = self.client.get(url("week") + "?date=2026-11-09").content.decode()
+        self.assertEqual(self.count_on_page(week, item), 1)
+        self.assertIn("is-overdue", week.split(f'data-item="{item.pk}"', 1)[0].rsplit("<li", 1)[1])
+
     def test_detail_says_one_at_a_time(self):
         item = self.task(start=d(11, 9))
         page = self.client.get(url("edit", item.pk)).content.decode()
@@ -264,6 +272,20 @@ class OtherActionsTests(Base):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self.client.post(url("toggle", item.pk), {"date": "2026-11-07"},
                                           HTTP_X_REQUESTED_WITH="XMLHttpRequest").json(), {"ok": True, "done": True})
+
+    def test_future_scheduled_date_cannot_be_completed_ahead_of_current(self):
+        """A daily one-at-a-time task: only the current occurrence can be checked off - not a later scheduled day
+        (which used to succeed via is_scheduled, leaving an orphan completion without moving the series on)."""
+        item = self.task(rule="FREQ=DAILY", start=d(11, 2))       # current: Mon Nov 2 (overdue on Wed Nov 4)
+        self.assertEqual(self.current(item), d(11, 2))
+        self.assertIsNone(planner.toggle(item, d(11, 4), self.me, done=True))   # today, scheduled, but not current
+        self.assertFalse(ItemCompletion.objects.filter(item=item).exists())
+        self.assertEqual(self.current(item), d(11, 2))
+        self.assertFalse(planner.valid_occurrence(item, d(11, 4)))
+        self.assertTrue(planner.valid_occurrence(item, d(11, 2)))
+        response = self.client.post(url("toggle", item.pk), {"date": "2026-11-04"},
+                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 400)
 
 
 class SharedTests(Base):

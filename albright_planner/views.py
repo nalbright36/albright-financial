@@ -217,12 +217,23 @@ def week_view(request):
     day = _day(request.GET.get("date"), today)
     start = planner.week_start(day)
     end = start + timedelta(days=6)
-    occs = checklist.attach(planner.occurrences(request.user, start, end, **_filters(request)))
+    f = _filters(request)
+    occs = checklist.attach(planner.occurrences(request.user, start, end, **f))
     meals = sources.meals(request.user, start, end, show=_options(request)["meals"])
+    # Overdue one-offs / one-at-a-time tasks from before this week: pin onto Today (Day view already does this;
+    # without it, Week hid anything whose date fell outside the seven days).
+    overdue_outside = []
+    if start <= today <= end:
+        overdue_outside = [o for o in planner.overdue(request.user, today, kind=f["kind"], who=f["who"])
+                           if not (start <= o.date <= end)]
+        if overdue_outside:
+            checklist.attach(overdue_outside)
     days = []
     for i in range(7):
         d = start + timedelta(days=i)
         top, timed = _split([o for o in occs if o.date == d])
+        if d == today and overdue_outside:
+            top = overdue_outside + top
         top = [m for m in meals if m.date == d] + top
         days.append({"date": d, "top": top, "timed": timed, "is_today": d == today})
     title = f"{start:%b} {start.day} – " + (f"{end.day}" if end.month == start.month else f"{end:%b} {end.day}") + f", {end.year}"

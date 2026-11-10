@@ -429,7 +429,7 @@ class ScheduleApiTests(Base):
         self.assertFalse(ScheduleItem.objects.filter(title="x").exists())
 
     def test_complete_and_uncomplete_one_occurrence(self):
-        gym = self.item("Gym", recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR")
+        gym = self.item("Gym", recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", recurrence_until=TODAY + timedelta(days=60))
         response = self.call("POST", self.api_url("schedule_complete", gym.pk), {"occurrence_date": "2026-11-06"})
         self.assertEqual(response.json(), {"item_id": gym.pk, "occurrence_date": "2026-11-06", "done": True})
         self.assertEqual(list(gym.completions.values_list("occurrence_date", flat=True)), [TODAY + timedelta(days=2)])

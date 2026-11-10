@@ -225,12 +225,11 @@ def _put_back(item, occurrence_date):
 
 def valid_occurrence(item, day):
     """Whether `day` names one of the item's occurrences: scheduled that day, or (one at a time) its current one or
-    one already done."""
-    if recurrence.is_scheduled(item, day):
-        return True
+    one already done. A one-at-a-time task only exposes its current occurrence (and past completions) - never a
+    future scheduled date, so completing or ticking a checklist can't jump ahead of the series."""
     if item.one_at_a_time:
         return day == current_occurrence(item) or item.completions.filter(occurrence_date=day).exists()
-    return False
+    return recurrence.is_scheduled(item, day)
 
 
 def current_or_first(item):
@@ -422,7 +421,8 @@ def _toggle_one_at_a_time(item, occurrence_date, user, done):
     completed = set(item.completions.values_list("occurrence_date", flat=True))
     current = current_occurrence(item, completed)
     is_done = occurrence_date in completed
-    if not (is_done or occurrence_date == current or recurrence.is_scheduled(item, occurrence_date)):
+    # Only the current occurrence (or one already done, for undo) - not a future scheduled date.
+    if not (is_done or occurrence_date == current):
         return None
     want = (not is_done) if done is None else done
     if want and not is_done:

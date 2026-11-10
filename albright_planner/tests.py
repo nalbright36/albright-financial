@@ -110,7 +110,7 @@ class ExpansionTests(Base):
 
 class CompletionTests(Base):
     def test_check_off_records_only_that_occurrence(self):
-        item = self.item(recurrence="FREQ=DAILY", date=d(11, 1))
+        item = self.item(recurrence="FREQ=DAILY", date=d(11, 1), recurrence_until=d(12, 31))   # ends: not one at a time
         response = self.client.post(url("toggle", item.pk), {"date": "2026-11-04"}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.json(), {"ok": True, "done": True})
         self.assertEqual(list(ItemCompletion.objects.values_list("occurrence_date", flat=True)), [d(11, 4)])
@@ -157,6 +157,8 @@ class ChangeTests(Base):
         self.assertEqual(ScheduleItem.objects.count(), 1)
 
     def test_this_and_following(self):
+        self.series.recurrence_until = d(12, 31)          # ends: not one at a time, so any day can be checked off
+        self.series.save()
         planner.toggle(self.series, d(11, 3), self.me)
         planner.toggle(self.series, d(11, 6), self.me)
         new = planner.change(self.series, d(11, 5), planner.FOLLOWING, {"title": "Standup v2"})
@@ -338,7 +340,7 @@ class MoveTests(Base):
         self.assertEqual(item.date, d(11, 6))
 
     def test_drag_a_repeating_item(self):
-        item = self.item(recurrence="FREQ=DAILY", date=d(11, 2))
+        item = self.item(recurrence="FREQ=DAILY", date=d(11, 2), recurrence_until=d(12, 31))   # ends: not one at a time
         self.post(item, {"date": "2026-11-04", "to": "2026-11-07", "scope": "this"})
         exc = ItemException.objects.get()
         self.assertEqual((exc.occurrence_date, exc.new_date, exc.action), (d(11, 4), d(11, 7), "move"))
