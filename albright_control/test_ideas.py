@@ -10,7 +10,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from albright_bot_api.models import SCOPES, BotToken, SiteSuggestion
-from albright_control.ideas import claude_code_prompt, find_duplicate, similarity
+from albright_control.ideas import claude_code_prompt, find_duplicate, from_suggestion, similarity
 from albright_control.models import AuditEntry, Idea
 from albright_control.prompts import CLOSING
 from albright_labs.testing import with_apps
@@ -221,20 +221,39 @@ class IdeasPageTests(TestCase):
         self.assertFalse(Idea.objects.filter(pk=self.medium.pk).exists())
         self.assertEqual(AuditEntry.objects.get().action, "idea_deleted")
 
-    def test_move_from_bot_suggestions(self):
+    def test_promote_from_bot_suggestions(self):
         suggestion = SiteSuggestion.objects.create(app="opps", area="Income tab", title="Calendar view",
                                                    description="Show deadlines on a calendar.", priority="high",
                                                    my_notes="good one")
         inbox = self.client.get(reverse("albright_control:suggestions"))
         self.assertContains(inbox, reverse("albright_control:suggestion_to_idea", args=[suggestion.pk]))
-        response = self.client.post(reverse("albright_control:suggestion_to_idea", args=[suggestion.pk]))
+        response = self.client.post(reverse("albright_control:suggestion_to_idea", args=[suggestion.pk]), follow=True)
         idea = Idea.objects.get(title="Calendar view")
         self.assertRedirects(response, reverse("albright_control:idea", args=[idea.pk]))
+        self.assertContains(response, f"Promoted to Idea #{idea.pk}")
         self.assertEqual((idea.source, idea.app, idea.priority, idea.description, idea.my_notes, idea.status),
                          ("moved_from_suggestion", "opps", "high", "Show deadlines on a calendar.", "good one", "new"))
         self.assertIn(f"Moved from Bot suggestion #{suggestion.pk} - Income tab", idea.original_message)
-        self.assertFalse(SiteSuggestion.objects.filter(pk=suggestion.pk).exists())
+        # The suggestion stays in the inbox as promoted, linked to the idea.
+        suggestion.refresh_from_db()
+        self.assertEqual((suggestion.status, suggestion.promoted_idea_id), ("promoted", idea.pk))
+        self.assertEqual(list(idea.from_suggestions.all()), [suggestion])
         self.assertEqual(AuditEntry.objects.get().action, "idea_created")
+
+    def test_promote_is_idempotent(self):
+        suggestion = SiteSuggestion.objects.create(app="trade", title="Dark charts", description="d")
+        url = reverse("albright_control:suggestion_to_idea", args=[suggestion.pk])
+        first = self.client.post(url)
+        second = self.client.post(url)
+        idea = Idea.objects.get(title="Dark charts")
+        self.assertEqual(Idea.objects.filter(title="Dark charts").count(), 1)
+        for response in (first, second):
+            self.assertRedirects(response, reverse("albright_control:idea", args=[idea.pk]),
+                                 fetch_redirect_response=False)
+        suggestion.refresh_from_db()
+        self.assertEqual((suggestion.status, suggestion.promoted_idea_id), ("promoted", idea.pk))
+        self.assertEqual(from_suggestion(suggestion), idea)
+        self.assertEqual(AuditEntry.objects.filter(action="idea_created").count(), 1)
 
     def test_prompt_format(self):
         idea = Idea.objects.create(title="Watchlist sound alert", description="Beep under max in the last 10 min.",

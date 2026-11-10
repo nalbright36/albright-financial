@@ -1,9 +1,10 @@
 """Admin > Ideas and Admin > Bot suggestions as one shared list
 (review_list.py, review_list_views.py, review_list.html, review_list.js):
-the same statuses, status tabs that always open on New, ?status=, tab
-counts, quick status changes and Undo (JSON and plain form posts), review
-mode's queue, the empty state, the nav/overview New counts, the suggestion
-status migration, and superuser-only access."""
+status tabs that always open on New, ?status=, tab counts, quick status
+changes and Undo (JSON and plain form posts), review mode's queue, the empty
+state, the nav/overview New counts, the suggestion status migrations, and
+superuser-only access. Ideas keep Idea.STATUSES; a suggestion is an inbox
+item - new, declined or promoted (only by Promote)."""
 import importlib
 import json
 import re
@@ -17,13 +18,18 @@ from django.utils import timezone
 
 from albright_bot_api.models import SiteSuggestion
 from albright_control.models import AuditEntry, Idea
-from albright_control.review_list import SHORTCUTS, STATUSES, TABS, ago
+from albright_control.review_list import (KINDS, ROW_STATUSES, SHORTCUTS, STATUS_KEYS, STATUSES, SUGGESTION_SHORTCUTS,
+                                          SUGGESTION_TABS, TABS, ago)
 from albright_labs.testing import with_apps
 
 PASSWORD = "pw-not-real-12345"
 TEMPLATE = "albright_control/review_list.html"
 PAGES = {"ideas": "albright_control:ideas", "suggestions": "albright_control:suggestions"}
 STATUS_URLS = {"ideas": "albright_control:idea_status", "suggestions": "albright_control:suggestion_status"}
+IDEA_SEED = [("Oldest new", "new"), ("Middle new", "new"), ("Newest new", "new"),
+             ("A plan", "planned"), ("Thinking", "considering"), ("Shipped", "done")]
+SUGGESTION_SEED = [("Oldest new", "new"), ("Middle new", "new"), ("Newest new", "new"),
+                   ("Turned down", "declined"), ("Not now", "declined"), ("Shipped", "promoted")]
 
 
 class ReviewListTestCase(TestCase):
@@ -32,17 +38,17 @@ class ReviewListTestCase(TestCase):
         self.client.force_login(self.admin)
         now = timezone.now()
         self.items = {"ideas": {}, "suggestions": {}}
-        for i, (title, status) in enumerate([("Oldest new", "new"), ("Middle new", "new"), ("Newest new", "new"),
-                                             ("A plan", "planned"), ("Thinking", "considering"), ("Shipped", "done")]):
+        for i, ((title, status), (s_title, s_status)) in enumerate(zip(IDEA_SEED, SUGGESTION_SEED)):
             idea = Idea.objects.create(title=f"Idea {title}", description=f"About {title}", original_message="m",
                                        status=status)
-            suggestion = SiteSuggestion.objects.create(app="resell", title=f"Suggestion {title}",
-                                                       description=f"About {title}", status=status)
+            suggestion = SiteSuggestion.objects.create(app="resell", title=f"Suggestion {s_title}",
+                                                       description=f"About {s_title}", status=s_status,
+                                                       promoted_idea=idea if s_status == "promoted" else None)
             # Spread the created times so "oldest first" is well defined.
             Idea.objects.filter(pk=idea.pk).update(created_at=now - timedelta(hours=10 - i))
             SiteSuggestion.objects.filter(pk=suggestion.pk).update(created_at=now - timedelta(hours=10 - i))
             self.items["ideas"][title] = idea
-            self.items["suggestions"][title] = suggestion
+            self.items["suggestions"][s_title] = suggestion
 
     def page(self, kind, **params):
         return self.client.get(reverse(PAGES[kind]), params)
@@ -68,7 +74,7 @@ class TabsTests(ReviewListTestCase):
     def test_opening_the_page_always_shows_new(self):
         for kind in PAGES:
             with self.subTest(kind=kind):
-                self.page(kind, status="planned")            # look at another tab first...
+                self.page(kind, status="declined")           # look at another tab first...
                 self.page(kind, status="all")
                 response = self.page(kind)                   # ...then open the page plainly
                 self.assertEqual(response.context["status"], "new")
@@ -77,23 +83,28 @@ class TabsTests(ReviewListTestCase):
                 self.assertEqual(response.content.decode().count("ib-tab is-on"), 1)
 
     def test_status_param_picks_the_tab(self):
-        prefix = {"ideas": "Idea", "suggestions": "Suggestion"}
+        self.assertEqual(self.titles("ideas", status="planned"), ["Idea A plan"])
+        self.assertEqual(self.titles("ideas", status="considering"), ["Idea Thinking"])
+        self.assertEqual(self.titles("suggestions", status="declined"), ["Suggestion Not now", "Suggestion Turned down"])
+        self.assertEqual(self.titles("suggestions", status="promoted"), ["Suggestion Shipped"])
+        # Idea-only statuses aren't suggestion tabs: they fall back to New.
+        self.assertEqual(self.page("suggestions", status="considering").context["status"], "new")
         for kind in PAGES:
             with self.subTest(kind=kind):
-                self.assertEqual(self.titles(kind, status="planned"), [f"{prefix[kind]} A plan"])
-                self.assertEqual(self.titles(kind, status="considering"), [f"{prefix[kind]} Thinking"])
                 self.assertEqual(len(self.titles(kind, status="all")), 6)
                 self.assertEqual(len(self.titles(kind, status="bogus")), 3)        # unknown -> New
                 self.assertEqual(self.page(kind, status="bogus").context["status"], "new")
 
     def test_tab_counts(self):
+        expected = {"ideas": ({"new": 3, "considering": 1, "planned": 1, "in_progress": 0, "done": 1, "declined": 0,
+                               "all": 6}, TABS),
+                    "suggestions": ({"new": 3, "declined": 2, "promoted": 1, "all": 6}, SUGGESTION_TABS)}
         for kind in PAGES:
             with self.subTest(kind=kind):
                 response = self.page(kind)
                 counts = {tab["key"]: tab["count"] for tab in response.context["tabs"]}
-                self.assertEqual(counts, {"new": 3, "considering": 1, "planned": 1, "in_progress": 0, "done": 1,
-                                          "declined": 0, "all": 6})
-                self.assertEqual([tab["key"] for tab in response.context["tabs"]], [k for k, _l in TABS])
+                self.assertEqual(counts, expected[kind][0])
+                self.assertEqual([tab["key"] for tab in response.context["tabs"]], [k for k, _l in expected[kind][1]])
                 self.assertContains(response, '<span class="ib-count" data-count="new">3</span>')
                 self.assertContains(response, '<span class="ib-count" data-count="all">6</span>')
 
@@ -135,9 +146,19 @@ class TabsTests(ReviewListTestCase):
 
         suggestion = self.items["suggestions"]["Newest new"]
         detail = self.detail(self.page("suggestions").content.decode(), suggestion.pk)
-        self.assertIn("Move to Ideas", detail)
+        self.assertIn('<button type="submit" class="ib-sbtn">Promote</button>', detail)
+        self.assertIn(reverse("albright_control:suggestion_to_idea", args=[suggestion.pk]), detail)
+        self.assertNotIn("Move to Ideas", detail)
         self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), detail)
         self.assertNotIn("Merge duplicates", detail)
+
+    def test_promoted_suggestion_links_to_its_idea(self):
+        suggestion = self.items["suggestions"]["Shipped"]
+        detail = self.detail(self.page("suggestions", status="promoted").content.decode(), suggestion.pk)
+        idea_url = reverse("albright_control:idea", args=[suggestion.promoted_idea_id])
+        self.assertIn(f'<a href="{idea_url}" class="ib-sbtn">Promoted to Idea #{suggestion.promoted_idea_id}</a>', detail)
+        self.assertNotIn(">Promote</button>", detail)
+        self.assertNotIn("data-status-form", detail)          # no Decline on a promoted one
 
     def test_inbox_structure_on_both_pages(self):
         """Option C: tabs, filters, then the split - items on the left, one detail per item on the right,
@@ -162,14 +183,17 @@ class TabsTests(ReviewListTestCase):
 
     def test_status_buttons_exclude_the_current_status_and_no_menu(self):
         keys = {"Considering": "C", "Planned": "P", "In progress": "I", "Declined": "X"}
+        cases = {"ideas": (("Middle new", "new"), ("A plan", "planned"), ("Shipped", "done")),
+                 "suggestions": (("Middle new", "new"),)}
         for kind in PAGES:
-            for name, status in (("Middle new", "new"), ("A plan", "planned"), ("Shipped", "done")):
+            statuses = KINDS[kind].row_statuses
+            for name, status in cases[kind]:
                 with self.subTest(kind=kind, status=status):
                     obj = self.items[kind][name]
                     content = self.page(kind, status=status).content.decode()
                     form = self.detail(content, obj.pk).split("data-status-form", 1)[1].split("</form>", 1)[0]
                     shown = re.findall(r'value="\w+" class="ib-sbtn[^"]*">([^<]+)(?:<span class="ib-kbd">(\w)</span>)?</button>', form)
-                    expected = [label for key, label in STATUSES if key not in ("new", status)]
+                    expected = [label for key, label in statuses if key not in ("new", status)]
                     self.assertEqual([label for label, _key in shown], expected)
                     self.assertEqual({label: key for label, key in shown if key}, {k: v for k, v in keys.items() if k in expected})
                     self.assertNotIn('value="new"', form)
@@ -178,6 +202,15 @@ class TabsTests(ReviewListTestCase):
                     self.assertNotIn("rl-more", content)
                     self.assertNotIn("…</summary>", content)
 
+    def test_suggestions_only_decline_and_promote(self):
+        content = self.page("suggestions").content.decode()
+        obj = self.items["suggestions"]["Middle new"]
+        form = self.detail(content, obj.pk).split("data-status-form", 1)[1].split("</form>", 1)[0]
+        self.assertEqual(re.findall(r'name="status" value="(\w+)"', form), ["declined"])
+        for label in ("Considering", "Planned", "In progress", "Done"):
+            self.assertNotIn(f">{label}<", self.detail(content, obj.pk))
+        self.assertIn('data-status-keys="{&quot;x&quot;: &quot;declined&quot;}"', content)
+
     def test_empty_new_tab(self):
         Idea.objects.filter(status="new").update(status="planned")
         response = self.page("ideas")
@@ -185,25 +218,28 @@ class TabsTests(ReviewListTestCase):
         self.assertContains(response, f'href="?status=planned">Planned</a>')
         self.assertNotContains(response, 'id="rl-start-review"')
         self.assertNotContains(response, 'id="rl-queue"')
+        SiteSuggestion.objects.filter(status="new").update(status="declined")
+        self.assertContains(self.page("suggestions"), 'href="?status=declined">Declined</a>')
         filtered = self.page("ideas", status="done", q="nothing like this")
         self.assertContains(filtered, "Nothing in Done matches these filters.")
 
 
 class StatusChangeTests(ReviewListTestCase):
     def test_quick_status_updates_counts_and_leaves_new(self):
-        for kind in PAGES:
+        for kind, (status, label, after) in (("ideas", ("planned", "Planned", 2)),
+                                             ("suggestions", ("declined", "Declined", 3))):
             with self.subTest(kind=kind):
                 obj = self.items[kind]["Middle new"]
-                response = self.set_status(kind, obj, "planned")
+                response = self.set_status(kind, obj, status)
                 self.assertEqual(response.status_code, 200)
                 data = response.json()
-                self.assertEqual((data["status"], data["label"], data["previous"]), ("planned", "Planned", "new"))
-                self.assertEqual((data["counts"]["new"], data["counts"]["planned"], data["counts"]["all"]), (2, 2, 6))
+                self.assertEqual((data["status"], data["label"], data["previous"]), (status, label, "new"))
+                self.assertEqual((data["counts"]["new"], data["counts"][status], data["counts"]["all"]), (2, after, 6))
                 self.assertEqual(data["new_counts"][kind], 2)
                 obj.refresh_from_db()
-                self.assertEqual(obj.status, "planned")
+                self.assertEqual(obj.status, status)
                 self.assertNotIn(obj.title, self.titles(kind))
-                self.assertIn(obj.title, self.titles(kind, status="planned"))
+                self.assertIn(obj.title, self.titles(kind, status=status))
 
     def test_undo_puts_it_back(self):
         for kind in PAGES:
@@ -211,7 +247,8 @@ class StatusChangeTests(ReviewListTestCase):
                 obj = self.items[kind]["Oldest new"]
                 self.set_status(kind, obj, "declined")
                 data = self.set_status(kind, obj, "new", undo=True).json()
-                self.assertEqual((data["status"], data["counts"]["new"], data["counts"]["declined"]), ("new", 3, 0))
+                declined = {"ideas": 0, "suggestions": 2}[kind]
+                self.assertEqual((data["status"], data["counts"]["new"], data["counts"]["declined"]), ("new", 3, declined))
                 self.assertIn(obj.title, self.titles(kind))
         details = list(AuditEntry.objects.order_by("pk").values_list("action", "details"))
         self.assertEqual([a for a, _d in details], ["idea_status", "idea_status", "suggestion_status", "suggestion_status"])
@@ -230,6 +267,32 @@ class StatusChangeTests(ReviewListTestCase):
         self.assertEqual(self.set_status("suggestions", obj, "accepted").status_code, 400)
         obj.refresh_from_db()
         self.assertEqual(obj.status, "new")
+
+    def test_suggestions_take_only_new_and_declined(self):
+        obj = self.items["suggestions"]["Oldest new"]
+        for status in ("considering", "planned", "in_progress", "done", "promoted"):
+            with self.subTest(status=status):
+                self.assertEqual(self.set_status("suggestions", obj, status).status_code, 400)
+        obj.refresh_from_db()
+        self.assertEqual((obj.status, obj.promoted_idea_id), ("new", None))
+        # A promoted suggestion stays promoted - the Idea is where it moves on.
+        promoted = self.items["suggestions"]["Shipped"]
+        for status in ("new", "declined"):
+            with self.subTest(promoted=status):
+                self.assertEqual(self.set_status("suggestions", promoted, status).status_code, 400)
+        promoted.refresh_from_db()
+        self.assertEqual(promoted.status, "promoted")
+
+    def test_idea_statuses_and_shortcuts_unchanged(self):
+        self.assertEqual([k for k, _l in STATUSES], ["new", "considering", "planned", "in_progress", "done", "declined"])
+        self.assertEqual(STATUSES, Idea.STATUSES)
+        self.assertEqual(KINDS["ideas"].statuses, Idea.STATUSES)
+        self.assertEqual([k for k, _l in ROW_STATUSES], ["considering", "planned", "in_progress", "done", "declined"])
+        self.assertEqual(STATUS_KEYS, {"considering": "C", "planned": "P", "in_progress": "I", "declined": "X"})
+        idea = self.items["ideas"]["Oldest new"]
+        for status in ("considering", "planned", "in_progress", "done", "declined"):
+            with self.subTest(status=status):
+                self.assertEqual(self.set_status("ideas", idea, status).status_code, 200)
 
     def test_plain_form_post_goes_back(self):
         obj = self.items["ideas"]["Oldest new"]
@@ -293,14 +356,20 @@ class ReviewModeTests(ReviewListTestCase):
             self.assertIn(label, legend)
             for key in keys:
                 self.assertIn(f'<kbd class="kbd">{key}</kbd>', legend)
+        # Suggestions: X declines; no Idea statuses.
+        other = self.page("suggestions").content.decode().split('id="rv-legend"', 1)[1].split("</aside>", 1)[0]
+        self.assertEqual([action for _keys, _label, action in SUGGESTION_SHORTCUTS],
+                         ["declined", "note", "copy", "skip", "back", "undo", "help"])
+        for action in ("considering", "planned", "in_progress"):
+            self.assertNotIn(f'data-legend="{action}"', other)
         self.assertIn('class="review-layout"', content)          # the reseller review queue's layout and card
         self.assertIn('class="card review-card"', content)
 
     def test_review_actions_with_undo_update_new(self):
-        """What review mode does for C / P / X and then U: the same status endpoint (undo flagged)."""
+        """What review mode does for X and then U: the same status endpoint (undo flagged)."""
         queue = self.queue("suggestions")
         first, second = (SiteSuggestion.objects.get(pk=item["id"]) for item in queue[:2])
-        self.assertEqual(self.set_status("suggestions", first, "considering").json()["counts"]["new"], 2)
+        self.assertEqual(self.set_status("suggestions", first, "declined").json()["counts"]["new"], 2)
         self.assertEqual(self.set_status("suggestions", second, "declined").json()["counts"]["new"], 1)
         self.assertEqual(len(self.queue("suggestions")), 1)
         undone = self.set_status("suggestions", second, "new", undo=True).json()
@@ -322,7 +391,7 @@ class NavAndOverviewTests(ReviewListTestCase):
         self.assertContains(response, f'href="{reverse("albright_control:suggestions")}?status=new"')
         tile = response.content.decode().split('id="suggestion-counts"', 1)[1].split("</a>", 1)[0]
         self.assertIn("3 new", tile)
-        self.assertIn("1 planned &middot; 0 in progress", tile)
+        self.assertIn("1 promoted &middot; 2 declined", tile)
 
 
 class AccessTests(ReviewListTestCase):
@@ -343,7 +412,7 @@ class AccessTests(ReviewListTestCase):
             for url in urls:
                 with self.subTest(who=who and who.username, url=url):
                     self.assertEqual(client.get(url).status_code, 404)
-                    self.assertEqual(client.post(url, {"status": "done", "my_notes": "x"}).status_code, 404)
+                    self.assertEqual(client.post(url, {"status": "declined", "my_notes": "x"}).status_code, 404)
         idea.refresh_from_db()
         suggestion.refresh_from_db()
         self.assertEqual((idea.status, suggestion.status, idea.my_notes), ("new", "new", ""))
@@ -351,11 +420,31 @@ class AccessTests(ReviewListTestCase):
 
 
 class StatusesTests(TestCase):
-    def test_both_pages_share_the_statuses(self):
-        self.assertEqual(SiteSuggestion.STATUSES, Idea.STATUSES)
-        self.assertEqual([k for k, _l in STATUSES], ["new", "considering", "planned", "in_progress", "done", "declined"])
+    def test_suggestions_have_inbox_statuses_ideas_keep_theirs(self):
+        self.assertEqual([k for k, _l in SiteSuggestion.STATUSES], ["new", "declined", "promoted"])
+        self.assertEqual([k for k, _l in KINDS["suggestions"].statuses], ["new", "declined", "promoted"])
+        self.assertEqual([k for k, _l in Idea.STATUSES], ["new", "considering", "planned", "in_progress", "done", "declined"])
+        self.assertNotEqual(SiteSuggestion.STATUSES, Idea.STATUSES)
 
-    def test_suggestion_status_migration(self):
+    def test_inbox_status_migration(self):
+        """0007: considering / planned / in_progress -> new, done -> promoted; new and declined stay."""
+        migration = importlib.import_module("albright_bot_api.migrations.0007_sitesuggestion_inbox_statuses")
+        rows = {}
+        for old in ("new", "considering", "planned", "in_progress", "done", "declined"):
+            s = SiteSuggestion.objects.create(app="all", title=old, description="d")
+            SiteSuggestion.objects.filter(pk=s.pk).update(status=old)      # the Idea-style values, as stored before
+            rows[old] = s.pk
+        migration.remap(migration.FORWARD)(django_apps, None)
+        after = dict(SiteSuggestion.objects.values_list("pk", "status"))
+        self.assertEqual({old: after[pk] for old, pk in rows.items()},
+                         {"new": "new", "considering": "new", "planned": "new", "in_progress": "new",
+                          "done": "promoted", "declined": "declined"})
+        migration.remap(migration.BACKWARD)(django_apps, None)
+        back = dict(SiteSuggestion.objects.values_list("pk", "status"))
+        self.assertEqual(back[rows["done"]], "done")
+        self.assertEqual(back[rows["declined"]], "declined")
+
+    def test_old_suggestion_status_migration(self):
         migration = importlib.import_module("albright_bot_api.migrations.0004_sitesuggestion_idea_statuses")
         rows = {}
         for old in ("new", "accepted", "declined", "done"):

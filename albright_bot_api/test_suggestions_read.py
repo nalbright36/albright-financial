@@ -1,5 +1,6 @@
 """GET site-suggestions and site-suggestions/counts: the suggestions:read scope (or site:suggest for a token's
-own), filters, include=description, paging, the private notes never leaving, and the activity log."""
+own), filters, include=description, paging, the private notes never leaving, and the activity log.
+Suggestion statuses are the inbox's: new, declined, promoted."""
 from datetime import timedelta
 
 from django.urls import reverse
@@ -21,8 +22,8 @@ class SuggestionsReadTests(BotApiTestCase):
             token=token, title=title, description=f"About {title}", my_notes=f"SECRET note on {title}",
             **{"app": "all", **f})
         self.new = mk(self.poster, "Calendar view", app="opps", priority="high")
-        self.planned = mk(self.poster, "Dark charts", status="planned", app="trade")
-        self.doing = mk(self.reader, "Faster search", status="in_progress", app="resell", priority="low")
+        self.declined = mk(self.poster, "Dark charts", status="declined", app="trade")
+        self.promoted = mk(self.reader, "Faster search", status="promoted", app="resell", priority="low")
         self.other = mk(None, "Old idea", status="new")          # its token was deleted
 
     def get(self, path, raw, **params):
@@ -47,7 +48,7 @@ class SuggestionsReadTests(BotApiTestCase):
 
     def test_reader_sees_every_bot_suggestion_newest_first(self):
         response = self.get(LIST, self.reader_raw)
-        self.assertEqual(self.ids(response), [self.other.pk, self.doing.pk, self.planned.pk, self.new.pk])
+        self.assertEqual(self.ids(response), [self.other.pk, self.promoted.pk, self.declined.pk, self.new.pk])
         data = response.json()
         self.assertFalse(data["own_only"])
         self.assertEqual(data["total"], 4)
@@ -60,9 +61,9 @@ class SuggestionsReadTests(BotApiTestCase):
 
     def test_site_suggest_alone_sees_only_its_own(self):
         response = self.get(LIST, self.poster_raw)
-        self.assertEqual(self.ids(response), [self.planned.pk, self.new.pk])
+        self.assertEqual(self.ids(response), [self.declined.pk, self.new.pk])
         self.assertTrue(response.json()["own_only"])
-        self.assertEqual(self.ids(self.get(LIST, self.poster_raw, status="in_progress")), [])
+        self.assertEqual(self.ids(self.get(LIST, self.poster_raw, status="promoted")), [])
 
     def test_posting_still_works_on_the_same_path(self):
         response = self.call("POST", LIST, {"app": "all", "title": "New one", "description": "x"},
@@ -74,17 +75,24 @@ class SuggestionsReadTests(BotApiTestCase):
     # filters -------------------------------------------------------------
     def test_status_filter_one_and_several(self):
         self.assertEqual(self.ids(self.get(LIST, self.reader_raw, status="new")), [self.other.pk, self.new.pk])
-        self.assertEqual(self.ids(self.get(LIST, self.reader_raw, status="planned,in_progress")),
-                         [self.doing.pk, self.planned.pk])
-        response = self.get(LIST, self.reader_raw, status="planned,accepted")
+        self.assertEqual(self.ids(self.get(LIST, self.reader_raw, status="declined,promoted")),
+                         [self.promoted.pk, self.declined.pk])
+        response = self.get(LIST, self.reader_raw, status="declined,accepted")
         self.assertEqual(response.status_code, 400)
-        self.assertIn("in_progress", response.json()["error"])
+        self.assertIn("new, declined, promoted", response.json()["error"])
+
+    def test_idea_statuses_are_refused(self):
+        for status in ("considering", "planned", "in_progress", "done"):
+            with self.subTest(status=status):
+                response = self.get(LIST, self.reader_raw, status=status)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"], '"status" must be one or more of: new, declined, promoted.')
 
     def test_app_priority_query_and_dates(self):
         self.assertEqual(self.ids(self.get(LIST, self.reader_raw, app="trade,resell")),
-                         [self.doing.pk, self.planned.pk])
+                         [self.promoted.pk, self.declined.pk])
         self.assertEqual(self.ids(self.get(LIST, self.reader_raw, priority="high")), [self.new.pk])
-        self.assertEqual(self.ids(self.get(LIST, self.reader_raw, q="CHARTS")), [self.planned.pk])
+        self.assertEqual(self.ids(self.get(LIST, self.reader_raw, q="CHARTS")), [self.declined.pk])
         long_ago = timezone.now() - timedelta(days=30)
         SiteSuggestion.objects.filter(pk=self.new.pk).update(created_at=long_ago, updated_at=long_ago)
         since = (timezone.localdate() - timedelta(days=1)).isoformat()
@@ -110,7 +118,7 @@ class SuggestionsReadTests(BotApiTestCase):
         self.assertEqual(self.ids(self.get(LIST, self.reader_raw, q="SECRET")), [])   # not searched either
 
     def test_sort_by_status_change_and_paging(self):
-        self.new.status = "considering"
+        self.new.status = "declined"
         self.new.save(update_fields=["status", "updated_at"])         # how Admin saves a move
         self.new.refresh_from_db()
         self.assertGreater(self.new.status_changed_at, self.other.status_changed_at)
@@ -124,18 +132,18 @@ class SuggestionsReadTests(BotApiTestCase):
         self.assertEqual(self.get(LIST, self.reader_raw, page="x").status_code, 400)
 
     def test_status_changed_at_only_moves_on_a_status_change(self):
-        before = self.planned.status_changed_at
-        self.planned.my_notes = "edited"
-        self.planned.save(update_fields=["my_notes", "updated_at"])
-        self.planned.refresh_from_db()
-        self.assertEqual(self.planned.status_changed_at, before)
+        before = self.declined.status_changed_at
+        self.declined.my_notes = "edited"
+        self.declined.save(update_fields=["my_notes", "updated_at"])
+        self.declined.refresh_from_db()
+        self.assertEqual(self.declined.status_changed_at, before)
 
     # counts --------------------------------------------------------------
     def test_counts(self):
         response = self.get(COUNTS, self.reader_raw)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"counts": {"new": 2, "considering": 0, "planned": 1, "in_progress": 1,
-                                                      "done": 0, "declined": 0}, "total": 4})
+        self.assertEqual(response.json(), {"counts": {"new": 2, "declined": 1, "promoted": 1}, "total": 4})
+        self.assertEqual(list(response.json()["counts"]), ["new", "declined", "promoted"])
 
     # log -----------------------------------------------------------------
     def test_calls_are_logged(self):

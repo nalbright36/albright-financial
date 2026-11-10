@@ -4,7 +4,8 @@
  *
  * The inbox (Option C of docs/design/ideas_layout_options.html): clicking a
  * title on the left shows its details on the right (below it on a phone).
- * The detail's status buttons - or C / P / I / X for the selected item - save
+ * The detail's status buttons - or their keys (data-status-keys: Ideas C / P / I / X,
+ * Bot suggestions X; Promote is a plain form post) for the selected item - save
  * without a reload: the item leaves the current tab at once, the next one is
  * selected, the tab counts and the Admin nav's New badges update, and a
  * toast offers "Undo" for a few seconds. Notes save in place too.
@@ -12,7 +13,8 @@
  * Daily review (the New tab's "Start review"): New items one at a time,
  * oldest first, with the reseller review queue's card, legend and help
  * overlay (review_queue.js's pattern):
- *   C considering   P planned   I in progress   X declined   (each saves, then next)
+ *   Ideas: C considering   P planned   I in progress   X declined   (each saves, then next)
+ *   Bot suggestions: X declined
  *   N add a note    Y copy as Claude Code prompt
  *   →/Space skip    ← back      U undo          ? help
  *
@@ -30,7 +32,9 @@
     root.querySelectorAll("#rl-tabs [data-tab]").forEach(function (tab) {
         LABELS[tab.dataset.tab] = tab.firstChild.textContent.trim();
     });
-    var KEY_STATUSES = {c: "considering", p: "planned", i: "in_progress", x: "declined"};
+    // The Kind's status keys (review_list.py), e.g. {"c": "considering", ...} on Ideas, {"x": "declined"} on suggestions.
+    var KEY_STATUSES = {};
+    try { KEY_STATUSES = JSON.parse(root.dataset.statusKeys || "{}"); } catch (e) { KEY_STATUSES = {}; }
 
     function byId(id) { return document.getElementById(id); }
     function csrfToken() {
@@ -257,7 +261,7 @@
         }
     });
 
-    // C / P / I / X - the key hints on the detail's buttons - for the selected item (not while reviewing,
+    // The key hints on the detail's status buttons (KEY_STATUSES) - for the selected item (not while reviewing,
     // which has its own keys, or while typing).
     document.addEventListener("keydown", function (event) {
         if (reviewing || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;
@@ -482,13 +486,15 @@
     }
 
     var ACTIONS = {
-        considering: function () { decide("considering"); }, planned: function () { decide("planned"); },
-        in_progress: function () { decide("in_progress"); }, declined: function () { decide("declined"); },
         note: openNote, copy: copyPrompt, skip: function () { flash("skip"); next(); },
         back: function () { flash("back"); back(); }, undo: undo, help: function () { toggleHelp(); },
     };
-    var KEYS = {c: "considering", p: "planned", i: "in_progress", x: "declined", n: "note", y: "copy",
-                ArrowRight: "skip", " ": "skip", ArrowLeft: "back", u: "undo", "?": "help"};
+    var KEYS = {n: "note", y: "copy", ArrowRight: "skip", " ": "skip", ArrowLeft: "back", u: "undo", "?": "help"};
+    Object.keys(KEY_STATUSES).forEach(function (key) {
+        var status = KEY_STATUSES[key];
+        KEYS[key] = status;
+        ACTIONS[status] = function () { decide(status); };
+    });
 
     document.addEventListener("keydown", function (event) {
         if (!reviewing || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;

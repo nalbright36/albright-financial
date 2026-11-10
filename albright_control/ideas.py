@@ -68,7 +68,12 @@ SUGGESTION_APPS = {"trade": "trade", "resell": "resell", "opps": "opps", "all": 
 
 
 def from_suggestion(suggestion, user=None):
-    """A Bot suggestion becomes an idea (source moved_from_suggestion); the suggestion is removed."""
+    """Promote a Bot suggestion to an idea (source moved_from_suggestion). The suggestion stays in the
+    inbox as promoted, linked to the idea; promoting it again returns that same idea."""
+    if suggestion.status == "promoted" and suggestion.promoted_idea_id:
+        existing = Idea.objects.filter(pk=suggestion.promoted_idea_id).first()
+        if existing:
+            return existing
     idea = Idea.objects.create(
         title=suggestion.title[:200], description=suggestion.description,
         original_message=f"(Moved from Bot suggestion #{suggestion.pk}{' - ' + suggestion.area if suggestion.area else ''})\n"
@@ -78,8 +83,10 @@ def from_suggestion(suggestion, user=None):
         my_notes=suggestion.my_notes, source="moved_from_suggestion", token=suggestion.token,
         possible_duplicate_of=find_duplicate(suggestion.title))
     AuditEntry.objects.create(user=user, action="idea_created",
-                              details=f'#{idea.pk} "{idea.title[:80]}" moved from Bot suggestion #{suggestion.pk}')
-    suggestion.delete()
+                              details=f'#{idea.pk} "{idea.title[:80]}" promoted from Bot suggestion #{suggestion.pk}')
+    suggestion.status = "promoted"
+    suggestion.promoted_idea = idea
+    suggestion.save()
     return idea
 
 

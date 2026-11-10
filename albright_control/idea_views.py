@@ -129,5 +129,5 @@ def _detail_context(idea, form):
 def suggestion_to_idea(request, pk):
     suggestion = get_object_or_404(SiteSuggestion, pk=pk)
     idea = from_suggestion(suggestion, user=request.user)
-    messages.success(request, f'Moved to Ideas as #{idea.pk}.')
+    messages.success(request, f"Promoted to Idea #{idea.pk}")
     return redirect("albright_control:idea", pk=idea.pk)

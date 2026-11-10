@@ -22,7 +22,7 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("opportunities:read", "Read opportunities found in the last 7 days."),
     ("opportunities:suggest", "Leave notes and proposal drafts on opportunities (never sent anywhere)."),
     ("site:suggest", "Drop website improvement ideas in the Admin inbox (Bot suggestions)."),
-    ("suggestions:read", "Read bot suggestions and their status (e.g. what's New, Planned, or In progress)."),
+    ("suggestions:read", "Read bot suggestions and their status (New, Declined, or Promoted to an Idea)."),
     ("ideas:write", "Save the owner's ideas (what they told the bot) to Admin > Ideas."),
     ("ideas:read", "List existing idea titles and statuses, to avoid sending duplicates."),
     ("meals:read", "Read the Meals plan, grocery list, meal ideas and recipes."),
@@ -166,10 +166,9 @@ class SiteSuggestion(_BotWrite):
     (/control/suggestions/). I set the status and add my own notes."""
     APPS = [("trade", "Trading"), ("resell", "Reselling"), ("opps", "Opportunities"), ("planner", "Planner"), ("meals", "Meals"), ("money", "Money"), ("fitness", "Fitness"), ("ideas", "Ideas"), ("all", "Whole site")]
     PRIORITIES = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
-    # The same statuses as Admin > Ideas (albright_control.models.Idea.STATUSES) - migration 0004
-    # moved the old ones over (accepted -> planned).
-    STATUSES = [("new", "New"), ("considering", "Considering"), ("planned", "Planned"),
-                ("in_progress", "In progress"), ("done", "Done"), ("declined", "Declined")]
+    # An inbox item, not an Idea: new until I decline it or promote it (albright_control.ideas.from_suggestion
+    # sets promoted and promoted_idea). Migration 0007 moved the old Idea-style statuses over.
+    STATUSES = [("new", "New"), ("declined", "Declined"), ("promoted", "Promoted")]
     app = models.CharField(max_length=10, choices=APPS)
     area = models.CharField(max_length=100, blank=True)
     title = models.CharField(max_length=200)
@@ -179,6 +178,8 @@ class SiteSuggestion(_BotWrite):
     my_notes = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    promoted_idea = models.ForeignKey("albright_control.Idea", null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name="from_suggestions")
 
     @classmethod
     def from_db(cls, db, field_names, values):

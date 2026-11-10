@@ -16,10 +16,8 @@ from django.views.decorators.http import require_POST
 from albright_bot_api.models import SiteSuggestion
 
 from .access import audit, superuser_required
-from .review_list import (DEFAULT_TAB, KINDS, LIST_LIMIT, ROW_STATUSES, SHORTCUTS, STATUS_KEYS, STATUSES, TABS,
-                          new_counts)
+from .review_list import DEFAULT_TAB, KINDS, LIST_LIMIT, new_counts
 
-STATUS_LABELS = dict(STATUSES)
 TEXT_LIMIT = 5000
 
 
@@ -48,7 +46,8 @@ def _back(request, kind):
 def list_page(request, kind):
     k = KINDS[kind]
     status = request.GET.get("status", "")
-    status = status if status in dict(TABS) else DEFAULT_TAB
+    tabs = dict(k.tabs)
+    status = status if status in tabs else DEFAULT_TAB
     values = k.filter_values(request.GET)
     qs = k.queryset(values, status)
     rows = [k.row(obj) for obj in qs[:LIST_LIMIT]]
@@ -59,14 +58,16 @@ def list_page(request, kind):
         queue = [k.row(obj) for obj in k.queryset({**values, "sort": "oldest"}, "new")[:LIST_LIMIT]]
     counts = k.counts()
     return render(request, "albright_control/review_list.html", {
-        "kind": k, "status": status, "status_label": dict(TABS)[status], "rows": rows, "total": qs.count(),
+        "kind": k, "status": status, "status_label": tabs[status], "rows": rows, "total": qs.count(),
         "counts": counts, "tabs": [{"key": key, "label": label, "count": counts[key],
-                                    "url": "?" + urlencode({**keep, "status": key})} for key, label in TABS],
+                                    "url": "?" + urlencode({**keep, "status": key})} for key, label in k.tabs],
         "filters": [{"name": name, "label": label, "value": values[name],
                      "choices": [(t, t) for t in k.tags()] if name == "tag" else choices}
                     for name, label, choices in k.filters],
         "values": values, "filtered": any(values[name] for name in values if name != "sort"),
-        "row_statuses": [(key, label, STATUS_KEYS.get(key, "")) for key, label in ROW_STATUSES], "shortcuts": SHORTCUTS, "queue": queue,
+        "row_statuses": [(key, label, k.status_keys.get(key, "")) for key, label in k.row_statuses],
+        "shortcuts": k.shortcuts, "queue": queue,
+        "status_keys": json.dumps({key.lower(): status for status, key in k.status_keys.items()}),
         "merge_targets": (k.model.objects.exclude(status__in=("done", "declined")).only("pk", "title")[:LIST_LIMIT]
                           if kind == "ideas" else []),
         "next": request.get_full_path(),
@@ -87,15 +88,22 @@ def suggestions(request):
 @require_POST
 def set_status(request, kind, pk):
     """{"status": key} (plus "undo": true when it's putting one back). JSON callers get the new tab
-    counts and the nav's New counts; a plain form post goes back to the page."""
+    counts and the nav's New counts; a plain form post goes back to the page. Suggestions take only
+    new or declined - promoted is set by ideas.from_suggestion, and a promoted one stays promoted."""
     k = KINDS[kind]
+    labels = dict(k.statuses)
     obj = get_object_or_404(k.model, pk=pk)
     data = _json_body(request)
     status = data.get("status")
-    if status not in STATUS_LABELS:
+    error = None
+    if status not in k.settable:
+        error = "Unknown status."
+    elif kind == "suggestions" and obj.status == "promoted" and status != "promoted":
+        error = "This suggestion was promoted to an Idea - change the Idea instead."
+    if error:
         if _wants_json(request):
-            return JsonResponse({"error": "Unknown status."}, status=400)
-        messages.error(request, "Unknown status.")
+            return JsonResponse({"error": error}, status=400)
+        messages.error(request, error)
         return _back(request, kind)
     previous = obj.status
     if previous != status:
@@ -107,10 +115,10 @@ def set_status(request, kind, pk):
         undo = " (undo)" if str(data.get("undo", "")).lower() in ("1", "true") else ""
         audit(request, k.audit_status, f'#{pk} "{obj.title[:80]}": {previous} -> {status}{undo}')
     if not _wants_json(request):
-        messages.success(request, f"Moved to {STATUS_LABELS[status]}.")
+        messages.success(request, f"Moved to {labels[status]}.")
         return _back(request, kind)
-    return JsonResponse({"ok": True, "id": obj.pk, "status": status, "label": STATUS_LABELS[status],
-                         "previous": previous, "previous_label": STATUS_LABELS.get(previous, previous),
+    return JsonResponse({"ok": True, "id": obj.pk, "status": status, "label": labels[status],
+                         "previous": previous, "previous_label": labels.get(previous, previous),
                          "counts": k.counts(), "new_counts": new_counts()})
 
 

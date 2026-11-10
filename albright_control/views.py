@@ -53,7 +53,7 @@ def overview(request):
         "status_counts": status_counts, "problems": [r for r in health if r["status"] in ("late", "failing")],
         "integrations": integ, "usage": usage,
         "new_suggestions": SiteSuggestion.objects.filter(status="new").count(),
-        "suggestion_counts": {key: SiteSuggestion.objects.filter(status=key).count() for key in ("planned", "in_progress")},
+        "suggestion_counts": {key: SiteSuggestion.objects.filter(status=key).count() for key in ("promoted", "declined")},
         "idea_counts": {key: Idea.objects.filter(status=key).count() for key in ("new", "planned", "in_progress")},
         "active_tokens": BotToken.objects.filter(revoked_at=None).count(),
         "recent_audit": AuditEntry.objects.select_related("user")[:5],

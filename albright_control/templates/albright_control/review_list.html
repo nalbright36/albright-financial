@@ -13,7 +13,7 @@ pages by index.html). Behavior and the daily review mode (the reseller
 review queue's card, legend and help overlay): static/js/review_list.js.
 {% endcomment %}
 <div class="container ib" style="padding-top: 32px; padding-bottom: 48px; max-width: 1100px;" id="review-list"
-     data-kind="{{ kind.key }}" data-status="{{ status }}"
+     data-kind="{{ kind.key }}" data-status="{{ status }}" data-status-keys="{{ status_keys }}"
      data-nav-ideas="{% url 'albright_control:ideas' %}" data-nav-suggestions="{% url 'albright_control:suggestions' %}">
     <div class="card__header" style="margin-bottom: 6px;">
         <h1 style="margin: 0;">{{ kind.title }}</h1>
@@ -113,8 +113,12 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                         <input type="hidden" name="action" value="delete">
                         <button type="submit" class="ib-sbtn decline">Delete</button></form>
                     {% else %}
-                    <form method="post" action="{{ r.urls.move }}" data-confirm="Move this suggestion to Ideas? It leaves the inbox and becomes a new idea.">{% csrf_token %}
-                        <button type="submit" class="ib-sbtn">Move to Ideas</button></form>
+                    {% if r.promoted_idea %}
+                    <a href="{{ r.promoted_url }}" class="ib-sbtn">Promoted to Idea #{{ r.promoted_idea }}</a>
+                    {% elif r.status != "promoted" %}
+                    <form method="post" action="{{ r.urls.move }}" data-confirm="Promote this suggestion to an Idea? It stays here as Promoted, linked to the new idea.">{% csrf_token %}
+                        <button type="submit" class="ib-sbtn">Promote</button></form>
+                    {% endif %}
                     <form method="post" action="{{ r.urls.delete }}" data-confirm="Delete this suggestion? This can't be undone.">{% csrf_token %}
                         <input type="hidden" name="next" value="{{ next }}">
                         <button type="submit" class="ib-sbtn decline">Delete</button></form>
@@ -122,10 +126,12 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                 </div>
 
                 <div class="ib-bar">
+                    {% if r.status != "promoted" %}
                     <form method="post" action="{{ r.urls.status }}" class="ib-actions" data-status-form aria-label="Change status">{% csrf_token %}
                         <input type="hidden" name="next" value="{{ next }}">
                         {% for key, label, kbd in row_statuses %}<button type="submit" name="status" value="{{ key }}" class="ib-sbtn{% if key == 'declined' %} decline{% endif %}"{% if key == r.status %} hidden{% endif %}>{{ label }}{% if kbd %}<span class="ib-kbd">{{ kbd }}</span>{% endif %}</button>{% endfor %}
                     </form>
+                    {% endif %}
                     <button type="button" class="ib-sbtn js-rl-copy" data-copy-target="prompt-{{ kind.noun }}-{{ r.id }}">Copy as Claude Code prompt</button>
                     <pre id="prompt-{{ kind.noun }}-{{ r.id }}" hidden>{{ r.prompt }}</pre>
                 </div>

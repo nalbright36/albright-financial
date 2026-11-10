@@ -1,11 +1,13 @@
-"""Admin > Ideas and Admin > Bot suggestions share one list: the same
-statuses and status tabs (New first, always the default), the same filters,
-rows, quick status buttons and daily review mode
-(templates/albright_control/review_list.html + static/js/review_list.js).
+"""Admin > Ideas and Admin > Bot suggestions share one list: status tabs
+(New first, always the default), filters, rows, quick status buttons and
+daily review mode (templates/albright_control/review_list.html +
+static/js/review_list.js).
 
-Each page is a Kind: its model, filters, and how one record becomes a row
-(a plain dict - the template renders the list from it and review mode gets
-the same dicts as JSON)."""
+Each page is a Kind: its model, statuses, tabs, shortcuts, filters, and how
+one record becomes a row (a plain dict - the template renders the list from
+it and review mode gets the same dicts as JSON). Ideas use Idea.STATUSES; a
+Bot suggestion is an inbox item - new, declined, or promoted (only by
+ideas.from_suggestion, never a status button)."""
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.urls import reverse
 from django.utils import timezone
@@ -16,7 +18,8 @@ from . import ideas, prompts
 from .templatetags.review_list_tags import rich_text
 from .models import Idea
 
-STATUSES = Idea.STATUSES                     # SiteSuggestion.STATUSES is the same list (tests check)
+# Ideas' statuses, tabs and keys (IdeaKind); SuggestionKind has its own below.
+STATUSES = Idea.STATUSES
 TABS = STATUSES + [("all", "All")]
 DEFAULT_TAB = "new"
 LIST_LIMIT = 500
@@ -40,6 +43,21 @@ PRIORITY_RANK = {"low": 0, "medium": 1, "high": 2, "urgent": 3}
 PRIORITY_BADGE = {"urgent": "b-red", "high": "b-hi", "medium": "b-med"}     # inbox.css badge colors; low is plain
 # The inbox's key hints on the status buttons (review_list.js handles them for the selected item).
 STATUS_KEYS = {"considering": "C", "planned": "P", "in_progress": "I", "declined": "X"}
+
+# Bot suggestions: Decline (X) is the only status button - Promote posts to the row's "move" URL, and
+# Undo puts a row back to new.
+SUGGESTION_TABS = SiteSuggestion.STATUSES + [("all", "All")]
+SUGGESTION_SHORTCUTS = [
+    (["X"], "Declined", "declined"),
+    (["N"], "Add a note", "note"),
+    (["Y"], "Copy as Claude Code prompt", "copy"),
+    (["→", "Space"], "Skip", "skip"),
+    (["←"], "Back", "back"),
+    (["U"], "Undo", "undo"),
+    (["?"], "Help", "help"),
+]
+SUGGESTION_ROW_STATUSES = [("declined", "Declined")]
+SUGGESTION_STATUS_KEYS = {"declined": "X"}
 RANK = {"impact": {"low": 0, "medium": 1, "high": 2}, "effort": {"small": 0, "medium": 1, "large": 2}}
 
 
@@ -86,10 +104,16 @@ class Kind:
     search_fields = ()
     sorts = [("newest", "Newest first"), ("oldest", "Oldest first"), ("priority", "Priority")]
     audit_status = ""
+    statuses = STATUSES
+    tabs = TABS
+    shortcuts = SHORTCUTS
+    row_statuses = ROW_STATUSES
+    status_keys = STATUS_KEYS
+    settable = frozenset(key for key, _label in STATUSES)     # what set_status accepts
 
     def counts(self):
         rows = dict(self.model.objects.values_list("status").annotate(n=Count("pk")).order_by())
-        out = {key: rows.get(key, 0) for key, _label in STATUSES}
+        out = {key: rows.get(key, 0) for key, _label in self.statuses}
         out["all"] = sum(out.values())
         return out
 
@@ -195,6 +219,12 @@ class SuggestionKind(Kind):
     filters = (("app", "apps", SiteSuggestion.APPS), ("priority", "priorities", SiteSuggestion.PRIORITIES))
     search_fields = ("title", "description", "area", "my_notes")
     audit_status = "suggestion_status"
+    statuses = SiteSuggestion.STATUSES
+    tabs = SUGGESTION_TABS
+    shortcuts = SUGGESTION_SHORTCUTS
+    row_statuses = SUGGESTION_ROW_STATUSES
+    status_keys = SUGGESTION_STATUS_KEYS
+    settable = frozenset({"new", "declined"})                 # promoted: only ideas.from_suggestion
 
     def base_queryset(self):
         return SiteSuggestion.objects.select_related("token")
@@ -209,8 +239,10 @@ class SuggestionKind(Kind):
                 "move": reverse("albright_control:suggestion_to_idea", args=[obj.pk])}
 
     def row(self, obj, now=None):
+        idea_id = obj.promoted_idea_id
         return {**super().row(obj, now), "source": "Grok", "area": obj.area, "links": [],
-                "prompt": prompts.claude_code_prompt(obj)}
+                "prompt": prompts.claude_code_prompt(obj), "promoted_idea": idea_id,
+                "promoted_url": reverse("albright_control:idea", args=[idea_id]) if idea_id else ""}
 
 
 KINDS = {"ideas": IdeaKind(), "suggestions": SuggestionKind()}

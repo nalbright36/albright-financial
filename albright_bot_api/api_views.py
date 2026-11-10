@@ -139,14 +139,14 @@ POST site-suggestions                                 scope: site:suggest
   Body: {"app": "trade" | "resell" | "opps" | "all" (required), "area": str (optional, <=100, e.g. "Watchlist page"),
          "title": str (required, <=200), "description": str (required - what to change and why),
          "priority": "low" | "medium" | "high" (optional, default "medium")}
-  The owner reviews it and moves it through new -> considering -> planned -> in_progress -> done (or
-  declined); nothing changes on the site by itself. Returns 201 {"id": int, "status": "new"}.
+  It lands in the owner's inbox as new; the owner either declines it or promotes it to one of their Ideas
+  (status promoted). Nothing changes on the site by itself. Returns 201 {"id": int, "status": "new"}.
 
 GET  site-suggestions                                  scope: suggestions:read (or site:suggest - own only)
   Bot suggestions and where they stand. With suggestions:read: every bot suggestion. With only site:suggest:
   just the ones THIS token sent. Without either: 403 {"error": "missing scope", "required": "suggestions:read"}.
   Query (all optional):
-    status=new,planned    one or more of new, considering, planned, in_progress, done, declined
+    status=new,promoted   one or more of new, declined, promoted
     app=trade,opps        one or more of trade, resell, opps, all
     priority=high         one or more of low, medium, high
     created_since / updated_since    YYYY-MM-DD or an ISO date-time
@@ -160,12 +160,12 @@ GET  site-suggestions                                  scope: suggestions:read (
   The owner's private notes on a suggestion are never included.
   Examples:
     GET site-suggestions?status=new                         what hasn't been looked at yet
-    GET site-suggestions?status=planned,in_progress&include=description
+    GET site-suggestions?status=promoted&include=description   the ones the owner turned into Ideas
     GET site-suggestions?sort=status_changed_at&updated_since=2026-11-01&page_size=10
 
 GET  site-suggestions/counts                           scope: suggestions:read
-  How many bot suggestions are in each status. Returns {"counts": {"new": 6, "considering": 1, "planned": 6,
-  "in_progress": 0, "done": 3, "declined": 2}, "total": 18} - every status is listed, 0 when empty.
+  How many bot suggestions are in each status. Returns {"counts": {"new": 6, "declined": 9, "promoted": 3},
+  "total": 18} - every status is listed, 0 when empty.
 
 POST ideas                                            scope: ideas:write
   Save an idea the owner told you, for them to review on Admin > Ideas.

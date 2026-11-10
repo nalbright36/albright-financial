@@ -23,7 +23,7 @@
         <a href="{% url 'albright_control:suggestions' %}?status=new" class="card" style="display: block;" id="suggestion-counts">
             <div class="card__header"><span class="card__label">Bot suggestions</span></div>
             <span class="ledger-stat__value num">{{ new_suggestions }} new</span>
-            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ suggestion_counts.planned }} planned &middot; {{ suggestion_counts.in_progress }} in progress</div>
+            <div style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary);">{{ suggestion_counts.promoted }} promoted &middot; {{ suggestion_counts.declined }} declined</div>
         </a>
         <a href="{% url 'albright_control:ai_usage' %}" class="card" style="display: block;">
             <div class="card__header"><span class="card__label">AI spend this month</span></div>
