@@ -112,6 +112,14 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                         <span class="ib-time">{{ p.main.date|date:"M j" }}</span>
                         <a href="{% url 'albright_planner:item' p.main.item.pk %}?date={{ p.main.date|date:'Y-m-d' }}" class="ib-time">Open in Planner &#8599;</a>
                     </form>
+                    {% else %}
+                    <form method="post" action="{{ r.urls.detail }}" class="ib-row ib-plan-main">{% csrf_token %}
+                        <input type="hidden" name="action" value="add_main"><input type="hidden" name="next" value="{{ next }}">
+                        <span class="ib-plan-empty">Not in your Planner yet</span>
+                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input ib-date" aria-label="Date" required>
+                        <button type="submit" class="ib-sbtn primary">Add idea to Planner</button>
+                    </form>
+                    {% endif %}
                     {% for s in p.subs %}
                     <form method="post" action="{% url 'albright_planner:toggle' s.item.pk %}" class="ib-row ib-sub" data-plan-item="{{ s.item.pk }}">{% csrf_token %}
                         <input type="hidden" name="date" value="{{ s.date|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ next }}">
@@ -121,19 +129,13 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                         <span class="ib-time">{{ s.date|date:"M j" }}</span>
                     </form>
                     {% endfor %}
-                    <form method="post" action="{{ r.urls.detail }}" class="ib-row ib-sub">{% csrf_token %}
+                    <form method="post" action="{{ r.urls.detail }}" class="ib-row ib-sub ib-add">{% csrf_token %}
                         <input type="hidden" name="action" value="add_subtask"><input type="hidden" name="next" value="{{ next }}">
-                        <input type="text" name="title" placeholder="Add a subtask…" maxlength="200" class="ib-input" aria-label="New subtask" required>
-                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input" aria-label="Subtask date" required>
-                        <button type="submit" class="ib-sbtn">Add</button>
+                        <span aria-hidden="true">&#8627;</span>
+                        <input type="text" name="title" placeholder="Add a subtask…" maxlength="200" class="ib-input ib-grow" aria-label="New subtask" required>
+                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input ib-date" aria-label="Subtask date" required>
+                        <button type="submit" class="ib-sbtn primary">Add</button>
                     </form>
-                    {% else %}
-                    <form method="post" action="{{ r.urls.detail }}" class="ib-row">{% csrf_token %}
-                        <input type="hidden" name="action" value="add_main"><input type="hidden" name="next" value="{{ next }}">
-                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input" aria-label="Date" required>
-                        <button type="submit" class="btn btn-primary btn-sm">Add idea to Planner</button>
-                    </form>
-                    {% endif %}
                 {% endwith %}</div>
                 <div data-dpane="notes" hidden>
                 {% endif %}
@@ -156,7 +158,7 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                         <input type="hidden" name="action" value="merge"><input type="hidden" name="into" value="{{ r.duplicate_of }}">
                         <button type="submit" class="ib-sbtn">Merge into #{{ r.duplicate_of }}</button></form>
                     {% endif %}
-                    <form method="post" action="{{ r.urls.detail }}" class="ib-row" data-confirm="Merge this idea into the one you picked? Both original messages are kept; this idea is then removed.">{% csrf_token %}
+                    <form method="post" action="{{ r.urls.detail }}" data-confirm="Merge this idea into the one you picked? Both original messages are kept; this idea is then removed.">{% csrf_token %}
                         <input type="hidden" name="action" value="merge">
                         <input type="text" name="into" list="merge-targets" inputmode="numeric" class="ib-input ib-merge-input" placeholder="Idea #" aria-label="Merge into idea number" required>
                         <button type="submit" class="ib-sbtn">Merge</button></form>

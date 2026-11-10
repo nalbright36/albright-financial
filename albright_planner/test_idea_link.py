@@ -76,10 +76,14 @@ class IdeaTaskTests(TestCase):
         main = ScheduleItem.objects.get(idea=self.idea)
         self.assertEqual((main.title, main.parent_id), ("Dark charts", None))
 
-    def test_subtask_needs_a_main_task(self):
-        response = self.add_sub("Too early", self.today)
-        self.assertFalse(ScheduleItem.objects.filter(idea=self.idea).exists())
-        self.assertIn("Add the idea to your Planner first - subtasks go under it.", self.messages(response))
+    def test_first_subtask_adds_the_main_task_too(self):
+        self.add_sub("First step", self.today + timedelta(days=2))
+        items = ScheduleItem.objects.filter(idea=self.idea)
+        self.assertEqual(items.count(), 2)
+        main = items.get(parent__isnull=True)
+        sub = items.get(parent__isnull=False)
+        self.assertEqual((main.title, main.date), ("Dark charts", self.today + timedelta(days=2)))
+        self.assertEqual((sub.title, sub.parent_id), ("First step", main.pk))
 
     def test_form_defaults_to_today(self):
         response = self.client.get(self.page_url)
@@ -186,7 +190,7 @@ class IdeaTaskTests(TestCase):
 
     def test_reviewer_add_idea_to_planner_then_subtasks(self):
         planner = self.pane("planner")
-        self.assertIn('<button type="submit" class="btn btn-primary btn-sm">Add idea to Planner</button>', planner)
+        self.assertIn('<button type="submit" class="ib-sbtn primary">Add idea to Planner</button>', planner)
         self.assertIn('<input type="hidden" name="action" value="add_main">', planner)
         self.assertIn(f'name="date" value="{self.today.isoformat()}"', planner)
         self.add_main()
@@ -205,6 +209,7 @@ class IdeaTaskTests(TestCase):
         self.assertIn('placeholder="Add a subtask…"', planner)
         self.assertIn('<input type="hidden" name="action" value="add_subtask">', planner)
         self.assertNotIn("Add idea to Planner", planner)
+        self.assertLess(planner.index(f'data-plan-item="{sub.pk}"'), planner.index('class="ib-row ib-sub ib-add"'))
         self.assertIn('Planner<span class="ib-count">0/2</span>', self.detail())
 
     def test_toggle_from_the_planner_shows_in_the_reviewer(self):

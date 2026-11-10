@@ -175,13 +175,12 @@ def idea_detail(request, pk):
             return _back(request, idea)
         elif action == "add_subtask":
             main = _main_task(idea, request.user)
-            if main is None:
-                messages.error(request, "Add the idea to your Planner first - subtasks go under it.")
-                return _back(request, idea)
             sub_form = SubtaskForm(request.POST, auto_id="idea-sub-%s")
             if not sub_form.is_valid():
                 return render(request, "albright_control/idea.html",
                               _detail_context(request, idea, form, sub_form=sub_form))
+            if main is None:            # the first subtask puts the idea itself in the Planner too
+                main = _new_task(idea, request.user, idea.title, sub_form.cleaned_data["date"])
             item = _new_task(idea, request.user, sub_form.cleaned_data["title"], sub_form.cleaned_data["date"],
                              parent=main)
             audit(request, "idea_task", f'#{idea.pk} "{idea.title[:80]}": subtask {item.date:%Y-%m-%d}')

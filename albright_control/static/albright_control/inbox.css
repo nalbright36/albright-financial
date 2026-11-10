@@ -184,3 +184,13 @@ button.ib-tab { background: none; border: 0; border-bottom: 2px solid transparen
 .ib-done { text-decoration: line-through; opacity: .6; }
 .ib-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--ib-line, #232a33); padding-top: 12px; }
 @media (prefers-reduced-motion: reduce) { .ib * { transition: none !important; } }
+.ib-plan { gap: 8px; }
+.ib-plan .ib-row, .ib-foot form { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; margin: 0; }
+.ib-plan .ib-input, .ib-foot .ib-input { flex: 0 0 auto; min-height: 34px; padding: 5px 10px; font-size: 13px; border-radius: 8px; }
+.ib-plan .ib-grow { flex: 1 1 auto; min-width: 0; }
+.ib-plan .ib-date { width: 150px; }
+.ib-foot .ib-merge-input { width: 90px; }
+.ib-plan .ib-sbtn, .ib-foot .ib-sbtn { min-height: 34px; }
+.ib-plan-empty { flex: 1 1 auto; font-size: 13px; color: var(--ib-muted); }
+.ib-add { margin-top: 4px; }
+@media (max-width: 760px) { .ib-plan .ib-row { flex-wrap: wrap; } }

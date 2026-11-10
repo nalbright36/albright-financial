@@ -153,6 +153,15 @@ class TabsTests(ReviewListTestCase):
         self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), detail)
         self.assertNotIn(">Merge</button>", detail)
 
+    def test_idea_without_planner_tasks_offers_both_adds(self):
+        idea = self.items["ideas"]["Newest new"]
+        pane = self.detail(self.page("ideas").content.decode(), idea.pk).split('data-dpane="planner"', 1)[1]
+        pane = pane.split('data-dpane="notes"', 1)[0]
+        self.assertIn("Not in your Planner yet", pane)
+        self.assertIn('<button type="submit" class="ib-sbtn primary">Add idea to Planner</button>', pane)
+        self.assertIn('placeholder="Add a subtask…"', pane)
+        self.assertIn('<input type="hidden" name="action" value="add_subtask">', pane)
+
     def test_promoted_suggestion_links_to_its_idea(self):
         suggestion = self.items["suggestions"]["Shipped"]
         detail = self.detail(self.page("suggestions", status="promoted").content.decode(), suggestion.pk)
