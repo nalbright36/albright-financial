@@ -62,7 +62,7 @@ def _next(request, fallback="albright_planner:home"):
 
 
 def _visible(request, pk):
-    return get_object_or_404(ScheduleItem.objects.visible_to(request.user).select_related("owner"), pk=pk)
+    return get_object_or_404(ScheduleItem.objects.visible_to(request.user).select_related("owner", "parent"), pk=pk)
 
 
 def _editable(request, pk):
@@ -374,6 +374,8 @@ def view_item(request, pk):
         "linked_note": planner.linked_note(item, request.user, full=True),
         "can_skip": can_skip, "can_move": can_edit, "can_delete": can_delete,
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
+        "subtasks": list(ScheduleItem.objects.visible_to(request.user).filter(parent=item, archived=False)
+                         .order_by("date", "pk")),
     })
 
 

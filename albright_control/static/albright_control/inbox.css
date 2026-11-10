@@ -176,4 +176,11 @@ html.js .ib-nojs { display: none; }     /* the Filter button: filters apply on c
   .ib .ib-select { flex: 1 1 140px; }
   .ib-detail { min-height: 0; }
 }
+/* An idea's detail tabs (Details | Planner | Notes - review_list.js) and its Planner pane and footer. */
+.ib-dtabs { margin: 10px 0 4px; }
+button.ib-tab { background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; cursor: pointer; }
+.ib-plan { display: grid; gap: 6px; }
+.ib-sub { padding-left: 26px; }
+.ib-done { text-decoration: line-through; opacity: .6; }
+.ib-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--ib-line, #232a33); padding-top: 12px; }
 @media (prefers-reduced-motion: reduce) { .ib * { transition: none !important; } }

@@ -103,6 +103,9 @@ class ScheduleItem(models.Model):
     # source_app/source_id, whose one-item-per-source constraint would allow only one. Not locked.
     idea = models.ForeignKey("albright_control.Idea", null=True, blank=True, on_delete=models.SET_NULL,
                              related_name="planner_tasks")
+    # An Idea's subtask: the Idea's main task (the first one, parent empty) is its parent. Deleting the main task
+    # leaves the subtasks as plain tasks.
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="subtasks")
     note =models.ForeignKey("albright_notes.Note", on_delete=note_gone, null=True, blank=True,
                              related_name="planner_items")
     note_deleted = models.BooleanField(default=False)

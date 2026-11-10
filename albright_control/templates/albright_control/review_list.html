@@ -63,6 +63,18 @@ review queue's card, legend and help overlay): static/js/review_list.js.
             <section class="ib-detail" id="rl-detail-{{ r.id }}" data-id="{{ r.id }}" aria-label="{{ r.title }}"{% if not forloop.first %} hidden{% endif %}>
                 <div>
                     <h3>{{ r.title }}</h3>
+                    {% if kind.key == "ideas" %}
+                    {% comment %}Ideas: Details | Planner (done/total) | Notes - review_list.js shows one pane and remembers the tab
+                    (sessionStorage "ib-dtab"), so it stays on Planner after a form posts and comes back.{% endcomment %}
+                    <nav class="ib-tabs ib-dtabs" aria-label="Idea sections">
+                        <button type="button" class="ib-tab is-on" data-dtab="details" aria-pressed="true">Details</button>
+                        <button type="button" class="ib-tab" data-dtab="planner" aria-pressed="false">Planner{% if r.planner.total %}<span class="ib-count">{{ r.planner.done }}/{{ r.planner.total }}</span>{% endif %}</button>
+                        <button type="button" class="ib-tab" data-dtab="notes" aria-pressed="false">Notes</button>
+                    </nav>
+                    </div>
+                    <div data-dpane="details">
+                    <div>
+                    {% endif %}
                     <div class="ib-meta ib-head-meta">
                         {% if status == "all" %}<span class="ib-badge" data-row-status>{{ r.status_label }}</span>{% endif %}
                         <span class="ib-badge b-app">{{ r.app }}</span>
@@ -87,6 +99,44 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                     <ul class="ib-links">{% for link in r.links %}<li>{% if link.href %}<a href="{{ link.href }}"{% if link.verified %} target="_blank" rel="noopener noreferrer"{% else %} title="Not on your verified list - you'll see a warning first"{% endif %}>{{ link.text }}</a>{% if not link.verified %} <span class="ib-badge b-hi">unverified</span>{% endif %}{% else %}{{ link.text }}{% endif %}</li>{% endfor %}</ul></div>
                 {% endif %}
 
+                {% if kind.key == "ideas" %}
+                </div>
+                {% comment %}My Planner tasks for this idea (idea_views.planner_block - only mine): the main task, its subtasks, and
+                adding either. The boxes post to the Planner's own check-off, so done shows the same everywhere.{% endcomment %}
+                <div data-dpane="planner" class="ib-plan" hidden>{% with p=r.planner %}
+                    {% if p.main %}
+                    <form method="post" action="{% url 'albright_planner:toggle' p.main.item.pk %}" class="ib-row ib-plan-main" data-plan-item="{{ p.main.item.pk }}">{% csrf_token %}
+                        <input type="hidden" name="date" value="{{ p.main.date|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ next }}">
+                        <button type="submit" class="ib-sbtn" aria-pressed="{{ p.main.done|yesno:'true,false' }}" aria-label="{% if p.main.done %}Mark not done{% else %}Mark done{% endif %}: {{ p.main.item.title }}">{% if p.main.done %}&#9745;{% else %}&#9744;{% endif %}</button>
+                        <strong{% if p.main.done %} class="ib-done"{% endif %}>{{ p.main.item.title }}</strong>
+                        <span class="ib-time">{{ p.main.date|date:"M j" }}</span>
+                        <a href="{% url 'albright_planner:item' p.main.item.pk %}?date={{ p.main.date|date:'Y-m-d' }}" class="ib-time">Open in Planner &#8599;</a>
+                    </form>
+                    {% for s in p.subs %}
+                    <form method="post" action="{% url 'albright_planner:toggle' s.item.pk %}" class="ib-row ib-sub" data-plan-item="{{ s.item.pk }}">{% csrf_token %}
+                        <input type="hidden" name="date" value="{{ s.date|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ next }}">
+                        <span aria-hidden="true">&#8627;</span>
+                        <button type="submit" class="ib-sbtn" aria-pressed="{{ s.done|yesno:'true,false' }}" aria-label="{% if s.done %}Mark not done{% else %}Mark done{% endif %}: {{ s.item.title }}">{% if s.done %}&#9745;{% else %}&#9744;{% endif %}</button>
+                        <span{% if s.done %} class="ib-done"{% endif %}>{{ s.item.title }}</span>
+                        <span class="ib-time">{{ s.date|date:"M j" }}</span>
+                    </form>
+                    {% endfor %}
+                    <form method="post" action="{{ r.urls.detail }}" class="ib-row ib-sub">{% csrf_token %}
+                        <input type="hidden" name="action" value="add_subtask"><input type="hidden" name="next" value="{{ next }}">
+                        <input type="text" name="title" placeholder="Add a subtask…" maxlength="200" class="ib-input" aria-label="New subtask" required>
+                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input" aria-label="Subtask date" required>
+                        <button type="submit" class="ib-sbtn">Add</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="{{ r.urls.detail }}" class="ib-row">{% csrf_token %}
+                        <input type="hidden" name="action" value="add_main"><input type="hidden" name="next" value="{{ next }}">
+                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input" aria-label="Date" required>
+                        <button type="submit" class="btn btn-primary btn-sm">Add idea to Planner</button>
+                    </form>
+                    {% endif %}
+                {% endwith %}</div>
+                <div data-dpane="notes" hidden>
+                {% endif %}
                 <form method="post" action="{{ r.urls.notes }}" class="ib-notes" data-notes-form>{% csrf_token %}
                     <input type="hidden" name="next" value="{{ next }}">
                     <label for="rl-notes-{{ r.id }}" class="ib-label">My notes</label>
@@ -96,40 +146,26 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                         <span class="ib-saved" data-notes-status aria-live="polite"></span>
                     </div>
                 </form>
+                {% if kind.key == "ideas" %}</div>{% endif %}
 
-                <div class="ib-row">
-                    {% if kind.key == "ideas" %}
+                {% if kind.key == "ideas" %}
+                <div class="ib-foot">
                     <a href="{{ r.urls.detail }}" class="ib-sbtn">Edit</a>
-                    <div class="ib-steps"><div class="ib-label">Steps{% if r.steps %} ({{ r.steps|length }}){% endif %}</div>
-                      {% for s in r.steps %}
-                      <form method="post" action="{% url 'albright_planner:toggle' s.item.pk %}" class="ib-row">{% csrf_token %}
-                        <input type="hidden" name="date" value="{{ s.date|date:'Y-m-d' }}">
-                        <input type="hidden" name="next" value="{{ next }}">
-                        <button type="submit" class="ib-sbtn" aria-pressed="{{ s.done|yesno:'true,false' }}">{% if s.done %}&#9745;{% else %}&#9744;{% endif %}</button>
-                        <span{% if s.done %} style="text-decoration: line-through; opacity: .6"{% endif %}>{{ s.item.title }}</span>
-                        <span class="ib-time">{{ s.date|date:"M j" }}</span>
-                      </form>
-                      {% empty %}<p class="ib-time">No steps yet.</p>{% endfor %}
-                      <form method="post" action="{{ r.urls.detail }}" class="ib-row">{% csrf_token %}
-                        <input type="hidden" name="action" value="add_task"><input type="hidden" name="next" value="{{ next }}">
-                        <input type="text" name="title" placeholder="Add a step…" maxlength="200" class="ib-input" aria-label="New step" required>
-                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input" aria-label="Step date" required>
-                        <button type="submit" class="ib-sbtn">Add step</button>
-                      </form>
-                    </div>
                     {% if r.duplicate_of %}
                     <form method="post" action="{{ r.urls.detail }}" data-confirm="Merge this idea into #{{ r.duplicate_of }}? Both original messages are kept; this idea is then removed.">{% csrf_token %}
                         <input type="hidden" name="action" value="merge"><input type="hidden" name="into" value="{{ r.duplicate_of }}">
                         <button type="submit" class="ib-sbtn">Merge into #{{ r.duplicate_of }}</button></form>
                     {% endif %}
-                    <form method="post" action="{{ r.urls.detail }}" data-confirm="Merge this idea into the one you picked? Both original messages are kept; this idea is then removed.">{% csrf_token %}
+                    <form method="post" action="{{ r.urls.detail }}" class="ib-row" data-confirm="Merge this idea into the one you picked? Both original messages are kept; this idea is then removed.">{% csrf_token %}
                         <input type="hidden" name="action" value="merge">
                         <input type="text" name="into" list="merge-targets" inputmode="numeric" class="ib-input ib-merge-input" placeholder="Idea #" aria-label="Merge into idea number" required>
-                        <button type="submit" class="ib-sbtn">Merge duplicates</button></form>
-                    <form method="post" action="{{ r.urls.detail }}" data-confirm="Delete idea #{{ r.id }}? This can't be undone.">{% csrf_token %}
+                        <button type="submit" class="ib-sbtn">Merge</button></form>
+                    <form method="post" action="{{ r.urls.detail }}" style="margin-left: auto;" data-confirm="Delete idea #{{ r.id }}? This can't be undone.">{% csrf_token %}
                         <input type="hidden" name="action" value="delete">
                         <button type="submit" class="ib-sbtn decline">Delete</button></form>
-                    {% else %}
+                </div>
+                {% else %}
+                <div class="ib-row">
                     {% if r.promoted_idea %}
                     <a href="{{ r.promoted_url }}" class="ib-sbtn">Promoted to Idea #{{ r.promoted_idea }}</a>
                     {% elif r.status != "promoted" %}
@@ -139,8 +175,8 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                     <form method="post" action="{{ r.urls.delete }}" data-confirm="Delete this suggestion? This can't be undone.">{% csrf_token %}
                         <input type="hidden" name="next" value="{{ next }}">
                         <button type="submit" class="ib-sbtn decline">Delete</button></form>
-                    {% endif %}
                 </div>
+                {% endif %}
 
                 <div class="ib-bar">
                     {% if r.status != "promoted" %}

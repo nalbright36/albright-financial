@@ -53,9 +53,9 @@ def list_page(request, kind):
     values = k.filter_values(request.GET)
     qs = k.queryset(values, status)
     if kind == "ideas":
-        # Steps: my Planner tasks for each idea (idea_views._planner_tasks - never anyone else's).
-        from .idea_views import _planner_tasks
-        rows = [{**k.row(obj), "steps": _planner_tasks(obj, request.user)} for obj in qs[:LIST_LIMIT]]
+        # The Planner tab: my main task and subtasks for each idea (idea_views.planner_block - never anyone else's).
+        from .idea_views import planner_block
+        rows = [{**k.row(obj), "planner": planner_block(obj, request.user)} for obj in qs[:LIST_LIMIT]]
     else:
         rows = [k.row(obj) for obj in qs[:LIST_LIMIT]]
     keep = {name: value for name, value in values.items() if value}
@@ -64,12 +64,17 @@ def list_page(request, kind):
         # Review mode: the same New items (with the same filters), oldest first.
         queue = [k.row(obj) for obj in k.queryset({**values, "sort": "oldest"}, "new")[:LIST_LIMIT]]
         if kind == "ideas":
-            # The same steps, as plain values - review mode gets the queue as JSON.
-            from .idea_views import _planner_tasks
+            # The same Planner block, as plain values - review mode gets the queue as JSON.
+            from .idea_views import planner_block
+
+            def plain(row):
+                return row and {"id": row["item"].pk, "title": row["item"].title, "date": row["date"].isoformat(),
+                                "done": row["done"]}
             by_id = {obj.pk: obj for obj in Idea.objects.filter(pk__in=[r["id"] for r in queue])}
             for r in queue:
-                r["steps"] = [{"id": s["item"].pk, "title": s["item"].title, "date": s["date"].isoformat(),
-                               "done": s["done"]} for s in _planner_tasks(by_id[r["id"]], request.user)]
+                block = planner_block(by_id[r["id"]], request.user)
+                r["planner"] = {"main": plain(block["main"]), "subs": [plain(x) for x in block["subs"]],
+                                "done": block["done"], "total": block["total"]}
     counts = k.counts()
     return render(request, "albright_control/review_list.html", {
         "kind": k, "status": status, "status_label": tabs[status], "rows": rows, "total": qs.count(),

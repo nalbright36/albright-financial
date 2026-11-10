@@ -238,7 +238,35 @@
         }).catch(function () {});
     }
 
+    // An idea's detail tabs (Details | Planner | Notes): one pane shows; the choice is remembered for the session so
+    // a form that posts and comes back (a Planner check-off, a new subtask) opens on the same tab.
+    var DTAB_KEY = "ib-dtab";
+    function showDetailTab(name) {
+        root.querySelectorAll(".ib-detail").forEach(function (detail) {
+            var tabs = detail.querySelectorAll("[data-dtab]");
+            if (!tabs.length) return;
+            if (!detail.querySelector('[data-dtab="' + name + '"]')) name = "details";
+            tabs.forEach(function (tab) {
+                var on = tab.dataset.dtab === name;
+                tab.classList.toggle("is-on", on);
+                tab.setAttribute("aria-pressed", on ? "true" : "false");
+            });
+            detail.querySelectorAll("[data-dpane]").forEach(function (pane) { pane.hidden = pane.dataset.dpane !== name; });
+        });
+    }
+    var savedTab = "details";
+    try { savedTab = window.sessionStorage.getItem(DTAB_KEY) || "details"; } catch (e) { savedTab = "details"; }
+    showDetailTab(savedTab);
+
     root.addEventListener("click", function (event) {
+        var dtab = event.target.closest("[data-dtab]");
+        if (dtab && dtab.closest(".ib-detail")) {
+            event.preventDefault();
+            event.stopPropagation();
+            showDetailTab(dtab.dataset.dtab);
+            try { window.sessionStorage.setItem(DTAB_KEY, dtab.dataset.dtab); } catch (e) { /* private mode */ }
+            return;
+        }
         var item = event.target.closest(".ib-item");
         if (item) { select(item, true); return; }
         var copy = event.target.closest(".js-rl-copy");

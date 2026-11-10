@@ -16,41 +16,65 @@ from .models import Idea
 INPUT = {"class": "ledger-input"}
 
 
-class IdeaTaskForm(forms.Form):
-    """Add Planner task: one more task for this Idea (each its own Planner item and date)."""
-    title = forms.CharField(max_length=200, widget=forms.TextInput(attrs=INPUT))
+class MainTaskForm(forms.Form):
+    """Add idea to Planner: the Idea's main task (titled like the Idea) on a date."""
     date = forms.DateField(widget=forms.DateInput(attrs={**INPUT, "type": "date"}, format="%Y-%m-%d"))
     notes = forms.CharField(required=False, max_length=5000, label="Notes (optional)",
                             widget=forms.Textarea(attrs={**INPUT, "rows": 2}))
 
 
-def _task_form(idea):
+class SubtaskForm(forms.Form):
+    """Add subtask: one more step under the main task, its own Planner task and date."""
+    title = forms.CharField(max_length=200, widget=forms.TextInput(attrs=INPUT))
+    date = forms.DateField(widget=forms.DateInput(attrs={**INPUT, "type": "date"}, format="%Y-%m-%d"))
+
+
+def _task_form(idea, user=None):
     from albright_planner.planner import today
-    return IdeaTaskForm(initial={"title": idea.title[:200], "date": today()}, auto_id="idea-task-%s")
+    return MainTaskForm(initial={"date": today(user)}, auto_id="idea-task-%s")
 
 
-def _add_task(idea, user, data):
+def _subtask_form(user=None):
+    from albright_planner.planner import today
+    return SubtaskForm(initial={"date": today(user)}, auto_id="idea-sub-%s")
+
+
+def _new_task(idea, user, title, day, notes="", parent=None):
     """A Planner task for this Idea, owned by me: linked by the idea FK (not source_app/source_id - one Idea can
-    have several), its source link the Idea's page. Owner-made, so the Planner's "ideas" source toggle doesn't apply."""
-    from albright_planner.models import ScheduleItem, home_zone, idea_path
-    form = IdeaTaskForm(data, auto_id="idea-task-%s")
-    if not form.is_valid():
-        return form, None
-    item = ScheduleItem.objects.create(
-        owner=user, kind=ScheduleItem.TASK, title=form.cleaned_data["title"], date=form.cleaned_data["date"],
-        notes=form.cleaned_data["notes"], idea=idea, source_url=idea_path(idea.pk), created_by=user.username,
-        timezone=home_zone(user))
-    return form, item
+    have several), its source link the Idea's page, made in my zone. Owner-made, so the Planner's "ideas" source
+    toggle doesn't apply."""
+    from albright_planner.models import PlannerSettings, ScheduleItem, idea_path
+    return ScheduleItem.objects.create(
+        owner=user, kind=ScheduleItem.TASK, title=title[:200], date=day, notes=notes, idea=idea, parent=parent,
+        source_url=idea_path(idea.pk), created_by=user.username, timezone=PlannerSettings.for_user(user).timezone)
 
 
-def _planner_tasks(idea, user):
-    """My (never anyone else's) open Planner tasks for this Idea, each with its occurrence and whether it's done."""
+def _main_task(idea, user):
+    return idea.planner_tasks.filter(owner=user, parent__isnull=True, archived=False).order_by("pk").first()
+
+
+def _row(item):
     from albright_planner.planner import current_or_first
-    rows = []
-    for item in idea.planner_tasks.filter(owner=user, archived=False).order_by("date", "pk"):
-        day = current_or_first(item)
-        rows.append({"item": item, "date": day, "done": item.completions.filter(occurrence_date=day).exists()})
-    return rows
+    day = current_or_first(item)
+    return {"item": item, "date": day, "done": item.completions.filter(occurrence_date=day).exists()}
+
+
+def planner_block(idea, user):
+    """My (never anyone else's) Planner tasks for this Idea: {"main": row or None, "subs": [rows], "done": n,
+    "total": n}; a row is {"item", "date" (its occurrence), "done"}."""
+    main = _main_task(idea, user)
+    if main is None:
+        return {"main": None, "subs": [], "done": 0, "total": 0}
+    rows = [_row(main)] + [_row(item) for item in main.subtasks.filter(archived=False).order_by("date", "pk")]
+    return {"main": rows[0], "subs": rows[1:], "done": sum(r["done"] for r in rows), "total": len(rows)}
+
+
+def _back(request, idea):
+    """After adding to the Planner: the safe "next" (the Ideas list) or the Idea page."""
+    target = request.POST.get("next", "")
+    if url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(target)
+    return redirect("albright_control:idea", pk=idea.pk)
 
 
 def _lines(text):
@@ -136,18 +160,33 @@ def idea_detail(request, pk):
             if not form.is_valid():
                 return render(request, "albright_control/idea.html", _detail_context(request, idea, form))
             idea = form.save()
-        elif action == "add_task":
-            task_form, item = _add_task(idea, request.user, request.POST)
-            if item is None:
+        elif action in ("add_main", "add_task"):          # add_task: older forms' name for it
+            if _main_task(idea, request.user) is not None:
+                messages.info(request, "Already in your Planner.")
+                return _back(request, idea)
+            task_form = MainTaskForm(request.POST, auto_id="idea-task-%s")
+            if not task_form.is_valid():
                 return render(request, "albright_control/idea.html",
                               _detail_context(request, idea, form, task_form=task_form))
+            item = _new_task(idea, request.user, idea.title, task_form.cleaned_data["date"],
+                             notes=task_form.cleaned_data["notes"])
             audit(request, "idea_task", f'#{idea.pk} "{idea.title[:80]}": Planner task {item.date:%Y-%m-%d}')
             messages.success(request, f"Added to your Planner for {item.date:%b} {item.date.day}.")
-            target = request.POST.get("next", "")
-            if url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()},
-                                               require_https=request.is_secure()):
-                return redirect(target)
-            return redirect("albright_control:idea", pk=idea.pk)
+            return _back(request, idea)
+        elif action == "add_subtask":
+            main = _main_task(idea, request.user)
+            if main is None:
+                messages.error(request, "Add the idea to your Planner first - subtasks go under it.")
+                return _back(request, idea)
+            sub_form = SubtaskForm(request.POST, auto_id="idea-sub-%s")
+            if not sub_form.is_valid():
+                return render(request, "albright_control/idea.html",
+                              _detail_context(request, idea, form, sub_form=sub_form))
+            item = _new_task(idea, request.user, sub_form.cleaned_data["title"], sub_form.cleaned_data["date"],
+                             parent=main)
+            audit(request, "idea_task", f'#{idea.pk} "{idea.title[:80]}": subtask {item.date:%Y-%m-%d}')
+            messages.success(request, f"Added the subtask for {item.date:%b} {item.date.day}.")
+            return _back(request, idea)
         elif action == "merge":
             target = Idea.objects.filter(pk=request.POST.get("into")).exclude(pk=idea.pk).first()
             if target is None:
@@ -168,11 +207,12 @@ def idea_detail(request, pk):
     return render(request, "albright_control/idea.html", _detail_context(request, idea, form))
 
 
-def _detail_context(request, idea, form, task_form=None):
+def _detail_context(request, idea, form, task_form=None, sub_form=None):
     return {"idea": idea, "form": form, "prompt": claude_code_prompt(idea), "statuses": Idea.STATUSES,
             "merge_targets": Idea.objects.exclude(pk=idea.pk).exclude(status__in=Idea.CLOSED_STATUSES)[:200],
             "duplicates": idea.possible_duplicates.all(),
-            "planner_tasks": _planner_tasks(idea, request.user), "task_form": task_form or _task_form(idea)}
+            "planner": planner_block(idea, request.user), "task_form": task_form or _task_form(idea, request.user),
+            "sub_form": sub_form or _subtask_form(request.user)}
 
 
 @superuser_required

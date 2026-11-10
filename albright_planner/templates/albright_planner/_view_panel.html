@@ -44,6 +44,18 @@ tick right here (saved to the note) for someone who can edit it.
         {% if o.done and o.done_by and o.shared %}<span class="pl-view__fact pl-done-by">Done by {{ o.done_by|person }}</span>{% endif %}
         {% if item.source_href %}<a href="{{ item.source_href }}" class="pl-view__fact"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app &#x2197;</a>{% endif %}
     </p>
+    {% if item.parent_id or item.idea_id %}
+    <p class="pl-view__facts" id="pl-view-links">
+        {% if item.parent_id %}<span class="pl-view__fact" id="pl-view-parent">Subtask of <a href="{% url 'albright_planner:item' item.parent_id %}" data-view>{{ item.parent.title }}</a> &rarr;</span>{% endif %}
+        {% if item.idea_id %}<a href="{% url 'albright_control:idea' item.idea_id %}" class="pl-view__fact" id="pl-view-idea">Idea #{{ item.idea_id }} &rarr;</a>{% endif %}
+    </p>
+    {% endif %}
+    {% if subtasks %}
+    <section class="pl-view__section" id="pl-view-subtasks" aria-labelledby="pl-view-sub-h">
+        <h3 class="pl-view__label" id="pl-view-sub-h">Subtasks</h3>
+        <ul class="pl-view__subtasks">{% for sub in subtasks %}<li><span aria-hidden="true">&#8627;</span> <a href="{% url 'albright_planner:item' sub.pk %}" data-view>{{ sub.title }}</a></li>{% endfor %}</ul>
+    </section>
+    {% endif %}
 
     {% if o.shared_in %}<p class="pl-view__shared" id="pl-view-shared"><span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> Shared by {{ item.owner|person }}{% if not can_edit %} <span class="pl-muted">&middot; view only</span>{% endif %}</p>
     {% elif shared_with %}<p class="pl-view__shared" id="pl-view-shared">Shared with {{ shared_with|join:", " }}</p>{% endif %}

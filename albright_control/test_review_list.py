@@ -80,7 +80,8 @@ class TabsTests(ReviewListTestCase):
                 self.assertEqual(response.context["status"], "new")
                 self.assertEqual(sorted(r["status"] for r in response.context["rows"]), ["new"] * 3)
                 self.assertContains(response, 'class="ib-tab is-on" data-tab="new" aria-current="page"')
-                self.assertEqual(response.content.decode().count("ib-tab is-on"), 1)
+                main_tabs = response.content.decode().split('id="rl-tabs"', 1)[1].split("</nav>", 1)[0]
+                self.assertEqual(main_tabs.count("ib-tab is-on"), 1)          # (each idea's detail has its own tabs)
 
     def test_status_param_picks_the_tab(self):
         self.assertEqual(self.titles("ideas", status="planned"), ["Idea A plan"])
@@ -141,7 +142,7 @@ class TabsTests(ReviewListTestCase):
         self.assertIn('<pre class="ib-pre">m</pre>', detail)
         self.assertIn("https://example.com/spec", detail)
         self.assertIn(">My take</textarea>", detail)
-        for action in ("Copy as Claude Code prompt", "Merge duplicates", ">Delete</button>", ">Edit</a>"):
+        for action in ("Copy as Claude Code prompt", ">Merge</button>", ">Delete</button>", ">Edit</a>"):
             self.assertIn(action, detail)
 
         suggestion = self.items["suggestions"]["Newest new"]
@@ -150,7 +151,7 @@ class TabsTests(ReviewListTestCase):
         self.assertIn(reverse("albright_control:suggestion_to_idea", args=[suggestion.pk]), detail)
         self.assertNotIn("Move to Ideas", detail)
         self.assertIn(reverse("albright_control:suggestion_delete", args=[suggestion.pk]), detail)
-        self.assertNotIn("Merge duplicates", detail)
+        self.assertNotIn(">Merge</button>", detail)
 
     def test_promoted_suggestion_links_to_its_idea(self):
         suggestion = self.items["suggestions"]["Shipped"]
