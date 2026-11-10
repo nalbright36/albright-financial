@@ -44,6 +44,7 @@ def _back(request, kind):
 
 
 def list_page(request, kind):
+    from albright_planner.planner import today
     k = KINDS[kind]
     status = request.GET.get("status", "")
     tabs = dict(k.tabs)
@@ -71,6 +72,7 @@ def list_page(request, kind):
         "merge_targets": (k.model.objects.exclude(status__in=("done", "declined")).only("pk", "title")[:LIST_LIMIT]
                           if kind == "ideas" else []),
         "next": request.get_full_path(),
+        "today": today(),
     })
 
 

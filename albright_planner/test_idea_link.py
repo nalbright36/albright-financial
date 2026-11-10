@@ -110,6 +110,28 @@ class IdeaTaskTests(TestCase):
         self.assertNotIn("&#x2197;", row)                                  # the gear instead of the plain link
         self.assertIn(reverse("albright_planner:toggle", args=[first.pk]), row)   # not locked: still checkable
 
+    def test_add_from_the_list_goes_back_to_the_list(self):
+        back = "/control/ideas/?status=new"
+        response = self.client.post(self.page_url, {"action": "add_task", "title": "From the list",
+                                                    "date": self.today.isoformat(), "next": back})
+        self.assertRedirects(response, back, fetch_redirect_response=False)
+        item = ScheduleItem.objects.get(title="From the list")
+        self.assertEqual((item.idea_id, item.owner), (self.idea.pk, self.me))
+
+    def test_offsite_next_goes_to_the_idea_page(self):
+        response = self.client.post(self.page_url, {"action": "add_task", "title": "Elsewhere",
+                                                    "date": self.today.isoformat(), "next": "https://evil.example/"})
+        self.assertRedirects(response, self.page_url, fetch_redirect_response=False)
+        self.assertTrue(ScheduleItem.objects.filter(idea=self.idea, title="Elsewhere").exists())
+
+    def test_ideas_list_has_the_add_to_planner_form(self):
+        content = self.client.get(reverse("albright_control:ideas")).content.decode()
+        detail = content.split(f'id="rl-detail-{self.idea.pk}"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<button type="submit" class="ib-sbtn">Add to Planner</button>', detail)
+        self.assertIn('<input type="hidden" name="action" value="add_task">', detail)
+        self.assertIn(f'name="date" value="{self.today.isoformat()}"', detail)
+        self.assertIn('name="title" value="Dark charts"', detail)
+
     def test_bad_task_form_shows_errors(self):
         response = self.client.post(self.page_url, {"action": "add_task", "title": "", "date": "not a date"})
         self.assertEqual(response.status_code, 200)

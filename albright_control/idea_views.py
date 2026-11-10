@@ -4,6 +4,7 @@ suggestions inbox. The list itself is review_list_views.py. Superusers only."""
 from django import forms
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from albright_bot_api.models import SiteSuggestion
@@ -141,6 +142,10 @@ def idea_detail(request, pk):
                               _detail_context(request, idea, form, task_form=task_form))
             audit(request, "idea_task", f'#{idea.pk} "{idea.title[:80]}": Planner task {item.date:%Y-%m-%d}')
             messages.success(request, f"Added to your Planner for {item.date:%b} {item.date.day}.")
+            target = request.POST.get("next", "")
+            if url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()},
+                                               require_https=request.is_secure()):
+                return redirect(target)
             return redirect("albright_control:idea", pk=idea.pk)
         elif action == "merge":
             target = Idea.objects.filter(pk=request.POST.get("into")).exclude(pk=idea.pk).first()

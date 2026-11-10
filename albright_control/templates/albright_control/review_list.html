@@ -100,6 +100,13 @@ review queue's card, legend and help overlay): static/js/review_list.js.
                 <div class="ib-row">
                     {% if kind.key == "ideas" %}
                     <a href="{{ r.urls.detail }}" class="ib-sbtn">Edit</a>
+                    <form method="post" action="{{ r.urls.detail }}" class="ib-row">{% csrf_token %}
+                        <input type="hidden" name="action" value="add_task">
+                        <input type="hidden" name="next" value="{{ next }}">
+                        <input type="text" name="title" value="{{ r.title|truncatechars:200 }}" maxlength="200" class="ib-input" aria-label="Planner task title" required>
+                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="ib-input" aria-label="Planner task date" required>
+                        <button type="submit" class="ib-sbtn">Add to Planner</button>
+                    </form>
                     {% if r.duplicate_of %}
                     <form method="post" action="{{ r.urls.detail }}" data-confirm="Merge this idea into #{{ r.duplicate_of }}? Both original messages are kept; this idea is then removed.">{% csrf_token %}
                         <input type="hidden" name="action" value="merge"><input type="hidden" name="into" value="{{ r.duplicate_of }}">
