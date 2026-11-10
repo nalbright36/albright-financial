@@ -1,11 +1,17 @@
 from django.urls import path
 
-from . import body_views, food_views, views
+from . import body_views, challenge_views, food_views, views
 
 app_name = "albright_fitness"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("challenges/", challenge_views.challenge_list, name="challenges"),
+    path("challenges/new/", challenge_views.challenge_new, name="challenge_new"),
+    path("challenges/<int:pk>/", challenge_views.challenge, name="challenge"),
+    path("challenges/<int:pk>/board/", challenge_views.challenge_board, name="challenge_board"),
+    path("challenges/<int:pk>/log/", challenge_views.challenge_log, name="challenge_log"),
+    path("entries/<int:pk>/comment/", challenge_views.challenge_comment, name="challenge_comment"),
     path("exercises/", views.exercises, name="exercises"),
     path("exercises/<int:pk>/", views.exercise, name="exercise"),
     path("start/", views.start, name="start"),

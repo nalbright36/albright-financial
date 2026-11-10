@@ -284,3 +284,17 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-cal-heat__day { width: 16px; height: 16px; border-radius: 4px; background: var(--surface-hover); }
 .fx-cal-heat__day.is-on { background: var(--accent); }
 .fx-cal-heat__day.is-future { background: transparent; border: 1px dashed var(--border); }
+
+/* Circle challenges: form rows, leaderboard, entry comments. */
+.fx-form .fx-label { display: block; margin: 12px 0 4px; font-size: var(--text-sm); font-weight: 600; }
+.fx-form .fx-label:first-child { margin-top: 0; }
+.fx-form__row { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.fx-form__row > div { flex: 1 1 8rem; }
+.fx-form .btn { margin-top: var(--space-3); }
+#fx-board-table .is-me td { font-weight: 700; }
+.fx-entry { border-top: 1px solid var(--border); padding: var(--space-3) 0; }
+.fx-entry:first-of-type { border-top: 0; }
+.fx-entry__head { margin: 0 0 6px; }
+.fx-comments { list-style: none; margin: 0 0 8px; padding: 0; font-size: var(--text-sm); }
+.fx-comments li { margin: 0 0 4px; }
+.fx-muted { color: var(--text-secondary); }

@@ -9,6 +9,7 @@
  *              the phone can
  *   filters    the exercise library's menus apply on change
  *   chart      hover / tap a point (or move along the line) for its value
+ *   board      the challenge leaderboard (#fx-board) refreshes every 15s
  */
 (function () {
     "use strict";
@@ -185,5 +186,21 @@
             showPreview();
         });
         showPreview();
+    }
+
+    // ---------- Challenge leaderboard poll ----------
+    var board = document.getElementById("fx-board");
+    if (board && board.dataset.url) {
+        var refreshBoard = function () {
+            if (document.hidden) return;
+            fetch(board.dataset.url, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (data && data.html) board.innerHTML = data.html;
+                })
+                .catch(function () {});
+        };
+        setInterval(refreshBoard, 15000);
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshBoard(); });
     }
 })();

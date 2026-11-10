@@ -104,6 +104,7 @@ APPS = (
         description="Log workouts at the gym, track personal records, and follow a program on your Planner.",
         last_app_cookie="fitness", tile="fitness",
         pages=(("fitness:dashboard", "Dashboard", "albright_fitness:dashboard"),
+               ("fitness:challenges", "Challenges", "albright_fitness:challenges"),
                ("fitness:history", "History", "albright_fitness:history"),
                ("fitness:programs", "Programs", "albright_fitness:programs"),
                ("fitness:exercises", "Exercises", "albright_fitness:exercises")),

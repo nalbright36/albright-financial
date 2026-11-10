@@ -422,3 +422,7 @@ class Measurement(models.Model):
 
     def __str__(self):
         return f"Measurements {self.date}"
+
+
+# Challenge models live in challenges.py (imported here so migrations see them).
+from .challenges import Challenge, ChallengeRule, ChallengeEntry, EntryComment  # noqa: F401

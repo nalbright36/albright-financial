@@ -1,0 +1,34 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}New challenge · {% endblock %}
+{% block fitness %}
+{% comment %}New challenge (challenge_views.challenge_new): name, circle, dates, and the steps scoring rule. Other activity rules can be added later.{% endcomment %}
+<div class="fx-head">
+    <div><h1 class="fx-head__title">New challenge</h1><p class="fx-head__sub">A steps contest in one of your circles. You can score other activities later.</p></div>
+    <a href="{% url 'albright_fitness:challenges' %}" class="btn btn-secondary btn-sm">All challenges</a>
+</div>
+<form method="post" class="card fx-card fx-form" id="fx-challenge-new">{% csrf_token %}
+    <label class="fx-label" for="fx-ch-name">Name</label>
+    <input type="text" name="name" id="fx-ch-name" class="ledger-input fx-input-wide" maxlength="100" required placeholder="December steps">
+    <label class="fx-label" for="fx-ch-circle">Circle</label>
+    <select name="circle" id="fx-ch-circle" class="ledger-input" required>
+        {% for c in circles %}<option value="{{ c.pk }}">{{ c.name }}</option>{% endfor %}
+    </select>
+    <div class="fx-form__row">
+        <div><label class="fx-label" for="fx-ch-start">Start</label>
+        <input type="date" name="start_date" id="fx-ch-start" class="ledger-input" required value="{{ today|date:'Y-m-d' }}"></div>
+        <div><label class="fx-label" for="fx-ch-end">End</label>
+        <input type="date" name="end_date" id="fx-ch-end" class="ledger-input" required></div>
+    </div>
+    <h2 class="fx-card__title">Steps scoring</h2>
+    <p class="fx-help">Default is 1 point per 1,000 steps. Leave the daily cap blank for no cap.</p>
+    <div class="fx-form__row">
+        <div><label class="fx-label" for="fx-ch-pts">Points</label>
+        <input type="number" name="steps_points" id="fx-ch-pts" class="ledger-input" step="0.01" min="0" required value="{{ default_points }}"></div>
+        <div><label class="fx-label" for="fx-ch-per">per this many steps</label>
+        <input type="number" name="steps_per" id="fx-ch-per" class="ledger-input" step="1" min="1" required value="{{ default_per }}"></div>
+        <div><label class="fx-label" for="fx-ch-cap">Daily cap (pts, optional)</label>
+        <input type="number" name="steps_cap" id="fx-ch-cap" class="ledger-input" step="0.01" min="0" placeholder="None"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Start challenge</button>
+</form>
+{% endblock %}

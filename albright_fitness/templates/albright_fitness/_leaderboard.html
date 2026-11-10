@@ -1,0 +1,11 @@
+{% comment %}Live leaderboard rows (challenge_views.challenge / challenge_board).{% endcomment %}
+<table class="fx-table" id="fx-board-table">
+    <thead><tr><th scope="col">Rank</th><th scope="col">Name</th><th scope="col">Points</th></tr></thead>
+    <tbody>
+    {% for row in board %}
+        <tr{% if row.me %} class="is-me"{% endif %}><td>{{ row.rank }}</td><td>{{ row.name }}</td><td>{{ row.points.normalize }}</td></tr>
+    {% empty %}
+        <tr><td colspan="3" class="fx-empty">No one to rank yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>

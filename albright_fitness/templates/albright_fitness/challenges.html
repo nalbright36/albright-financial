@@ -1,0 +1,32 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Challenges · {% endblock %}
+{% block fitness %}
+{% comment %}Challenge list (challenge_views.challenge_list): current, upcoming and past challenges in circles where you've joined Fitness.{% endcomment %}
+<div class="fx-head">
+    <div><h1 class="fx-head__title">Challenges</h1><p class="fx-head__sub">Step counts and more, scored in your circles.</p></div>
+    {% if circles %}<a href="{% url 'albright_fitness:challenge_new' %}" class="btn btn-primary">New challenge</a>{% endif %}
+</div>
+{% if not circles %}
+<p class="fx-empty">Join a circle and turn on Fitness there (My account &gt; Circles) to start or enter a challenge.</p>
+{% elif not challenges %}
+<p class="fx-empty">None yet. <a href="{% url 'albright_fitness:challenge_new' %}">Start one</a> for a steps contest.</p>
+{% endif %}
+{% if current %}
+<section class="card fx-card" aria-labelledby="fx-ch-current-h">
+    <h2 class="fx-card__title" id="fx-ch-current-h">Current</h2>
+    {% for c in current %}<a href="{% url 'albright_fitness:challenge' c.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ c.name }}</span><span class="fx-row__ind">{{ c.circle.name }} &middot; {{ c.start_date|date:"M j" }}–{{ c.end_date|date:"M j" }}</span></a>{% endfor %}
+</section>
+{% endif %}
+{% if upcoming %}
+<section class="card fx-card" aria-labelledby="fx-ch-up-h">
+    <h2 class="fx-card__title" id="fx-ch-up-h">Upcoming</h2>
+    {% for c in upcoming %}<a href="{% url 'albright_fitness:challenge' c.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ c.name }}</span><span class="fx-row__ind">{{ c.circle.name }} &middot; {{ c.start_date|date:"M j" }}–{{ c.end_date|date:"M j" }}</span></a>{% endfor %}
+</section>
+{% endif %}
+{% if past %}
+<section class="card fx-card" aria-labelledby="fx-ch-past-h">
+    <h2 class="fx-card__title" id="fx-ch-past-h">Past</h2>
+    {% for c in past %}<a href="{% url 'albright_fitness:challenge' c.pk %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ c.name }}</span><span class="fx-row__ind">{{ c.circle.name }} &middot; {{ c.start_date|date:"M j" }}–{{ c.end_date|date:"M j" }}</span></a>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}
