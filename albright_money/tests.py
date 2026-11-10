@@ -322,6 +322,48 @@ class TransactionTests(Base):
         self.client.post(url("transaction_delete", out.pk))
         self.assertFalse(Transaction.objects.exists())                  # both sides go
 
+    def test_editing_a_transfer_keeps_both_sides_aligned(self):
+        checking, savings = self.account("Checking"), self.account("Savings", kind="savings")
+        self.client.post(url("transfer"), {"from_account": checking.pk, "to_account": savings.pk, "amount": "500",
+                                           "date": self.today.isoformat(), "note": "Move"})
+        out = Transaction.objects.get(account=checking)
+        into = out.transfer_pair
+        response = self.client.post(url("transaction", out.pk), {
+            "date": (self.today - timedelta(days=1)).isoformat(), "amount": "-400.00", "payee": "Rent float",
+            "account": checking.pk, "category": "", "notes": "", "tags": "", "needs_review": False})
+        self.assertEqual(response.status_code, 302)
+        out.refresh_from_db()
+        into.refresh_from_db()
+        self.assertEqual((out.amount, into.amount), (D("-400.00"), D("400.00")))
+        self.assertEqual(out.date, into.date)
+        self.assertEqual((out.payee, into.payee), ("Rent float", "Rent float"))
+        self.assertTrue(out.is_transfer and into.is_transfer)
+
+    def test_cannot_mark_a_normal_spend_as_a_transfer(self):
+        a = self.account()
+        t = self.txn(a, "-25.00", "Coffee", category=self.cat("Dining"))
+        self.client.post(url("transaction", t.pk), {
+            "date": self.today.isoformat(), "amount": "-25.00", "payee": "Coffee", "account": a.pk,
+            "category": t.category_id, "notes": "", "tags": "", "is_transfer": "on", "needs_review": False})
+        t.refresh_from_db()
+        self.assertFalse(t.is_transfer)
+        totals = money.category_totals([t.category], self.month, budget.month_end(self.month))
+        self.assertEqual(totals[t.category_id], D("-25.00"))
+
+    def test_cannot_move_a_transfer_to_another_account_on_edit(self):
+        checking, savings, other = (
+            self.account("Checking"), self.account("Savings", kind="savings"), self.account("Cash", kind="cash"))
+        self.client.post(url("transfer"), {"from_account": checking.pk, "to_account": savings.pk, "amount": "50",
+                                           "date": self.today.isoformat()})
+        out = Transaction.objects.get(account=checking)
+        response = self.client.post(url("transaction", out.pk), {
+            "date": self.today.isoformat(), "amount": "-50.00", "payee": out.payee, "account": other.pk,
+            "category": "", "notes": "", "tags": "", "needs_review": False})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A transfer&#x27;s account can&#x27;t change here")   # escaped in the page
+        out.refresh_from_db()
+        self.assertEqual(out.account_id, checking.pk)
+
     def test_category_menu_is_the_accounts_own_set(self):
         h = self.household(self.wife)
         ours = self.account("Joint", household=h)
@@ -487,6 +529,23 @@ class ImportTests(Base):
         from django.conf import settings
         self.assertLessEqual(imports.MAX_BYTES, settings.FILE_UPLOAD_MAX_MEMORY_SIZE)   # never a temp file
 
+    def test_import_is_atomic_on_failure(self):
+        a = self.account(csv_mapping={"date": "Date", "description": "Description", "amount": "Amount",
+                                      "date_format": "%m/%d/%Y"})
+        rows = [{"date": "2026-11-01", "payee": "One", "amount": "-1.00", "duplicate": False},
+                {"date": "2026-11-02", "payee": "Two", "amount": "-2.00", "duplicate": False}]
+        real_save = Transaction.save
+
+        def boom(self, *args, **kwargs):
+            if self.payee == "Two":
+                raise RuntimeError("boom")
+            return real_save(self, *args, **kwargs)
+
+        with mock.patch.object(Transaction, "save", boom):
+            with self.assertRaises(RuntimeError):
+                imports.import_rows(a, rows, self.me)
+        self.assertFalse(Transaction.objects.exists())  # first row rolled back with the second
+
     def test_tampered_payload_is_refused(self):
         a = self.account()
         response = self.client.post(url("import"), {"step": "import", "payload": "not-signed"})
@@ -496,6 +555,19 @@ class ImportTests(Base):
         token = imports.pack({"account": other.pk, "rows": [{"date": "2026-11-01", "payee": "x", "amount": "-1"}]})
         self.assertEqual(self.client.post(url("import"), {"step": "import", "payload": token}).status_code, 404)
         self.assertTrue(a.pk)
+
+    def test_set_category_refuses_splits(self):
+        a = self.account()
+        t = self.txn(a, "-100.00", "Target")
+        g, s = self.cat("Groceries"), self.cat("Shopping")
+        Split.objects.create(transaction=t, category=g, amount=D("-60.00"))
+        Split.objects.create(transaction=t, category=s, amount=D("-40.00"))
+        response = self.client.post(url("set_category", t.pk), {"category": g.pk},
+                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(t.splits.count(), 2)
+        t.refresh_from_db()
+        self.assertIsNone(t.category_id)
 
 
 # ---------------------------------------------------------------------------

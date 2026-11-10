@@ -17,6 +17,7 @@ from decimal import Decimal
 from difflib import SequenceMatcher
 
 from django.core import signing
+from django.db import transaction as db_transaction
 
 from django.urls import reverse
 
@@ -192,20 +193,22 @@ def preview(account, rows):
 
 def import_rows(account, rows, user):
     """Create the new rows' transactions (duplicates skipped again, in case something was added meanwhile).
-    Returns (created, skipped)."""
+    Returns (created, skipped). The whole batch (rows + the one activity event) is one DB transaction
+    so a mid-import failure does not leave a partial statement on the account."""
     rules = list(Rule.objects.filter(money.scope_filter(account.owner, account.space)).select_related("category"))
     mark_duplicates(account, rows)
     created = 0
-    for row in rows:
-        if row["duplicate"]:
-            continue
-        t = Transaction(account=account, date=date.fromisoformat(row["date"]), amount=money.to_decimal(row["amount"]),
-                        payee=row["payee"], entered_by=user, source=Transaction.IMPORT)
-        money.categorize(t, rules)
-        t.save()
-        created += 1
-    if created:   # one event for the whole import - never one per transaction
-        money.record_activity(account.space, "imported", f"imported {created} transaction{'s' if created != 1 else ''} "
-                              f"into {account.name}", actor=user, url=reverse("albright_money:transactions") + f"?space={account.space_id}",
-                              obj=account)
+    with db_transaction.atomic():
+        for row in rows:
+            if row["duplicate"]:
+                continue
+            t = Transaction(account=account, date=date.fromisoformat(row["date"]), amount=money.to_decimal(row["amount"]),
+                            payee=row["payee"], entered_by=user, source=Transaction.IMPORT)
+            money.categorize(t, rules)
+            t.save()
+            created += 1
+        if created:   # one event for the whole import - never one per transaction
+            money.record_activity(account.space, "imported", f"imported {created} transaction{'s' if created != 1 else ''} "
+                                  f"into {account.name}", actor=user, url=reverse("albright_money:transactions") + f"?space={account.space_id}",
+                                  obj=account)
     return created, len(rows) - created

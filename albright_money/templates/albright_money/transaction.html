@@ -19,7 +19,7 @@ money between your own accounts: never spending or income. Delete removes a tran
         {% endif %}{% endfor %}
     </div>
     <div class="field">{{ form.notes.label_tag }}{{ form.notes }}</div>
-    <label class="mn-check">{{ form.is_transfer }} {{ form.is_transfer.label }}</label>
+    {% if form.is_transfer %}<label class="mn-check">{{ form.is_transfer }} {{ form.is_transfer.label }}{% if form.is_transfer.help_text %} <span class="mn-help">{{ form.is_transfer.help_text }}</span>{% endif %}</label>{% endif %}
     <label class="mn-check">{{ form.needs_review }} {{ form.needs_review.label }}</label>
 
     <fieldset class="mn-splits" id="mn-splits">

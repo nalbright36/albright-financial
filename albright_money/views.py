@@ -233,6 +233,18 @@ def transaction(request, pk):
                 categorized = bool(t.category_id or splits.rows or t.is_transfer)
                 t.needs_review = form.cleaned_data["needs_review"] or not categorized
                 t.save()
+                # Keep the other side of a transfer aligned (amount opposite, same date/payee).
+                if t.transfer_pair_id:
+                    pair = Transaction.objects.visible_to(user).filter(pk=t.transfer_pair_id).first()
+                    if pair is not None:
+                        pair.date = t.date
+                        pair.amount = -t.amount
+                        pair.payee = t.payee
+                        pair.is_transfer = True
+                        pair.save(update_fields=["date", "amount", "payee", "is_transfer"])
+                        if not t.is_transfer:
+                            t.is_transfer = True
+                            t.save(update_fields=["is_transfer"])
                 t.splits.all().delete()
                 Split.objects.bulk_create([Split(transaction=t, **row) for row in splits.rows])
             messages.success(request, "Saved.")
@@ -263,6 +275,14 @@ def set_category(request, pk):
     """The list's inline category menu: "" = uncategorized. Answers with the "Always categorize" offer."""
     user = request.user
     t = get_object_or_404(Transaction.objects.visible_to(user).select_related("account"), pk=pk)
+    if t.splits.exists():
+        # The list's category menu is for simple rows; splits keep their own categories.
+        if _wants_json(request):
+            return JsonResponse(
+                {"ok": False, "error": "Split transactions are categorized on the transaction page."},
+                status=400)
+        messages.error(request, "Split transactions are categorized on the transaction page.")
+        return redirect(_next(request, "albright_money:transactions"))
     raw = request.POST.get("category", "")
     category = None
     if raw:

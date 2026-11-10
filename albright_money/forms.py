@@ -85,6 +85,15 @@ class TransactionForm(forms.ModelForm):
             Account.objects.visible_to(user).filter(pk=self.instance.account_id or 0)
         self.fields["category"].queryset = Category.objects.visible_to(user).filter(archived=False)
         self.fields["category"].required = False
+        # Transfers are created only on the Transfer form. On edit: show the flag
+        # read-only when this row is paired; hide it otherwise so a normal spend
+        # cannot be marked "transfer" (which would drop it from the budget).
+        if self.instance.pk and self.instance.transfer_pair_id:
+            self.fields["is_transfer"].disabled = True
+            self.fields["is_transfer"].help_text = (
+                "Both sides of a transfer stay linked. Delete and re-enter to undo.")
+        else:
+            self.fields.pop("is_transfer", None)
 
     def clean(self):
         data = super().clean()
@@ -92,6 +101,9 @@ class TransactionForm(forms.ModelForm):
         if account and category and not category.same_scope(account):
             self.add_error("category", "Pick one of this account's categories "
                                        f"({account.space.name}'s set).")
+        if self.instance.transfer_pair_id and account and account.pk != self.instance.account_id:
+            self.add_error("account",
+                           "A transfer's account can't change here - delete it and make a new transfer.")
         return data
 
 
