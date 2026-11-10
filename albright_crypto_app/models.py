@@ -9,6 +9,7 @@ pasted text) are checked by guards.reject_secrets() before saving.
 """
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -76,7 +77,7 @@ class Source(models.Model):
              ("rss_income", "RSS (income)"), ("api_income", "API (income)"),
              ("remotive", "Remotive"), ("remoteok", "Remote OK"),
              ("himalayas", "Himalayas"), ("jobicy", "Jobicy"), ("arbeitnow", "Arbeitnow"),
-             ("hn_hiring", "HN: Who is hiring"), ("email", "Email alerts")]
+             ("hn_hiring", "HN: Who is hiring"), ("email", "Email alerts"), ("bot", "My bot")]
     # Never run until terms_checked is ticked.
     INCOME_KINDS = ("rss_income", "api_income", "remotive", "remoteok", "himalayas", "jobicy", "arbeitnow",
                     "hn_hiring")
@@ -135,6 +136,9 @@ class Source(models.Model):
 class Opportunity(models.Model):
     source = models.ForeignKey(Source, on_delete=models.PROTECT, related_name="opportunities")
     opportunity_type = models.CharField(max_length=6, choices=OPPORTUNITY_TYPES, default="crypto")
+    # Whose inbox a bot-added opening is in (POST opportunities); null = site-collected, seen by every admin.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE,
+                              related_name="opportunities")
     external_id = models.CharField(max_length=300)
     url = models.URLField(max_length=1000)
     title = models.CharField(max_length=500)

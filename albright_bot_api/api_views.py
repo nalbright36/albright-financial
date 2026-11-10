@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Count, F
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.csrf import csrf_exempt
@@ -126,6 +126,13 @@ GET  opportunities/new                                scope: opportunities:read
     hours_estimate, ev_mid, ev_per_hour, confidence, risk_score, safety_verdict ("ok"|"warn"), safety_reasons,
     deadline, application_deadline, skills_required, skill_match, location_requirement, status,
     text (the posting text, up to 3000 characters).
+
+POST opportunities                                   scope: opportunities:write
+  Add a job or freelance opening to the owner's Opps inbox (only they see it; it's checked for safety and skill
+  fit, never sent to the AI). Body: {"title" (required), "url" (required, http(s)), "company", "work_type",
+  "pay_type" ("hourly"|"fixed"|"prize"|"bonus"), "pay_rate_usd", "location_requirement",
+  "skills_required": [str], "posted_at", "application_deadline" (ISO date-times), "text" (the posting)}
+  -> 201 {"id", "created": true, "safety_verdict"}; the same url again -> 200 {"id", "created": false}.
 
 POST opportunities/<id>/notes                         scope: opportunities:suggest
   Body: {"text": str}. Shown on the opportunity's page labeled "Grok". Returns 201 {"id": int}.
@@ -576,9 +583,11 @@ def reseller_inventory_suggestion(request, token, entry_id):
 # Opportunities
 # ---------------------------------------------------------------------------
 
-def _visible_opportunities():
+def _visible_opportunities(token):
+    """Site-collected openings, and ones a bot added to this token owner's inbox (never another person's)."""
     from albright_crypto_app.models import Opportunity, Source
     return (Opportunity.objects.exclude(safety_verdict="block").filter(excluded=False, duplicate_of__isnull=True)
+            .filter(Q(owner__isnull=True) | Q(owner=token.owner))
             .exclude(source__kind__in=list(Source.ATTRIBUTED_KINDS)))   # their terms forbid passing jobs on
 
 
@@ -586,7 +595,7 @@ def _visible_opportunities():
 def opportunities_new(request, token):
     since = timezone.now() - timedelta(days=NEW_OPPORTUNITY_DAYS)
     rows = []
-    for o in _visible_opportunities().filter(discovered_at__gte=since).order_by("-discovered_at"):
+    for o in _visible_opportunities(token).filter(discovered_at__gte=since).order_by("-discovered_at"):
         rows.append({
             "id": o.pk, "type": o.opportunity_type, "title": o.title, "url": o.url, "discovered_at": _iso(o.discovered_at),
             "reward_usd": _money(o.reward_usd), "reward_type": o.reward_type, "pay_type": o.pay_type,
@@ -601,7 +610,7 @@ def opportunities_new(request, token):
 
 
 def _opportunity_write(request, token, opportunity_id, kind):
-    opp = _visible_opportunities().filter(pk=opportunity_id).first()
+    opp = _visible_opportunities(token).filter(pk=opportunity_id).first()
     if opp is None:
         raise ApiError(404, "No such opportunity.", f"rejected: opportunity {opportunity_id} not found")
     note = OpportunityNote.objects.create(opportunity=opp, token=token, kind=kind, text=_text(json_body(request), "text"))
@@ -616,6 +625,68 @@ def opportunity_note(request, token, opportunity_id):
 @bot_endpoint("opportunities:suggest", methods=("POST",))
 def opportunity_proposal(request, token, opportunity_id):
     return _opportunity_write(request, token, opportunity_id, "proposal")
+
+
+def _when(data, key):
+    """An optional ISO date-time; a value without a zone is taken in the site's zone."""
+    raw = data.get(key)
+    if raw in (None, ""):
+        return None
+    try:
+        value = datetime.fromisoformat(str(raw).strip())
+    except ValueError as exc:
+        raise ApiError(400, f'"{key}" must be an ISO date-time.', f"rejected: bad {key}") from exc
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_current_timezone())
+    return value
+
+
+@bot_endpoint("opportunities:write", methods=("POST",))
+def opportunities_create(request, token):
+    """A job or freelance opening for the token owner's Opps inbox (owner set - nobody else sees it). Its own
+    "My bot" source per token; the same url again (ignoring a trailing slash, #fragment and case) is the same
+    opening. Safety check and skill fit run at once, without the AI."""
+    from albright_crypto_app.models import PAY_TYPES, WORK_TYPES, Opportunity, Source
+    from albright_crypto_app.pipeline import extract_and_score
+
+    from .links_check import is_http_url
+    data = json_body(request)
+    url = _text(data, "url", limit=1000)
+    if not is_http_url(url):
+        raise ApiError(400, '"url" must be an http(s) link.', "rejected: bad url")
+    title = _text(data, "title", limit=500)
+    work_types = [k for k, _ in WORK_TYPES if k != "crypto"]
+    work_type = data.get("work_type") or "other"
+    if work_type not in work_types:
+        raise ApiError(400, f'"work_type" must be one of: {", ".join(work_types)}.', "rejected: bad work_type")
+    pay_type = data.get("pay_type") or None
+    if pay_type and pay_type not in dict(PAY_TYPES):
+        raise ApiError(400, '"pay_type" must be hourly, fixed, prize or bonus.', "rejected: bad pay_type")
+    rate = data.get("pay_rate_usd")
+    try:
+        rate = Decimal(str(rate)).quantize(Decimal("0.01")) if rate not in (None, "") else None
+    except (InvalidOperation, ValueError) as exc:
+        raise ApiError(400, '"pay_rate_usd" must be a number.', "rejected: bad pay_rate_usd") from exc
+    if rate is not None and rate < 0:
+        raise ApiError(400, '"pay_rate_usd" can\'t be negative.', "rejected: negative pay_rate_usd")
+    posted_at, deadline = _when(data, "posted_at"), _when(data, "application_deadline")
+    source, _ = Source.objects.get_or_create(kind="bot", url=f"token:{token.pk}", opportunity_type="income",
+                                             defaults={"name": token.name[:200], "terms_checked": True})
+    external_id = url.split("#")[0].rstrip("/").lower()[:300]
+    existing = Opportunity.objects.filter(source=source, external_id=external_id).first()
+    if existing:
+        return {"id": existing.pk, "created": False}, 200, f"opportunity {existing.pk} already in the inbox"
+    opp = Opportunity.objects.create(
+        source=source, owner=token.owner, opportunity_type="income", external_id=external_id, url=url, title=title,
+        raw_text=_text(data, "text", required=False, limit=20000),
+        company=_text(data, "company", required=False, limit=200),
+        work_type=work_type, pay_type=pay_type, pay_rate_usd=rate,
+        location_requirement=_text(data, "location_requirement", required=False, limit=200) or None,
+        skills_required=_string_list(data, "skills_required", 30, 60) or None,
+        posted_at=posted_at, application_deadline=deadline, status="inbox", show_anyway=True)
+    extract_and_score(opp, use_ai=False)   # safety check + skill fit, no AI cost
+    return ({"id": opp.pk, "created": True, "safety_verdict": opp.safety_verdict}, 201,
+            f"opportunity {opp.pk}: {title[:80]}")
 
 
 # ---------------------------------------------------------------------------

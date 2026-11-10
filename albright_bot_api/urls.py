@@ -29,6 +29,7 @@ api_urlpatterns = [
     path("reseller/inventory", api_views.reseller_inventory, name="reseller_inventory"),
     path("reseller/inventory/<int:entry_id>/suggestions", api_views.reseller_inventory_suggestion,
          name="reseller_inventory_suggestion"),
+    path("opportunities", api_views.opportunities_create, name="opportunities_create"),
     path("opportunities/new", api_views.opportunities_new, name="opportunities_new"),
     path("opportunities/<int:opportunity_id>/notes", api_views.opportunity_note, name="opportunity_note"),
     path("opportunities/<int:opportunity_id>/proposal-draft", api_views.opportunity_proposal,

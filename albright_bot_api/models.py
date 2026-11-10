@@ -21,6 +21,7 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("reseller:suggest", "Leave notes on lots and pending price/listing suggestions on inventory items."),
     ("opportunities:read", "Read opportunities found in the last 7 days."),
     ("opportunities:suggest", "Leave notes and proposal drafts on opportunities (never sent anywhere)."),
+    ("opportunities:write", "Add job and freelance openings to the owner's Opps inbox."),
     ("site:suggest", "Drop website improvement ideas in the Admin inbox (Bot suggestions)."),
     ("suggestions:read", "Read bot suggestions and their status (New, Declined, or Promoted to an Idea)."),
     ("ideas:write", "Save the owner's ideas (what they told the bot) to Admin > Ideas."),
