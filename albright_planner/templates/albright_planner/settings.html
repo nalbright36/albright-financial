@@ -38,6 +38,16 @@ source off takes its items off the Planner; a deleted item never comes back.
                 <span><strong>Complete task when all items are checked</strong><span class="pl-help">A task with a checklist (e.g. a grocery run from the Meals grocery list) checks itself off when every item is checked, and reopens if one is unchecked.</span></span>
             </label>
         </fieldset>
+        <fieldset class="pl-fieldset" id="pl-timezone">
+            <legend class="pl-section__title">Time zone</legend>
+            <p class="pl-help">Time zone: <strong>{{ prefs.timezone }}</strong>. Timed items keep the zone they were made in and show at the matching time here; all-day items never move.</p>
+            <label class="pl-setting">
+                <input type="checkbox" name="auto_timezone" value="1"{% if prefs.auto_timezone %} checked{% endif %}>
+                <span><strong>Follow this device's time zone</strong><span class="pl-help">Updates on its own when you open the Planner somewhere else.</span></span>
+            </label>
+            <label class="pl-field" for="pl-timezone-name">Time zone (used when the box above is off)</label>
+            <input type="text" name="timezone" id="pl-timezone-name" class="pl-input" value="{{ prefs.timezone }}" maxlength="64" placeholder="America/Denver" autocomplete="off" spellcheck="false">
+        </fieldset>
         <div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">Save</button></div>
     </form>
 </div>

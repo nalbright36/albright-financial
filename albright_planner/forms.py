@@ -64,11 +64,16 @@ class ItemForm(forms.Form):
         return notes
 
     @classmethod
-    def initial_for(cls, item, occurrence_date):
+    def initial_for(cls, item, occurrence_date, viewer=None):
+        """The form for one occurrence; viewer (a ZoneInfo): its date and times shown in that zone."""
+        from .planner import convert, zone
         rule = recurrence.describe(item.recurrence)
+        day, start, end = occurrence_date, item.start_time, item.end_time
+        if viewer is not None:
+            day, start, end = convert(day, start, end, zone(item.timezone), viewer)
         return {
-            "title": item.title, "kind": item.kind, "date": occurrence_date, "start_time": item.start_time,
-            "end_time": item.end_time, "checkable": item.checkable, "priority": item.priority, "color": item.color,
+            "title": item.title, "kind": item.kind, "date": day, "start_time": start,
+            "end_time": end, "checkable": item.checkable, "priority": item.priority, "color": item.color,
             "notes": item.notes, "repeat": rule["repeat"], "days": rule["days"],
             "interval": rule["interval"] if rule["repeat"] == "every_n_weeks" else 2,
             "day_interval": rule["interval"] if rule["repeat"] == "every_n_days" else 3,

@@ -11,15 +11,21 @@ the ones already done, on their days. A past one stays on Today as overdue
   - repeat_from_completion: today plus the repeat interval (step_from), and
     the chain counts on from each check-off (repeat_anchor).
 Unchecking puts it back. next_due is on the item, so a check-off on a
-shared task moves it on for everyone."""
-from datetime import time, timedelta
+shared task moves it on for everyone.
+
+Time zones: a timed item keeps the zone it was made in (ScheduleItem.timezone);
+every view shows it in the viewer's zone (user_zone - PlannerSettings, which
+follows the browser). to_viewer moves its day and time; occurrence_date (what
+completions and exceptions key on) never changes. All-day items never shift."""
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import transaction
 from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
 from . import recurrence
-from .models import DeletedSourceItem, ItemCompletion, ItemException, ScheduleItem
+from .models import DEFAULT_TIMEZONE, DeletedSourceItem, ItemCompletion, ItemException, PlannerSettings, ScheduleItem
 
 THIS, FOLLOWING, ALL = "this", "following", "all"
 # The views' "Show" filter: everything I can see, only mine, or only what others shared with me.
@@ -30,8 +36,49 @@ SERIES_FIELDS = ("notes", "kind", "checkable", "priority", "color", "end_time")
 MAX_PAST_SCAN_DAYS = 3660          # how far back a never-checked one-at-a-time task looks for its current one
 
 
-def today():
-    return timezone.localdate()
+def zone(name):
+    """A ZoneInfo for `name` - the default zone if it isn't a real one."""
+    try:
+        return ZoneInfo(name or DEFAULT_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def user_zone(user):
+    """The zone `user` sees the Planner in (PlannerSettings.timezone; no settings row yet: the default)."""
+    name = None
+    if user is not None and getattr(user, "is_authenticated", False):
+        name = PlannerSettings.objects.filter(user=user).values_list("timezone", flat=True).first()
+    return zone(name)
+
+
+def today(user=None):
+    """Today's date - in `user`'s zone when given."""
+    if user is None:
+        return timezone.localdate()
+    return timezone.localdate(timezone=user_zone(user))
+
+
+def convert(day, start, end, src, dst):
+    """(day, start, end) at a wall time in zone src -> the same moment in zone dst. No start: unchanged (all day)."""
+    if start is None or src.key == dst.key:
+        return day, start, end
+    moment = datetime.combine(day, start, tzinfo=src).astimezone(dst)
+    if end is not None:
+        until = datetime.combine(day, end, tzinfo=src).astimezone(dst)
+        end = until.time() if until.date() == moment.date() else time(23, 59)
+    return moment.date(), moment.time().replace(tzinfo=None), end
+
+
+def to_viewer(occ, viewer):
+    """The occurrence in the viewer's zone: a timed one's day and times move (tz_days: by how many days);
+    occurrence_date stays the key. Returns occ."""
+    if occ.start_time is None:
+        return occ
+    day, start, end = convert(occ.date, occ.start_time, occ.end_time, zone(occ.item.timezone), viewer)
+    occ.tz_days = (day - occ.date).days
+    occ.date, occ.start_time, occ.end_time = day, start, end
+    return occ
 
 
 def week_start(day):
@@ -86,12 +133,17 @@ def _mark_sharing(occ, user):
     occ.shared = occ.shared_in or occ.shared_out          # shows "Done by <name>" on it and its subtasks
 
 
-def occurrences(user, start, end, kind="", show_done=True, shared_only=False, who=EVERYONE, expand=False):
+def occurrences(user, start, end, kind="", show_done=True, shared_only=False, who=EVERYONE, expand=False,
+                localize=True):
     """Every occurrence the user can see - their own items and ones shared with them - between start and end
     (inclusive), sorted by day and time. A check-off is the item's, so it shows for everyone who can see it, with
     who did it (occ.done_by). A one-at-a-time task shows only its current occurrence (and the done ones) unless
-    expand (the Bot API's ?expand=all): every scheduled one."""
-    items = list(_candidates(user, start, end))
+    expand (the Bot API's ?expand=all): every scheduled one. Times are in the user's zone (to_viewer) - a day either
+    side is looked at, since a zone can move an occurrence into the range or out of it. localize=False (the Bot
+    API): each item's own date and time, as stored."""
+    viewer = user_zone(user)
+    lo, hi = start - timedelta(days=1), end + timedelta(days=1)
+    items = list(_candidates(user, lo, hi))
     if kind in (ScheduleItem.TASK, ScheduleItem.EVENT):
         items = [i for i in items if i.kind == kind]
     items = _by_owner(items, user, SHARED if shared_only else who)
@@ -101,10 +153,14 @@ def occurrences(user, start, end, kind="", show_done=True, shared_only=False, wh
         completions = {c.occurrence_date: c for c in item.completions.all()}
         exceptions = {e.occurrence_date: e for e in item.exceptions.all()}
         if item.one_at_a_time and not expand:
-            found = _one_at_a_time(item, start, end, completions, exceptions)
+            found = _one_at_a_time(item, lo, hi, completions, exceptions)
         else:
-            found = recurrence.occurrences(item, start, end, set(completions), exceptions)
+            found = recurrence.occurrences(item, lo, hi, set(completions), exceptions)
         for occ in found:
+            if localize:
+                to_viewer(occ, viewer)
+            if not start <= occ.date <= end:
+                continue
             occ.can_edit = item.pk in editable
             completion = completions.get(occ.occurrence_date)
             occ.done_by = completion.completed_by if completion else None
@@ -188,10 +244,10 @@ def occurrence_for(item, day, user):
     with `user`."""
     exc = item.exceptions.filter(occurrence_date=day).first() if item.recurrence else None
     completion = item.completions.select_related("completed_by").filter(occurrence_date=day).first()
-    occ = recurrence.make(item, day, exc, completion is not None)
+    occ = to_viewer(recurrence.make(item, day, exc, completion is not None), user_zone(user))
     occ.done_by = completion.completed_by if completion else None
     occ.can_edit = item.can_edit(user)
-    occ.overdue = not occ.done and item.kind == ScheduleItem.TASK and item.checkable and occ.date < today() and \
+    occ.overdue = not occ.done and item.kind == ScheduleItem.TASK and item.checkable and occ.date < today(user) and \
         (not item.recurrence or item.one_at_a_time)
     _mark_sharing(occ, user)
     return occ
@@ -241,12 +297,13 @@ def repeat_text(item):
 def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
     """One-off tasks from before `day` that aren't checked off - they roll into Today until done or moved - and
     one-at-a-time tasks whose current occurrence is before `day` (shown once, "due Mon, Nov 3"). Includes tasks
-    shared with the user."""
-    day = day or today()
+    shared with the user. Days and times are in the user's zone (to_viewer)."""
+    day = day or today(user)
     if kind == ScheduleItem.EVENT:
         return []
+    viewer = user_zone(user)
     qs = _with_sharing(ScheduleItem.objects.visible_to(user)).filter(archived=False, recurrence="", kind=ScheduleItem.TASK,
-                                                      checkable=True, date__lt=day) \
+                                                      checkable=True, date__lt=day + timedelta(days=1)) \
         .exclude(completions__occurrence_date=F("date")).select_related("owner") \
         .order_by("date", "start_time", "pk")
     who = SHARED if shared_only else who
@@ -255,20 +312,22 @@ def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
     elif who == MINE:
         qs = qs.filter(owner=user)
     series = _with_sharing(ScheduleItem.objects.visible_to(user)).filter(
-        archived=False, kind=ScheduleItem.TASK, checkable=True, date__lt=day, recurrence_until__isnull=True,
+        archived=False, kind=ScheduleItem.TASK, checkable=True, date__lt=day + timedelta(days=1),
+        recurrence_until__isnull=True,
         recurrence_count__isnull=True).exclude(recurrence="").select_related("owner").prefetch_related(
         "exceptions", "completions")
     if who == SHARED:
         series = series.exclude(owner=user)
     elif who == MINE:
         series = series.filter(owner=user)
-    occs = [recurrence.Occurrence(item, item.date, item.date, item.title, item.start_time, item.end_time)
-            for item in qs]
+    occs = [to_viewer(recurrence.Occurrence(item, item.date, item.date, item.title, item.start_time, item.end_time),
+                      viewer) for item in qs]
+    occs = [o for o in occs if o.date < day]
     for item in series:
         exceptions = {e.occurrence_date: e for e in item.exceptions.all()}
         key = current_occurrence(item, {c.occurrence_date for c in item.completions.all()}, _skipped(exceptions))
         if key is not None:
-            occ = recurrence.make(item, key, exceptions.get(key))
+            occ = to_viewer(recurrence.make(item, key, exceptions.get(key)), viewer)
             if occ.date < day:
                 occs.append(occ)
     editable = set(ScheduleItem.objects.editable_by(user).filter(pk__in=[o.item.pk for o in occs])
@@ -282,7 +341,7 @@ def overdue(user, day=None, kind="", shared_only=False, who=EVERYONE):
 
 def open_tasks_today(user):
     """Today's unchecked tasks (and overdue ones) - the launcher's and Home's number."""
-    day = today()
+    day = today(user)
     todays = [o for o in occurrences(user, day, day, kind=ScheduleItem.TASK) if o.item.checkable and not o.done]
     return todays, overdue(user, day)
 
@@ -299,7 +358,7 @@ def today_panel(user, show_completed=False):
     (Home's "Show completed tasks"): today's finished tasks too, at the bottom. "open" / "overdue" / "done": the
     count line's numbers for what's shown."""
     from . import checklist
-    day = today()
+    day = today(user)
     late = overdue(user, day)
     occs = checklist.attach(occurrences(user, day, day) + late)
     todays = [o for o in occs if o.item.kind == ScheduleItem.TASK and not getattr(o, "overdue", False)]
@@ -369,7 +428,7 @@ def _toggle_one_at_a_time(item, occurrence_date, user, done):
     if want and not is_done:
         ItemCompletion.objects.get_or_create(item=item, occurrence_date=occurrence_date, defaults={"completed_by": user})
         if occurrence_date == current:
-            _move_on(item, occurrence_date, today())
+            _move_on(item, occurrence_date, today(user))
     elif not want and is_done:
         ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).delete()
         _put_back(item, occurrence_date)

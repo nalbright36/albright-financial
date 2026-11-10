@@ -13,6 +13,7 @@ Opening the Planner at all needs access in Admin > Users (albright_labs.app_acce
 import json
 from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -27,7 +28,7 @@ from albright_labs import sharing
 
 from . import checklist, planner, quickadd, recurrence, sources
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
-from .models import NOTES_MAX, PlannerSettings, ScheduleItem
+from .models import NOTES_MAX, PlannerSettings, ScheduleItem, home_zone
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -145,7 +146,7 @@ def _frame(request, view, day, prev_day, next_day, title):
     meals_toggle = sources.can_open(request.user, "meals")
     here = request.get_full_path()
     return {
-        "view": view, "day": day, "today": planner.today(), "title": title, "filters": o, "query": query,
+        "view": view, "day": day, "today": planner.today(request.user), "title": title, "filters": o, "query": query,
         "tabs": [(v, v.title(), link(v, day)) for v in VIEWS],
         "prev_url": link(view, prev_day), "next_url": link(view, next_day), "today_url": link(view, None),
         "here": here,
@@ -188,7 +189,7 @@ def _split(occs):
 @login_required
 @never_cache
 def day_view(request):
-    today = planner.today()
+    today = planner.today(request.user)
     day = _day(request.GET.get("date"), today)
     f = _filters(request)
     occs = planner.occurrences(request.user, day, day, **f)
@@ -212,7 +213,7 @@ def day_view(request):
 @login_required
 @never_cache
 def week_view(request):
-    today = planner.today()
+    today = planner.today(request.user)
     day = _day(request.GET.get("date"), today)
     start = planner.week_start(day)
     end = start + timedelta(days=6)
@@ -238,7 +239,7 @@ def _add_months(day, n):
 @login_required
 @never_cache
 def month_view(request):
-    today = planner.today()
+    today = planner.today(request.user)
     day = _day(request.GET.get("date"), today)
     first = day.replace(day=1)
     grid_start = planner.week_start(first)
@@ -272,10 +273,11 @@ def quick_add(request):
         messages.error(request, "Type what to add, e.g. “Call dentist tomorrow 3pm”.")
         return redirect(_next(request))
     text, subtasks = quickadd.split_checklist(text)
-    fields = quickadd.parse(text, planner.today())
+    fields = quickadd.parse(text, planner.today(request.user))
     if subtasks:
         fields.update(kind=ScheduleItem.TASK, checkable=True)
-    item = ScheduleItem.objects.create(owner=request.user, created_by=request.user.get_username(), **fields)
+    item = ScheduleItem.objects.create(owner=request.user, created_by=request.user.get_username(),
+                                       timezone=home_zone(request.user), **fields)
     checklist.create_rows(item, subtasks)
     planner.apply_default_shares(item, request.user)             # shared the way new Planner items are
     when = recurrence.summary(item.recurrence, item.date, item.recurrence_until, item.recurrence_count) or \
@@ -289,12 +291,13 @@ def quick_add(request):
 
 @login_required
 def new_item(request):
-    initial = {"date": _day(request.GET.get("date"), planner.today()), "kind": request.GET.get("kind") or "task"}
+    initial = {"date": _day(request.GET.get("date"), planner.today(request.user)), "kind": request.GET.get("kind") or "task"}
     form = ItemForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         changes = form.changes()
         changes.pop("date")
-        item = ScheduleItem(owner=request.user, created_by=request.user.get_username(), date=form.cleaned_data["date"])
+        item = ScheduleItem(owner=request.user, created_by=request.user.get_username(), date=form.cleaned_data["date"],
+                            timezone=home_zone(request.user))
         for name, value in changes.items():
             setattr(item, name, value)
         item.save()
@@ -360,7 +363,7 @@ def view_item(request, pk):
     template = "albright_planner/_view_panel.html" if request.GET.get("panel") == "1" else "albright_planner/item.html"
     return render(request, template, {
         "item": item, "o": occ, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
-        "today": planner.today(),
+        "today": planner.today(request.user),
         "back": back, "self_url": _view_url(item, occurrence, back),
         "edit_url": reverse("albright_planner:edit", args=[item.pk]) + "?" + urlencode(
             {"date": occurrence.isoformat(), "next": back, "then": "view"}) if can_edit else "",
@@ -398,13 +401,18 @@ def edit_item(request, pk):
     if occurrence is None or (item.repeats and not planner.valid_occurrence(item, occurrence)):
         occurrence = planner.current_or_first(item)
     can_edit, is_owner = item.can_edit(request.user), item.owner_id == request.user.pk
-    form = ItemForm(request.POST or None, initial=ItemForm.initial_for(item, occurrence), show_scope=item.repeats)
+    viewer = planner.user_zone(request.user)
+    form = ItemForm(request.POST or None, initial=ItemForm.initial_for(item, occurrence, viewer), show_scope=item.repeats)
     if request.method == "POST":
         if not can_edit:
             raise Http404
         if form.is_valid():
             scope = form.cleaned_data.get("scope") or planner.ALL
             changes = form.changes()
+            if changes.get("start_time"):
+                # Entered in my zone: back into the item's own, so the series keeps its time there.
+                changes["date"], changes["start_time"], changes["end_time"] = planner.convert(
+                    changes["date"], changes["start_time"], changes["end_time"], viewer, planner.zone(item.timezone))
             changed = planner.change(item, occurrence, scope, changes)
             if request.POST.get("cl_section") and changed.kind == ScheduleItem.TASK:
                 checklist.save_rows(changed, checklist.posted_rows(request.POST))
@@ -645,7 +653,8 @@ def from_note(request, note_id):
     d = form.cleaned_data
     item = ScheduleItem.objects.create(
         owner=request.user, created_by=request.user.get_username(), title=note.title[:200], date=d["date"],
-        start_time=d.get("time"), recurrence=recurrence.build(d["repeat"], d["date"]), note=note)
+        start_time=d.get("time"), recurrence=recurrence.build(d["repeat"], d["date"]), note=note,
+        timezone=home_zone(request.user))
     planner.apply_default_shares(item)
     when = recurrence.summary(item.recurrence, item.date) or f"{item.date:%a %b} {item.date.day}"
     messages.success(request, f"Scheduled “{item.title}” – {when}.")
@@ -683,11 +692,41 @@ def view_options(request):
     prefs.save(update_fields=fields)
     view = request.POST.get("view")
     view = view if view in VIEWS else "day"
-    day = _day(request.POST.get("date"), planner.today())
-    target = reverse(f"albright_planner:{view}") + ("" if day == planner.today() else f"?date={day.isoformat()}")
+    day = _day(request.POST.get("date"), planner.today(request.user))
+    target = reverse(f"albright_planner:{view}") + ("" if day == planner.today(request.user) else f"?date={day.isoformat()}")
     if _wants_json(request):
         return _remember(JsonResponse({"ok": True, "url": target}), view)
     return _remember(redirect(target), view)
+
+
+@login_required
+@require_POST
+def set_timezone(request):
+    """The browser's zone (base.html's script): {"timezone": "America/Denver"}. Saved only while the zone follows
+    the browser (auto_timezone); an unknown zone is refused."""
+    try:
+        body = json.loads(request.body or "{}") if request.content_type == "application/json" else request.POST
+    except json.JSONDecodeError:
+        body = {}
+    name = str((body.get("timezone") if hasattr(body, "get") else "") or "").strip()[:64]
+    if not _real_zone(name):
+        return JsonResponse({"ok": False, "error": "Unknown time zone."}, status=400)
+    prefs = PlannerSettings.for_user(request.user)
+    changed = prefs.auto_timezone and prefs.timezone != name
+    if changed:
+        prefs.timezone = name
+        prefs.save(update_fields=["timezone"])
+    return JsonResponse({"ok": True, "timezone": prefs.timezone, "auto": prefs.auto_timezone, "changed": changed})
+
+
+def _real_zone(name):
+    if not name:
+        return False
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
 
 
 @login_required
@@ -704,7 +743,15 @@ def settings_view(request):
         if meals_toggle:
             prefs.show_meals = request.POST.get("show_meals") == "1"
         prefs.complete_when_checklist_done = request.POST.get("complete_when_checklist_done") == "1"
-        prefs.save(update_fields=["sources_on", "show_meals", "complete_when_checklist_done"])
+        prefs.auto_timezone = request.POST.get("auto_timezone") == "1"
+        zone_name = request.POST.get("timezone", "").strip()[:64]
+        if not prefs.auto_timezone and zone_name and zone_name != prefs.timezone:
+            if _real_zone(zone_name):
+                prefs.timezone = zone_name
+            else:
+                messages.error(request, f"“{zone_name}” isn't a time zone - try one like America/Denver.")
+        prefs.save(update_fields=["sources_on", "show_meals", "complete_when_checklist_done", "auto_timezone",
+                                  "timezone"])
         sources.sync(request.user)              # the only place source items are added or updated
         messages.success(request, "Planner settings saved.")
         return redirect("albright_planner:settings")

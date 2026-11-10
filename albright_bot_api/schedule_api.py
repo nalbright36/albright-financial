@@ -202,7 +202,7 @@ def schedule_list(request, token):
     if expand not in ("", "all"):
         raise ApiError(400, '"expand" must be "all" (or left out).', "rejected: bad expand")
     from albright_planner import checklist
-    occs = checklist.attach(planner.occurrences(token.owner, start, end, expand=expand == "all"))
+    occs = checklist.attach(planner.occurrences(token.owner, start, end, expand=expand == "all", localize=False))
     rows = [_occurrence_json(o) for o in occs]
     return ({"start": start.isoformat(), "end": end.isoformat(), "occurrences": rows}, 200,
             f"listed {len(rows)} occurrences {start}..{end}" + (" (expand=all)" if expand else ""))
@@ -210,7 +210,7 @@ def schedule_list(request, token):
 
 @bot_endpoint("schedule:write", methods=("POST",))
 def schedule_create(request, token):
-    from albright_planner.models import NOTES_MAX, ScheduleItem
+    from albright_planner.models import NOTES_MAX, ScheduleItem, home_zone
     _require_planner_access(token)
     data = json_body(request)
     title = _str(data, "title", 200, required=True)
@@ -247,7 +247,7 @@ def schedule_create(request, token):
         owner=token.owner, title=title, date=start, start_time=start_time, end_time=end_time, kind=kind,
         checkable=True if kind == ScheduleItem.TASK else checkable, notes=_str(data, "notes", NOTES_MAX),
         recurrence=rule, recurrence_until=until, recurrence_count=count, repeat_from_completion=from_completion,
-        created_by=token.name[:150], from_bot=True, bot_token=token)
+        created_by=token.name[:150], from_bot=True, bot_token=token, timezone=home_zone(token.owner))
     from albright_planner.checklist import create_rows
     create_rows(item, subtasks)
     shared = share_field.apply(token, item, data)    # the owner's default, plus "share"

@@ -34,3 +34,18 @@ def notes_markdown(text):
     read-only."""
     from albright_notes.render import render
     return render(text or "")
+
+
+@register.simple_tag(takes_context=True)
+def planner_zone(context):
+    """The viewer's Planner zone for base.html's auto-detect: {"name": "America/New_York", "auto": True} (no settings
+    row yet: the defaults - nothing is written on a page view)."""
+    from albright_planner.models import DEFAULT_TIMEZONE, PlannerSettings
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    row = None
+    if user is not None and user.is_authenticated:
+        row = PlannerSettings.objects.filter(user=user).values("timezone", "auto_timezone").first()
+    if row is None:
+        return {"name": DEFAULT_TIMEZONE, "auto": True}
+    return {"name": row["timezone"], "auto": row["auto_timezone"]}

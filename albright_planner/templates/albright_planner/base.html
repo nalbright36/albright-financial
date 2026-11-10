@@ -3,9 +3,34 @@
 Albright Planner's base template. Its stylesheet and script come from the app
 registry (apps_registry: Planner's stylesheet / script), which index.html
 includes on every Planner page.
+
+data-planner-tz: the zone times are shown in (PlannerSettings.timezone). While it follows the browser
+(data-planner-tz-auto="1"), the script below sends the browser's zone when it differs and reloads, so a trip
+across zones shows every timed item at the right local time (planner.to_viewer).
 {% endcomment %}
-{% block content %}
-<div class="container pl" id="planner" data-view-url="{% url 'albright_planner:item' 0 %}">
+{% block content %}{% load planner_extras %}{% planner_zone as planner_tz %}
+<div class="container pl" id="planner" data-view-url="{% url 'albright_planner:item' 0 %}"
+     data-planner-tz="{{ planner_tz.name }}" data-planner-tz-auto="{{ planner_tz.auto|yesno:'1,0' }}"
+     data-planner-tz-url="{% url 'albright_planner:timezone' %}">
     {% block planner %}{% endblock %}
 </div>
+<script>
+(function () {
+    var root = document.getElementById("planner");
+    if (!root || root.dataset.plannerTzAuto !== "1" || !window.Intl || !window.fetch) return;
+    var zone;
+    try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { return; }
+    if (!zone || zone === root.dataset.plannerTz) return;
+    var match = document.cookie.match(/csrftoken=([^;]+)/);
+    var input = document.querySelector("input[name=csrfmiddlewaretoken]");
+    var token = match ? match[1] : (input ? input.value : "");
+    fetch(root.dataset.plannerTzUrl, {
+        method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": token, "X-Requested-With": "XMLHttpRequest"},
+        body: JSON.stringify({timezone: zone})
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data && data.changed) location.reload(); })
+      .catch(function () {});
+})();
+</script>
 {% endblock %}

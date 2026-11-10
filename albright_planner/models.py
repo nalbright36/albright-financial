@@ -209,6 +209,10 @@ class PlannerSettings(models.Model):
     complete_when_checklist_done = models.BooleanField(default=True,
                                                        verbose_name="Complete task when all items are checked")
     synced_at = models.DateTimeField(null=True, blank=True)      # sources last brought up to date
+    # The zone this person sees times in (planner.user_zone) and new items are made in (home_zone). auto_timezone:
+    # it follows the browser (base.html posts the browser's zone to planner/timezone/); off: the one set here.
+    timezone = models.CharField(max_length=64, default=DEFAULT_TIMEZONE)
+    auto_timezone = models.BooleanField(default=True)
 
     @classmethod
     def for_user(cls, user):
@@ -216,6 +220,11 @@ class PlannerSettings(models.Model):
 
     def source_on(self, key):
         return key in (self.sources_on or [])
+
+
+def home_zone(user):
+    """The zone a new item of `user`'s is made in (ScheduleItem.timezone): their Planner zone."""
+    return PlannerSettings.for_user(user).timezone
 
 
 class TaskChecklistItem(models.Model):

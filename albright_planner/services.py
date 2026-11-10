@@ -13,7 +13,7 @@ from datetime import timedelta
 
 from django.db import IntegrityError, transaction
 
-from .models import DeletedSourceItem, ScheduleItem
+from .models import DeletedSourceItem, ScheduleItem, home_zone
 
 SOURCE_TITLE_MAX = 200
 
@@ -34,7 +34,8 @@ def upsert_source_item(user, source_app, source_id, title, date, time=None, chec
     if item is None:
         try:
             with transaction.atomic():
-                return ScheduleItem.objects.create(created_by=source_app, **key, **fields), True
+                return ScheduleItem.objects.create(created_by=source_app, timezone=home_zone(user), **key,
+                                                   **fields), True
         except IntegrityError:                     # made meanwhile by another request: update that one
             item = ScheduleItem.objects.select_for_update().get(**key)
     changed = [name for name, value in fields.items() if getattr(item, name) != value]
@@ -84,7 +85,7 @@ def upsert_weekly_source_item(user, source_app, source_id, title, start, weekday
     item = ScheduleItem.objects.select_for_update().filter(**key).first()
     created = item is None
     if created:
-        item = ScheduleItem.objects.create(created_by=source_app, **key, **fields)
+        item = ScheduleItem.objects.create(created_by=source_app, timezone=home_zone(user), **key, **fields)
         checklists.create_rows(item, checklist)
         return item, True
     if item.date < first and item.completions.exists():

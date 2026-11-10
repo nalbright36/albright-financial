@@ -32,13 +32,14 @@ def _task_form(idea):
 def _add_task(idea, user, data):
     """A Planner task for this Idea, owned by me: linked by the idea FK (not source_app/source_id - one Idea can
     have several), its source link the Idea's page. Owner-made, so the Planner's "ideas" source toggle doesn't apply."""
-    from albright_planner.models import ScheduleItem, idea_path
+    from albright_planner.models import ScheduleItem, home_zone, idea_path
     form = IdeaTaskForm(data, auto_id="idea-task-%s")
     if not form.is_valid():
         return form, None
     item = ScheduleItem.objects.create(
         owner=user, kind=ScheduleItem.TASK, title=form.cleaned_data["title"], date=form.cleaned_data["date"],
-        notes=form.cleaned_data["notes"], idea=idea, source_url=idea_path(idea.pk), created_by=user.username)
+        notes=form.cleaned_data["notes"], idea=idea, source_url=idea_path(idea.pk), created_by=user.username,
+        timezone=home_zone(user))
     return form, item
 
 

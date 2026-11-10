@@ -228,10 +228,11 @@ class Occurrence:
     can_edit: bool = False
     overdue: bool = False
     tags: list = field(default_factory=list)
+    tz_days: int = 0                 # days the viewer's zone shifted it (planner.to_viewer) - not a move
 
     @property
     def moved(self):
-        return self.date != self.occurrence_date
+        return (self.date - timedelta(days=self.tz_days)) != self.occurrence_date
 
     @property
     def key(self):
