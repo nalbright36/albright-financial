@@ -18,6 +18,8 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from albright_labs import activity
+
 from . import scopes
 from .models import BotRequestLog, BotToken, hash_token
 
@@ -98,7 +100,8 @@ def bot_endpoint(scope=None, methods=("GET",)):
                     .exclude(status=429).count()
                 if recent >= RATE_LIMIT:
                     raise ApiError(429, f"Rate limit: {RATE_LIMIT} requests per minute per token.", "rate limited")
-                data, status, summary = view(request, token, **kwargs)
+                with activity.acting(token.owner, token.name):    # what it changes shows "via <bot name>"
+                    data, status, summary = view(request, token, **kwargs)
             except ApiError as exc:
                 log_token = getattr(exc, "token", token)
                 _log(request, log_token, exc.status, exc.summary)

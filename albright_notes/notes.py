@@ -65,6 +65,7 @@ def save(note, by, base_version=None, **fields):
         current = Note.objects.select_for_update().get(pk=note.pk)
         if base_version is not None and current.version != base_version:
             raise Conflict(current)
+        before = (current.title, current.body, current.tags)
         if "title" in fields:
             current.title = (fields["title"] or "").strip()[:200] or UNTITLED
         if "body" in fields:
@@ -75,7 +76,16 @@ def save(note, by, base_version=None, **fields):
         current.updated_by = by[:150]
         current.save()
         current.refresh_from_db()
+    if (current.title, current.body, current.tags) != before:
+        _record_edit(current)
     return current
+
+
+def _record_edit(note):
+    """A shared note's edits show in others' activity - one event per person per NOTE_WINDOW (10 minutes)."""
+    from albright_labs import activity
+    activity.record_activity("notes", "updated", f"edited the note {activity.quote(note.title)}", obj=note,
+                             group=f"edited:{note.pk}", window=activity.NOTE_WINDOW)
 
 
 def search(qs, query):

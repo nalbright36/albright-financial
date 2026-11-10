@@ -84,6 +84,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     # 404 for any view of an app the user can't open (Admin > Users).
     'albright_labs.app_access.AppAccessMiddleware',
+    # Activity (albright_labs.activity) is recorded as the signed-in person.
+    'albright_labs.activity.ActivityMiddleware',
     'albright_trading_proj.middleware.LastAppMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

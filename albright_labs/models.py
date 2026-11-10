@@ -3,6 +3,7 @@ and, once signed in, Home (a tile per app) plus where to land after signing in."
 import hashlib
 import secrets
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
@@ -33,6 +34,8 @@ class Circle(models.Model):
                                    related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
     enabled_apps = models.JSONField(default=list, blank=True)
+    # Money activity: a transaction this size or bigger (in or out) shows in the circle's activity (albright_labs.activity).
+    money_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("100.00"))
 
     class Meta:
         ordering = ["name", "pk"]
@@ -362,3 +365,83 @@ class SharingDefault(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.app}: {self.mode}"
+
+
+# ---------------------------------------------------------------------------
+# Activity - what changed in shared things and circle spaces (albright_labs.activity records and shows it)
+# ---------------------------------------------------------------------------
+
+ACTIVITY_APPS = ("planner", "meals", "money", "notes", "fitness", "circles")
+
+
+class ActivityEvent(models.Model):
+    """One thing someone did to something others can see: "Nathan checked off Pack · 3 of 5 done".
+    Who sees it is decided when they look (activity.visible), never stored:
+      audience OBJECT - whoever can view the object right now (albright_labs.sharing.can_view);
+      audience CIRCLE - the circle's ACTIVE members who opted in to the app (a Meals or Money space's rows), or all
+                        its active members for app "circles" (someone joined or left).
+    recipient: only that person sees it ("shared X with you"). owner: whose thing it is, for "Only things that
+    involve me". Repeats by the same person on the same kind of thing (group_key) within a few minutes are merged:
+    count goes up, summary and updated_at change."""
+    OBJECT, CIRCLE = "object", "circle"
+    AUDIENCES = [(OBJECT, "Who can view the object"), (CIRCLE, "The circle's members in the app")]
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    via = models.CharField(max_length=100, blank=True)              # the bot (token name) that did it
+    app = models.CharField(max_length=10)                           # ACTIVITY_APPS
+    verb = models.CharField(max_length=20)                          # created, updated, completed, checked, joined...
+    content_type = models.ForeignKey("contenttypes.ContentType", on_delete=models.CASCADE, null=True, blank=True,
+                                     related_name="+")
+    object_id = models.PositiveBigIntegerField(null=True, blank=True)
+    summary = models.CharField(max_length=300)                      # after the actor's name: "checked off Pack · 3 of 5 done"
+    count = models.PositiveIntegerField(default=1)
+    group_key = models.CharField(max_length=120, blank=True)
+    audience = models.CharField(max_length=6, choices=AUDIENCES, default=OBJECT)
+    circle = models.ForeignKey(Circle, on_delete=models.CASCADE, null=True, blank=True, related_name="activity")
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name="+")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    url = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-pk"]
+        indexes = [models.Index(fields=["content_type", "object_id"]),
+                   models.Index(fields=["circle", "updated_at"]),
+                   models.Index(fields=["actor", "app", "verb", "group_key", "updated_at"])]
+
+    def __str__(self):
+        return f"{self.actor} {self.summary}"
+
+
+class ActivityRead(models.Model):
+    """One person opened one notification (at read_at - a merged event that grows afterwards is unread again)."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="activity_reads")
+    event = models.ForeignKey(ActivityEvent, on_delete=models.CASCADE, related_name="reads")
+    read_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "event"], name="labs_read_once")]
+
+
+class NotificationSettings(models.Model):
+    """My account > Notifications. levels: {"app:<key>" | "circle:<id>": "all" | "mine" | "off"} (missing: all).
+    Quiet hours: no badge count and no digest email between quiet_start and quiet_end (site time; may span midnight).
+    read_all_at: "Mark all read" - everything up to then is read."""
+    ALL, MINE, OFF = "all", "mine", "off"
+    LEVELS = [(ALL, "All"), (MINE, "Only things that involve me"), (OFF, "Off")]
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notification_settings")
+    levels = models.JSONField(default=dict, blank=True)
+    quiet_start = models.TimeField(null=True, blank=True)
+    quiet_end = models.TimeField(null=True, blank=True)
+    digest = models.BooleanField(default=False, verbose_name="Daily email digest")
+    digest_sent_at = models.DateTimeField(null=True, blank=True)
+    read_all_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Notifications for {self.user}"
+
+    @classmethod
+    def for_user(cls, user):
+        return cls.objects.get_or_create(user=user)[0]

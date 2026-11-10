@@ -166,7 +166,21 @@ def finish(workout):
     records = training.detect_records(workout)
     if workout.planner_item_id and workout.planner_date and workout.planner_item.owner_id == workout.owner_id:
         services.complete_occurrence(workout.planner_item, workout.planner_date, workout.owner)
+    _record_finish(workout, records)
     return records
+
+
+def _record_finish(workout, records):
+    """A SHARED workout finished, and its new PRs, show in the activity of those it's shared with. Only workouts:
+    the food diary, targets, body metrics and weight never produce activity."""
+    from albright_labs import activity
+    activity.record_activity("fitness", "completed", f"finished the workout {activity.quote(workout.title)}", obj=workout,
+                             actor=workout.owner)
+    if records:
+        first = training.record_text(records[0])
+        more = f" and {len(records) - 1} more" if len(records) > 1 else ""
+        activity.record_activity("fitness", "pr", f"set a new PR in {activity.quote(workout.title)}: {first}{more}",
+                                 obj=workout, actor=workout.owner)
 
 
 # ---------------------------------------------------------------------------

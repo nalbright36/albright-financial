@@ -41,5 +41,7 @@ def apply(token, obj, data):
                           who=str(value.get("user") or "") if value.get("circle") in (None, "") else "")
         except sharing.ShareError as exc:
             raise ApiError(400, f'"share": {exc}', "rejected: share not allowed") from exc
+        from albright_labs import activity
+        activity.created(obj, token.owner)              # now that others can see it
     return [{"circle": g.circle_id, "user": g.user.get_username() if g.user_id else None, "permission": g.permission}
             for g in sharing.grants(obj)]

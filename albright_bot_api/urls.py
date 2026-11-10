@@ -54,6 +54,8 @@ api_urlpatterns = [
     # Notes (albright_bot_api.notes_api).
     path("notes", notes_api.notes_collection, name="notes"),
     path("notes/<int:note_id>", notes_api.note_update, name="note"),
+    # Activity (albright_labs.activity) - the owner's notifications.
+    path("activity", api_views.activity, name="activity"),
     # Planner (albright_bot_api.schedule_api).
     path("schedule", schedule_api.schedule_collection, name="schedule"),
     path("schedule/<int:item_id>/complete", schedule_api.schedule_complete, name="schedule_complete"),

@@ -1,0 +1,13 @@
+{% comment %}The header bell's panel (labs.activity_views.panel, fetched by labs/notifications.js each time it opens): recent notifications - never my own actions - newest first, unread marked; Mark all read; links to the full Activity page and the settings.{% endcomment %}<div class="notif-panel__head">
+    <strong class="notif-panel__title">Notifications</strong>
+    {% if unread %}<form method="post" action="{% url 'labs:notifications_read_all' %}" class="notif-panel__readall-form" data-notif-readall>{% csrf_token %}<button type="submit" class="notif-panel__readall">Mark all read</button></form>{% endif %}
+</div>
+<div class="notif-panel__list" data-unread="{{ unread }}">
+    {% for r in rows %}{% include "albright_labs/_activity_row.html" %}{% empty %}
+    <p class="notif-panel__empty">Nothing yet. When someone changes something shared with you or in your circles, it shows here.</p>
+    {% endfor %}
+</div>
+<div class="notif-panel__footer">
+    <a href="{% url 'labs:activity' %}" class="notif-panel__link">All activity</a>
+    <a href="{% url 'labs:notification_settings' %}" class="notif-panel__link">Settings</a>
+</div>

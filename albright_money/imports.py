@@ -18,6 +18,8 @@ from difflib import SequenceMatcher
 
 from django.core import signing
 
+from django.urls import reverse
+
 from . import money
 from .models import Rule, Transaction
 
@@ -202,4 +204,7 @@ def import_rows(account, rows, user):
         money.categorize(t, rules)
         t.save()
         created += 1
+    if created:   # one event for the whole import - never one per transaction
+        money.record_activity(account.space, "imported", f"imported {created} transaction{'s' if created != 1 else ''} "
+                              f"into {account.name}", actor=user, url=reverse("albright_money:transactions") + f"?space={account.space_id}")
     return created, len(rows) - created

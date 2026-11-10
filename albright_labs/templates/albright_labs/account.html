@@ -10,6 +10,12 @@
         <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">Groups of people you choose to share some apps with - Meals, Money and more. Your personal things stay yours.</p>
         <a href="{% url 'labs:circles' %}" class="btn btn-secondary">Circles</a>
     </section>
+    <section class="card" id="activity-link" style="margin-top: var(--space-5, 20px);">
+        <div class="card__header"><span class="card__label">Activity</span>{% if notification_count %} <span class="badge navbar__badge">{{ notification_count_label }} unread</span>{% endif %}</div>
+        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">What others changed in things shared with you and in your circles, and how you're told about it.</p>
+        <a href="{% url 'labs:activity' %}" class="btn btn-secondary">Activity</a>
+        <a href="{% url 'labs:notification_settings' %}" class="btn btn-secondary">Notifications</a>
+    </section>
     {% if api_keys %}
     <section class="card" id="api-keys-link" style="margin-top: var(--space-5, 20px);">
         <div class="card__header"><span class="card__label">API keys</span></div>

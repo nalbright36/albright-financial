@@ -318,9 +318,35 @@ def today_panel(user, show_completed=False):
 @transaction.atomic
 def toggle(item, occurrence_date, user, done=None):
     """Check off (or undo) one occurrence. Returns whether it's now done, or None if it isn't scheduled that day.
-    A one-at-a-time task's current occurrence moves it on to the next; unchecking one puts it back."""
-    if item.one_at_a_time:
-        return _toggle_one_at_a_time(item, occurrence_date, user, done)
+    A one-at-a-time task's current occurrence moves it on to the next; unchecking one puts it back. A shared item's
+    change shows in others' activity."""
+    was_done = ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).exists()
+    now_done = _toggle_one_at_a_time(item, occurrence_date, user, done) if item.one_at_a_time \
+        else _toggle(item, occurrence_date, user, done)
+    if now_done is not None and now_done != was_done:
+        _record_toggle(item, occurrence_date, now_done, user)
+    return now_done
+
+
+def _record_toggle(item, occurrence_date, done, user):
+    from albright_labs import activity
+
+    from . import checklist
+    if not activity.others_can_see(item):
+        return
+    rows = checklist.occurrence_rows(item, occurrence_date)
+    progress = f" · {checklist.progress(rows)['title']}" if rows else ""
+    if done:
+        activity.record_activity("planner", "completed", f"checked off {activity.quote(item.title)}{progress}", obj=item,
+                                 actor=user if getattr(user, "pk", None) else None, group="completed",
+                                 plural="checked off {n} items")
+    else:
+        activity.record_activity("planner", "uncompleted", f"reopened {activity.quote(item.title)}", obj=item,
+                                 actor=user if getattr(user, "pk", None) else None, group="uncompleted",
+                                 plural="reopened {n} items")
+
+
+def _toggle(item, occurrence_date, user, done):
     if not recurrence.is_scheduled(item, occurrence_date):
         return None
     existing = ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date)
@@ -375,11 +401,38 @@ def _set_rule(item, changes, moved_from=None):
         item.recurrence_until = item.recurrence_count = None
 
 
-@transaction.atomic
 def change(item, occurrence_date, scope, changes):
     """Edit or move an item. changes: any of title, notes, kind, date (the occurrence's new day), start_time,
     end_time, checkable, priority, color, and (for a series) recurrence / recurrence_until / recurrence_count.
-    Returns the item now holding that occurrence."""
+    Returns the item now holding that occurrence. A new title, day or time on a shared item shows in others'
+    activity."""
+    before = (item.title, occurrence_date, item.start_time, item.end_time)
+    changed = _change(item, occurrence_date, scope, changes)
+    _record_change(changed, before, changes)
+    return changed
+
+
+def _when(value):
+    return value.strftime("%I:%M %p").lstrip("0") if value else "no time"
+
+
+def _record_change(item, before, changes):
+    from albright_labs import activity
+    title, day, start, end = before
+    parts = []
+    if "title" in changes and changes["title"] != title:
+        parts.append(f"renamed it from {activity.quote(title)}")
+    if changes.get("date") and changes["date"] != day:
+        parts.append(f"moved it to {changes['date']:%a %b} {changes['date'].day}")
+    if ("start_time" in changes and changes["start_time"] != start) or ("end_time" in changes and changes["end_time"] != end):
+        parts.append(f"set the time to {_when(changes.get('start_time', start))}")
+    if parts:
+        activity.record_activity("planner", "updated", f"changed {activity.quote(item.title)} – " + ", ".join(parts),
+                                 obj=item, group=f"updated:{item.pk}")
+
+
+@transaction.atomic
+def _change(item, occurrence_date, scope, changes):
     new_date = changes.get("date") or occurrence_date
     if not item.recurrence:
         _apply(item, changes)

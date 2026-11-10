@@ -24,7 +24,7 @@ from django.views.decorators.http import require_POST
 from albright_labs import circles, sharing
 from albright_labs.models import ShareGrant
 
-from . import groceries, importer, plan, recipe_nutrition, scope
+from . import groceries, importer, plan, recipe_nutrition, scope, signals
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
 from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
@@ -308,6 +308,7 @@ def grocery_clear(request):
     now = timezone.now()
     count = GroceryItem.objects.active().filter(space=request.space, checked=True) \
         .update(archived_at=now, updated_at=now)
+    signals.groceries_cleared(request.space.pk, count, request.user)
     messages.success(request, f"Cleared {count} checked item{'s' if count != 1 else ''}.")
     return redirect("albright_meals:groceries")
 

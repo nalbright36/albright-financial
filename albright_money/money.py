@@ -44,6 +44,27 @@ def members(space):
     return list(space_members(space, APP)) if space else []
 
 
+def record_activity(space, verb, summary, actor=None, group="", url=""):
+    """Money activity - only in a circle's space (budget changes, imports, big transactions); a Personal space never
+    records anything."""
+    if space is None or not space.circle_id:
+        return None
+    from albright_labs import activity
+    return activity.record_activity(APP, verb, summary, circle=space.circle, actor=actor, group=group, url=url)
+
+
+def record_big_transaction(t, actor=None):
+    """One entered transaction at or over its circle's threshold (Circle.money_threshold, default $100), in or out.
+    Transfers and smaller ones never show; imports show as one "imported N transactions" event instead."""
+    space = t.account.space
+    if t.is_transfer or not space.circle_id or abs(t.amount) < space.circle.money_threshold:
+        return None
+    from django.urls import reverse
+    word = "received" if t.amount > 0 else "spent"
+    return record_activity(space, "transaction", f"{word} ${abs(t.amount):,.2f}" + (f" – {t.payee}" if t.payee else ""),
+                           actor=actor, url=reverse("albright_money:transaction", args=[t.pk]))
+
+
 def visible_spaces(user):
     from albright_labs.circles import visible_spaces as spaces
     return spaces(user, APP)

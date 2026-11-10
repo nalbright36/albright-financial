@@ -16,6 +16,8 @@ from django.db.models.functions import TruncMonth
 from django.db.models import Sum
 from django.utils import timezone
 
+from django.urls import reverse
+
 from . import money
 from .models import ZERO, Budget, BudgetLine, Split, Transaction
 
@@ -128,9 +130,15 @@ def save_plan(owner, space, month, planned):
     """Store the month's plan: {category pk: Decimal}. Returns the budget."""
     budget, _ = Budget.objects.get_or_create(space=space, month=month, defaults={"owner": owner})
     allowed = {c.pk for c in money.ensure_categories(owner, space)}
+    before = dict(BudgetLine.objects.filter(budget=budget).values_list("category_id", "planned"))
+    changed = 0
     for pk, amount in planned.items():
         if pk in allowed:
             BudgetLine.objects.update_or_create(budget=budget, category_id=pk, defaults={"planned": amount})
+            changed += before.get(pk) != amount and not (pk not in before and amount == 0)
+    if changed:
+        money.record_activity(space, "budget", f"updated the {month:%B} budget", group=f"budget:{month:%Y-%m}",
+                              url=reverse("albright_money:budget") + f"?month={month:%Y-%m}&space={space.pk}")
     return budget
 
 

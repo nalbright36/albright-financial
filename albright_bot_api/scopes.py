@@ -4,7 +4,8 @@ A token always acts as its owner (BotToken.owner): what it reads is what the own
 owner's. On top of the token's own scopes, every request checks the owner right now (auth.bot_endpoint):
   - API keys allowed: superusers always; anyone else only with "Allow API keys" on (Admin > Users,
     UserPreference.api_keys_allowed). Turned off: their keys stop working.
-  - The scope's app: schedule:* needs the Planner, meals:* Meals, notes:* Notes, fitness:* Fitness (APP_SCOPES). Everything else
+  - The scope's app: schedule:* needs the Planner, meals:* Meals, notes:* Notes, fitness:* Fitness (APP_SCOPES);
+    activity:read works for anyone allowed keys (OPEN_SCOPES - it only shows what they can see). Everything else
     (trading, reseller, opportunities, ideas, site suggestions) is admin-only - superusers. So taking an app away
     from someone stops their key working for that app at once (403 naming the scope).
 """
@@ -25,7 +26,10 @@ PLAIN = {
     "notes:write": "Save notes for me, and add to notes I can edit",
     "fitness:read": "See my Fitness day and weekly summary (workouts, food vs targets)",
     "fitness:write": "Log workouts, food and weigh-ins for me",
+    "activity:read": "See my notifications - what others changed in things shared with me and in my circles",
 }
+# Scopes anyone allowed API keys can use (not tied to one app).
+OPEN_SCOPES = {"activity:read"}
 
 
 def _pref(user):
@@ -45,6 +49,8 @@ def allowed(user, scope):
     if not (user and user.is_active) or scope not in SCOPE_KEYS:
         return False
     if user.is_superuser:
+        return True
+    if scope in OPEN_SCOPES:
         return True
     app = APP_SCOPES.get(scope)
     return app is not None and app_access.can_use(user, _pref(user), app)

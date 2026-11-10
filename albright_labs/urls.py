@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import circle_views, invite_views, share_views, views
+from . import activity_views, circle_views, invite_views, share_views, views
 
 app_name = "labs"
 
@@ -21,6 +21,12 @@ urlpatterns = [
     path("home/account/circles/sharing/", share_views.defaults, name="sharing_defaults"),
     path("home/account/circles/shared-with-me/", share_views.shared_with_me, name="shared_with_me"),
     path("home/account/household/", circle_views.household_redirect, name="household"),
+    # Activity and notifications (activity_views; the rules: albright_labs.activity).
+    path("home/account/activity/", activity_views.activity_page, name="activity"),
+    path("home/account/notifications/", activity_views.notification_settings, name="notification_settings"),
+    path("notifications/panel/", activity_views.panel, name="notifications_panel"),
+    path("notifications/<int:pk>/open/", activity_views.open_event, name="notification_open"),
+    path("notifications/read-all/", activity_views.read_all, name="notifications_read_all"),
     path("home/nav/", views.save_nav, name="save_nav"),
     path("home/picker/", views.save_picker, name="save_picker"),
     path("home/pin/", views.toggle_pin, name="toggle_pin"),

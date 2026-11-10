@@ -13,7 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import apps_registry, sharing
+from . import activity, apps_registry, sharing
 from .models import SharingDefault
 
 
@@ -45,6 +45,7 @@ def share(request, label, pk):
             grant = sharing.share(request.user, obj, request.POST.get("permission", sharing.VIEW), circle_id=circle_id,
                                   who=request.POST.get("who", ""))
             result["message"] = sharing.explain(kind, grant)
+            activity.shared(grant, request.user)
         elif action == "permission":
             sharing.set_permission(request.user, obj, request.POST.get("grant") or 0, request.POST.get("permission"))
             result["message"] = "Saved."

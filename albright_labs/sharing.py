@@ -269,7 +269,14 @@ def apply_defaults(obj, owner, by=None):
                     continue                          # someone who lost access: skipped, the rest still apply
     except ShareError:
         pass                                          # a circle they've since left: only them
+    _record_created(obj, by or owner)
     return made
+
+
+def _record_created(obj, actor):
+    """A new Planner item or note others can now see shows in their activity (albright_labs.activity)."""
+    from . import activity
+    activity.created(obj, actor)
 
 
 def apply_posted(request, obj, prefix="share"):
@@ -281,11 +288,13 @@ def apply_posted(request, obj, prefix="share"):
         return apply_defaults(obj, request.user)
     if mode == "me":
         return []
+    made = []
     if mode.startswith("circle:"):
-        return [share(request.user, obj, perm, circle_id=mode.split(":", 1)[1])]
-    if mode == "person" and request.POST.get(f"{prefix}_who", "").strip():
-        return [share(request.user, obj, perm, who=request.POST[f"{prefix}_who"])]
-    return []
+        made = [share(request.user, obj, perm, circle_id=mode.split(":", 1)[1])]
+    elif mode == "person" and request.POST.get(f"{prefix}_who", "").strip():
+        made = [share(request.user, obj, perm, who=request.POST[f"{prefix}_who"])]
+    _record_created(obj, request.user)
+    return made
 
 
 def save_default(user, app, mode, circle_id=None, permission=VIEW, people=None):

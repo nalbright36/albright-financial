@@ -1,0 +1,6 @@
+{% comment %}One app's or circle's notification level (notification_settings.html): All / Only things that involve me / Off.{% endcomment %}<fieldset class="notif-level" id="level-{{ row.key|slugify }}">
+    <legend class="notif-level__label">{{ row.label }}</legend>
+    <div class="notif-level__choices">{% for value, label in levels %}
+        <label class="notif-level__choice"><input type="radio" name="{{ row.key }}" value="{{ value }}"{% if row.value == value %} checked{% endif %}> <span>{% if value == "mine" %}Involves me{% else %}{{ label }}{% endif %}</span></label>{% endfor %}
+    </div>
+</fieldset>

@@ -99,3 +99,52 @@
     margin-right: calc(-1 * max(10px, env(safe-area-inset-right, 0px)));
   }
 }
+
+/* The notification bell, left of the launcher (templates/index.html, labs/notifications.js; albright_labs.activity).
+   The button is the launcher's; the panel is a solid sheet like the launcher's menu - never taller than the screen
+   below it (--notif-top, set when it opens), scrolling inside, with its header and footer pinned. */
+.notif-bell { position: relative; }
+.notif-bell__button { position: relative; }
+.notif-bell__count {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; color: #fff;
+  background: var(--red); border: 2px solid var(--surface-raised); box-sizing: content-box;
+}
+.notif-bell__count[hidden] { display: none; }
+.notif-panel {
+  display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 380px;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+  max-height: calc(100vh - var(--notif-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - var(--notif-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+.notif-bell.open .notif-panel { display: block; }
+.notif-panel[hidden] { display: none; }
+.notif-panel__head, .notif-panel__footer {
+  position: sticky; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; background: var(--surface-raised);
+}
+.notif-panel__head { top: 0; border-bottom: 1px solid var(--border); border-radius: 12px 12px 0 0; min-height: 44px; }
+.notif-panel__footer { bottom: 0; border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
+.notif-panel__title { font-size: 14px; color: var(--text-primary); }
+.notif-panel__readall-form { margin: 0; }
+.notif-panel__readall, .notif-panel__link {
+  min-height: 36px; padding: 6px 10px; border: 0; border-radius: 9px; background: transparent; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--accent); text-decoration: none; display: inline-flex; align-items: center;
+}
+.notif-panel__readall:hover, .notif-panel__link:hover, .notif-panel__readall:focus-visible, .notif-panel__link:focus-visible {
+  background: var(--surface-hover); text-decoration: none; outline: none; box-shadow: none;
+}
+.notif-panel__list { padding: 4px 6px; }
+.notif-panel__list .act-row { border-radius: 10px; padding: 8px; }
+.notif-panel__empty { margin: 0; padding: 18px 14px; font-size: 13px; color: var(--text-secondary); }
+
+@media (max-width: 639.98px) {
+  .notif-bell { position: static; }
+  .notif-panel {
+    left: 0; right: 0; top: 100%; width: auto; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px;
+    padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+  }
+  .notif-panel__head { border-radius: 0; }
+}

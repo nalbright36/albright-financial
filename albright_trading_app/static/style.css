@@ -2535,3 +2535,43 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 .swm-row:hover { background: var(--surface-hover); text-decoration: none; }
 .swm-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: var(--surface-hover); }
 .swm-icon svg { width: 16px; height: 16px; }
+
+/* Activity rows (albright_labs/_activity_row.html) - the bell's panel, My account > Activity, a circle's page: the app's
+   icon in its color, the actor's initials, what they did, where and when; unread rows marked with a dot and a tint. */
+.act-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 4px; border-top: 1px solid var(--border);
+  color: var(--text-primary); text-decoration: none; }
+.act-row:first-of-type { border-top: 0; }
+.act-row:hover, .act-row:focus-visible { background: var(--surface-hover); text-decoration: none; color: var(--text-primary); outline: none; box-shadow: none; }
+.act-row.is-unread { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.act-row.is-unread:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.act-row__app { --app-color: var(--app-labs); display: inline-grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 9px;
+  color: var(--app-color); background: color-mix(in srgb, var(--app-color) 18%, transparent); }
+.act-row__app[data-app-target="planner"] { --app-color: var(--app-planner); }
+.act-row__app[data-app-target="meals"] { --app-color: var(--app-meals); }
+.act-row__app[data-app-target="money"] { --app-color: var(--app-money); }
+.act-row__app[data-app-target="notes"] { --app-color: var(--app-notes); }
+.act-row__app[data-app-target="fitness"] { --app-color: var(--app-fitness); }
+.act-row__app svg { width: 16px; height: 16px; }
+.act-row__avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+  background: var(--act-avatar, var(--accent-solid)); color: #fff; font-size: 0.6875rem; font-weight: 700; }
+.act-row__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.act-row__text { font-size: var(--text-sm); line-height: 1.4; }
+.act-row.is-unread .act-row__text { font-weight: 600; }
+.act-row__meta { font-size: 0.75rem; color: var(--text-secondary); }
+.act-row__dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--accent); }
+.act-filters__unread { flex: 0 0 auto; min-height: 44px; align-items: center; }
+.act-feed__readall { display: flex; justify-content: flex-end; margin: 0 0 var(--space-2); }
+.act-pages { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 var(--space-4); }
+/* My account > Notifications: All / Involves me / Off per app and circle */
+.notif-level { margin: 0; padding: 8px 0; border: 0; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.notif-level:first-of-type { border-top: 0; }
+.notif-level__label { float: left; padding: 0; font-weight: 600; }
+.notif-level__choices { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; border: 1px solid var(--border); border-radius: 999px; }
+.notif-level__choice { position: relative; display: inline-flex; }
+.notif-level__choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.notif-level__choice span { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: var(--text-sm); color: var(--text-secondary); }
+.notif-level__choice input:checked + span { background: var(--accent-solid); color: var(--accent-contrast, #fff); font-weight: 600; }
+.notif-level__choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notif-quiet__times { display: flex; align-items: center; gap: 8px; }
+.notif-quiet__times .ledger-input { flex: 0 1 140px; min-height: 44px; }
+.notif-settings > .btn { margin-bottom: var(--space-4); }

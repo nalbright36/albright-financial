@@ -396,6 +396,18 @@ GET  fitness/summary?weeks=4                          scope: fitness:read
   "workouts_planned", "volume_lb", "volume_change_pct" (vs the week before, or null), "new_records": [{"exercise",
   "text"}], "days_food_logged", "avg_calories", "avg_protein" (over days with food logged), "target_calories",
   "target_protein"}]}.
+
+ACTIVITY (the owner's notifications - what others changed in things shared with them and in their circles)
+--------------------------------------------------------------------------------------------------------------
+Never the owner's own actions. Each event is checked when you ask: something unshared, or a circle the owner left
+or opted out of, disappears at once. The owner's notification settings apply (an app or circle turned Off, or
+"Only things that involve me"). Kept 90 days.
+
+GET  activity?since=<ISO date or datetime>&limit=50    scope: activity:read
+  Newest first, changed after `since` (default: the last 24 hours), up to `limit` (1-200, default 50).
+  Returns {"since", "events": [{"id", "app", "verb", "text" ("Kate added 5 items to the grocery list"),
+  "actor", "via" (a bot's name, or null), "summary", "count" (merged repeats), "circle": {"id", "name"} or null,
+  "url" (a path on the site), "created_at", "updated_at", "unread"}]}.
 """
 
 
@@ -813,3 +825,33 @@ def ideas_list(request, token):
 def ideas(request):
     """One path, two scopes: POST creates (ideas:write), anything else lists (ideas:read, GET only)."""
     return ideas_create(request) if request.method == "POST" else ideas_list(request)
+
+
+# ---------------------------------------------------------------------------
+# Activity (albright_labs.activity) - the owner's notifications
+# ---------------------------------------------------------------------------
+
+@bot_endpoint("activity:read")
+def activity(request, token):
+    from albright_labs import activity as labs_activity
+    raw = (request.GET.get("since") or "").strip()
+    since = timezone.now() - timedelta(days=1)
+    if raw:
+        parsed = parse_datetime(raw.replace(" ", "+"))
+        if parsed is None and parse_date(raw):
+            parsed = datetime.combine(parse_date(raw), datetime.min.time())
+        if parsed is None:
+            raise ApiError(400, '"since" must be an ISO date or datetime, e.g. 2026-11-09 or 2026-11-09T08:00:00Z.',
+                           "rejected: bad since")
+        since = timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+    try:
+        limit = max(1, min(200, int(request.GET.get("limit") or 50)))
+    except ValueError:
+        raise ApiError(400, '"limit" must be a number from 1 to 200.', "rejected: bad limit") from None
+    owner = token.owner
+    events = list(labs_activity.notifications(owner).filter(updated_at__gt=since)[:limit])
+    unread = set(labs_activity.unread(owner, labs_activity.visible(owner).filter(pk__in=[e.pk for e in events]))
+                 .values_list("pk", flat=True))
+    return ({"since": since.isoformat(),
+             "events": [{**labs_activity.as_json(e), "unread": e.pk in unread} for e in events]},
+            200, f"read {len(events)} activity event(s)")

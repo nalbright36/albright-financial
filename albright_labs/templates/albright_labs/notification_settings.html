@@ -1,0 +1,42 @@
+{% extends "index.html" %}
+{% block page_title %}Notifications · {% endblock %}
+{% block content %}
+{% comment %}
+My account > Notifications (labs.activity_views.notification_settings): for each app and each circle, All / Only things
+that involve me (mine, or shared with me directly) / Off; quiet hours (no badge count or email); the daily digest email
+(off by default). An event shows only if neither its app nor its circle is Off, and "Only things that involve me" on
+either narrows it.
+{% endcomment %}
+<div class="container circles-page">
+    <h1 class="circles-title">Notifications</h1>
+    <p class="circles-lead">The bell shows what others change in things shared with you and in your circles - never your own actions.</p>
+    <form method="post" class="notif-settings">{% csrf_token %}
+        <section class="card circles-card" id="notif-apps" aria-labelledby="notif-apps-h">
+            <h2 class="circles-card__title" id="notif-apps-h">By app</h2>
+            {% for row in app_rows %}{% include "albright_labs/_notif_level.html" %}{% endfor %}
+        </section>
+        {% if circle_rows %}
+        <section class="card circles-card" id="notif-circles" aria-labelledby="notif-circles-h">
+            <h2 class="circles-card__title" id="notif-circles-h">By circle</h2>
+            {% for row in circle_rows %}{% include "albright_labs/_notif_level.html" %}{% endfor %}
+        </section>
+        {% endif %}
+        <section class="card circles-card" id="notif-quiet" aria-labelledby="notif-quiet-h">
+            <h2 class="circles-card__title" id="notif-quiet-h">Quiet hours</h2>
+            <label class="circles-check"><input type="checkbox" name="quiet" value="1" id="notif-quiet-on"{% if prefs.quiet_start %} checked{% endif %}> <span><strong>No badge count or email during</strong> <span class="circles-muted">Notifications still collect; you see them after.{% if quiet_now %} Quiet hours are on now.{% endif %}</span></span></label>
+            <div class="circles-inline notif-quiet__times">
+                <label for="notif-quiet-start">From</label>
+                <input type="time" name="quiet_start" id="notif-quiet-start" class="ledger-input" value="{{ prefs.quiet_start|time:'H:i'|default:'22:00' }}">
+                <label for="notif-quiet-end">to</label>
+                <input type="time" name="quiet_end" id="notif-quiet-end" class="ledger-input" value="{{ prefs.quiet_end|time:'H:i'|default:'07:00' }}">
+            </div>
+        </section>
+        <section class="card circles-card" id="notif-digest" aria-labelledby="notif-digest-h">
+            <h2 class="circles-card__title" id="notif-digest-h">Daily email</h2>
+            <label class="circles-check"><input type="checkbox" name="digest" value="1" id="notif-digest-on"{% if prefs.digest %} checked{% endif %}{% if not has_email %} disabled{% endif %}> <span><strong>Email me a daily summary of unread activity</strong> <span class="circles-muted">{% if has_email %}Only on days with something new, and never during quiet hours.{% else %}Your account has no email address - ask the site admin to add one.{% endif %}</span></span></label>
+        </section>
+        <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+    <p><a href="{% url 'labs:activity' %}">Activity</a> &middot; <a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:account' %}">My account</a></p>
+</div>
+{% endblock %}

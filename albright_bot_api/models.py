@@ -36,6 +36,8 @@ SCOPES = [   # (scope, one-line description of what it allows)
                        "back on."),
     ("fitness:read", "Read the owner's Fitness day (planned workout, workouts done, macros vs targets) and weekly summary."),
     ("fitness:write", "Log workouts, food and weigh-ins for the owner (their own diary and records only)."),
+    ("activity:read", "Read the owner's notifications - what others changed in things shared with them and in their "
+                      "circles - e.g. to summarize what changed today."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

@@ -173,8 +173,28 @@ def set_enabled_apps(user, circle, apps):
     """Owners choose the circle's apps. Turning one off hides it from everyone at once (members' opt-ins stay, so
     turning it back on brings back exactly who had opted in)."""
     _owner_only(user, circle)
+    before = set(circle.enabled_apps or [])
     circle.enabled_apps = _clean_apps(apps)
     circle.save(update_fields=["enabled_apps"])
+    added = [a for a in circle.enabled_apps if a not in before]
+    if added:
+        from . import activity
+        names = ", ".join(activity.APP_LABELS[a] for a in added)
+        activity.circle_event(circle, "apps", f"turned on {names} for {circle.name}", actor=user)
+
+
+def set_money_threshold(user, circle, amount):
+    """Owners set how big a transaction has to be (in or out) to show in the circle's Money activity."""
+    from decimal import Decimal, InvalidOperation
+    _owner_only(user, circle)
+    try:
+        value = Decimal(str(amount).replace("$", "").replace(",", "").strip())
+    except InvalidOperation as exc:
+        raise CircleError("Enter an amount, like 100.") from exc
+    if value < 0 or value > Decimal("99999999"):
+        raise CircleError("Enter an amount of 0 or more.")
+    circle.money_threshold = value.quantize(Decimal("0.01"))
+    circle.save(update_fields=["money_threshold"])
 
 
 def set_participation(user, circle, app, on):
@@ -203,6 +223,8 @@ def leave(user, circle):
         raise CircleError("You're its only owner - make someone else an owner first, or delete the circle.")
     m.status, m.role = CircleMembership.LEFT, CircleMembership.MEMBER
     m.save(update_fields=["status", "role"])
+    from . import activity
+    activity.circle_event(circle, "left", f"left {circle.name}", actor=user)
 
 
 def remove(owner, circle, user):
@@ -214,6 +236,9 @@ def remove(owner, circle, user):
         raise CircleError("They're not in this circle.")
     m.status, m.role = CircleMembership.REMOVED, CircleMembership.MEMBER
     m.save(update_fields=["status", "role"])
+    from . import activity
+    from .sharing import person_name
+    activity.circle_event(circle, "removed", f"removed {person_name(user)} from {circle.name}", actor=owner)
 
 
 def transfer(owner, circle, user, keep_owner=False):
@@ -322,6 +347,8 @@ def accept(user, circle_invite, apps):
     circle_invite.accepted_at = timezone.now()
     circle_invite.save(update_fields=["accepted_at"])
     Space.objects.get_or_create(circle=circle)
+    from . import activity
+    activity.circle_event(circle, "joined", f"accepted the invite and joined {circle.name}", actor=user)
 
 
 def decline(user, circle_invite):

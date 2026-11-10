@@ -44,6 +44,14 @@ removing people, making someone an owner, and deleting it. Nobody here ever sees
         <form method="post" class="circles-leave" data-confirm="Leave {{ circle.name }}? You stop seeing what it shares at once. Your own data is untouched.">{% csrf_token %}<input type="hidden" name="action" value="leave"><button type="submit" class="btn btn-secondary btn-sm" id="circle-leave">Leave circle</button></form>
     </section>
 
+    <section class="card circles-card" id="circle-activity" aria-labelledby="circle-activity-h">
+        <h2 class="circles-card__title" id="circle-activity-h">Recent activity</h2>
+        {% for r in activity_rows %}{% include "albright_labs/_activity_row.html" %}{% empty %}
+        <p class="circles-muted">Nothing yet. Changes in what {{ circle.name }} shares show here.</p>
+        {% endfor %}
+        {% if activity_rows %}<p class="circles-muted"><a href="{% url 'labs:activity' %}?circle={{ circle.pk }}">All of {{ circle.name }}'s activity</a></p>{% endif %}
+    </section>
+
     {% if owner %}
     <section class="card circles-card" id="circle-invites" aria-labelledby="circle-invites-h">
         <h2 class="circles-card__title" id="circle-invites-h">Invite people</h2>
@@ -75,6 +83,13 @@ removing people, making someone an owner, and deleting it. Nobody here ever sees
             <p class="circles-muted">Turning an app off hides it from everyone in the circle at once.</p>
             <button type="submit" class="btn btn-secondary btn-sm">Save</button>
         </form>
+        {% if "money" in circle.enabled_apps %}
+        <form method="post" class="circles-form circles-inline" id="circle-threshold">{% csrf_token %}<input type="hidden" name="action" value="threshold">
+            <label for="circle-threshold-amount">Money activity shows transactions of at least $</label>
+            <input type="number" name="amount" id="circle-threshold-amount" class="ledger-input" min="0" step="1" inputmode="decimal" value="{{ circle.money_threshold|floatformat:'0' }}" required>
+            <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+        </form>
+        {% endif %}
         <form method="post" class="circles-form circles-danger" data-confirm="Delete {{ circle.name }}? Everything it shares in Meals and Money is deleted. Everyone's personal data stays.">{% csrf_token %}<input type="hidden" name="action" value="delete">
             <label for="circle-delete-name">Type <strong>{{ circle.name }}</strong> to delete the circle</label>
             <input type="text" name="confirm_name" id="circle-delete-name" class="ledger-input" autocomplete="off">

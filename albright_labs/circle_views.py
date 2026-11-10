@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 
-from . import apps_registry, circles, invites
+from . import activity_views, apps_registry, circles, invites
 from .models import CIRCLE_APPS, Circle, CircleInvite, CircleMembership
 
 
@@ -103,6 +103,8 @@ def circle_page(request, pk):
                 circles.rename(user, circle, request.POST.get("name", ""))
             elif action == "apps":
                 circles.set_enabled_apps(user, circle, request.POST.getlist("apps"))
+            elif action == "threshold":
+                circles.set_money_threshold(user, circle, request.POST.get("amount", ""))
             elif action == "invite":
                 sent = _invite_many(request, circle, request.POST.get("who", ""))
                 if sent:
@@ -144,7 +146,8 @@ def circle_page(request, pk):
     return render(request, "albright_labs/circle.html", {
         "circle": circle, "me": me, "owner": owner, "members": members, "waiting": waiting,
         "enabled": _app_rows(circle.enabled_apps), "all_apps": _app_rows(CIRCLE_APPS),
-        "my_apps": [{**a, "on": a["key"] in (me.apps or [])} for a in _app_rows(circle.enabled_apps)]})
+        "my_apps": [{**a, "on": a["key"] in (me.apps or [])} for a in _app_rows(circle.enabled_apps)],
+        "activity_rows": activity_views.recent_for_circle(user, circle)})
 
 
 @login_required

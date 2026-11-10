@@ -167,13 +167,27 @@ def set_checked(row, day, checked, user, check_task=True):
             line.save()
         return
     if checked:
-        ChecklistItemCompletion.objects.get_or_create(
+        _tick, made = ChecklistItemCompletion.objects.get_or_create(
             checklist_item=row, occurrence_date=day,
             defaults={"task_id": row.task_id, "text": row.text, "done_by": user if getattr(user, "pk", None) else None})
+        if made:
+            _record_tick(row, day, user)
     else:
         ChecklistItemCompletion.objects.filter(checklist_item=row, occurrence_date=day).delete()
     if check_task:
         reevaluate(row.task, day, user)
+
+
+def _record_tick(row, day, user):
+    """A shared task's subtask ticked: "checked “Socks” in “Pack” · 3 of 5 done" (repeats merge)."""
+    from albright_labs import activity
+    task = row.task
+    if not activity.others_can_see(task):
+        return
+    shown = progress(occurrence_rows(task, day))["title"]
+    activity.record_activity("planner", "checked", f"checked {activity.quote(row.text, 40)} in {activity.quote(task.title)} · {shown}",
+                             obj=task, actor=user if getattr(user, "pk", None) else None, group=f"checked:{task.pk}:{day}",
+                             plural=f"checked {{n}} items in {activity.quote(task.title)} · {shown}")
 
 
 def mark_all(task, day, user):

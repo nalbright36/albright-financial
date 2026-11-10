@@ -1,0 +1,7 @@
+{% comment %}One activity event (albright_labs.activity.rows): the app's icon, who did it, what they did, where and when. Opens the thing and marks it read (labs.activity_views.open_event). Used by the bell's panel, My account > Activity and each circle's page.{% endcomment %}<a href="{% url 'labs:notification_open' r.event.pk %}" class="act-row{% if r.unread %} is-unread{% endif %}" data-app="{{ r.app }}" data-event="{{ r.event.pk }}">
+    <span class="act-row__app" data-app-target="{{ r.app }}" aria-hidden="true">{% include "_app_icon.html" with key=r.app %}</span>
+    <span class="act-row__avatar" style="--act-avatar: {{ r.color }};" aria-hidden="true">{{ r.initials }}</span>
+    <span class="act-row__main"><span class="act-row__text">{{ r.text }}</span>
+        <span class="act-row__meta">{{ r.app_label }}{% if r.circle %} &middot; {{ r.circle.name }}{% endif %} &middot; <time datetime="{{ r.event.updated_at|date:'c' }}" title="{{ r.event.updated_at|date:'M j, g:i A' }}">{{ r.when }}</time></span></span>
+    {% if r.unread %}<span class="act-row__dot" title="Unread"></span><span class="visually-hidden">(unread)</span>{% endif %}
+</a>

@@ -208,6 +208,7 @@ def quick_add(request):
                     category=parsed["category"], entered_by=user, source=Transaction.MANUAL)
     money.categorize(t)
     t.save()
+    money.record_big_transaction(t, user)
     word = "in" if t.amount > 0 else "out"
     messages.success(request, f"Added ${abs(t.amount):,.2f} {word} – {t.payee or 'no payee'}"
                               + (f", {t.category.name}." if t.category else " (needs a category)."))
