@@ -43,6 +43,12 @@ def note_gone(collector, field, sub_objs, using):
     collector.add_field_update(field.model._meta.get_field("note_deleted"), True, sub_objs)
 
 
+def idea_path(idea_id):
+    """An Admin Idea's page (/control/ideas/<id>/) - the source_url of the Planner tasks made for it."""
+    from django.urls import reverse
+    return reverse("albright_control:idea", args=[idea_id])
+
+
 class ItemQuerySet(models.QuerySet):
     def visible_to(self, user):
         if not (user and user.is_authenticated):
@@ -93,7 +99,11 @@ class ScheduleItem(models.Model):
     source_app = models.CharField(max_length=20, blank=True)
     source_id = models.CharField(max_length=64, blank=True)
     source_url = models.CharField(max_length=1000, blank=True)    # the record's page (a site path, or an external URL)
-    note = models.ForeignKey("albright_notes.Note", on_delete=note_gone, null=True, blank=True,
+    # Admin > Ideas: one Idea can have several tasks (each its own item and date), so this is a plain FK - not
+    # source_app/source_id, whose one-item-per-source constraint would allow only one. Not locked.
+    idea = models.ForeignKey("albright_control.Idea", null=True, blank=True, on_delete=models.SET_NULL,
+                             related_name="planner_tasks")
+    note =models.ForeignKey("albright_notes.Note", on_delete=note_gone, null=True, blank=True,
                              related_name="planner_items")
     note_deleted = models.BooleanField(default=False)
     from_bot = models.BooleanField(default=False)

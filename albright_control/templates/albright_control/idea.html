@@ -29,6 +29,35 @@
         </form>
     </section>
 
+    {% comment %}My Planner tasks for this Idea (idea_views._planner_tasks - only mine, never another person's): each its
+    own Planner item and date, done or not for that occurrence. Add Planner task makes one more.{% endcomment %}
+    <section class="card" style="margin-bottom: 16px;" id="idea-planner-tasks" aria-labelledby="idea-planner-tasks-h">
+        <div class="card__header"><span class="card__label" id="idea-planner-tasks-h">Planner tasks</span></div>
+        {% if planner_tasks %}
+        <ul style="list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px;" id="idea-task-list">
+            {% for t in planner_tasks %}
+            <li class="idea-task{% if t.done %} is-done{% endif %}" data-item="{{ t.item.pk }}" style="display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 0.875rem;">
+                <span class="badge {% if t.done %}gain{% else %}neutral{% endif %}">{% if t.done %}Done{% else %}Open{% endif %}</span>
+                <a href="{% url 'albright_planner:item' t.item.pk %}?date={{ t.date|date:'Y-m-d' }}" style="overflow-wrap: anywhere;">{{ t.item.title }}</a>
+                <span style="color: var(--text-secondary);">{{ t.date|date:"D, M j, Y" }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p style="margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-secondary);">No Planner tasks for this idea yet.</p>
+        {% endif %}
+        <form method="post" id="idea-task-form" style="display: grid; gap: 8px;">{% csrf_token %}<input type="hidden" name="action" value="add_task">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: end;">
+                <div class="field" style="margin: 0; flex: 2; min-width: 200px;"><label for="{{ task_form.title.id_for_label }}">Title</label>{{ task_form.title }}
+                    {% for e in task_form.title.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+                <div class="field" style="margin: 0; flex: 1; min-width: 150px;"><label for="{{ task_form.date.id_for_label }}">Date</label>{{ task_form.date }}
+                    {% for e in task_form.date.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}</div>
+            </div>
+            <div class="field" style="margin: 0;"><label for="{{ task_form.notes.id_for_label }}">{{ task_form.notes.label }}</label>{{ task_form.notes }}</div>
+            <div><button type="submit" class="btn btn-secondary btn-sm">Add Planner task</button></div>
+        </form>
+    </section>
+
     <div class="grid grid-2" style="align-items: start; gap: var(--space-5);">
         <form method="post" class="card" id="idea-form">{% csrf_token %}<input type="hidden" name="action" value="edit">
             <div class="card__header"><span class="card__label">Details</span></div>

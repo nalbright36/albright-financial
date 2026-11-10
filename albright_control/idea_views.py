@@ -1,6 +1,6 @@
 """Admin > Ideas: add, detail (edit, status buttons, notes, merge, delete,
-Claude Code prompt), and "Move to Ideas" from the Bot suggestions inbox.
-The list itself is review_list_views.py. Superusers only."""
+Claude Code prompt, my Planner tasks for it), and "Promote" from the Bot
+suggestions inbox. The list itself is review_list_views.py. Superusers only."""
 from django import forms
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,6 +13,42 @@ from .ideas import claude_code_prompt, find_duplicate, from_suggestion, merge
 from .models import Idea
 
 INPUT = {"class": "ledger-input"}
+
+
+class IdeaTaskForm(forms.Form):
+    """Add Planner task: one more task for this Idea (each its own Planner item and date)."""
+    title = forms.CharField(max_length=200, widget=forms.TextInput(attrs=INPUT))
+    date = forms.DateField(widget=forms.DateInput(attrs={**INPUT, "type": "date"}, format="%Y-%m-%d"))
+    notes = forms.CharField(required=False, max_length=5000, label="Notes (optional)",
+                            widget=forms.Textarea(attrs={**INPUT, "rows": 2}))
+
+
+def _task_form(idea):
+    from albright_planner.planner import today
+    return IdeaTaskForm(initial={"title": idea.title[:200], "date": today()}, auto_id="idea-task-%s")
+
+
+def _add_task(idea, user, data):
+    """A Planner task for this Idea, owned by me: linked by the idea FK (not source_app/source_id - one Idea can
+    have several), its source link the Idea's page. Owner-made, so the Planner's "ideas" source toggle doesn't apply."""
+    from albright_planner.models import ScheduleItem, idea_path
+    form = IdeaTaskForm(data, auto_id="idea-task-%s")
+    if not form.is_valid():
+        return form, None
+    item = ScheduleItem.objects.create(
+        owner=user, kind=ScheduleItem.TASK, title=form.cleaned_data["title"], date=form.cleaned_data["date"],
+        notes=form.cleaned_data["notes"], idea=idea, source_url=idea_path(idea.pk), created_by=user.username)
+    return form, item
+
+
+def _planner_tasks(idea, user):
+    """My (never anyone else's) open Planner tasks for this Idea, each with its occurrence and whether it's done."""
+    from albright_planner.planner import current_or_first
+    rows = []
+    for item in idea.planner_tasks.filter(owner=user, archived=False).order_by("date", "pk"):
+        day = current_or_first(item)
+        rows.append({"item": item, "date": day, "done": item.completions.filter(occurrence_date=day).exists()})
+    return rows
 
 
 def _lines(text):
@@ -96,8 +132,16 @@ def idea_detail(request, pk):
         elif action == "edit":
             form = IdeaForm(request.POST, instance=idea)
             if not form.is_valid():
-                return render(request, "albright_control/idea.html", _detail_context(idea, form))
+                return render(request, "albright_control/idea.html", _detail_context(request, idea, form))
             idea = form.save()
+        elif action == "add_task":
+            task_form, item = _add_task(idea, request.user, request.POST)
+            if item is None:
+                return render(request, "albright_control/idea.html",
+                              _detail_context(request, idea, form, task_form=task_form))
+            audit(request, "idea_task", f'#{idea.pk} "{idea.title[:80]}": Planner task {item.date:%Y-%m-%d}')
+            messages.success(request, f"Added to your Planner for {item.date:%b} {item.date.day}.")
+            return redirect("albright_control:idea", pk=idea.pk)
         elif action == "merge":
             target = Idea.objects.filter(pk=request.POST.get("into")).exclude(pk=idea.pk).first()
             if target is None:
@@ -115,13 +159,14 @@ def idea_detail(request, pk):
             audit(request, "idea_status", f'#{idea.pk} "{idea.title[:80]}": {old_status} -> {idea.status}')
         messages.success(request, "Saved.")
         return redirect("albright_control:idea", pk=idea.pk)
-    return render(request, "albright_control/idea.html", _detail_context(idea, form))
+    return render(request, "albright_control/idea.html", _detail_context(request, idea, form))
 
 
-def _detail_context(idea, form):
+def _detail_context(request, idea, form, task_form=None):
     return {"idea": idea, "form": form, "prompt": claude_code_prompt(idea), "statuses": Idea.STATUSES,
             "merge_targets": Idea.objects.exclude(pk=idea.pk).exclude(status__in=Idea.CLOSED_STATUSES)[:200],
-            "duplicates": idea.possible_duplicates.all()}
+            "duplicates": idea.possible_duplicates.all(),
+            "planner_tasks": _planner_tasks(idea, request.user), "task_form": task_form or _task_form(idea)}
 
 
 @superuser_required
