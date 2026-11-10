@@ -44,13 +44,34 @@ def members(space):
     return list(space_members(space, APP)) if space else []
 
 
-def record_activity(space, verb, summary, actor=None, group="", url=""):
+def record_activity(space, verb, summary, actor=None, group="", url="", obj=None):
     """Money activity - only in a circle's space (budget changes, imports, big transactions); a Personal space never
-    records anything."""
+    records anything. obj (a transaction or account) is stored on the event so forget_activity can remove it."""
     if space is None or not space.circle_id:
         return None
     from albright_labs import activity
-    return activity.record_activity(APP, verb, summary, circle=space.circle, actor=actor, group=group, url=url)
+    return activity.record_activity(APP, verb, summary, obj=obj, audience=activity.CIRCLE, circle=space.circle,
+                                    actor=actor, group=group, url=url)
+
+
+def forget_activity(*objs):
+    """Drop Money events about these transactions / accounts (deleted, or moved out of the circle's space) so circle
+    members stop seeing their payee and amount at once - not just when the event ages out."""
+    from django.contrib.contenttypes.models import ContentType
+    from albright_labs.models import ActivityEvent
+    for obj in objs:
+        if obj is not None and obj.pk:
+            ActivityEvent.objects.filter(app=APP, content_type=ContentType.objects.get_for_model(obj),
+                                         object_id=obj.pk).delete()
+
+
+def forget_account_activity(account):
+    """The account and every transaction in it."""
+    from django.contrib.contenttypes.models import ContentType
+    from albright_labs.models import ActivityEvent
+    ActivityEvent.objects.filter(app=APP, content_type=ContentType.objects.get_for_model(Transaction),
+                                 object_id__in=list(account.transactions.values_list("pk", flat=True))).delete()
+    forget_activity(account)
 
 
 def record_big_transaction(t, actor=None):
@@ -62,7 +83,7 @@ def record_big_transaction(t, actor=None):
     from django.urls import reverse
     word = "received" if t.amount > 0 else "spent"
     return record_activity(space, "transaction", f"{word} ${abs(t.amount):,.2f}" + (f" – {t.payee}" if t.payee else ""),
-                           actor=actor, url=reverse("albright_money:transaction", args=[t.pk]))
+                           actor=actor, url=reverse("albright_money:transaction", args=[t.pk]), obj=t)
 
 
 def visible_spaces(user):

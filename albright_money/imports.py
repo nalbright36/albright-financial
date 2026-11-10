@@ -206,5 +206,6 @@ def import_rows(account, rows, user):
         created += 1
     if created:   # one event for the whole import - never one per transaction
         money.record_activity(account.space, "imported", f"imported {created} transaction{'s' if created != 1 else ''} "
-                              f"into {account.name}", actor=user, url=reverse("albright_money:transactions") + f"?space={account.space_id}")
+                              f"into {account.name}", actor=user, url=reverse("albright_money:transactions") + f"?space={account.space_id}",
+                              obj=account)
     return created, len(rows) - created

@@ -254,6 +254,30 @@ class MoneyTests(Base):
             budgets.save_plan(self.kate, space, budgets.this_month(), {groceries.pk: Decimal("600")})
         self.assertIn(f"Kate updated the {budgets.this_month():%B} budget", self.seen(self.nate))
 
+    def test_deleted_transaction_and_moved_account_hide_their_events(self):
+        c = self.family()
+        space = self.kitchen_of(c)
+        account = Account.objects.create(owner=self.nate, space=space, name="Joint", starting_date=self.today)
+        self.client.post(reverse("albright_money:quick_add"), {"account": account.pk, "text": "250 Vet"})
+        self.assertEqual(self.seen(self.kate), ["Nathan spent $250.00 – Vet"])
+        t = Transaction.objects.get(account=account, payee__icontains="Vet")
+        self.client.post(reverse("albright_money:transaction_delete", args=[t.pk]))
+        self.assertEqual(self.seen(self.kate), [])
+        self.client.post(reverse("albright_money:quick_add"), {"account": account.pk, "text": "300 Dentist"})
+        from albright_money import imports
+        with activity.acting(self.nate):
+            imports.import_rows(account, [{"date": self.today.isoformat(), "amount": "-5.00", "payee": "Shop",
+                                           "duplicate": False}], self.nate)
+        self.assertEqual(len(self.seen(self.kate)), 2)
+        mine = personal(self.nate)
+        r = self.client.post(reverse("albright_money:account", args=[account.pk]),
+                             {"name": "Joint", "kind": account.kind, "institution": "", "last4": "",
+                              "starting_balance": "0.00", "starting_date": self.today.isoformat(), "space": mine.pk})
+        self.assertEqual(r.status_code, 302)
+        account.refresh_from_db()
+        self.assertEqual(account.space_id, mine.pk)
+        self.assertEqual(self.seen(self.kate), [])
+
 
 class FitnessTests(Base):
     def test_shared_workouts_only_never_diary_or_body(self):

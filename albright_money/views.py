@@ -249,6 +249,7 @@ def transaction(request, pk):
 def transaction_delete(request, pk):
     t = get_object_or_404(Transaction.objects.visible_to(request.user), pk=pk)
     pair = t.transfer_pair
+    money.forget_activity(t, pair)
     t.delete()
     if pair and Transaction.objects.visible_to(request.user).filter(pk=pair.pk).exists():
         pair.delete()                                   # a transfer goes as a whole
@@ -344,6 +345,8 @@ def _save_account(form, request, account=None):
     was = account.space_id
     account.space = form.cleaned_data["space"]
     account.save()
+    if was is not None and was != account.space_id:
+        money.forget_account_activity(account)          # its circle events go with it
     if was != account.space_id and account.transactions.exists():
         _rescope(account)
     return account
