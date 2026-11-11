@@ -10,9 +10,11 @@ Who sees an event is decided when they look (visible), never stored:
   - audience OBJECT: whoever can view the object right now (sharing.can_view - unsharing hides it at once);
   - audience CIRCLE: the circle's ACTIVE members who opted in to the app (all active members for "circles") -
     leaving or opting out hides it at once;
-  - recipient set: only that person.
+  - recipient set: only that person (a circle invite is audience CIRCLE plus recipient, so the invitee sees it
+    before they join).
 Notifications (the bell, the digest, the Bot API) are those events minus the person's own actions, filtered by
 their preferences (My account > Notifications: per app and per circle All / Only things that involve me / Off).
+A circle-invite notification is not hidden if Circles is Off.
 Quiet hours hide the badge count and hold the digest. Events are kept KEEP_DAYS (manage.py prune_activity).
 
 Who did it comes from acting(...): ActivityMiddleware sets the signed-in person for each request, and the Bot API
@@ -229,6 +231,8 @@ def visible(user):
     member_of = list(CircleMembership.objects.filter(user=user, status=CircleMembership.ACTIVE).values_list("circle_id", flat=True))
     if member_of:
         q |= Q(audience=CIRCLE, app="circles", circle_id__in=member_of)
+    # A direct circle message (an invite) is visible to its recipient even before they join.
+    q |= Q(recipient=user, audience=CIRCLE)
     return (ActivityEvent.objects.filter(q).filter(Q(recipient__isnull=True) | Q(recipient=user))
             .select_related("actor", "circle"))
 
@@ -254,6 +258,8 @@ def notifications(user, prefs=None):
     prefs = prefs or prefs_for(user)
     qs = visible(user).exclude(actor=user)
     mine = involves(user)
+    # An invite is a request to the person, not circle noise - it stays even if Circles is Off.
+    keep_invites = Q(app="circles", verb="invited", recipient=user)
     for key, value in (prefs.levels or {}).items():
         kind, _, ref = key.partition(":")
         if kind == "app":
@@ -263,7 +269,7 @@ def notifications(user, prefs=None):
         else:
             continue
         if value == OFF:
-            qs = qs.exclude(match)
+            qs = qs.exclude(match & ~keep_invites)
         elif value == MINE:
             qs = qs.exclude(match & ~mine)
     return qs
@@ -328,9 +334,18 @@ def rows(user, events, prefs=None):
     if events and _authed(user):
         unread_ids = set(unread(user, ActivityEvent.objects.filter(pk__in=[e.pk for e in events]), prefs)
                          .values_list("pk", flat=True))
+    pending = {}
+    if events and _authed(user):
+        invite_ids = [e.object_id for e in events
+                      if e.verb == "invited" and e.object_id and e.recipient_id == user.pk]
+        if invite_ids:
+            from .models import CircleInvite
+            pending = {i.pk: i for i in CircleInvite.objects.filter(pk__in=invite_ids, user=user)
+                       if i.status == "pending"}
     return [{"event": e, "text": text(e), "app": e.app, "app_label": APP_LABELS.get(e.app, e.app.title()),
              "initials": sharing.initials(e.actor) if e.actor_id else "?", "color": avatar_color(e.actor),
-             "unread": e.pk in unread_ids, "circle": e.circle, "when": when(e.updated_at)} for e in events]
+             "unread": e.pk in unread_ids, "circle": e.circle, "when": when(e.updated_at),
+             "invite": pending.get(e.object_id) if e.verb == "invited" else None} for e in events]
 
 
 def when(moment, now=None):

@@ -18,7 +18,15 @@ nobody is ever listed or suggested.
         {% for i in pending %}
         <div class="circles-row">
             <span class="circles-row__main"><strong>{{ i.circle.name }}</strong> <span class="circles-muted">from {{ i.invited_by.first_name|default:i.invited_by.username|default:"someone" }} &middot; shares {% for a in i.circle.enabled_apps %}{{ a|capfirst }}{% if not forloop.last %}, {% endif %}{% empty %}nothing yet{% endfor %}</span></span>
-            <a href="{% url 'labs:circle_invite' i.pk %}" class="btn btn-primary btn-sm">Review</a>
+            <div class="circles-actions">
+                <form method="post" action="{% url 'labs:circle_invite' i.pk %}">{% csrf_token %}
+                    <button type="submit" name="action" value="accept" class="btn btn-primary btn-sm">Accept</button>
+                </form>
+                <a href="{% url 'labs:circle_invite' i.pk %}" class="btn btn-secondary btn-sm">Review</a>
+                <form method="post" action="{% url 'labs:circle_invite' i.pk %}">{% csrf_token %}
+                    <button type="submit" name="action" value="decline" class="btn btn-secondary btn-sm">Decline</button>
+                </form>
+            </div>
         </div>
         {% endfor %}
     </section>
@@ -53,7 +61,7 @@ nobody is ever listed or suggested.
             </fieldset>
             <div class="field"><label for="circle-invite">Invite people <span class="circles-muted">(optional)</span></label>
                 <textarea name="invite" id="circle-invite" class="ledger-input" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Their exact username or email - one per line"></textarea>
-                <small class="circles-muted">Nobody is listed or suggested. Someone without an account gets a sign-up invite by email.</small></div>
+                <small class="circles-muted">Nobody is listed or suggested. People who already have an account get a notification and can accept it here. Someone without an account gets a sign-up invite by email.</small></div>
             <button type="submit" class="btn btn-primary">Create circle</button>
         </form>
     </details>

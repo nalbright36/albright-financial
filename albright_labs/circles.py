@@ -276,8 +276,9 @@ def find_person(text):
 @transaction.atomic
 def invite(owner, circle, who):
     """Invite by exact username or email -> (CircleInvite, raw token, site Invitation or None, its raw token).
-    Someone with an account sees it under Circles (and the badge); an email with no account gets the site's sign-up
-    invite, with the circle invite waiting when they arrive."""
+    Someone with an account gets an in-site notification (Accept / Decline on the bell and under Circles) and the
+    account-menu badge; no email is sent. An email with no account gets the site's sign-up invite, with the circle
+    invite waiting when they arrive."""
     _owner_only(owner, circle)
     person = find_person(who)
     if person is not None:
@@ -290,6 +291,7 @@ def invite(owner, circle, who):
         circle_invite, raw = CircleInvite.create(circle=circle, invited_by=owner, user=person, email=person.email or "")
         CircleMembership.objects.update_or_create(circle=circle, user=person, defaults={
             "status": CircleMembership.INVITED, "role": CircleMembership.MEMBER, "invited_by": owner, "apps": []})
+        _notify_invite(circle_invite)
         return circle_invite, raw, None, None
     email = (who or "").strip()
     from django.core.exceptions import ValidationError
@@ -314,6 +316,7 @@ def attach_signup(user, site_invite):
     ci.save(update_fields=["user"])
     CircleMembership.objects.get_or_create(circle=ci.circle, user=user, defaults={
         "status": CircleMembership.INVITED, "invited_by": ci.invited_by})
+    _notify_invite(ci)
 
 
 def pending_invites(user):
@@ -337,8 +340,19 @@ def invite_for(user, pk=None, raw=None):
 
 @transaction.atomic
 def accept(user, circle_invite, apps):
-    """Join with the apps they chose (off unless chosen)."""
-    if circle_invite.user_id != user.pk or circle_invite.status != "pending":
+    """Join with the apps they chose (off unless chosen). Already accepted (or already an active member) is a no-op."""
+    if circle_invite.user_id != user.pk:
+        raise CircleError("That invite isn't available any more.")
+    existing = membership(user, circle_invite.circle)
+    from django.urls import reverse
+    circle_url = reverse("labs:circle", args=[circle_invite.circle.pk])
+    if circle_invite.status == "accepted" or (existing is not None and existing.status == ACTIVE):
+        if circle_invite.status == "pending":
+            circle_invite.accepted_at = timezone.now()
+            circle_invite.save(update_fields=["accepted_at"])
+        _clear_invite_notification(user, circle_invite, url=circle_url)
+        return
+    if circle_invite.status != "pending":
         raise CircleError("That invite isn't available any more.")
     circle = circle_invite.circle
     CircleMembership.objects.update_or_create(circle=circle, user=user, defaults={
@@ -347,16 +361,25 @@ def accept(user, circle_invite, apps):
     circle_invite.accepted_at = timezone.now()
     circle_invite.save(update_fields=["accepted_at"])
     Space.objects.get_or_create(circle=circle)
+    _clear_invite_notification(user, circle_invite, url=circle_url)
     from . import activity
     activity.circle_event(circle, "joined", f"accepted the invite and joined {circle.name}", actor=user)
 
 
 def decline(user, circle_invite):
-    if circle_invite.user_id != user.pk or circle_invite.status != "pending":
+    """Turn the invite down. Already declined is a no-op."""
+    if circle_invite.user_id != user.pk:
+        raise CircleError("That invite isn't available any more.")
+    from django.urls import reverse
+    if circle_invite.status == "declined":
+        _clear_invite_notification(user, circle_invite, url=reverse("labs:circles"))
+        return
+    if circle_invite.status != "pending":
         raise CircleError("That invite isn't available any more.")
     circle_invite.declined_at = timezone.now()
     circle_invite.save(update_fields=["declined_at"])
     CircleMembership.objects.filter(circle=circle_invite.circle, user=user, status=CircleMembership.INVITED).delete()
+    _clear_invite_notification(user, circle_invite, url=reverse("labs:circles"))
 
 
 def revoke(owner, circle_invite):
@@ -368,6 +391,8 @@ def revoke(owner, circle_invite):
     if circle_invite.user_id:
         CircleMembership.objects.filter(circle=circle_invite.circle, user_id=circle_invite.user_id,
                                         status=CircleMembership.INVITED).delete()
+        from django.urls import reverse
+        _clear_invite_notification(circle_invite.user, circle_invite, url=reverse("labs:circles"))
     for site in circle_invite.signups.filter(used_at__isnull=True):
         site.revoked = True
         site.save(update_fields=["revoked"])
@@ -378,7 +403,50 @@ def resend(owner, circle_invite):
     _owner_only(owner, circle_invite.circle)
     if circle_invite.accepted_at or circle_invite.declined_at or circle_invite.revoked_at:
         raise CircleError("That invite is closed.")
-    return circle_invite.renew()
+    raw = circle_invite.renew()
+    if circle_invite.user_id:
+        _notify_invite(circle_invite, bump=True)
+    return raw
+
+
+def _notify_invite(invite, *, bump=False):
+    """An in-site notification for the invited account (never emailed). Bump refreshes it after a resend."""
+    if not invite.user_id:
+        return None
+    from django.contrib.contenttypes.models import ContentType
+    from django.urls import reverse
+
+    from . import activity
+    from .models import ActivityEvent
+    ct = ContentType.objects.get_for_model(CircleInvite)
+    existing = ActivityEvent.objects.filter(app="circles", verb="invited", recipient_id=invite.user_id,
+                                            content_type=ct, object_id=invite.pk).first()
+    if existing is not None:
+        if bump:
+            existing.updated_at = timezone.now()
+            existing.url = reverse("labs:circle_invite", args=[invite.pk])
+            existing.save(update_fields=["updated_at", "url"])
+        return existing
+    return activity.record_activity(
+        "circles", "invited", f"invited you to join {invite.circle.name}",
+        actor=invite.invited_by, circle=invite.circle, audience=activity.CIRCLE, recipient=invite.user,
+        obj=invite, url=reverse("labs:circle_invite", args=[invite.pk]))
+
+
+def _clear_invite_notification(user, invite, *, url=None):
+    """The invitee's 'invited you' notification is read once they accept or decline.
+    url: the notification's link afterwards (the circle, or Circles after a decline)."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from . import activity
+    from .models import ActivityEvent
+    ct = ContentType.objects.get_for_model(CircleInvite)
+    for event in ActivityEvent.objects.filter(app="circles", verb="invited", recipient=user,
+                                              content_type=ct, object_id=invite.pk):
+        if url is not None and event.url != url:
+            event.url = url[:300]
+            event.save(update_fields=["url"])
+        activity.mark_read(user, event)
 
 
 def pending_count(user):

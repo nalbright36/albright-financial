@@ -2537,11 +2537,17 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 .swm-icon svg { width: 16px; height: 16px; }
 
 /* Activity rows (albright_labs/_activity_row.html) - the bell's panel, My account > Activity, a circle's page: the app's
-   icon in its color, the actor's initials, what they did, where and when; unread rows marked with a dot and a tint. */
+   icon in its color, the actor's initials, what they did, where and when; unread rows marked with a dot and a tint.
+   The row is a container so a pending circle invite can put Accept / Decline beside the link that opens it. */
 .act-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 4px; border-top: 1px solid var(--border);
-  color: var(--text-primary); text-decoration: none; }
+  color: var(--text-primary); }
 .act-row:first-of-type { border-top: 0; }
-.act-row:hover, .act-row:focus-visible { background: var(--surface-hover); text-decoration: none; color: var(--text-primary); outline: none; box-shadow: none; }
+.act-row__link { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; min-height: 44px;
+  color: inherit; text-decoration: none; }
+.act-row:hover, .act-row:focus-within { background: var(--surface-hover); color: var(--text-primary); }
+.act-row__link:hover, .act-row__link:focus-visible { text-decoration: none; color: var(--text-primary); outline: none; box-shadow: none; }
+.act-row__actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; margin: 0; }
+.act-row__actions .btn { min-height: 36px; }
 .act-row.is-unread { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .act-row.is-unread:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .act-row__app { --app-color: var(--app-labs); display: inline-grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 9px;

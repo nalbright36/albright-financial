@@ -68,7 +68,8 @@ class InviteTests(Base):
         self.assertEqual(circles.pending_invites(self.sam), [invite])
         CircleInvite.objects.filter(pk=invite.pk).update(expires_at=timezone.now() - timedelta(minutes=1))
         self.assertEqual(circles.pending_invites(self.sam), [])
-        self.assertEqual(self.as_user(self.sam).get(reverse("labs:circle_invite", args=[invite.pk])).status_code, 404)
+        self.assertRedirects(self.as_user(self.sam).get(reverse("labs:circle_invite", args=[invite.pk])),
+                             reverse("labs:circles"), fetch_redirect_response=False)
 
     def test_link_only_works_for_the_invited_person(self):
         circle = self.circle()
@@ -99,7 +100,8 @@ class InviteTests(Base):
         again, _raw, _s, _r = circles.invite(self.nate, circle, "sam")
         self.client.post(reverse("labs:circle", args=[circle.pk]), {"action": "revoke", "invite": again.pk})
         self.assertEqual(CircleInvite.objects.get(pk=again.pk).status, "revoked")
-        self.assertEqual(self.as_user(self.sam).post(reverse("labs:circle_invite", args=[again.pk]), {"action": "accept"}).status_code, 404)
+        response = self.as_user(self.sam).post(reverse("labs:circle_invite", args=[again.pk]), {"action": "accept"})
+        self.assertRedirects(response, reverse("labs:circles"), fetch_redirect_response=False)
         self.assertFalse(CircleMembership.objects.filter(circle=circle, user=self.sam, status="active").exists())
 
     def test_exact_names_only_and_email_invites_through_sign_up(self):

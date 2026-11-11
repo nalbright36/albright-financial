@@ -150,28 +150,46 @@ def circle_page(request, pk):
         "activity_rows": activity_views.recent_for_circle(user, circle)})
 
 
+def _invite_owned_by(user, pk):
+    """This person's circle invite, whether or not it's still pending (for idempotent Accept / Decline)."""
+    return CircleInvite.objects.filter(pk=pk, user=user).select_related("circle", "invited_by").first()
+
+
 @login_required
 @never_cache
 def invite_page(request, pk):
-    """An invite waiting for me: what the circle shares, which apps to join (all off), Accept or Decline."""
-    invite = circles.invite_for(request.user, pk=pk)
-    if invite is None:
-        raise Http404
+    """An invite waiting for me: what the circle shares, which apps to join (all off), Accept or Decline.
+    POST is idempotent: already accepted joins the circle page, expired or revoked say so instead of a 404.
+    GET of an already-accepted invite goes to the circle (the old email link still works)."""
+    user = request.user
+    invite = circles.invite_for(user, pk=pk)
     if request.method == "POST":
+        found = invite or _invite_owned_by(user, pk)
+        if found is None:
+            raise Http404
         try:
             if request.POST.get("action") == "decline":
-                circles.decline(request.user, invite)
-                messages.success(request, f"Declined the invite to {invite.circle.name}.")
+                circles.decline(user, found)
+                messages.success(request, f"Declined the invite to {found.circle.name}.")
                 return redirect("labs:circles")
-            circles.accept(request.user, invite, request.POST.getlist("apps"))
+            circles.accept(user, found, request.POST.getlist("apps"))
         except circles.CircleError as exc:
             messages.error(request, str(exc))
             return redirect("labs:circles")
-        messages.success(request, f"You joined {invite.circle.name}.")
-        return redirect("labs:circle", pk=invite.circle.pk)
+        messages.success(request, f"You joined {found.circle.name}.")
+        return redirect("labs:circle", pk=found.circle.pk)
+    if invite is None:
+        found = _invite_owned_by(user, pk)
+        if found is None:
+            raise Http404
+        me = circles.membership(user, found.circle)
+        if found.status == "accepted" or (me is not None and me.status == CircleMembership.ACTIVE):
+            return redirect("labs:circle", pk=found.circle.pk)
+        messages.error(request, "That invite isn't available any more.")
+        return redirect("labs:circles")
     return render(request, "albright_labs/circle_invite.html", {
         "invite": invite, "inviter": _person(invite.invited_by) if invite.invited_by else "Someone",
-        "apps": [{**a, "can_open": circles.can_use_app(request.user, a["key"])} for a in _app_rows(invite.circle.enabled_apps)]})
+        "apps": [{**a, "can_open": circles.can_use_app(user, a["key"])} for a in _app_rows(invite.circle.enabled_apps)]})
 
 
 @login_required
