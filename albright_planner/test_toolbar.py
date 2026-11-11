@@ -1,5 +1,6 @@
-"""The Planner's toolbar: the date range, Day / Week / Month on the main display, "‹ Today ›", a date jump,
-View options and New item. View options (a dialog) holds the filters, Show meals, the default sharing and a link
+"""The Planner's toolbar: the date range, Day / Week / Month on the main display, "‹ <date> ›" (the date
+button opens a date jump), Today beside the title when you are not already on today, View options and New item.
+View options (a dialog) holds the filters, Show meals, the default sharing and a link
 to the settings page - Save stores them for the account and they apply on the next load, anywhere; a ?kind= /
 ?done= / ?who= / ?meals= link (and the live preview) overrides them without saving; its button's dot shows while
 something is filtered out. New item is a dialog with quick add first and "More options" bringing in the full form
@@ -42,10 +43,13 @@ class ToolbarTests(Base):
         for name in ("day", "week", "month"):
             head = bar(self.client.get(url(name)).content.decode())
             self.assertEqual(re.findall(r'<(?:a|button)\b[^>]*\bid="([^"]+)"', head),
-                             ["pl-prev", "pl-today", "pl-next", "pl-options-btn", "pl-new"], name)
+                             ["pl-today", "pl-prev", "pl-jump-btn", "pl-next", "pl-options-btn", "pl-new"], name)
             self.assertIn('<h1 class="pl-title" id="pl-title">', head)
             self.assertIn('id="pl-views"', head)
             self.assertIn('id="pl-jump"', head)
+            self.assertLess(head.index('id="pl-views"'), head.index('id="pl-jump"'))
+            self.assertGreater(head.index('id="pl-jump"'), head.index('id="pl-prev"'))
+            self.assertLess(head.index("</form>", head.index('id="pl-jump"')), head.index('id="pl-next"'))
             self.assertIn(f'data-tab="{name}"', head)
             for gone in ("<select", 'type="checkbox"', "pl-tab", "Quick add", "Settings</a>", "Show meals"):
                 self.assertNotIn(gone, head, name)
@@ -97,13 +101,16 @@ class ToolbarTests(Base):
         css = static("albright_planner/planner.css")
         self.assertIn(".pl-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }", css)
         self.assertIn(".pl-head__tools { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }", css)
+        self.assertIn(".pl-views { display: flex; gap: 2px; padding: 3px; flex: 1 1 auto; min-width: 0; max-width: 22rem;", css)  # desktop cap
         phone = css[css.index("@media (max-width: 640px) {\n  .pl-head__top { flex-direction: column;"):]
-        self.assertIn(".pl-head__top { flex-direction: column; align-items: stretch; gap: 10px; }", phone)  # date range alone
+        self.assertIn(".pl-head__top { flex-direction: column; align-items: stretch; gap: 10px; }", phone)  # title, then full-width views
+        self.assertIn(".pl-views { max-width: none; width: 100%; }", phone)         # Day / Week / Month: full width on phones only
         self.assertIn(".pl-views a { min-height: 44px; }", phone)                   # Day / Week / Month: large tap targets
         self.assertIn(".pl-options-btn__text { position: absolute;", phone)        # View options: just its icon
         self.assertIn("@media (max-width: 380px) {", css)                          # 320px phones still fit
         self.assertIn(".pl-nav__lbl { display: none; }", css)
         self.assertIn("@media (min-width: 700px) {", css)                          # Prev / Next labels when there's room
+        self.assertIn("html.js .pl-jump__btn { display: inline-flex; }", css)      # the styled date; input+Go without JS
 
 
 class ViewOptionsSaveTests(Base):
@@ -326,11 +333,14 @@ class ViewSwitchTests(Base):
         self.assertIn('action="/planner/week/"', week)
         self.assertIn('type="date" name="date" id="pl-jump-date"', week)
         self.assertIn('value="2026-12-15"', week)
+        self.assertIn('id="pl-jump-btn"', week)
+        self.assertIn(">Dec 14 – 20</button>", week)
         self.assertIn('class="pl-btn pl-nojs">Go</button>', week)
         month = bar(self.client.get(url("month") + "?date=2026-12").content.decode())
         self.assertIn('id="pl-title">December 2026</h1>', self.client.get(url("month") + "?date=2026-12").content.decode())
         self.assertIn('type="month" name="date" id="pl-jump-date"', month)
         self.assertIn('value="2026-12"', month)
+        self.assertIn(">December 2026</button>", month)
         fallback = self.client.get(url("month") + "?date=nope").content.decode()
         self.assertIn('id="pl-title">November 2026</h1>', fallback)         # today
 
@@ -348,7 +358,31 @@ class ViewSwitchTests(Base):
     def test_the_script_submits_the_jump(self):
         js = static("albright_planner/planner.js")
         self.assertIn('jumpInput.addEventListener("change", function () { if (jumpInput.value) jumpForm.submit(); })', js)
+        self.assertIn("jumpInput.showPicker", js)
+        self.assertIn("jumpInput.click()", js)                                 # fallback if showPicker is missing or throws
+        self.assertIn('jumpBtn.addEventListener("click", openJump)', js)
         self.assertNotIn("touchstart", js)   # site rule: don't block the iOS edge swipe (test_app_nav)
         self.assertNotIn("touchmove", js)
         self.assertNotIn("touchend", js)
+
+    def test_the_date_button_shows_the_viewed_period(self):
+        day = bar(self.client.get(url("day")).content.decode())
+        self.assertIn('id="pl-jump-btn"', day)
+        self.assertIn(">Wed, Nov 4</button>", day)
+        self.assertIn("pl-jump__btn is-today", day)
+        self.assertIn('id="pl-today" hidden', day)                             # already on today: Today is tucked away
+        week = bar(self.client.get(url("week")).content.decode())
+        self.assertIn(">Nov 2 – 8</button>", week)
+        self.assertIn('id="pl-today" hidden', week)
+        month = bar(self.client.get(url("month")).content.decode())
+        self.assertIn(">November 2026</button>", month)
+        self.assertIn('id="pl-today" hidden', month)
+        later = bar(self.client.get(url("day") + "?date=2026-11-12").content.decode())
+        self.assertIn(">Thu, Nov 12</button>", later)
+        self.assertRegex(later, r'<a href="/planner/day/" class="pl-btn" id="pl-today">Today</a>')
+        self.assertNotIn("pl-jump__btn is-today", later)
+        other_year = bar(self.client.get(url("day") + "?date=2025-11-04").content.decode())
+        self.assertIn(">Tue, Nov 4, 2025</button>", other_year)
+        split = bar(self.client.get(url("week") + "?date=2026-11-30").content.decode())
+        self.assertIn(">Nov 30 – Dec 6</button>", split)
 

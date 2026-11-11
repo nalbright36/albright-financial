@@ -494,14 +494,25 @@
         return url.pathname + url.search;
     }
     function headLinks(doc) {
+        var todayBtn = doc.getElementById("pl-today"), jumpBtn = doc.getElementById("pl-jump-btn"),
+            jumpDate = doc.getElementById("pl-jump-date");
         return {title: doc.getElementById("pl-title").textContent, prev: doc.getElementById("pl-prev").getAttribute("href"),
-                today: doc.getElementById("pl-today").getAttribute("href"), next: doc.getElementById("pl-next").getAttribute("href"),
-                page: doc.title};
+                today: todayBtn.getAttribute("href"), todayHidden: todayBtn.hidden,
+                next: doc.getElementById("pl-next").getAttribute("href"), page: doc.title,
+                jump: jumpBtn ? jumpBtn.textContent : "", jumpValue: jumpDate ? jumpDate.value : "",
+                jumpToday: !!(jumpBtn && jumpBtn.classList.contains("is-today"))};
     }
     function showHead(links) {
         document.getElementById("pl-title").textContent = links.title;
         ["prev", "today", "next"].forEach(function (k) { document.getElementById("pl-" + k).setAttribute("href", links[k]); });
+        document.getElementById("pl-today").hidden = links.todayHidden;
         document.title = links.page;
+        var jumpBtn = document.getElementById("pl-jump-btn"), jumpDate = document.getElementById("pl-jump-date");
+        if (jumpBtn && "jump" in links) {
+            jumpBtn.textContent = links.jump;
+            jumpBtn.classList.toggle("is-today", links.jumpToday);
+        }
+        if (jumpDate && "jumpValue" in links) jumpDate.value = links.jumpValue;
     }
     function putContent(nodes) {
         content(plannerBox).forEach(function (n) { n.parentNode.removeChild(n); });
@@ -597,10 +608,20 @@
         });
     }
 
-    // ---------- Date jump: submit on change (the Go button is there without JS) ----------
+    // ---------- Date jump: the date button opens the native picker; submit on change (Go is there without JS)
     var jumpForm = document.getElementById("pl-jump"), jumpInput = document.getElementById("pl-jump-date");
+    var jumpBtn = document.getElementById("pl-jump-btn");
+    function openJump() {
+        if (!jumpInput) return;
+        if (jumpInput.showPicker) {
+            try { jumpInput.showPicker(); return; } catch (err) { /* hidden, or no user gesture */ }
+        }
+        jumpInput.focus();
+        if (typeof jumpInput.click === "function") jumpInput.click();
+    }
     if (jumpForm && jumpInput) {
         jumpInput.addEventListener("change", function () { if (jumpInput.value) jumpForm.submit(); });
+        if (jumpBtn) jumpBtn.addEventListener("click", openJump);
     }
 
     function goNav(id) {

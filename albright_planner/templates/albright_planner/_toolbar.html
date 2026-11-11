@@ -1,32 +1,36 @@
 {% comment %}
 Every Planner view's header: the date range, a Day / Week / Month switch (plain links that keep this
-date and take effect at once), "‹ Today ›", a date jump (a month jump in Month view), View options and New item.
+date and take effect at once), "‹ <date> ›" (the date button opens a date jump; a month jump in Month
+view), Today beside the title when you are not already on today, View options and New item.
 Everything else lives in two dialogs (planner.js; bottom sheets on phones):
   View options  the filters (Show, Hide completed, Whose items), Show meals and the default sharing for
                 new items - they apply live while it's open; Save stores them for the account (views.view_options),
                 Cancel puts the page back. Its button carries a dot while something is filtered out (views.is_filtered).
   New item      quick add first; "More options" brings the full form in below it (new/?panel=1).
-Without JavaScript the view switch and the arrows are plain links, the jump form has a Go button, and the
-dialog buttons are links to the Planner settings page and the New item page.
+Without JavaScript the view switch and the arrows are plain links, the jump form shows the date field
+and a Go button, and the dialog buttons are links to the Planner settings page and the New item page.
 Keys (desktop): D / W / M switch views, T today, N New item, Left / Right previous or next.
 {% endcomment %}
 <div class="pl-head" id="pl-head">
     <div class="pl-head__top">
-        <h1 class="pl-title" id="pl-title">{{ title }}</h1>
+        <div class="pl-head__title-row">
+            <h1 class="pl-title" id="pl-title">{{ title }}</h1>
+            <a href="{{ today_url }}" class="pl-btn" id="pl-today"{% if on_today %} hidden{% endif %}>Today</a>
+        </div>
         <div class="pl-head__switch">
             <nav class="pl-views" id="pl-views" aria-label="Calendar view">{% for key, label, url in tabs %}<a href="{{ url }}"{% if key == view %} class="is-current" aria-current="page"{% endif %} data-tab="{{ key }}">{{ label }}</a>{% endfor %}</nav>
-            <form method="get" action="{{ view_path }}" class="pl-jump" id="pl-jump">
-                {% for key, value in filter_pairs %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
-                <label for="pl-jump-date" class="visually-hidden">{% if jump_kind == "month" %}Go to month{% else %}Go to date{% endif %}</label>
-                <input type="{{ jump_kind }}" name="date" id="pl-jump-date" class="pl-input" value="{{ jump_value }}" autocomplete="off">
-                <button type="submit" class="pl-btn pl-nojs">Go</button>
-            </form>
         </div>
     </div>
     <div class="pl-head__tools">
         <div class="pl-nav">
             <a href="{{ prev_url }}" class="pl-btn pl-btn--icon" id="pl-prev" aria-label="Previous {{ view }}" title="Previous {{ view }}">&lsaquo;<span class="pl-nav__lbl">Prev</span></a>
-            <a href="{{ today_url }}" class="pl-btn" id="pl-today">Today</a>
+            <form method="get" action="{{ view_path }}" class="pl-jump" id="pl-jump">
+                {% for key, value in filter_pairs %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+                <label for="pl-jump-date" class="visually-hidden">{% if jump_kind == "month" %}Go to month{% else %}Go to date{% endif %}</label>
+                <button type="button" class="pl-btn pl-jump__btn{% if on_today %} is-today{% endif %}" id="pl-jump-btn" title="{% if jump_kind == 'month' %}Go to month{% else %}Go to date{% endif %}">{{ jump_label }}</button>
+                <input type="{{ jump_kind }}" name="date" id="pl-jump-date" class="pl-input pl-jump__input" value="{{ jump_value }}" autocomplete="off">
+                <button type="submit" class="pl-btn pl-nojs">Go</button>
+            </form>
             <a href="{{ next_url }}" class="pl-btn pl-btn--icon" id="pl-next" aria-label="Next {{ view }}" title="Next {{ view }}"><span class="pl-nav__lbl">Next</span>&rsaquo;</a>
         </div>
         <div class="pl-head__actions">

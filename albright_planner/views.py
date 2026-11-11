@@ -141,9 +141,35 @@ def is_filtered(options, meals_toggle):
 KIND_CHOICES = [("", "Tasks and events"), (ScheduleItem.TASK, "Tasks only"), (ScheduleItem.EVENT, "Events only")]
 
 
+def _jump_label(view, day, today):
+    """Compact label on the toolbar date button: 'Wed, Nov 4', 'Nov 2 – 8', 'November 2026'."""
+    if view == "day":
+        text = f"{day:%a, %b} {day.day}"
+        return f"{text}, {day.year}" if day.year != today.year else text
+    if view == "week":
+        start = planner.week_start(day)
+        end = start + timedelta(days=6)
+        text = f"{start:%b} {start.day} – " + (f"{end.day}" if end.month == start.month else f"{end:%b} {end.day}")
+        if start.year != end.year or end.year != today.year:
+            text += f", {end.year}"
+        return text
+    return f"{day:%B %Y}"
+
+
+def _on_today(view, day, today):
+    """True when the Day / Week / Month being shown is the one that contains today."""
+    if view == "day":
+        return day == today
+    if view == "week":
+        start = planner.week_start(day)
+        return start <= today <= start + timedelta(days=6)
+    return day.month == today.month and day.year == today.year
+
+
 def _frame(request, view, day, prev_day, next_day, title):
     """What every view's header needs: the title, Day / Week / Month (plain links that keep this date),
-    Today / arrows, a date (or month) jump, View options (with its dot) and New item."""
+    arrows, a date button that opens the date (or month) jump, Today when you are not already there,
+    View options (with its dot) and New item."""
     o = _options(request)
     keep = _filter_params(o)
     query = urlencode(keep)
@@ -153,14 +179,17 @@ def _frame(request, view, day, prev_day, next_day, title):
         return reverse(f"albright_planner:{name}") + ("?" + urlencode(params) if params else "")
     meals_toggle = sources.can_open(request.user, "meals")
     here = request.get_full_path()
+    today = planner.today(request.user)
     return {
-        "view": view, "day": day, "today": planner.today(request.user), "title": title, "filters": o, "query": query,
+        "view": view, "day": day, "today": today, "title": title, "filters": o, "query": query,
         "tabs": [(v, v.title(), link(v, day)) for v in VIEWS],
         "prev_url": link(view, prev_day), "next_url": link(view, next_day), "today_url": link(view, None),
         "view_path": reverse(f"albright_planner:{view}"),
         "filter_pairs": list(keep.items()),
         "jump_kind": "month" if view == "month" else "date",
         "jump_value": f"{day.year:04d}-{day.month:02d}" if view == "month" else day.isoformat(),
+        "jump_label": _jump_label(view, day, today),
+        "on_today": _on_today(view, day, today),
         "here": here,
         "day_url": lambda d: link("day", d),
         "meals_toggle": meals_toggle,
