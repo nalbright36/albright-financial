@@ -278,6 +278,23 @@ class MoneyTests(Base):
         self.assertEqual(account.space_id, mine.pk)
         self.assertEqual(self.seen(self.kate), [])
 
+    def test_editing_transaction_onto_personal_account_hides_its_event(self):
+        c = self.family()
+        space = self.kitchen_of(c)
+        joint = Account.objects.create(owner=self.nate, space=space, name="Joint", starting_date=self.today)
+        mine = Account.objects.create(owner=self.nate, space=personal(self.nate), name="Mine",
+                                      starting_date=self.today)
+        self.client.post(reverse("albright_money:quick_add"), {"account": joint.pk, "text": "250 Vet"})
+        self.assertEqual(self.seen(self.kate), ["Nathan spent $250.00 – Vet"])
+        t = Transaction.objects.get(account=joint, payee__icontains="Vet")
+        r = self.client.post(reverse("albright_money:transaction", args=[t.pk]),
+                             {"date": self.today.isoformat(), "amount": "-250.00", "payee": "Vet",
+                              "account": mine.pk, "category": "", "notes": "", "tags": "", "needs_review": "on"})
+        self.assertEqual(r.status_code, 302)
+        t.refresh_from_db()
+        self.assertEqual(t.account_id, mine.pk)
+        self.assertEqual(self.seen(self.kate), [])
+
 
 class FitnessTests(Base):
     def test_shared_workouts_only_never_diary_or_body(self):

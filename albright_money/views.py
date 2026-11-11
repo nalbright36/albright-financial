@@ -219,6 +219,7 @@ def quick_add(request):
 def transaction(request, pk):
     user = request.user
     t = get_object_or_404(Transaction.objects.visible_to(user).select_related("account"), pk=pk)
+    was_space_id = t.account.space_id                   # before is_valid() copies the new account onto t
     form = TransactionForm(request.POST or None, instance=t, user=user)
     splits = None
     if request.method == "POST" and form.is_valid():
@@ -247,6 +248,8 @@ def transaction(request, pk):
                             t.save(update_fields=["is_transfer"])
                 t.splits.all().delete()
                 Split.objects.bulk_create([Split(transaction=t, **row) for row in splits.rows])
+            if account.space_id != was_space_id:
+                money.forget_activity(t)                # left the circle space: hide payee/amount at once
             messages.success(request, "Saved.")
             return redirect(_next(request, "albright_money:transactions"))
     existing = [{"category": s.category, "amount": s.amount, "note": s.note} for s in t.splits.all()]
