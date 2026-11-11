@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from . import challenges as ch
-from .challenges import ACTIVITIES, Challenge, ChallengeEntry, ChallengeError
+from .challenges import Challenge, ChallengeEntry, ChallengeError
 
 
 def _challenge(request, pk):
@@ -79,9 +79,11 @@ def challenge_new(request):
                 challenge = ch.create_challenge(
                     request.user, circle, request.POST.get("name"),
                     request.POST.get("start_date"), request.POST.get("end_date"),
-                    steps_points=request.POST.get("steps_points"),
-                    steps_per=request.POST.get("steps_per"),
-                    steps_cap=request.POST.get("steps_cap") or None)
+                    activity_key=request.POST.get("activity"),
+                    steps_points=request.POST.get("points") or request.POST.get("steps_points"),
+                    steps_per=request.POST.get("per_units") or request.POST.get("steps_per"),
+                    steps_cap=request.POST.get("daily_cap") or request.POST.get("steps_cap") or None,
+                    unit=request.POST.get("unit") or None)
             except ChallengeError as exc:
                 messages.error(request, str(exc))
             else:
@@ -90,7 +92,10 @@ def challenge_new(request):
     today = timezone.localdate()
     return render(request, "albright_fitness/challenge_new.html", {
         "circles": mine, "today": today,
+        "default_activity": ch.STEPS,
         "default_points": ch.DEFAULT_STEPS_POINTS, "default_per": ch.DEFAULT_STEPS_PER,
+        "default_unit": ch.ACTIVITY_UNITS[ch.STEPS],
+        "catalog": ch.available_options(),
     })
 
 
@@ -103,7 +108,7 @@ def challenge(request, pk):
                .prefetch_related("comments__user").order_by("-date", "pk")[:60])
     today = timezone.localdate()
     default_day = today if challenge.covers(today) else min(max(today, challenge.start_date), challenge.end_date)
-    activities = [(r.activity, r.get_activity_display(), r.unit) for r in rules]
+    activities = [(r.activity, ch.log_label(r), r.unit) for r in rules]
     return render(request, "albright_fitness/challenge.html", {
         "challenge": challenge, "rules": rules, "board": _board(challenge, request.user),
         "entries": entries, "activities": activities,
@@ -171,9 +176,10 @@ def challenge_rules(request, pk):
     challenge = _editable(request, pk)
     rules = list(challenge.rules.all())
     taken = {r.activity for r in rules}
-    available = [(k, lab, unit) for k, lab, unit in ACTIVITIES if k not in taken]
     return render(request, "albright_fitness/challenge_rules.html", {
-        "challenge": challenge, "rules": rules, "available": available,
+        "challenge": challenge, "rules": rules,
+        "catalog": ch.available_options(exclude=taken),
+        "warnings": ch.overlap_warnings(taken),
     })
 
 

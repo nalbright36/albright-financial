@@ -10,6 +10,8 @@
  *   filters    the exercise library's menus apply on change
  *   chart      hover / tap a point (or move along the line) for its value
  *   board      the challenge leaderboard (#fx-board) refreshes every 15s
+ *   rules      on Edit rules / New challenge, a two-step activity + measure picker
+ *              (the grouped <select name="activity"> still works without JS)
  */
 (function () {
     "use strict";
@@ -204,11 +206,100 @@
         document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshBoard(); });
     }
 
-    var addActivity = document.getElementById("fx-add-activity"), addUnit = document.getElementById("fx-add-unit");
-    if (addActivity && addUnit) {
-        addActivity.addEventListener("change", function () {
-            var opt = addActivity.options[addActivity.selectedIndex];
-            if (opt && opt.dataset.unit) addUnit.value = opt.dataset.unit;
+    // ---------- Challenge rule picker (activity, then measure) ----------
+    // The form still posts a single <select name="activity"> of catalog keys
+    // (optgroups, no-JS). With JS we hide that select and drive it from two
+    // dropdowns, prefilling suggested points, per-units, unit and daily cap.
+    function setupRulePicker(form) {
+        var fallback = form.querySelector("[data-rule-fallback]");
+        var activity = form.querySelector("[name=activity]");
+        if (!fallback || !activity || activity.tagName !== "SELECT") return;
+        var unit = form.querySelector("[name=unit]");
+        var points = form.querySelector("[name=points]") || form.querySelector("[name=steps_points]");
+        var per = form.querySelector("[name=per_units]") || form.querySelector("[name=steps_per]");
+        var cap = form.querySelector("[name=daily_cap]") || form.querySelector("[name=steps_cap]");
+        var prefillCap = form.hasAttribute("data-prefill-cap");
+
+        function fillFrom(opt) {
+            if (!opt) return;
+            if (unit && opt.dataset.unit) unit.value = opt.dataset.unit;
+            if (points && opt.dataset.points) points.value = opt.dataset.points;
+            if (per && opt.dataset.per) per.value = opt.dataset.per;
+            // New-challenge keeps a blank cap (no cap) unless the user types one.
+            if (cap && prefillCap) cap.value = opt.dataset.cap || "";
+        }
+
+        var kindOrder = [], byKind = {};
+        Array.prototype.forEach.call(activity.options, function (opt) {
+            if (!opt.value || !opt.dataset.kind) return;
+            var kind = opt.dataset.kind;
+            if (!byKind[kind]) {
+                var text = (opt.textContent || "").trim();
+                var cut = text.lastIndexOf(" - ");
+                var label = cut === -1 ? text : text.slice(0, cut);
+                var group = (opt.parentNode && opt.parentNode.label) || "";
+                byKind[kind] = {label: label, group: group, measures: []};
+                kindOrder.push(kind);
+            }
+            byKind[kind].measures.push(opt);
         });
+        if (!kindOrder.length) return;
+
+        var kindWrap = document.createElement("div");
+        kindWrap.innerHTML = '<label class="fx-label" for="fx-add-kind">Activity</label>' +
+            '<select id="fx-add-kind" class="ledger-input"></select>';
+        var measWrap = document.createElement("div");
+        measWrap.innerHTML = '<label class="fx-label" for="fx-add-measure">Score by</label>' +
+            '<select id="fx-add-measure" class="ledger-input"></select>';
+        var kindSel = kindWrap.querySelector("#fx-add-kind");
+        var measSel = measWrap.querySelector("#fx-add-measure");
+        var currentGroup = null, groupEl = null;
+        kindOrder.forEach(function (kind) {
+            var info = byKind[kind];
+            if (info.group && info.group !== currentGroup) {
+                currentGroup = info.group;
+                groupEl = document.createElement("optgroup");
+                groupEl.label = info.group;
+                kindSel.appendChild(groupEl);
+            }
+            var o = document.createElement("option");
+            o.value = kind;
+            o.textContent = info.label;
+            (groupEl || kindSel).appendChild(o);
+        });
+
+        function selectedActivity() {
+            return activity.options[activity.selectedIndex];
+        }
+        function syncMeasure() {
+            var kind = kindSel.value, opts = (byKind[kind] && byKind[kind].measures) || [];
+            measSel.innerHTML = "";
+            opts.forEach(function (opt) {
+                var o = document.createElement("option");
+                o.value = opt.value;
+                o.textContent = opt.dataset.measure || opt.textContent;
+                measSel.appendChild(o);
+            });
+            var current = selectedActivity();
+            if (current && current.dataset.kind === kind) measSel.value = current.value;
+            activity.value = measSel.value;
+            fillFrom(selectedActivity());
+        }
+        kindSel.addEventListener("change", syncMeasure);
+        measSel.addEventListener("change", function () {
+            activity.value = measSel.value;
+            fillFrom(selectedActivity());
+        });
+
+        var start = selectedActivity();
+        if (start && start.dataset.kind) kindSel.value = start.dataset.kind;
+        fallback.hidden = true;
+        fallback.parentNode.insertBefore(kindWrap, fallback);
+        fallback.parentNode.insertBefore(measWrap, fallback);
+        syncMeasure();
+        // Re-apply the starting option's suggestions in case the form had
+        // generic defaults (create-challenge starts on walk_steps).
+        fillFrom(selectedActivity());
     }
+    document.querySelectorAll("[data-rule-picker]").forEach(setupRulePicker);
 })();

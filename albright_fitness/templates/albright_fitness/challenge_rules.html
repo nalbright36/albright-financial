@@ -9,7 +9,10 @@
     </div>
     <a href="{% url 'albright_fitness:challenge' challenge.pk %}" class="btn btn-secondary btn-sm">Back to challenge</a>
 </div>
-<p class="fx-help">Points are recalculated for existing entries when you save or remove a rule, so the leaderboard stays in sync. A challenge has to keep at least one rule.</p>
+<p class="fx-help">Points are recalculated for existing entries when you save or remove a rule, so the leaderboard stays in sync. A challenge has to keep at least one rule. The unit label is yours to edit (for example, km instead of mi).</p>
+{% for w in warnings %}
+<p class="fx-warn" role="status">{{ w }}</p>
+{% endfor %}
 
 {% for r in rules %}
 <section class="card fx-card" aria-labelledby="fx-rule-{{ r.pk }}">
@@ -38,24 +41,34 @@
 </section>
 {% endfor %}
 
-{% if available %}
+{% if catalog %}
 <section class="card fx-card" aria-labelledby="fx-rule-add-h">
     <h2 class="fx-card__title" id="fx-rule-add-h">Add a rule</h2>
-    <p class="fx-help">Score running, biking, lifting or classes (or change the unit, for example minutes instead of miles).</p>
-    <form method="post" action="{% url 'albright_fitness:challenge_rule_save' challenge.pk %}" class="fx-form">{% csrf_token %}
+    <p class="fx-help">Pick an activity and how it should score. Suggested points and a daily cap are filled in for you; you can change them.</p>
+    <form method="post" action="{% url 'albright_fitness:challenge_rule_save' challenge.pk %}" class="fx-form" data-rule-picker data-prefill-cap>{% csrf_token %}
         <div class="fx-form__row">
-            <div><label class="fx-label" for="fx-add-activity">Activity</label>
-            <select name="activity" id="fx-add-activity" class="ledger-input" required>
-                {% for key, label, unit in available %}<option value="{{ key }}" data-unit="{{ unit }}">{{ label }} ({{ unit }})</option>{% endfor %}
-            </select></div>
+            <div data-rule-fallback>
+                <label class="fx-label" for="fx-add-activity">Activity</label>
+                <select name="activity" id="fx-add-activity" class="ledger-input" required>
+                    {% for category, opts in catalog %}
+                    <optgroup label="{{ category }}">
+                        {% for key, label, unit, points, per, cap, kind, measure in opts %}
+                        <option value="{{ key }}" data-unit="{{ unit }}" data-points="{{ points }}" data-per="{{ per }}" data-cap="{{ cap }}" data-kind="{{ kind }}" data-measure="{{ measure }}">{{ label }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+            {% with opt=catalog.0.1.0 %}
             <div><label class="fx-label" for="fx-add-pts">Points</label>
-            <input type="number" name="points" id="fx-add-pts" class="ledger-input" step="0.01" min="0" required value="1"></div>
+            <input type="number" name="points" id="fx-add-pts" class="ledger-input" step="0.01" min="0" required value="{{ opt.3 }}"></div>
             <div><label class="fx-label" for="fx-add-per">per this many</label>
-            <input type="number" name="per_units" id="fx-add-per" class="ledger-input" step="0.01" min="0.01" required value="1"></div>
+            <input type="number" name="per_units" id="fx-add-per" class="ledger-input" step="0.01" min="0.01" required value="{{ opt.4 }}"></div>
             <div><label class="fx-label" for="fx-add-unit">Unit</label>
-            <input type="text" name="unit" id="fx-add-unit" class="ledger-input" maxlength="20" placeholder="mi, minutes, sessions" value="{{ available.0.2 }}"></div>
+            <input type="text" name="unit" id="fx-add-unit" class="ledger-input" maxlength="20" required placeholder="mi, minutes, sessions" value="{{ opt.2 }}"></div>
             <div><label class="fx-label" for="fx-add-cap">Daily cap (pts, optional)</label>
-            <input type="number" name="daily_cap" id="fx-add-cap" class="ledger-input" step="0.01" min="0" placeholder="None"></div>
+            <input type="number" name="daily_cap" id="fx-add-cap" class="ledger-input" step="0.01" min="0" placeholder="None" value="{{ opt.5 }}"></div>
+            {% endwith %}
         </div>
         <button type="submit" class="btn btn-primary">Add rule</button>
     </form>

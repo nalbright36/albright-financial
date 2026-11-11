@@ -9,7 +9,7 @@
 {% if not circles %}
 <p class="fx-empty">Join a circle and turn on Fitness there (My account &gt; Circles) to start or enter a challenge.</p>
 {% elif not challenges %}
-<p class="fx-empty">None yet. <a href="{% url 'albright_fitness:challenge_new' %}">Start one</a> for a steps contest.</p>
+<p class="fx-empty">None yet. <a href="{% url 'albright_fitness:challenge_new' %}">Start one</a> for your circle.</p>
 {% endif %}
 {% if current %}
 <section class="card fx-card" aria-labelledby="fx-ch-current-h">

@@ -257,18 +257,18 @@ class RuleEditTests(Base):
     def test_log_form_lists_only_activities_the_challenge_scores(self):
         challenge = self.challenge()
         page = self.client.get(url("challenge", challenge.pk))
-        self.assertContains(page, 'value="steps"')
-        self.assertNotContains(page, 'value="run"')
-        self.assertNotContains(page, 'value="bike"')
-        self.assertNotContains(page, 'value="lift"')
+        self.assertContains(page, 'value="walk_steps"')
+        self.assertNotContains(page, 'value="run_miles"')
+        self.assertNotContains(page, 'value="bike_miles"')
+        self.assertNotContains(page, 'value="weights_sessions"')
         ch.set_rule(challenge, self.me, ch.RUN, points="10", per_units="1", unit="mi")
         page = self.client.get(url("challenge", challenge.pk))
-        self.assertContains(page, ">Running (mi)<")
-        self.assertContains(page, 'value="run"')
-        self.assertContains(page, 'value="steps"')
-        self.assertNotContains(page, 'value="bike"')
-        self.assertNotContains(page, ">Biking")
-        self.assertNotContains(page, ">Lifting")
+        self.assertContains(page, ">Running (miles)<")
+        self.assertContains(page, 'value="run_miles"')
+        self.assertContains(page, 'value="walk_steps"')
+        self.assertNotContains(page, 'value="bike_miles"')
+        self.assertNotContains(page, "Outdoor biking")
+        self.assertNotContains(page, "Weight training")
 
 
 class PhotoTests(Base):
@@ -326,3 +326,135 @@ class PhotoTests(Base):
         entry = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS,
                              amount=1000, photo=WEBP)
         self.assertEqual(entry.photo.content_type, "image/webp")
+
+class CatalogTests(TestCase):
+    def test_catalog_covers_the_agreed_activities_and_default_measures(self):
+        expected = {
+            "walk_steps", "walk_miles", "walk_minutes",
+            "run_miles", "run_km", "run_minutes",
+            "bike_miles", "bike_minutes",
+            "cycle_minutes", "cycle_miles", "cycle_calories",
+            "hike_miles", "hike_minutes", "hike_elevation",
+            "swim_laps", "swim_yards", "swim_meters", "swim_minutes",
+            "row_meters", "row_minutes",
+            "elliptical_minutes", "elliptical_floors",
+            "jumprope_minutes", "jumprope_jumps",
+            "weights_minutes", "weights_sessions",
+            "bodyweight_reps", "plank_minutes",
+            "hiit_minutes", "hiit_sessions",
+            "class_sessions", "class_minutes",
+            "yoga_minutes", "yoga_sessions",
+            "pilates_minutes", "pilates_sessions",
+            "stretch_minutes", "meditate_minutes",
+            "sports_minutes", "sports_games",
+            "ski_minutes", "ski_runs",
+            "kayak_minutes", "kayak_miles",
+            "dance_minutes", "water_glasses", "sleep_hours", "active_minutes",
+        }
+        self.assertEqual(set(ch.ACTIVITY_KEYS), expected)
+        self.assertEqual(ch.default_key("walk"), "walk_steps")
+        self.assertEqual(ch.default_key("run"), "run_miles")
+        self.assertEqual(ch.default_key("bike"), "bike_miles")
+        self.assertEqual(ch.default_key("cycle"), "cycle_minutes")
+        self.assertEqual(ch.default_key("weights"), "weights_minutes")
+        self.assertEqual(ch.default_key("class"), "class_sessions")
+        self.assertEqual((ch.STEPS, ch.RUN, ch.BIKE, ch.LIFT, ch.CLASS),
+                         ("walk_steps", "run_miles", "bike_miles", "weights_sessions", "class_sessions"))
+
+    def test_suggested_points_match_the_defaults_we_agreed(self):
+        self.assertEqual(ch.SUGGESTED["walk_steps"][:2], (D("1"), D("1000")))
+        self.assertEqual(ch.SUGGESTED["walk_miles"][:2], (D("3"), D("1")))
+        self.assertEqual(ch.SUGGESTED["run_miles"][:2], (D("10"), D("1")))
+        self.assertEqual(ch.SUGGESTED["weights_minutes"][:2], (D("1"), D("10")))
+        # Categories are used as optgroups on the add-rule form.
+        groups = [name for name, _opts in ch.CATALOG_GROUPS]
+        self.assertEqual(groups, ["Cardio", "Strength and training", "Mind and body",
+                                  "Sports and outdoors", "Habits"])
+
+    def test_legacy_keys_map_onto_the_catalog(self):
+        self.assertEqual(ch.remap_legacy_activity("steps"), "walk_steps")
+        self.assertEqual(ch.remap_legacy_activity("run"), "run_miles")
+        self.assertEqual(ch.remap_legacy_activity("run", "km"), "run_km")
+        self.assertEqual(ch.remap_legacy_activity("run", "minutes"), "run_minutes")
+        self.assertEqual(ch.remap_legacy_activity("bike"), "bike_miles")
+        self.assertEqual(ch.remap_legacy_activity("bike", "min"), "bike_minutes")
+        self.assertEqual(ch.remap_legacy_activity("lift"), "weights_sessions")
+        self.assertEqual(ch.remap_legacy_activity("lift", "minutes"), "weights_minutes")
+        self.assertEqual(ch.remap_legacy_activity("class"), "class_sessions")
+        self.assertEqual(ch.remap_legacy_activity("class", "minutes"), "class_minutes")
+        self.assertEqual(ch.remap_legacy_activity("walk_steps"), "walk_steps")
+        self.assertEqual(ch.remap_legacy_activity("run_miles", "mi"), "run_miles")
+        # The data migration ships a frozen copy of this mapping.
+        import importlib
+        migrate = importlib.import_module("albright_fitness.migrations.0009_challenge_activity_catalog")
+        cases = [("steps", None), ("run", None), ("run", "km"), ("run", "minutes"),
+                 ("bike", None), ("bike", "min"), ("lift", None), ("lift", "minutes"),
+                 ("class", None), ("class", "minutes"), ("walk_steps", None)]
+        for key, unit in cases:
+            self.assertEqual(migrate._remap(key, unit), ch.remap_legacy_activity(key, unit), (key, unit))
+
+
+class MultiMeasureTests(Base):
+    def test_one_activity_can_score_two_measures_on_the_same_day(self):
+        challenge = self.challenge()
+        ch.set_rule(challenge, self.me, "walk_miles", points="3", per_units="1", unit="mi")
+        steps = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS, amount=1000)
+        miles = ch.log_entry(challenge, self.me, day=self.today, activity_key="walk_miles", amount="2")
+        self.assertNotEqual(steps.pk, miles.pk)
+        self.assertEqual((steps.points, miles.points), (D("1.00"), D("6.00")))
+        again = ch.log_entry(challenge, self.me, day=self.today, activity_key="walk_miles", amount="3")
+        self.assertEqual(again.pk, miles.pk)
+        again.refresh_from_db()
+        self.assertEqual(again.points, D("9.00"))
+        self.assertEqual(ChallengeEntry.objects.filter(challenge=challenge, user=self.me, date=self.today).count(), 2)
+
+    def test_overlap_warning_when_walking_steps_and_miles_are_both_on(self):
+        challenge = self.challenge()
+        page = self.client.get(url("challenge_rules", challenge.pk))
+        self.assertNotContains(page, "count the same walk twice")
+        self.assertContains(page, '<optgroup label="Cardio">')
+        self.assertContains(page, "Walking - miles")
+        ch.set_rule(challenge, self.me, "walk_miles", points="3", per_units="1")
+        page = self.client.get(url("challenge_rules", challenge.pk))
+        self.assertContains(page, "Walking (steps) and Walking (miles) count the same walk twice.")
+        # The taken measures drop out of the add-rule list; other walking measures stay.
+        self.assertContains(page, "Walking - minutes")
+        self.assertNotContains(page, "Walking - steps")
+        self.assertNotContains(page, "Walking - miles")
+
+    def test_log_form_lists_enabled_rules_with_measure_labels(self):
+        challenge = self.challenge()
+        ch.set_rule(challenge, self.me, "walk_miles", points="3", per_units="1", unit="mi")
+        page = self.client.get(url("challenge", challenge.pk))
+        self.assertContains(page, 'value="walk_steps"')
+        self.assertContains(page, 'value="walk_miles"')
+        self.assertContains(page, ">Walking (steps)<")
+        self.assertContains(page, ">Walking (miles)<")
+        self.assertNotContains(page, 'value="run_miles"')
+        self.assertNotContains(page, ">Running")
+
+    def test_legacy_form_posts_still_log_and_edit_the_remapped_rule(self):
+        challenge = self.challenge()
+        self.assertEqual(self.client.post(url("challenge_log", challenge.pk), {
+            "date": self.today.isoformat(), "activity": "steps", "amount": "1000"}).status_code, 302)
+        entry = ChallengeEntry.objects.get(challenge=challenge, user=self.me)
+        self.assertEqual((entry.activity, entry.points), (ch.STEPS, D("1.00")))
+        self.assertEqual(self.client.post(url("challenge_rule_save", challenge.pk), {
+            "activity": "run", "points": "10", "per_units": "1", "unit": "mi"}).status_code, 302)
+        self.assertTrue(challenge.rules.filter(activity=ch.RUN).exists())
+
+    def test_create_can_start_with_a_catalog_rule_other_than_steps(self):
+        response = self.client.post(url("challenge_new"), {
+            "name": "Run club", "circle": self.circle.pk,
+            "start_date": self.today.isoformat(),
+            "end_date": (self.today + timedelta(days=10)).isoformat(),
+            "activity": "run_miles", "points": "10", "per_units": "1", "unit": "mi"})
+        challenge = Challenge.objects.get(name="Run club")
+        self.assertRedirects(response, url("challenge", challenge.pk))
+        rule = challenge.rules.get()
+        self.assertEqual((rule.activity, rule.points, rule.per_units, rule.unit),
+                         ("run_miles", D("10.00"), D("1.00"), "mi"))
+        page = self.client.get(url("challenge_new"))
+        self.assertContains(page, '<optgroup label="Cardio">')
+        self.assertContains(page, 'value="walk_steps"')
+        self.assertContains(page, 'selected')

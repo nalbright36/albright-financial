@@ -1,12 +1,14 @@
 """Circle fitness challenges: a date-range contest in a Circle, with point rules per
-activity, logged entries (optional photo), comments, and a live leaderboard (challenge_views).
+activity and measure, logged entries (optional photo), comments, and a live leaderboard
+(challenge_views).
 
 Access: only active members of the challenge's circle who opted into Fitness for that
 circle (and can open Fitness) - the same four rules as albright_labs.circles.
 
-The creator, or a circle owner, can add, edit and remove rules (steps, run, bike, lift,
-class). Changing a rule recalculates stored points on existing entries so the leaderboard
-stays in sync. Photos are stored as image bytes on ChallengePhoto (no files on disk).
+The creator, or a circle owner, can add, edit and remove rules. A rule is one activity
+plus one measure (for example walking by steps, or walking by miles). Changing a rule
+recalculates stored points on existing entries so the leaderboard stays in sync. Photos
+are stored as image bytes on ChallengePhoto (no files on disk).
 """
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -20,18 +22,192 @@ from django.utils import timezone
 from albright_labs import activity, circles
 
 
-STEPS, RUN, BIKE, LIFT, CLASS = "steps", "run", "bike", "lift", "class"
-ACTIVITIES = [
-    (STEPS, "Steps", "steps"),
-    (RUN, "Running", "mi"),
-    (BIKE, "Biking", "mi"),
-    (LIFT, "Lifting", "sessions"),
-    (CLASS, "Classes", "classes"),
+# ---------------------------------------------------------------------------
+# Catalog: each activity can score by one or more measures. The stored key is
+# "{kind}_{measure}" (walk_steps, run_miles). Suggested points and an optional
+# daily cap are defaults for the add-rule form; a challenge can override them,
+# including the unit label (slice 2).
+# ---------------------------------------------------------------------------
+
+def _d(value):
+    return None if value is None else Decimal(str(value))
+
+
+# (kind, label, category, [(measure, measure_label, unit, points, per_units, daily_cap), ...])
+# The first measure is the default for that activity.
+CATALOG = [
+    ("walk", "Walking", "Cardio", [
+        ("steps", "steps", "steps", "1", "1000", "20"),
+        ("miles", "miles", "mi", "3", "1", "15"),
+        ("minutes", "minutes", "min", "1", "10", "12"),
+    ]),
+    ("run", "Running", "Cardio", [
+        ("miles", "miles", "mi", "10", "1", "50"),
+        ("km", "km", "km", "6", "1", "80"),
+        ("minutes", "minutes", "min", "1", "1", "60"),
+    ]),
+    ("bike", "Outdoor biking", "Cardio", [
+        ("miles", "miles", "mi", "3", "1", "30"),
+        ("minutes", "minutes", "min", "1", "5", "24"),
+    ]),
+    ("cycle", "Indoor cycling / Peloton", "Cardio", [
+        ("minutes", "minutes", "min", "1", "5", "24"),
+        ("miles", "miles", "mi", "3", "1", "30"),
+        ("calories", "calories", "kcal", "1", "50", "20"),
+    ]),
+    ("hike", "Hiking", "Cardio", [
+        ("miles", "miles", "mi", "8", "1", "40"),
+        ("minutes", "minutes", "min", "1", "10", "18"),
+        ("elevation", "elevation", "ft", "1", "100", "20"),
+    ]),
+    ("swim", "Swimming", "Cardio", [
+        ("laps", "laps", "laps", "1", "5", "20"),
+        ("yards", "yards", "yd", "1", "100", "20"),
+        ("meters", "meters", "m", "1", "100", "20"),
+        ("minutes", "minutes", "min", "1", "5", "24"),
+    ]),
+    ("row", "Rowing", "Cardio", [
+        ("meters", "meters", "m", "1", "500", "20"),
+        ("minutes", "minutes", "min", "1", "5", "24"),
+    ]),
+    ("elliptical", "Elliptical / stair climber", "Cardio", [
+        ("minutes", "minutes", "min", "1", "10", "12"),
+        ("floors", "floors", "floors", "1", "10", "15"),
+    ]),
+    ("jumprope", "Jump rope", "Cardio", [
+        ("minutes", "minutes", "min", "1", "5", "12"),
+        ("jumps", "jumps", "jumps", "1", "200", "15"),
+    ]),
+    ("weights", "Weight training", "Strength and training", [
+        ("minutes", "minutes", "min", "1", "10", "12"),
+        ("sessions", "sessions", "sessions", "10", "1", "20"),
+    ]),
+    ("bodyweight", "Bodyweight", "Strength and training", [
+        ("reps", "reps", "reps", "1", "25", "20"),
+    ]),
+    ("plank", "Plank", "Strength and training", [
+        ("minutes", "minutes", "min", "2", "1", "10"),
+    ]),
+    ("hiit", "HIIT / CrossFit", "Strength and training", [
+        ("minutes", "minutes", "min", "1", "5", "12"),
+        ("sessions", "sessions", "sessions", "10", "1", "20"),
+    ]),
+    ("class", "Workout class", "Strength and training", [
+        ("sessions", "sessions", "sessions", "10", "1", "20"),
+        ("minutes", "minutes", "min", "1", "10", "12"),
+    ]),
+    ("yoga", "Yoga", "Mind and body", [
+        ("minutes", "minutes", "min", "1", "10", "12"),
+        ("sessions", "sessions", "sessions", "8", "1", "16"),
+    ]),
+    ("pilates", "Pilates", "Mind and body", [
+        ("minutes", "minutes", "min", "1", "10", "12"),
+        ("sessions", "sessions", "sessions", "8", "1", "16"),
+    ]),
+    ("stretch", "Stretching / mobility", "Mind and body", [
+        ("minutes", "minutes", "min", "1", "10", "6"),
+    ]),
+    ("meditate", "Meditation", "Mind and body", [
+        ("minutes", "minutes", "min", "1", "10", "6"),
+    ]),
+    ("sports", "Sports", "Sports and outdoors", [
+        ("minutes", "minutes", "min", "1", "10", "18"),
+        ("games", "games", "games", "10", "1", "20"),
+    ]),
+    ("ski", "Skiing / snowboarding", "Sports and outdoors", [
+        ("minutes", "minutes", "min", "1", "15", "16"),
+        ("runs", "runs", "runs", "2", "1", "20"),
+    ]),
+    ("kayak", "Kayaking / paddleboarding", "Sports and outdoors", [
+        ("minutes", "minutes", "min", "1", "10", "12"),
+        ("miles", "miles", "mi", "5", "1", "25"),
+    ]),
+    ("dance", "Dance", "Sports and outdoors", [
+        ("minutes", "minutes", "min", "1", "10", "12"),
+    ]),
+    ("water", "Water", "Habits", [
+        ("glasses", "glasses", "glasses", "1", "1", "8"),
+    ]),
+    ("sleep", "Sleep", "Habits", [
+        ("hours", "hours", "hours", "1", "1", "8"),
+    ]),
+    ("active", "Active minutes", "Habits", [
+        ("minutes", "minutes", "min", "1", "10", "15"),
+    ]),
 ]
-ACTIVITY_LABELS = {key: label for key, label, _unit in ACTIVITIES}
-ACTIVITY_UNITS = {key: unit for key, _label, unit in ACTIVITIES}
+
+# Pairs (or more) of measures that score the same effort two ways. Enabling more
+# than one in a group shows a warning on the rules page.
+OVERLAP_GROUPS = [
+    ("walk_steps", "walk_miles", "walk_minutes"),
+    ("run_miles", "run_km", "run_minutes"),
+    ("bike_miles", "bike_minutes"),
+    ("cycle_minutes", "cycle_miles", "cycle_calories"),
+    ("hike_miles", "hike_minutes"),
+    ("swim_laps", "swim_yards", "swim_meters", "swim_minutes"),
+    ("row_meters", "row_minutes"),
+    ("elliptical_minutes", "elliptical_floors"),
+    ("jumprope_minutes", "jumprope_jumps"),
+    ("weights_minutes", "weights_sessions"),
+    ("hiit_minutes", "hiit_sessions"),
+    ("class_sessions", "class_minutes"),
+    ("yoga_minutes", "yoga_sessions"),
+    ("pilates_minutes", "pilates_sessions"),
+    ("sports_minutes", "sports_games"),
+    ("ski_minutes", "ski_runs"),
+    ("kayak_minutes", "kayak_miles"),
+]
+
+
+def _plain(value):
+    """Decimal as a plain string for form values (no commas)."""
+    if value is None:
+        return ""
+    return format(Decimal(value).normalize(), "f")
+
+
+def _index_catalog():
+    labels, units, names, measures, kinds, suggested, choices = {}, {}, {}, {}, {}, {}, []
+    groups, kind_rows, current_cat, cat_opts = [], {}, None, None
+    defaults = {}
+    for kind, name, category, measure_rows in CATALOG:
+        recs = []
+        for i, (meas, meas_label, unit, pts, per, cap) in enumerate(measure_rows):
+            key = f"{kind}_{meas}"
+            pts, per, cap = _d(pts), _d(per), _d(cap)
+            # "Active minutes (minutes)" would be redundant.
+            label = name if name.lower().endswith(meas_label.lower()) else f"{name} ({meas_label})"
+            labels[key] = label
+            units[key] = unit
+            names[key] = name
+            measures[key] = meas_label
+            kinds[key] = kind
+            suggested[key] = (pts, per, cap)
+            choices.append((key, label))
+            rec = {"key": key, "measure": meas, "label": meas_label, "unit": unit,
+                   "points": pts, "per_units": per, "daily_cap": cap}
+            recs.append(rec)
+            option = (key, f"{name} - {meas_label}", unit, _plain(pts), _plain(per), _plain(cap), kind, meas)
+            if current_cat != category:
+                if cat_opts is not None:
+                    groups.append((current_cat, cat_opts))
+                current_cat = category
+                cat_opts = []
+            cat_opts.append(option)
+            if i == 0:
+                defaults[kind] = key
+        kind_rows[kind] = {"key": kind, "label": name, "category": category, "measures": recs}
+    if cat_opts is not None:
+        groups.append((current_cat, cat_opts))
+    return labels, units, names, measures, kinds, suggested, choices, groups, kind_rows, defaults
+
+
+(ACTIVITY_LABELS, ACTIVITY_UNITS, ACTIVITY_NAMES, ACTIVITY_MEASURES, ACTIVITY_KINDS,
+ SUGGESTED, ACTIVITY_CHOICES, CATALOG_GROUPS, CATALOG_KINDS, DEFAULT_KEYS) = _index_catalog()
 ACTIVITY_KEYS = tuple(ACTIVITY_LABELS)
-# Default steps rule for a new challenge: 1 point per 1,000 steps, no daily cap.
+# Slice 1-2 keys after migration 0009: steps, run, bike, lift, class.
+STEPS, RUN, BIKE, LIFT, CLASS = "walk_steps", "run_miles", "bike_miles", "weights_sessions", "class_sessions"
+# Kept for existing tests and create-challenge defaults.
 DEFAULT_STEPS_POINTS = Decimal("1")
 DEFAULT_STEPS_PER = Decimal("1000")
 TWO = Decimal("0.01")
@@ -39,6 +215,125 @@ MAX_AMOUNT = Decimal("1000000")
 MAX_POINTS = Decimal("100000")
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
 PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+# Slice 1-2 activity keys, plus a unit hint when the old rule used a custom unit.
+_MINUTES = {"min", "mins", "minute", "minutes"}
+_KM = {"km", "kilometer", "kilometers", "kilometre", "kilometres"}
+_LEGACY = {
+    "steps": "walk_steps",
+    "run": "run_miles",
+    "bike": "bike_miles",
+    "lift": "weights_sessions",
+    "class": "class_sessions",
+}
+
+
+def remap_legacy_activity(key, unit=None):
+    """Map a slice 1-2 activity key onto the catalog. Already-new keys pass through.
+
+    lift and class (and run/bike) use the stored unit when it clearly picks a
+    different measure, so a lifting rule in minutes becomes weights_minutes.
+    """
+    key = (key or "").strip()
+    if key in ACTIVITY_KEYS:
+        return key
+    unit_l = " ".join((unit or "").split()).lower()
+    if key == "run":
+        if unit_l in _KM:
+            return "run_km"
+        if unit_l in _MINUTES:
+            return "run_minutes"
+        return "run_miles"
+    if key == "bike":
+        return "bike_minutes" if unit_l in _MINUTES else "bike_miles"
+    if key == "lift":
+        return "weights_minutes" if unit_l in _MINUTES else "weights_sessions"
+    if key == "class":
+        return "class_minutes" if unit_l in _MINUTES else "class_sessions"
+    return _LEGACY.get(key, key)
+
+
+def resolve_activity_key(key, unit=None):
+    """Accept a catalog key or a slice 1-2 key (steps, run, bike, lift, class)."""
+    return remap_legacy_activity(key, unit)
+
+
+def default_key(kind):
+    """The default (first) measure key for an activity, e.g. walk → walk_steps."""
+    return DEFAULT_KEYS.get(kind)
+
+
+def available_options(exclude=None):
+    """Grouped catalog options for a <select>, skipping keys already used on a challenge.
+
+    Each option is (key, 'Walking - steps', unit, points, per, cap, kind, measure).
+    """
+    skip = set(exclude or [])
+    groups = []
+    for category, opts in CATALOG_GROUPS:
+        left = [o for o in opts if o[0] not in skip]
+        if left:
+            groups.append((category, left))
+    return groups
+
+
+def available_kinds(exclude=None):
+    """Activities that still have a free measure, grouped by category, for the JS picker."""
+    skip = set(exclude or [])
+    by_cat = []
+    current, rows = None, None
+    for kind, name, category, measure_rows in CATALOG:
+        recs = [m for m in CATALOG_KINDS[kind]["measures"] if m["key"] not in skip]
+        if not recs:
+            continue
+        row = {"key": kind, "label": name, "measures": recs}
+        if current != category:
+            if rows is not None:
+                by_cat.append((current, rows))
+            current, rows = category, []
+        rows.append(row)
+    if rows is not None:
+        by_cat.append((current, rows))
+    return by_cat
+
+
+_OVERLAP_NOUN = {
+    "walk": "walk", "run": "run", "bike": "ride", "cycle": "ride", "hike": "hike",
+    "swim": "swim", "row": "row", "elliptical": "session", "jumprope": "jump-rope session",
+    "weights": "workout", "hiit": "workout", "class": "class", "yoga": "session",
+    "pilates": "session", "sports": "game", "ski": "ski day", "kayak": "paddle",
+}
+
+
+def overlap_warnings(keys):
+    """Human warnings when a challenge scores the same effort two ways."""
+    have = set(keys or [])
+    warnings = []
+    for group in OVERLAP_GROUPS:
+        hit = [k for k in group if k in have]
+        if len(hit) < 2:
+            continue
+        labels = [ACTIVITY_LABELS[k] for k in hit]
+        if len(labels) == 2:
+            joined = f"{labels[0]} and {labels[1]}"
+        else:
+            joined = ", ".join(labels[:-1]) + f", and {labels[-1]}"
+        noun = _OVERLAP_NOUN.get(ACTIVITY_KINDS[hit[0]], ACTIVITY_NAMES[hit[0]].lower())
+        warnings.append(f"{joined} count the same {noun} twice.")
+    return warnings
+
+
+def log_label(rule):
+    """Label for the log form: 'Walking (miles)', or the custom unit when one is set."""
+    key, unit = rule.activity, rule.unit
+    name = ACTIVITY_NAMES.get(key) or ACTIVITY_LABELS.get(key, key)
+    default_unit = ACTIVITY_UNITS.get(key, "")
+    if unit and default_unit and unit != default_unit:
+        return f"{name} ({unit})"
+    measure = ACTIVITY_MEASURES.get(key)
+    if measure:
+        return f"{name} ({measure})"
+    return ACTIVITY_LABELS.get(key, key)
 
 
 class ChallengeError(Exception):
@@ -76,9 +371,9 @@ class Challenge(models.Model):
 
 
 class ChallengeRule(models.Model):
-    """How one activity scores in a challenge: `points` per `per_units` of `unit`, optional daily point cap."""
+    """How one activity+measure scores: `points` per `per_units` of `unit`, optional daily point cap."""
     challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name="rules")
-    activity = models.CharField(max_length=10, choices=[(k, lab) for k, lab, _u in ACTIVITIES])
+    activity = models.CharField(max_length=32, choices=ACTIVITY_CHOICES)
     unit = models.CharField(max_length=20)
     points = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     per_units = models.DecimalField(max_digits=12, decimal_places=2, default=1,
@@ -103,11 +398,11 @@ class ChallengeRule(models.Model):
 
 
 class ChallengeEntry(models.Model):
-    """One person's amount for one activity on one day. points is computed from the challenge's rule and stored."""
+    """One person's amount for one activity+measure on one day. points is computed from the rule and stored."""
     challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name="entries")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_challenge_entries")
     date = models.DateField()
-    activity = models.CharField(max_length=10, choices=[(k, lab) for k, lab, _u in ACTIVITIES])
+    activity = models.CharField(max_length=32, choices=ACTIVITY_CHOICES)
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01")),
                                                                                MaxValueValidator(MAX_AMOUNT)])
     note = models.CharField(max_length=500, blank=True)
@@ -239,8 +534,9 @@ def leaderboard(challenge):
 
 
 @transaction.atomic
-def create_challenge(user, circle, name, start, end, steps_points=None, steps_per=None, steps_cap=None):
-    """Create a challenge with a steps rule. Raises ChallengeError on bad input or no access."""
+def create_challenge(user, circle, name, start, end, steps_points=None, steps_per=None, steps_cap=None,
+                     activity_key=None, unit=None):
+    """Create a challenge with one scoring rule (steps by default). Raises ChallengeError on bad input or no access."""
     if not can_participate(user, circle):
         raise ChallengeError("You can only start a challenge in a circle where you've joined Fitness.")
     name = " ".join((name or "").split())[:100]
@@ -249,15 +545,22 @@ def create_challenge(user, circle, name, start, end, steps_points=None, steps_pe
     start, end = _date(start, "start date"), _date(end, "end date")
     if end < start:
         raise ChallengeError("The end date has to be on or after the start date.")
-    points = _decimal(steps_points, DEFAULT_STEPS_POINTS, "points")
-    per = _decimal(steps_per, DEFAULT_STEPS_PER, "steps per point")
+    activity_key = resolve_activity_key(activity_key or STEPS, unit)
+    if activity_key not in ACTIVITY_KEYS:
+        raise ChallengeError("Pick a scoring activity.")
+    default_pts, default_per, _default_cap = SUGGESTED[activity_key]
+    if activity_key == STEPS:
+        default_pts, default_per = DEFAULT_STEPS_POINTS, DEFAULT_STEPS_PER
+    points = _decimal(steps_points, default_pts, "points")
+    per = _decimal(steps_per, default_per, "units per point")
     cap = _decimal(steps_cap, None, "daily cap", allow_empty=True)
     if points < 0 or per <= 0:
-        raise ChallengeError("Points have to be 0 or more, and the step count has to be more than 0.")
+        raise ChallengeError("Points have to be 0 or more, and the unit count has to be more than 0.")
     if cap is not None and cap < 0:
         raise ChallengeError("The daily cap has to be 0 or more.")
+    unit = " ".join((unit or "").split())[:20] or ACTIVITY_UNITS[activity_key]
     challenge = Challenge.objects.create(circle=circle, name=name, start_date=start, end_date=end, created_by=user)
-    ChallengeRule.objects.create(challenge=challenge, activity=STEPS, unit=ACTIVITY_UNITS[STEPS],
+    ChallengeRule.objects.create(challenge=challenge, activity=activity_key, unit=unit,
                                  points=points, per_units=per, daily_cap=cap)
     activity.record_activity(
         "fitness", "challenge", f"started the challenge {activity.quote(name)}",
@@ -319,6 +622,7 @@ def log_entry(challenge, user, *, day, activity_key, amount, note="", photo=None
         raise ChallengeError("That date isn't in this challenge.")
     if day > today:
         raise ChallengeError("You can't log a future date.")
+    activity_key = resolve_activity_key(activity_key)
     if activity_key not in ACTIVITY_KEYS:
         raise ChallengeError("Pick an activity this challenge scores.")
     rule = challenge.rules.filter(activity=activity_key).first()
@@ -379,9 +683,10 @@ def _rule_values(points, per_units, daily_cap, unit, activity_key):
 
 @transaction.atomic
 def set_rule(challenge, user, activity_key, points, per_units, daily_cap=None, unit=None):
-    """Create or replace the rule for one activity, then recalculate that activity's stored points."""
+    """Create or replace the rule for one activity+measure, then recalculate that activity's stored points."""
     if not can_edit_rules(user, challenge):
         raise ChallengeError("Only the person who started this challenge, or a circle owner, can edit the rules.")
+    activity_key = resolve_activity_key(activity_key, unit)
     if activity_key not in ACTIVITY_KEYS:
         raise ChallengeError("Pick a scoring activity.")
     points, per, cap, unit = _rule_values(points, per_units, daily_cap, unit, activity_key)
@@ -397,6 +702,7 @@ def remove_rule(challenge, user, activity_key):
     """Drop a rule and zero that activity's stored points (entries, comments and photos stay)."""
     if not can_edit_rules(user, challenge):
         raise ChallengeError("Only the person who started this challenge, or a circle owner, can edit the rules.")
+    activity_key = resolve_activity_key(activity_key)
     rules = challenge.rules.all()
     if not rules.filter(activity=activity_key).exists():
         raise ChallengeError("That rule isn't on this challenge.")

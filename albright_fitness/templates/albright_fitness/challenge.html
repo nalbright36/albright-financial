@@ -34,7 +34,7 @@
             <input type="date" name="date" id="fx-log-date" class="ledger-input" required value="{{ default_day|date:'Y-m-d' }}" min="{{ challenge.start_date|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}"></div>
             {% if activities|length > 1 %}
             <div><label class="fx-label" for="fx-log-activity">Activity</label>
-            <select name="activity" id="fx-log-activity" class="ledger-input">{% for key, label, unit in activities %}<option value="{{ key }}">{{ label }} ({{ unit }})</option>{% endfor %}</select></div>
+            <select name="activity" id="fx-log-activity" class="ledger-input">{% for key, label, unit in activities %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
             {% else %}
             <input type="hidden" name="activity" value="{{ activities.0.0 }}">
             {% endif %}
