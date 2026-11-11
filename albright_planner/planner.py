@@ -219,7 +219,7 @@ def _put_back(item, occurrence_date):
     item.next_due = occurrence_date
     if item.repeat_from_completion:
         last = item.completions.order_by("-completed_at").first()
-        item.repeat_anchor = timezone.localdate(last.completed_at) if last else None
+        item.repeat_anchor = timezone.localdate(last.completed_at, timezone=user_zone(item.owner)) if last else None
     item.save(update_fields=["next_due", "repeat_anchor", "updated_at"])
 
 
@@ -570,7 +570,7 @@ def remove(item, occurrence_date, scope):
             "action": ItemException.SKIP, "new_date": None, "new_start_time": None, "new_title": ""})
         ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).delete()
         if current is not None and occurrence_date == current:
-            _move_on(item, occurrence_date, today())        # "Skip this one": on to the next, by the same rules
+            _move_on(item, occurrence_date, today(item.owner))  # "Skip this one": on to the next, by the same rules
         return
     item.recurrence_until, item.recurrence_count = occurrence_date - timedelta(days=1), None
     item.save()
@@ -648,7 +648,7 @@ def scheduled_for_note(note, user):
     """Notes' "Scheduled: <date>" chips: this user's visible items linked to the note, each with its next date
     (a repeating one's next occurrence from today, else its first) and a link to that day in the Planner."""
     from django.urls import reverse
-    day = today()
+    day = today(user)
     out = []
     for item in ScheduleItem.objects.visible_to(user).filter(note=note, archived=False).order_by("date", "pk"):
         when = item.date
