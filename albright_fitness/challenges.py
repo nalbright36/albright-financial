@@ -1,11 +1,12 @@
 """Circle fitness challenges: a date-range contest in a Circle, with point rules per
-activity, logged entries, comments, and a live leaderboard (challenge_views).
+activity, logged entries (optional photo), comments, and a live leaderboard (challenge_views).
 
 Access: only active members of the challenge's circle who opted into Fitness for that
 circle (and can open Fitness) - the same four rules as albright_labs.circles.
 
-Slice 1 ships steps (a default rule on create). The rule table already accepts run,
-bike, lift and class so those can be added later without a schema change. No photos.
+The creator, or a circle owner, can add, edit and remove rules (steps, run, bike, lift,
+class). Changing a rule recalculates stored points on existing entries so the leaderboard
+stays in sync. Photos are stored as image bytes on ChallengePhoto (no files on disk).
 """
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -35,6 +36,9 @@ DEFAULT_STEPS_POINTS = Decimal("1")
 DEFAULT_STEPS_PER = Decimal("1000")
 TWO = Decimal("0.01")
 MAX_AMOUNT = Decimal("1000000")
+MAX_POINTS = Decimal("100000")
+MAX_PHOTO_BYTES = 2 * 1024 * 1024
+PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class ChallengeError(Exception):
@@ -121,7 +125,7 @@ class ChallengeEntry(models.Model):
 
 
 class EntryComment(models.Model):
-    """Plain-text comment on an entry (slice 2 adds photos)."""
+    """Plain-text comment on an entry."""
     entry = models.ForeignKey(ChallengeEntry, on_delete=models.CASCADE, related_name="comments")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_entry_comments")
     text = models.TextField(max_length=2000)
@@ -134,8 +138,19 @@ class EntryComment(models.Model):
         return f"Comment by {self.user} on entry {self.entry_id}"
 
 
+class ChallengePhoto(models.Model):
+    """Optional photo on an entry, stored as image bytes (no files on disk; no user-controlled name)."""
+    entry = models.OneToOneField(ChallengeEntry, on_delete=models.CASCADE, related_name="photo")
+    data = models.BinaryField(editable=False)
+    content_type = models.CharField(max_length=20)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Photo for entry {self.entry_id}"
+
+
 # ---------------------------------------------------------------------------
-# Access, scoring, logging, the board
+# Access, scoring, logging, the board, rules, photos
 # ---------------------------------------------------------------------------
 
 def can_participate(user, circle):
@@ -145,6 +160,13 @@ def can_participate(user, circle):
     m = circles.membership(user, circle)
     return bool(m and m.status == circles.ACTIVE and "fitness" in (m.apps or [])
                 and "fitness" in (circle.enabled_apps or []))
+
+
+def can_edit_rules(user, challenge):
+    """The person who started the challenge, or a circle owner, if they can still participate."""
+    if not can_participate(user, challenge.circle):
+        return False
+    return (challenge.created_by_id == user.pk) or circles.is_owner(user, challenge.circle)
 
 
 def participatable_circles(user):
@@ -244,9 +266,51 @@ def create_challenge(user, circle, name, start, end, steps_points=None, steps_pe
     return challenge
 
 
+def sniff_image(data):
+    """Content type from magic bytes, or None if this isn't a JPEG, PNG or WebP."""
+    if not data:
+        return None
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data[:4] == b"RIFF" and len(data) >= 12 and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def read_photo(upload):
+    """Return (bytes, content_type) or None if nothing was attached. Raises ChallengeError if invalid."""
+    if not upload:
+        return None
+    if isinstance(upload, (bytes, bytearray, memoryview)):
+        data = bytes(upload)
+    else:
+        size = getattr(upload, "size", None)
+        if size == 0:
+            return None
+        if size is not None and size > MAX_PHOTO_BYTES:
+            raise ChallengeError("Photos have to be 2 MB or smaller.")
+        data = upload.read()
+    if not data:
+        return None
+    if len(data) > MAX_PHOTO_BYTES:
+        raise ChallengeError("Photos have to be 2 MB or smaller.")
+    ctype = sniff_image(data)
+    if not ctype:
+        raise ChallengeError("Use a JPEG, PNG or WebP image.")
+    return data, ctype
+
+
+def _attach_photo(entry, parsed):
+    data, ctype = parsed
+    ChallengePhoto.objects.update_or_create(entry=entry, defaults={"data": data, "content_type": ctype})
+
+
 @transaction.atomic
-def log_entry(challenge, user, *, day, activity_key, amount, note=""):
-    """Create or replace this user's entry for that day and activity. Returns the entry."""
+def log_entry(challenge, user, *, day, activity_key, amount, note="", photo=None):
+    """Create or replace this user's entry for that day and activity. Returns the entry.
+    photo is optional (an uploaded file or raw bytes); a new photo replaces the previous one."""
     if not can_participate(user, challenge.circle):
         raise ChallengeError("You're not in this challenge.")
     day = _date(day, "date")
@@ -266,6 +330,7 @@ def log_entry(challenge, user, *, day, activity_key, amount, note=""):
     if amount > MAX_AMOUNT:
         raise ChallengeError("That amount is too large.")
     note = " ".join((note or "").split())[:500]
+    parsed = read_photo(photo)
     points = points_for(rule, amount)
     entry, created = ChallengeEntry.objects.select_for_update().get_or_create(
         challenge=challenge, user=user, date=day, activity=activity_key,
@@ -275,6 +340,8 @@ def log_entry(challenge, user, *, day, activity_key, amount, note=""):
             raise ChallengeError("You can only edit your own entries.")
         entry.amount, entry.note, entry.points = amount, note, points
         entry.save(update_fields=["amount", "note", "points", "updated_at"])
+    if parsed:
+        _attach_photo(entry, parsed)
     return entry
 
 
@@ -285,6 +352,58 @@ def add_comment(entry, user, text):
     if not text:
         raise ChallengeError("Write a comment first.")
     return EntryComment.objects.create(entry=entry, user=user, text=text[:2000])
+
+
+def _recalculate(challenge, activity_key, rule):
+    """Recompute stored points for this activity from the current rule (0 if the rule was removed)."""
+    entries = list(challenge.entries.filter(activity=activity_key))
+    for entry in entries:
+        entry.points = points_for(rule, entry.amount) if rule is not None else Decimal("0.00")
+    if entries:
+        ChallengeEntry.objects.bulk_update(entries, ["points"])
+
+
+def _rule_values(points, per_units, daily_cap, unit, activity_key):
+    points = _decimal(points, None, "points")
+    per = _decimal(per_units, None, "units per point")
+    cap = _decimal(daily_cap, None, "daily cap", allow_empty=True)
+    if points is None or points < 0 or per is None or per <= 0:
+        raise ChallengeError("Points have to be 0 or more, and the unit count has to be more than 0.")
+    if cap is not None and cap < 0:
+        raise ChallengeError("The daily cap has to be 0 or more.")
+    if points > MAX_POINTS or per > MAX_AMOUNT or (cap is not None and cap > MAX_POINTS):
+        raise ChallengeError("That number is too large.")
+    unit = " ".join((unit or "").split())[:20] or ACTIVITY_UNITS[activity_key]
+    return points, per, cap, unit
+
+
+@transaction.atomic
+def set_rule(challenge, user, activity_key, points, per_units, daily_cap=None, unit=None):
+    """Create or replace the rule for one activity, then recalculate that activity's stored points."""
+    if not can_edit_rules(user, challenge):
+        raise ChallengeError("Only the person who started this challenge, or a circle owner, can edit the rules.")
+    if activity_key not in ACTIVITY_KEYS:
+        raise ChallengeError("Pick a scoring activity.")
+    points, per, cap, unit = _rule_values(points, per_units, daily_cap, unit, activity_key)
+    rule, _created = ChallengeRule.objects.update_or_create(
+        challenge=challenge, activity=activity_key,
+        defaults={"unit": unit, "points": points, "per_units": per, "daily_cap": cap})
+    _recalculate(challenge, activity_key, rule)
+    return rule
+
+
+@transaction.atomic
+def remove_rule(challenge, user, activity_key):
+    """Drop a rule and zero that activity's stored points (entries, comments and photos stay)."""
+    if not can_edit_rules(user, challenge):
+        raise ChallengeError("Only the person who started this challenge, or a circle owner, can edit the rules.")
+    rules = challenge.rules.all()
+    if not rules.filter(activity=activity_key).exists():
+        raise ChallengeError("That rule isn't on this challenge.")
+    if rules.count() == 1:
+        raise ChallengeError("A challenge needs at least one rule - add another before removing this one.")
+    rules.filter(activity=activity_key).delete()
+    _recalculate(challenge, activity_key, None)
 
 
 def _date(value, label):
@@ -302,6 +421,9 @@ def _decimal(value, default, label, allow_empty=False):
             return default
         raise ChallengeError(f"Enter the {label}.")
     try:
-        return Decimal(str(value).replace(",", "").strip())
+        number = Decimal(str(value).replace(",", "").strip())
     except (InvalidOperation, TypeError) as exc:
         raise ChallengeError(f"Enter a valid {label}.") from exc
+    if not number.is_finite():
+        raise ChallengeError(f"Enter a valid {label}.")
+    return number

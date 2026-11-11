@@ -203,4 +203,12 @@
         setInterval(refreshBoard, 15000);
         document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshBoard(); });
     }
+
+    var addActivity = document.getElementById("fx-add-activity"), addUnit = document.getElementById("fx-add-unit");
+    if (addActivity && addUnit) {
+        addActivity.addEventListener("change", function () {
+            var opt = addActivity.options[addActivity.selectedIndex];
+            if (opt && opt.dataset.unit) addUnit.value = opt.dataset.unit;
+        });
+    }
 })();

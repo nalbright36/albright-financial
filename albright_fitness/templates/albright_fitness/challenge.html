@@ -1,7 +1,7 @@
 {% extends "albright_fitness/base.html" %}
 {% block page_title %}{{ challenge.name }} · {% endblock %}
 {% block fitness %}
-{% comment %}Challenge detail (challenge_views.challenge): rules, live leaderboard (polled every 15s by fitness.js), log/edit today's entry, comments on recent entries.{% endcomment %}
+{% comment %}Challenge detail (challenge_views.challenge): rules, live leaderboard (polled every 15s by fitness.js), log/edit today's entry (optional photo), comments on recent entries.{% endcomment %}
 <div class="fx-head">
     <div>
         <h1 class="fx-head__title">{{ challenge.name }}</h1>
@@ -13,6 +13,7 @@
 <section class="card fx-card" aria-labelledby="fx-ch-rules-h">
     <h2 class="fx-card__title" id="fx-ch-rules-h">Rules</h2>
     <ul class="fx-list">{% for r in rules %}<li>{{ r.get_activity_display }}: {{ r.text }}</li>{% empty %}<li class="fx-empty">No scoring rules yet.</li>{% endfor %}</ul>
+    {% if can_edit_rules %}<p class="fx-help"><a href="{% url 'albright_fitness:challenge_rules' challenge.pk %}">Edit rules</a></p>{% endif %}
 </section>
 
 <section class="card fx-card" aria-labelledby="fx-board-h">
@@ -26,8 +27,8 @@
 {% if can_log %}
 <section class="card fx-card" aria-labelledby="fx-ch-log-h">
     <h2 class="fx-card__title" id="fx-ch-log-h">Log an entry</h2>
-    <p class="fx-help">Logging the same activity on the same day replaces your previous amount.</p>
-    <form method="post" action="{% url 'albright_fitness:challenge_log' challenge.pk %}" class="fx-form">{% csrf_token %}
+    <p class="fx-help">Logging the same activity on the same day replaces your previous amount. Photos are optional, up to 2 MB (JPEG, PNG or WebP).</p>
+    <form method="post" action="{% url 'albright_fitness:challenge_log' challenge.pk %}" class="fx-form" enctype="multipart/form-data">{% csrf_token %}
         <div class="fx-form__row">
             <div><label class="fx-label" for="fx-log-date">Date</label>
             <input type="date" name="date" id="fx-log-date" class="ledger-input" required value="{{ default_day|date:'Y-m-d' }}" min="{{ challenge.start_date|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}"></div>
@@ -35,13 +36,15 @@
             <div><label class="fx-label" for="fx-log-activity">Activity</label>
             <select name="activity" id="fx-log-activity" class="ledger-input">{% for key, label, unit in activities %}<option value="{{ key }}">{{ label }} ({{ unit }})</option>{% endfor %}</select></div>
             {% else %}
-            <input type="hidden" name="activity" value="{{ activities.0.0|default:'steps' }}">
+            <input type="hidden" name="activity" value="{{ activities.0.0 }}">
             {% endif %}
             <div><label class="fx-label" for="fx-log-amount">Amount</label>
-            <input type="number" name="amount" id="fx-log-amount" class="ledger-input" step="any" min="0.01" required placeholder="{% if activities %}{{ activities.0.2 }}{% else %}steps{% endif %}"></div>
+            <input type="number" name="amount" id="fx-log-amount" class="ledger-input" step="any" min="0.01" required placeholder="{% if activities %}{{ activities.0.2 }}{% else %}amount{% endif %}"></div>
         </div>
         <label class="fx-label" for="fx-log-note">Note (optional)</label>
         <input type="text" name="note" id="fx-log-note" class="ledger-input fx-input-wide" maxlength="500">
+        <label class="fx-label" for="fx-log-photo">Photo (optional)</label>
+        <input type="file" name="photo" id="fx-log-photo" class="ledger-input" accept="image/jpeg,image/png,image/webp">
         <button type="submit" class="btn btn-primary">Log</button>
     </form>
 </section>
@@ -52,6 +55,7 @@
     {% for e in entries %}
     <article class="fx-entry" id="entry-{{ e.pk }}">
         <p class="fx-entry__head"><strong>{{ e.user.first_name|default:e.user.username }}</strong> &middot; {{ e.date|date:"M j" }} &middot; {{ e.get_activity_display }}: {{ e.amount.normalize }}{% if e.note %} &middot; {{ e.note }}{% endif %} <span class="fx-muted">({{ e.points.normalize }} pts)</span></p>
+        {% if e.photo %}<img src="{% url 'albright_fitness:challenge_photo' e.pk %}" alt="" class="fx-entry__photo">{% endif %}
         <ul class="fx-comments">{% for c in e.comments.all %}<li><strong>{{ c.user.first_name|default:c.user.username }}</strong> {{ c.text }} <span class="fx-muted">{{ c.created_at|date:"M j, g:i A" }}</span></li>{% endfor %}</ul>
         <form method="post" action="{% url 'albright_fitness:challenge_comment' e.pk %}" class="fx-row-form">{% csrf_token %}
             <label class="visually-hidden" for="fx-c-{{ e.pk }}">Comment</label>

@@ -4,10 +4,9 @@ who opted into Fitness there - anyone else gets a 404, including other Fitness u
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
-from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -23,8 +22,16 @@ def _challenge(request, pk):
     return challenge
 
 
+def _editable(request, pk):
+    """A challenge the signed-in person may edit rules on; everyone else (including other members) gets 404."""
+    challenge = _challenge(request, pk)
+    if not ch.can_edit_rules(request.user, challenge):
+        raise Http404
+    return challenge
+
+
 def _entry(request, pk):
-    entry = get_object_or_404(ChallengeEntry.objects.select_related("challenge__circle", "user"), pk=pk)
+    entry = get_object_or_404(ChallengeEntry.objects.select_related("challenge__circle", "user", "photo"), pk=pk)
     if not ch.can_participate(request.user, entry.challenge.circle):
         raise Http404
     return entry
@@ -92,15 +99,17 @@ def challenge_new(request):
 def challenge(request, pk):
     challenge = _challenge(request, pk)
     rules = list(challenge.rules.all())
-    entries = (challenge.entries.select_related("user")
+    entries = (challenge.entries.select_related("user", "photo")
                .prefetch_related("comments__user").order_by("-date", "pk")[:60])
     today = timezone.localdate()
     default_day = today if challenge.covers(today) else min(max(today, challenge.start_date), challenge.end_date)
     activities = [(r.activity, r.get_activity_display(), r.unit) for r in rules]
     return render(request, "albright_fitness/challenge.html", {
         "challenge": challenge, "rules": rules, "board": _board(challenge, request.user),
-        "entries": entries, "activities": activities or ACTIVITIES,
-        "today": today, "default_day": default_day, "can_log": challenge.start_date <= today,
+        "entries": entries, "activities": activities,
+        "today": today, "default_day": default_day,
+        "can_log": challenge.start_date <= today and bool(activities),
+        "can_edit_rules": ch.can_edit_rules(request.user, challenge),
     })
 
 
@@ -121,7 +130,8 @@ def challenge_log(request, pk):
     try:
         ch.log_entry(challenge, request.user, day=request.POST.get("date"),
                      activity_key=request.POST.get("activity") or ch.STEPS,
-                     amount=request.POST.get("amount"), note=request.POST.get("note") or "")
+                     amount=request.POST.get("amount"), note=request.POST.get("note") or "",
+                     photo=request.FILES.get("photo"))
     except ChallengeError as exc:
         messages.error(request, str(exc))
     else:
@@ -138,3 +148,59 @@ def challenge_comment(request, pk):
     except ChallengeError as exc:
         messages.error(request, str(exc))
     return redirect("albright_fitness:challenge", pk=entry.challenge_id)
+
+
+@login_required
+@never_cache
+def challenge_photo(request, pk):
+    """Raw image bytes for an entry's photo. Same access as the challenge page; outsiders get 404."""
+    entry = _entry(request, pk)
+    photo = getattr(entry, "photo", None)
+    if photo is None or not photo.data or photo.content_type not in ch.PHOTO_TYPES:
+        raise Http404
+    response = HttpResponse(bytes(photo.data), content_type=photo.content_type)
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, no-store"
+    response["Content-Disposition"] = "inline"
+    return response
+
+
+@login_required
+@never_cache
+def challenge_rules(request, pk):
+    challenge = _editable(request, pk)
+    rules = list(challenge.rules.all())
+    taken = {r.activity for r in rules}
+    available = [(k, lab, unit) for k, lab, unit in ACTIVITIES if k not in taken]
+    return render(request, "albright_fitness/challenge_rules.html", {
+        "challenge": challenge, "rules": rules, "available": available,
+    })
+
+
+@login_required
+@require_POST
+def challenge_rule_save(request, pk):
+    challenge = _editable(request, pk)
+    try:
+        rule = ch.set_rule(challenge, request.user, request.POST.get("activity"),
+                           request.POST.get("points"), request.POST.get("per_units"),
+                           daily_cap=request.POST.get("daily_cap") or None,
+                           unit=request.POST.get("unit") or None)
+    except ChallengeError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, f"Saved the {rule.get_activity_display()} rule. The leaderboard has been updated.")
+    return redirect("albright_fitness:challenge_rules", pk=challenge.pk)
+
+
+@login_required
+@require_POST
+def challenge_rule_delete(request, pk):
+    challenge = _editable(request, pk)
+    try:
+        ch.remove_rule(challenge, request.user, request.POST.get("activity"))
+    except ChallengeError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Rule removed. The leaderboard has been updated.")
+    return redirect("albright_fitness:challenge_rules", pk=challenge.pk)

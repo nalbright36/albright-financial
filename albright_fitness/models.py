@@ -425,4 +425,4 @@ class Measurement(models.Model):
 
 
 # Challenge models live in challenges.py (imported here so migrations see them).
-from .challenges import Challenge, ChallengeRule, ChallengeEntry, EntryComment  # noqa: F401
+from .challenges import Challenge, ChallengeRule, ChallengeEntry, EntryComment, ChallengePhoto  # noqa: F401

@@ -1,0 +1,64 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Edit rules · {{ challenge.name }} · {% endblock %}
+{% block fitness %}
+{% comment %}Edit scoring rules (challenge_views.challenge_rules). Only the creator or a circle owner. Saving or removing a rule recalculates stored points.{% endcomment %}
+<div class="fx-head">
+    <div>
+        <h1 class="fx-head__title">Edit rules</h1>
+        <p class="fx-head__sub">{{ challenge.name }} &middot; {{ challenge.circle.name }}</p>
+    </div>
+    <a href="{% url 'albright_fitness:challenge' challenge.pk %}" class="btn btn-secondary btn-sm">Back to challenge</a>
+</div>
+<p class="fx-help">Points are recalculated for existing entries when you save or remove a rule, so the leaderboard stays in sync. A challenge has to keep at least one rule.</p>
+
+{% for r in rules %}
+<section class="card fx-card" aria-labelledby="fx-rule-{{ r.pk }}">
+    <h2 class="fx-card__title" id="fx-rule-{{ r.pk }}">{{ r.get_activity_display }}</h2>
+    <p class="fx-help">Currently: {{ r.text }}</p>
+    <form method="post" action="{% url 'albright_fitness:challenge_rule_save' challenge.pk %}" class="fx-form">{% csrf_token %}
+        <input type="hidden" name="activity" value="{{ r.activity }}">
+        <div class="fx-form__row">
+            <div><label class="fx-label" for="fx-pts-{{ r.pk }}">Points</label>
+            <input type="number" name="points" id="fx-pts-{{ r.pk }}" class="ledger-input" step="0.01" min="0" required value="{{ r.points }}"></div>
+            <div><label class="fx-label" for="fx-per-{{ r.pk }}">per this many</label>
+            <input type="number" name="per_units" id="fx-per-{{ r.pk }}" class="ledger-input" step="0.01" min="0.01" required value="{{ r.per_units }}"></div>
+            <div><label class="fx-label" for="fx-unit-{{ r.pk }}">Unit</label>
+            <input type="text" name="unit" id="fx-unit-{{ r.pk }}" class="ledger-input" maxlength="20" required value="{{ r.unit }}" placeholder="mi, minutes, sessions"></div>
+            <div><label class="fx-label" for="fx-cap-{{ r.pk }}">Daily cap (pts, optional)</label>
+            <input type="number" name="daily_cap" id="fx-cap-{{ r.pk }}" class="ledger-input" step="0.01" min="0" value="{% if r.daily_cap is not None %}{{ r.daily_cap }}{% endif %}" placeholder="None"></div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+    {% if rules|length > 1 %}
+    <form method="post" action="{% url 'albright_fitness:challenge_rule_delete' challenge.pk %}" class="fx-row-form fx-delete" data-confirm="Remove this rule? Existing entries stay, but they will score 0 until you add the rule back.">{% csrf_token %}
+        <input type="hidden" name="activity" value="{{ r.activity }}">
+        <button type="submit" class="btn btn-secondary btn-sm fx-danger">Remove</button>
+    </form>
+    {% endif %}
+</section>
+{% endfor %}
+
+{% if available %}
+<section class="card fx-card" aria-labelledby="fx-rule-add-h">
+    <h2 class="fx-card__title" id="fx-rule-add-h">Add a rule</h2>
+    <p class="fx-help">Score running, biking, lifting or classes (or change the unit, for example minutes instead of miles).</p>
+    <form method="post" action="{% url 'albright_fitness:challenge_rule_save' challenge.pk %}" class="fx-form">{% csrf_token %}
+        <div class="fx-form__row">
+            <div><label class="fx-label" for="fx-add-activity">Activity</label>
+            <select name="activity" id="fx-add-activity" class="ledger-input" required>
+                {% for key, label, unit in available %}<option value="{{ key }}" data-unit="{{ unit }}">{{ label }} ({{ unit }})</option>{% endfor %}
+            </select></div>
+            <div><label class="fx-label" for="fx-add-pts">Points</label>
+            <input type="number" name="points" id="fx-add-pts" class="ledger-input" step="0.01" min="0" required value="1"></div>
+            <div><label class="fx-label" for="fx-add-per">per this many</label>
+            <input type="number" name="per_units" id="fx-add-per" class="ledger-input" step="0.01" min="0.01" required value="1"></div>
+            <div><label class="fx-label" for="fx-add-unit">Unit</label>
+            <input type="text" name="unit" id="fx-add-unit" class="ledger-input" maxlength="20" placeholder="mi, minutes, sessions" value="{{ available.0.2 }}"></div>
+            <div><label class="fx-label" for="fx-add-cap">Daily cap (pts, optional)</label>
+            <input type="number" name="daily_cap" id="fx-add-cap" class="ledger-input" step="0.01" min="0" placeholder="None"></div>
+        </div>
+        <button type="submit" class="btn btn-primary">Add rule</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

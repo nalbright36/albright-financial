@@ -1,4 +1,4 @@
-"""Circle fitness challenges (slice 1): points, the leaderboard, access, upsert logging, comments."""
+"""Circle fitness challenges: points, the leaderboard, access, upsert logging, comments, photos, rule editing."""
 from datetime import timedelta
 from decimal import Decimal
 
@@ -174,3 +174,155 @@ class CreateTests(Base):
         data = self.client.get(url("challenge_board", challenge.pk)).json()
         self.assertIn("Nate", data["html"])
         self.assertIn("fx-board-table", data["html"])
+
+
+# 1x1-ish JPEG / PNG / WebP prefixes: sniff_image only checks magic bytes (no Pillow).
+JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 8
+WEBP = b"RIFF" + b"\x20\x00\x00\x00" + b"WEBP" + b"\x00" * 16
+
+
+def _photo(name, data, content_type="image/jpeg"):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    return SimpleUploadedFile(name, data, content_type=content_type)
+
+
+class RuleEditTests(Base):
+    def test_creator_and_circle_owner_can_add_and_edit_rules(self):
+        challenge = self.challenge()
+        page = self.client.get(url("challenge", challenge.pk))
+        self.assertContains(page, "Edit rules")
+        self.assertEqual(self.client.get(url("challenge_rules", challenge.pk)).status_code, 200)
+        self.assertEqual(self.client.post(url("challenge_rule_save", challenge.pk), {
+            "activity": "run", "points": "10", "per_units": "1", "unit": "mi"}).status_code, 302)
+        rule = challenge.rules.get(activity=ch.RUN)
+        self.assertEqual((rule.points, rule.per_units, rule.unit, rule.daily_cap),
+                         (D("10.00"), D("1.00"), "mi", None))
+        # A member who didn't create it (and isn't an owner) cannot.
+        sam = self.as_user(self.sister)
+        self.assertNotContains(sam.get(url("challenge", challenge.pk)), "Edit rules")
+        self.assertEqual(sam.get(url("challenge_rules", challenge.pk)).status_code, 404)
+        self.assertEqual(sam.post(url("challenge_rule_save", challenge.pk), {
+            "activity": "bike", "points": "5", "per_units": "1"}).status_code, 404)
+        self.assertFalse(challenge.rules.filter(activity=ch.BIKE).exists())
+
+    def test_circle_owner_can_edit_a_challenge_they_did_not_create(self):
+        challenge = self.challenge(created_by=self.sister)
+        self.assertTrue(ch.can_edit_rules(self.me, challenge))
+        self.assertTrue(ch.can_edit_rules(self.sister, challenge))  # creator
+        self.client.post(url("challenge_rule_save", challenge.pk), {
+            "activity": "lift", "points": "3", "per_units": "1", "unit": "sessions", "daily_cap": "12"})
+        rule = challenge.rules.get(activity=ch.LIFT)
+        self.assertEqual((rule.points, rule.daily_cap, rule.unit), (D("3.00"), D("12.00"), "sessions"))
+
+    def test_outsider_gets_404_on_rules(self):
+        challenge = self.challenge()
+        other = self.as_user(self.outsider)
+        self.assertEqual(other.get(url("challenge_rules", challenge.pk)).status_code, 404)
+        self.assertEqual(other.post(url("challenge_rule_save", challenge.pk), {
+            "activity": "run", "points": "1", "per_units": "1"}).status_code, 404)
+
+    def test_editing_a_rule_recalculates_points_and_the_board(self):
+        challenge = self.challenge()
+        entry = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS, amount=8000)
+        self.assertEqual(entry.points, D("8.00"))
+        ch.set_rule(challenge, self.me, ch.STEPS, points="2", per_units="1000")
+        entry.refresh_from_db()
+        self.assertEqual(entry.points, D("16.00"))
+        self.assertEqual(ch.leaderboard(challenge)[0]["points"], D("16.00"))
+
+    def test_removing_a_rule_zeroes_those_entries_and_can_be_restored(self):
+        challenge = self.challenge()
+        ch.set_rule(challenge, self.me, ch.RUN, points="10", per_units="1")
+        run = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.RUN, amount="3")
+        steps = ch.log_entry(challenge, self.sister, day=self.today, activity_key=ch.STEPS, amount=1000)
+        self.client.post(url("challenge_rule_delete", challenge.pk), {"activity": "run"})
+        run.refresh_from_db()
+        steps.refresh_from_db()
+        self.assertFalse(challenge.rules.filter(activity=ch.RUN).exists())
+        self.assertEqual((run.points, steps.points), (D("0.00"), D("1.00")))
+        # The entry (and later a photo) stays, and adding the rule back scores it again.
+        ch.set_rule(challenge, self.me, ch.RUN, points="10", per_units="1")
+        run.refresh_from_db()
+        self.assertEqual(run.points, D("30.00"))
+
+    def test_the_last_rule_cannot_be_removed(self):
+        challenge = self.challenge()
+        with self.assertRaises(ch.ChallengeError):
+            ch.remove_rule(challenge, self.me, ch.STEPS)
+        self.assertTrue(challenge.rules.filter(activity=ch.STEPS).exists())
+        self.client.post(url("challenge_rule_delete", challenge.pk), {"activity": "steps"})
+        self.assertTrue(challenge.rules.filter(activity=ch.STEPS).exists())
+
+    def test_log_form_lists_only_activities_the_challenge_scores(self):
+        challenge = self.challenge()
+        page = self.client.get(url("challenge", challenge.pk))
+        self.assertContains(page, 'value="steps"')
+        self.assertNotContains(page, 'value="run"')
+        self.assertNotContains(page, 'value="bike"')
+        self.assertNotContains(page, 'value="lift"')
+        ch.set_rule(challenge, self.me, ch.RUN, points="10", per_units="1", unit="mi")
+        page = self.client.get(url("challenge", challenge.pk))
+        self.assertContains(page, ">Running (mi)<")
+        self.assertContains(page, 'value="run"')
+        self.assertContains(page, 'value="steps"')
+        self.assertNotContains(page, 'value="bike"')
+        self.assertNotContains(page, ">Biking")
+        self.assertNotContains(page, ">Lifting")
+
+
+class PhotoTests(Base):
+    def test_logging_with_a_photo_shows_it_in_the_feed(self):
+        challenge = self.challenge()
+        response = self.client.post(url("challenge_log", challenge.pk), {
+            "date": self.today.isoformat(), "activity": "steps", "amount": "5000",
+            "photo": _photo("walk.jpg", JPEG)})
+        self.assertEqual(response.status_code, 302)
+        entry = ChallengeEntry.objects.get(challenge=challenge, user=self.me)
+        self.assertEqual(entry.photo.content_type, "image/jpeg")
+        self.assertEqual(bytes(entry.photo.data), JPEG)
+        page = self.client.get(url("challenge", challenge.pk))
+        self.assertContains(page, url("challenge_photo", entry.pk))
+        image = self.client.get(url("challenge_photo", entry.pk))
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image["Content-Type"], "image/jpeg")
+        self.assertEqual(image["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(image.content, JPEG)
+        # A participant can see someone else's photo; an outsider cannot.
+        sam = self.as_user(self.sister)
+        self.assertEqual(sam.get(url("challenge_photo", entry.pk)).status_code, 200)
+        self.assertEqual(self.as_user(self.outsider).get(url("challenge_photo", entry.pk)).status_code, 404)
+
+    def test_a_non_image_or_oversized_file_is_refused_and_does_not_log(self):
+        challenge = self.challenge()
+        self.client.post(url("challenge_log", challenge.pk), {
+            "date": self.today.isoformat(), "activity": "steps", "amount": "1000",
+            "photo": _photo("note.txt", b"<html><script>alert(1)</script>", "text/plain")})
+        self.assertFalse(ChallengeEntry.objects.exists())
+        big = _photo("big.jpg", b"\xff\xd8\xff" + b"x" * ch.MAX_PHOTO_BYTES)
+        self.client.post(url("challenge_log", challenge.pk), {
+            "date": self.today.isoformat(), "activity": "steps", "amount": "1000", "photo": big})
+        self.assertFalse(ChallengeEntry.objects.exists())
+
+    def test_relogging_without_a_photo_keeps_the_existing_one(self):
+        challenge = self.challenge()
+        first = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS,
+                             amount=4000, photo=JPEG)
+        self.assertEqual(bytes(first.photo.data), JPEG)
+        second = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS, amount=9000)
+        self.assertEqual(first.pk, second.pk)
+        second.photo.refresh_from_db()
+        self.assertEqual(bytes(second.photo.data), JPEG)
+        # A new photo replaces the old bytes (content type follows the sniffed type, not the filename).
+        ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS,
+                     amount=9000, photo=_photo("shot.jpg", PNG, "image/jpeg"))
+        second.photo.refresh_from_db()
+        self.assertEqual(second.photo.content_type, "image/png")
+        self.assertEqual(bytes(second.photo.data), PNG)
+
+    def test_webp_is_accepted(self):
+        self.assertEqual(ch.sniff_image(WEBP), "image/webp")
+        challenge = self.challenge()
+        entry = ch.log_entry(challenge, self.me, day=self.today, activity_key=ch.STEPS,
+                             amount=1000, photo=WEBP)
+        self.assertEqual(entry.photo.content_type, "image/webp")
