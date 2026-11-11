@@ -39,7 +39,14 @@ def _day(value, default=None):
     try:
         return date.fromisoformat(value)
     except (TypeError, ValueError):
-        return default
+        pass
+    # <input type="month"> submits YYYY-MM; treat it as the first of that month.
+    if isinstance(value, str) and len(value) == 7 and value[4] == "-":
+        try:
+            return date(int(value[:4]), int(value[5:]), 1)
+        except ValueError:
+            pass
+    return default
 
 
 def _wants_json(request):
@@ -135,7 +142,8 @@ KIND_CHOICES = [("", "Tasks and events"), (ScheduleItem.TASK, "Tasks only"), (Sc
 
 
 def _frame(request, view, day, prev_day, next_day, title):
-    """What every view's header needs: the title, Today / arrows, View options (with its dot) and New item."""
+    """What every view's header needs: the title, Day / Week / Month (plain links that keep this date),
+    Today / arrows, a date (or month) jump, View options (with its dot) and New item."""
     o = _options(request)
     keep = _filter_params(o)
     query = urlencode(keep)
@@ -149,6 +157,10 @@ def _frame(request, view, day, prev_day, next_day, title):
         "view": view, "day": day, "today": planner.today(request.user), "title": title, "filters": o, "query": query,
         "tabs": [(v, v.title(), link(v, day)) for v in VIEWS],
         "prev_url": link(view, prev_day), "next_url": link(view, next_day), "today_url": link(view, None),
+        "view_path": reverse(f"albright_planner:{view}"),
+        "filter_pairs": list(keep.items()),
+        "jump_kind": "month" if view == "month" else "date",
+        "jump_value": f"{day.year:04d}-{day.month:02d}" if view == "month" else day.isoformat(),
         "here": here,
         "day_url": lambda d: link("day", d),
         "meals_toggle": meals_toggle,
@@ -692,7 +704,8 @@ def toggle_meals(request):
 @require_POST
 def view_options(request):
     """View options' Save: the filters and Show meals - stored for the account,
-    so they're the same on phone and computer - then the chosen view (remembered like any other visit)."""
+    so they're the same on phone and computer - then the current view (remembered like any other visit;
+    Day / Week / Month are switched on the main display, not in this panel)."""
     prefs = PlannerSettings.for_user(request.user)
     kind, who = request.POST.get("kind", ""), request.POST.get("who", "")
     prefs.filter_kind = kind if kind in (ScheduleItem.TASK, ScheduleItem.EVENT) else ""

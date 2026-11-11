@@ -5,7 +5,7 @@
 <div class="pl-week" id="pl-week">
     {% for d in days %}
     <section class="pl-col{% if d.is_today %} is-today{% endif %}" data-drop-date="{{ d.date|date:'Y-m-d' }}" aria-label="{{ d.date|date:'l, F j' }}">
-        <a href="{% url 'albright_planner:day' %}?date={{ d.date|date:'Y-m-d' }}{% if query %}&amp;{{ query }}{% endif %}" class="pl-col__head">
+        <a href="{% url 'albright_planner:day' %}?date={{ d.date|date:'Y-m-d' }}{% if query %}&amp;{{ query }}{% endif %}" class="pl-col__head" aria-label="{{ d.date|date:'l, F j' }}">
             <span class="pl-col__dow">{{ d.date|date:"D" }}</span> <span class="pl-col__num">{{ d.date|date:"j" }}</span>
         </a>
         <ul class="pl-list pl-col__top">{% for o in d.top %}{% include "albright_planner/_occ.html" with drag=True %}{% endfor %}</ul>

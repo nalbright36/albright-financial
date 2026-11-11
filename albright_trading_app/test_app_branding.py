@@ -76,7 +76,7 @@ class HeaderTests(TestCase):
             with self.subTest(app=app):
                 content = self.page(url_name)
                 self.assertIn(f'<body data-app="{app}">', content)
-                self.assertIn(f'<span class="navbar__app-name">{brand.split()[-1]}</span></a>', content)
+                self.assertIn(f'<span class="navbar__chip-name">{brand.split()[-1]}</span></span></a>', content)
                 self.assertRegex(content, rf"<title>([^<]* · )?{brand}</title>")
                 self.assertNotIn("Albright Financial", content)
                 self.assertNotIn("{#", content)   # no template comment leaking into the page
@@ -88,23 +88,32 @@ class HeaderTests(TestCase):
     def test_logo_mark_and_name(self, _outlook):
         content = self.page("albright_planner:day")
         brand = content.split('class="navbar__brand">', 1)[1].split("</a>", 1)[0]
-        self.assertEqual(brand, '<img src="/static/icons/logo-mark-white.png" alt="Albright" width="121" height="60" '
-                                'class="navbar__logo navbar__logo--on-dark"><img src="/static/icons/logo-mark-dark.png" '
-                                'alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light">'
-                                '<span class="navbar__app-name">Planner</span>')
+        # The logo, then the app chip: the launcher's icon for the app and its name.
+        self.assertTrue(brand.startswith('<img src="/static/icons/logo-mark-white.png" alt="Albright" width="121" height="60" '
+                                         'class="navbar__logo navbar__logo--on-dark"><img src="/static/icons/logo-mark-dark.png" '
+                                         'alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light">'
+                                         '<span class="navbar__chip"><svg '), brand)
+        self.assertIn('<rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/>', brand)     # the Planner icon
+        self.assertTrue(brand.endswith('<span class="navbar__chip-name">Planner</span></span>'), brand)
         self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)
         css = STYLE.read_text(encoding="utf-8")
         logo = css.split("\n.navbar__logo {", 1)[1].split("}", 1)[0]
-        for rule in ("height: 60px;", "width: auto;", "flex-shrink: 0;"):
+        for rule in ("height: 36px;", "width: auto;", "flex-shrink: 0;"):
             self.assertIn(rule, logo)
         self.assertNotIn("border-radius", logo)
         for rule in (':root[data-theme="light"] .navbar__logo--on-light { display: block; }',
                      ':root[data-theme="light"] .navbar__logo--on-dark { display: none; }',
                      ':root:not([data-theme]) .navbar__logo--on-light { display: block; }',
-                     ".navbar__logo { height: 44px; }"):
+                     ".navbar__logo { height: 30px; }"):
             self.assertIn(rule, css)
-        self.assertIn(".navbar__app-name { white-space: nowrap; }", css)
-        self.assertIn('<span class="navbar__app-name">Labs</span>', self.page("labs:hub"))
+        self.assertNotIn("navbar__app-name", css)
+        chip = css.split("\n.navbar__chip {", 1)[1].split("}", 1)[0]
+        for rule in ("background: var(--accent-soft);", "color: var(--accent);", "border-radius: 999px;",
+                     "padding: 4px 11px 4px 9px;", "gap: 6px;", "font-size: 13px;", "font-weight: 600;"):
+            self.assertIn(rule, chip)
+        self.assertIn(".navbar__chip svg { width: 16px; height: 16px; flex-shrink: 0; }", css)
+        self.assertIn("@media (max-width: 359px) {", css)                           # icon only on very narrow phones
+        self.assertIn('<span class="navbar__chip-name">Labs</span>', self.page("labs:hub"))
 
     def test_login_page_defaults_to_trading(self, _outlook):
         self.client.logout()

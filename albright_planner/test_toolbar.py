@@ -1,8 +1,9 @@
-"""The Planner's toolbar: only the date range, "‹ Today ›", View options and New item. View options (a dialog) holds
-the view, the filters, Show meals, the default sharing and a link to the settings page - Save stores them for the
-account and they apply on the next load, anywhere; a ?kind= / ?done= / ?who= / ?meals= link (and the live preview)
-overrides them without saving; its button's dot shows while something is filtered out. New item is a dialog with
-quick add first and "More options" bringing in the full form (new/?panel=1). Keys: D / W / M, T, N."""
+"""The Planner's toolbar: the date range, Day / Week / Month on the main display, "‹ Today ›", a date jump,
+View options and New item. View options (a dialog) holds the filters, Show meals, the default sharing and a link
+to the settings page - Save stores them for the account and they apply on the next load, anywhere; a ?kind= /
+?done= / ?who= / ?meals= link (and the live preview) overrides them without saving; its button's dot shows while
+something is filtered out. New item is a dialog with quick add first and "More options" bringing in the full form
+(new/?panel=1). Keys: D / W / M, T, N, Left / Right."""
 import pathlib
 import re
 
@@ -43,7 +44,10 @@ class ToolbarTests(Base):
             self.assertEqual(re.findall(r'<(?:a|button)\b[^>]*\bid="([^"]+)"', head),
                              ["pl-prev", "pl-today", "pl-next", "pl-options-btn", "pl-new"], name)
             self.assertIn('<h1 class="pl-title" id="pl-title">', head)
-            for gone in ("<select", "<form", 'type="checkbox"', "pl-tab", "Quick add", "Settings</a>", "Show meals"):
+            self.assertIn('id="pl-views"', head)
+            self.assertIn('id="pl-jump"', head)
+            self.assertIn(f'data-tab="{name}"', head)
+            for gone in ("<select", 'type="checkbox"', "pl-tab", "Quick add", "Settings</a>", "Show meals"):
                 self.assertNotIn(gone, head, name)
             self.assertIn("View options", head)
             self.assertIn("<svg", head.split('id="pl-options-btn"', 1)[1].split("</a>", 1)[0])    # the sliders icon
@@ -57,8 +61,9 @@ class ToolbarTests(Base):
         self.wife.save()
         options = dialog(self.client.get(url("day")).content.decode(), "pl-options")
         self.assertIn('action="/planner/view-options/"', options)
-        self.assertEqual(re.findall(r'name="view" value="(\w+)"', options), ["day", "week", "month"])
-        self.assertIn('name="view" value="day" data-url="/planner/day/?date=2026-11-04" checked', options)
+        self.assertNotIn('<legend class="pl-label">View</legend>', options)
+        self.assertNotRegex(options, r'<input type="radio" name="view"')
+        self.assertIn('type="hidden" name="view" value="day"', options)
         self.assertEqual(re.findall(r'<option value="(\w*)"[^>]*>(Tasks and events|Tasks only|Events only)</option>', options),
                          [("", "Tasks and events"), ("task", "Tasks only"), ("event", "Events only")])
         self.assertRegex(options, r'<span>Hide completed</span><input type="checkbox" name="hide_done" value="1" role="switch"')
@@ -88,13 +93,17 @@ class ToolbarTests(Base):
         self.assertIn("border-radius: 16px 16px 0 0;", phone[:200])
         self.assertIn("padding-bottom: calc(12px + env(safe-area-inset-bottom));", phone)
 
-    def test_phone_layout_two_lines_that_never_wrap(self):
+    def test_phone_layout_stacks_the_title_views_and_tools(self):
         css = static("albright_planner/planner.css")
+        self.assertIn(".pl-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }", css)
         self.assertIn(".pl-head__tools { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }", css)
-        phone = css[css.index("@media (max-width: 640px) {\n  .pl-head { flex-direction: column;"):]
-        self.assertIn(".pl-head { flex-direction: column; align-items: stretch; gap: 10px; }", phone)   # date range alone
+        phone = css[css.index("@media (max-width: 640px) {\n  .pl-head__top { flex-direction: column;"):]
+        self.assertIn(".pl-head__top { flex-direction: column; align-items: stretch; gap: 10px; }", phone)  # date range alone
+        self.assertIn(".pl-views a { min-height: 44px; }", phone)                   # Day / Week / Month: large tap targets
         self.assertIn(".pl-options-btn__text { position: absolute;", phone)        # View options: just its icon
         self.assertIn("@media (max-width: 380px) {", css)                          # 320px phones still fit
+        self.assertIn(".pl-nav__lbl { display: none; }", css)
+        self.assertIn("@media (min-width: 700px) {", css)                          # Prev / Next labels when there's room
 
 
 class ViewOptionsSaveTests(Base):
@@ -269,8 +278,77 @@ class KeyboardTests(Base):
         js = static("albright_planner/planner.js")
         keys = js[js.index("// ---------- Keys"):js.index("// ---------- The item form")]
         self.assertIn('views = {d: "day", w: "week", m: "month"}', keys)
+        self.assertIn("""document.querySelector('#pl-views a[data-tab="' + views[key] + '"]')""", keys)
         self.assertIn('key === "t"', keys)
         self.assertIn('key === "n"', keys)
+        self.assertIn('key === "arrowleft"', keys)
+        self.assertIn('key === "arrowright"', keys)
         self.assertIn('event.target.closest("input, textarea, select, [contenteditable]")', keys)   # not while typing
         self.assertIn('document.querySelector("dialog[open]")', keys)                # nor with a dialog open
         self.assertIn("event.metaKey || event.ctrlKey || event.altKey", keys)
+
+
+class ViewSwitchTests(Base):
+    def test_day_week_month_live_on_the_main_display(self):
+        for name in ("day", "week", "month"):
+            head = bar(self.client.get(url(name)).content.decode())
+            nav = head[head.index('id="pl-views"'):head.index("</nav>")]
+            self.assertEqual(re.findall(r'data-tab="(\w+)"', nav), ["day", "week", "month"], name)
+            self.assertRegex(nav, rf'aria-current="page" data-tab="{name}"')
+            self.assertNotIn('name="view"', head)
+            options = dialog(self.client.get(url(name)).content.decode(), "pl-options")
+            self.assertNotIn('<legend class="pl-label">View</legend>', options)
+            self.assertNotRegex(options, r'<input type="radio" name="view"')
+
+    def test_switching_views_keeps_the_date_and_remembers_the_choice(self):
+        head = bar(self.client.get(url("day") + "?date=2026-11-12").content.decode())
+        nav = head[head.index('id="pl-views"'):head.index("</nav>")]
+        self.assertIn('href="/planner/week/?date=2026-11-12"', nav)
+        self.assertIn('href="/planner/month/?date=2026-11-12"', nav)
+        self.assertIn('href="/planner/day/?date=2026-11-12"', nav)
+        response = self.client.get(url("week") + "?date=2026-11-12")
+        self.assertEqual(response.cookies["planner_view"].value, "week")
+        page = response.content.decode()
+        self.assertIn('id="pl-title">Nov 9 – 15, 2026</h1>', page)          # the week that contains Nov 12
+        self.assertRedirects(self.client.get(url("home")), url("week"), fetch_redirect_response=False)
+        month = self.client.get(url("month") + "?date=2026-11-12").content.decode()
+        self.assertIn('id="pl-title">November 2026</h1>', month)
+
+    def test_a_filter_override_is_kept_on_the_view_links(self):
+        head = bar(self.client.get(url("day") + "?date=2026-11-12&kind=task").content.decode())
+        nav = head[head.index('id="pl-views"'):head.index("</nav>")]
+        self.assertIn("/planner/week/?date=2026-11-12&amp;kind=task", nav)
+
+    def test_jump_date_and_month(self):
+        week = bar(self.client.get(url("week") + "?date=2026-12-15").content.decode())
+        self.assertIn('id="pl-title">Dec 14 – 20, 2026</h1>', self.client.get(url("week") + "?date=2026-12-15").content.decode())
+        self.assertIn('id="pl-jump"', week)
+        self.assertIn('action="/planner/week/"', week)
+        self.assertIn('type="date" name="date" id="pl-jump-date"', week)
+        self.assertIn('value="2026-12-15"', week)
+        self.assertIn('class="pl-btn pl-nojs">Go</button>', week)
+        month = bar(self.client.get(url("month") + "?date=2026-12").content.decode())
+        self.assertIn('id="pl-title">December 2026</h1>', self.client.get(url("month") + "?date=2026-12").content.decode())
+        self.assertIn('type="month" name="date" id="pl-jump-date"', month)
+        self.assertIn('value="2026-12"', month)
+        fallback = self.client.get(url("month") + "?date=nope").content.decode()
+        self.assertIn('id="pl-title">November 2026</h1>', fallback)         # today
+
+    def test_jump_keeps_a_filter_override(self):
+        week = bar(self.client.get(url("week") + "?date=2026-11-12&kind=task").content.decode())
+        jump = week[week.index('id="pl-jump"'):week.index("</form>", week.index('id="pl-jump"'))]
+        self.assertIn('type="hidden" name="kind" value="task"', jump)
+
+    def test_week_and_month_day_headers_open_that_day(self):
+        week = self.client.get(url("week") + "?date=2026-11-12").content.decode()
+        self.assertRegex(week, r'href="/planner/day/\?date=2026-11-12(?:&amp;[^"]*)?" class="pl-col__head"')
+        month = self.client.get(url("month") + "?date=2026-11-12").content.decode()
+        self.assertIn('href="/planner/day/?date=2026-11-12" class="pl-cell__num"', month)
+
+    def test_the_script_submits_the_jump(self):
+        js = static("albright_planner/planner.js")
+        self.assertIn('jumpInput.addEventListener("change", function () { if (jumpInput.value) jumpForm.submit(); })', js)
+        self.assertNotIn("touchstart", js)   # site rule: don't block the iOS edge swipe (test_app_nav)
+        self.assertNotIn("touchmove", js)
+        self.assertNotIn("touchend", js)
+

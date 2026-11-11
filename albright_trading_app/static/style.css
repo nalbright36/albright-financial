@@ -484,29 +484,30 @@ a:hover { color: var(--accent-hover); }
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-6);   /* a little less above and below: the 60px logo sets the height */
+  padding: var(--space-2) var(--space-6);   /* a little less above and below */
   min-height: 56px;
 }
 
+/* The brand ("App chip"): the logo, then a pill with the current app's icon and name, all one link to the Home
+   app picker. */
 .navbar__brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 12px;
   white-space: nowrap;   /* never wraps or shrinks - the nav collapses into "Menu" instead */
   flex-shrink: 0;
-  font-size: var(--text-md);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
+  text-decoration: none;
 }
+.navbar__brand:hover { text-decoration: none; }
 /* The logo mark, transparent (484x240): white on the dark theme, dark on the light theme. Both are in
    the brand link; the theme shows one (display: none also hides the other from screen readers). With
    no data-theme yet, the system setting decides - dark is the site's default. */
 .navbar__logo {
   display: block;
-  height: 60px;
+  height: 36px;
   width: auto;
   flex-shrink: 0;
+  background: none;
 }
 .navbar__logo--on-light { display: none; }
 @media (prefers-color-scheme: light) {
@@ -517,7 +518,30 @@ a:hover { color: var(--accent-hover); }
 :root[data-theme="light"] .navbar__logo--on-dark { display: none; }
 :root[data-theme="dark"] .navbar__logo--on-light { display: none; }
 :root[data-theme="dark"] .navbar__logo--on-dark { display: block; }
-.navbar__app-name { white-space: nowrap; }
+/* The chip: the app's soft tint behind its accent (text and icon). In light mode the text is a deeper shade of
+   the accent - the plain accent on the tint drops under 4.5:1 for most apps (Trading 2.8:1, Fitness 3.8:1);
+   this keeps every app at 5:1 or more. */
+.navbar__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+[data-theme="light"] .navbar__chip { color: color-mix(in srgb, var(--accent-hover) 85%, #000); }
+.navbar__chip svg { width: 16px; height: 16px; flex-shrink: 0; }
+/* Very narrow phones: the icon only; the name stays as its accessible label. */
+@media (max-width: 359px) {
+  .navbar__chip { padding: 5px; }
+  .navbar__chip-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 
 .navbar__links {
   display: flex;
@@ -1243,7 +1267,7 @@ tr.scanner-detail td {
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .navbar__main-row { padding: var(--space-2) var(--space-4); }
-  .navbar__logo { height: 44px; }
+  .navbar__logo { height: 30px; }
   /* Phones: always collapsed (index.html's fit check) - a hamburger, not "Menu". */
   .navbar__toggle { padding: 4px 6px; border-color: transparent; background: none; }
   .navbar__toggle-bars { display: flex; }

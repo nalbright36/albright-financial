@@ -96,7 +96,7 @@ class LauncherTilesTests(Base):
         self.assertNotIn('id="app-launcher"', week)
         self.assertNotIn("Switch app", week)
         self.assertIn('id="theme-toggle"', week)                       # the rest of the header is still there
-        self.assertIn('<span class="navbar__app-name">Meals</span></a>', week)
+        self.assertIn('<span class="navbar__chip-name">Meals</span></span></a>', week)
         self.assertIn('id="nav-account-link"', week)
         # Two apps, one of them hidden: still something to switch to.
         self.set_pref(allowed_apps=["meals", "trade"], visible_apps=["meals"], app_order=["meals", "trade"])
@@ -306,7 +306,7 @@ class LauncherRenderingTests(Base):
                     self.assertRegex(svg, r'\swidth="\d+"')
                     self.assertRegex(svg, r'\sheight="\d+"')
                 self.assertIn('<svg width="16" height="16" viewBox="0 0 16 16"', nav)   # the 3x3 grid icon
-                self.assertEqual(nav.count('<svg width="19" height="19"'), 10)       # one per tile
+                self.assertEqual(nav.count('<svg width="19" height="19"'), 10 + 1)   # one per tile, plus the brand chip's
 
     def test_css_and_js_are_on_every_page_with_the_header(self):
         for url in self.app_pages():

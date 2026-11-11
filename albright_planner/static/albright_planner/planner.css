@@ -76,26 +76,63 @@ html.js .pl .pl-nojs { display: none; }
 .pl input[type="radio"]:checked::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-contrast); }
 .pl input[type="checkbox"]:focus-visible, .pl input[type="radio"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ---------- Header: the date range; "‹ Today ›", View options (its dot: something is filtered out), New item ----------
-   Phones: the date range on its own line, the controls on one line under it (View options as just its icon). */
-.pl-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 16px; }
+/* ---------- Header: the date range, Day / Week / Month, a date jump, "‹ Today ›",
+   View options (its dot: something is filtered out), New item ----------
+   Phones: the date range, then the view switch and jump, then the controls on one line
+   (View options as just its icon). The tools row still never wraps, including at 320px. */
+.pl-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.pl-head__top { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
 .pl-title { margin: 0; font-size: 1.375rem; font-weight: 700; min-width: 0; }
+.pl-head__switch { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 16rem; justify-content: flex-end; }
+.pl-views { display: flex; gap: 2px; padding: 3px; flex: 1 1 auto; min-width: 0; max-width: 22rem;
+  border-radius: 11px; background: var(--surface-hover); border: 1px solid var(--pl-line); }
+.pl-views a { display: flex; align-items: center; justify-content: center; flex: 1 1 0; min-width: 0; min-height: 36px;
+  padding: 4px 8px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; color: var(--pl-muted);
+  text-align: center; line-height: 1.2; text-decoration: none; }
+.pl-views a:hover { text-decoration: none; color: var(--text-primary); }
+.pl-views a.is-current { background: var(--surface); color: var(--text-primary);
+  box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.pl-views a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pl-jump { display: flex; align-items: center; gap: 6px; margin: 0; flex-shrink: 0; }
+.pl .pl-jump input[type="date"], .pl .pl-jump input[type="month"] {
+  -webkit-appearance: auto; appearance: auto; width: 10.5rem; min-width: 0; min-height: 38px;
+  padding: 6px 8px; font-size: 0.875rem; font-variant-numeric: tabular-nums; color-scheme: inherit;
+}
+.pl-jump input[type="date"]::-webkit-calendar-picker-indicator,
+.pl-jump input[type="month"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 1; }
 .pl-head__tools { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-.pl-head__actions { display: flex; align-items: center; gap: 8px; }
-.pl-nav { display: flex; gap: 6px; }
+.pl-head__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.pl-nav { display: flex; align-items: center; gap: 6px; }
+.pl-nav__lbl { display: none; }
 .pl .pl-options-btn { position: relative; }
 .pl .pl-options-btn svg { flex-shrink: 0; color: var(--pl-muted); }
 .pl-options-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 6px var(--accent-ring); }
+@media (min-width: 700px) {
+  .pl .pl-nav .pl-btn--icon { width: auto; padding: 0 10px; gap: 2px; }
+  .pl-nav__lbl { display: inline; font-size: 0.8125rem; font-weight: 500; }
+}
 @media (max-width: 640px) {
-  .pl-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .pl-head__top { flex-direction: column; align-items: stretch; gap: 10px; }
+  .pl-head__switch { flex: 0 0 auto; justify-content: flex-start; }
+  .pl-views { max-width: none; }
+  .pl-views a { min-height: 44px; }
+  .pl .pl-jump input[type="date"], .pl .pl-jump input[type="month"] {
+    width: 44px; min-width: 44px; min-height: 44px; padding: 0; font-size: 0;
+  }
+  .pl-jump input[type="date"]::-webkit-calendar-picker-indicator,
+  .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
+    width: 100%; height: 100%; margin: 0; opacity: 1;
+  }
   .pl-head__tools { justify-content: space-between; }
   .pl .pl-options-btn { width: 40px; padding: 0; }
   .pl-options-btn__text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .pl-col__head { min-height: 44px; align-items: center; }
+  .pl-cell__num { min-width: 36px; height: 36px; }
 }
 /* The smallest phones (320px): a little less space between and inside the buttons, so they still fit on one line. */
 @media (max-width: 380px) {
-  .pl-head__tools, .pl-head__actions { gap: 6px; }
+  .pl-head__tools, .pl-head__actions, .pl-head__switch { gap: 6px; }
   .pl-nav { gap: 4px; }
   .pl .pl-head__tools .pl-btn { padding-left: 10px; padding-right: 10px; }
   .pl .pl-head__tools .pl-btn--icon { width: 34px; padding: 0; }
@@ -126,7 +163,7 @@ html.js .pl .pl-nojs { display: none; }
   font-size: 0.9375rem; cursor: pointer; }
 .pl-opt--switch > span { display: inline-flex; align-items: center; gap: 8px; }
 .pl-opt-link { align-self: flex-start; font-size: 0.875rem; font-weight: 600; color: var(--accent); }
-/* Segmented choices (View, Whose items): radios under the labels. */
+/* Segmented choices (Whose items, and Day / Week / Month on the main display): radios under the labels, or links. */
 .pl-seg { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-hover); border: 1px solid var(--pl-line); }
 .pl-seg__item { position: relative; flex: 1 1 0; min-width: 0; cursor: pointer; }
 .pl .pl-seg__item input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; cursor: pointer; }

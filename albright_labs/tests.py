@@ -108,7 +108,7 @@ class HomeTests(TestCase):
         page = response.content.decode()
         self.assertEqual(home_tiles(page), ["trade", "resell", "opps", "meals", "notes", "planner", "money", "fitness"])
         self.assertIn('<body data-app="labs">', page)
-        self.assertIn('<span class="navbar__app-name">Labs</span></a>', page)
+        self.assertIn('<span class="navbar__chip-name">Labs</span></span></a>', page)
         self.assertEqual(self.client.get(reverse("labs:hub")).status_code, 200)
 
     def test_admin_tile_for_superusers_only(self):
@@ -253,7 +253,7 @@ class HeaderTests(TestCase):
             for url, brand in ((reverse("trading_home"), "Albright Trading"),
                                (reverse("albright_reselling_app:dashboard"), "Albright Reselling"),
                                (reverse("albright_crypto_app:inbox"), "Albright Opportunities")):
-                self.assertIn(f'<span class="navbar__app-name">{brand.split()[-1]}</span></a>', self.client.get(url).content.decode())
+                self.assertIn(f'<span class="navbar__chip-name">{brand.split()[-1]}</span></span></a>', self.client.get(url).content.decode())
 
     def test_hub_and_resume_visits_never_change_the_last_app_cookie(self):
         self.client.get(reverse("albright_crypto_app:inbox"))

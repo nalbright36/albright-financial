@@ -1,20 +1,33 @@
 {% comment %}
-Every Planner view's header: the date range on the left; on the right "‹ Today ›", View options and New item.
+Every Planner view's header: the date range, a Day / Week / Month switch (plain links that keep this
+date and take effect at once), "‹ Today ›", a date jump (a month jump in Month view), View options and New item.
 Everything else lives in two dialogs (planner.js; bottom sheets on phones):
-  View options  the view, the filters (Show, Hide completed, Whose items), Show meals and the default sharing for
+  View options  the filters (Show, Hide completed, Whose items), Show meals and the default sharing for
                 new items - they apply live while it's open; Save stores them for the account (views.view_options),
                 Cancel puts the page back. Its button carries a dot while something is filtered out (views.is_filtered).
   New item      quick add first; "More options" brings the full form in below it (new/?panel=1).
-Without JavaScript the buttons are plain links: the Planner settings page and the New item page.
-Keys (desktop): D / W / M switch views, T today, N New item.
+Without JavaScript the view switch and the arrows are plain links, the jump form has a Go button, and the
+dialog buttons are links to the Planner settings page and the New item page.
+Keys (desktop): D / W / M switch views, T today, N New item, Left / Right previous or next.
 {% endcomment %}
 <div class="pl-head" id="pl-head">
-    <h1 class="pl-title" id="pl-title">{{ title }}</h1>
+    <div class="pl-head__top">
+        <h1 class="pl-title" id="pl-title">{{ title }}</h1>
+        <div class="pl-head__switch">
+            <nav class="pl-views" id="pl-views" aria-label="Calendar view">{% for key, label, url in tabs %}<a href="{{ url }}"{% if key == view %} class="is-current" aria-current="page"{% endif %} data-tab="{{ key }}">{{ label }}</a>{% endfor %}</nav>
+            <form method="get" action="{{ view_path }}" class="pl-jump" id="pl-jump">
+                {% for key, value in filter_pairs %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+                <label for="pl-jump-date" class="visually-hidden">{% if jump_kind == "month" %}Go to month{% else %}Go to date{% endif %}</label>
+                <input type="{{ jump_kind }}" name="date" id="pl-jump-date" class="pl-input" value="{{ jump_value }}" autocomplete="off">
+                <button type="submit" class="pl-btn pl-nojs">Go</button>
+            </form>
+        </div>
+    </div>
     <div class="pl-head__tools">
         <div class="pl-nav">
-            <a href="{{ prev_url }}" class="pl-btn pl-btn--icon" id="pl-prev" aria-label="Previous {{ view }}">&lsaquo;</a>
+            <a href="{{ prev_url }}" class="pl-btn pl-btn--icon" id="pl-prev" aria-label="Previous {{ view }}" title="Previous {{ view }}">&lsaquo;<span class="pl-nav__lbl">Prev</span></a>
             <a href="{{ today_url }}" class="pl-btn" id="pl-today">Today</a>
-            <a href="{{ next_url }}" class="pl-btn pl-btn--icon" id="pl-next" aria-label="Next {{ view }}">&rsaquo;</a>
+            <a href="{{ next_url }}" class="pl-btn pl-btn--icon" id="pl-next" aria-label="Next {{ view }}" title="Next {{ view }}"><span class="pl-nav__lbl">Next</span>&rsaquo;</a>
         </div>
         <div class="pl-head__actions">
             <a href="{% url 'albright_planner:settings' %}" class="pl-btn pl-options-btn" id="pl-options-btn" aria-haspopup="dialog" aria-controls="pl-options">
@@ -29,15 +42,12 @@ Keys (desktop): D / W / M switch views, T today, N New item.
     <dialog class="pl-sheet" id="pl-options" aria-labelledby="pl-options-h">
         <form method="post" action="{% url 'albright_planner:view_options' %}" class="pl-sheet__frame" id="pl-options-form">{% csrf_token %}
             <input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}">
+            <input type="hidden" name="view" value="{{ view }}">
             <div class="pl-sheet__head">
                 <h2 class="pl-sheet__title" id="pl-options-h">View options</h2>
                 <button type="button" class="pl-sheet__close" data-options-cancel aria-label="Cancel">&times;</button>
             </div>
             <div class="pl-sheet__body">
-                <fieldset class="pl-opt">
-                    <legend class="pl-label">View</legend>
-                    <div class="pl-seg">{% for key, label, url in tabs %}<label class="pl-seg__item"><input type="radio" name="view" value="{{ key }}" data-url="{{ url }}"{% if key == view %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div>
-                </fieldset>
                 <div class="pl-opt">
                     <label for="pl-opt-kind" class="pl-label">Show</label>
                     <select name="kind" id="pl-opt-kind" class="pl-input pl-select">{% for value, label in kind_choices %}<option value="{{ value }}"{% if filters.kind == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>

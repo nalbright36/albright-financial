@@ -41,7 +41,7 @@
         <nav class="navbar">
             <div class="navbar__main-row">
                 {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). #}
-                <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__app-name">{{ app_label|default:"Trading" }}</span></a>
+                <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__chip">{% include "_app_icon.html" with key=current_app_key %}<span class="navbar__chip-name">{{ app_label|default:"Trading" }}</span></span></a>
 
                 {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
                 <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">

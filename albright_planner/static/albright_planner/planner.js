@@ -9,12 +9,14 @@
  *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through.
  *               In Home's Today panel a checked-off task leaves the list at once with "Done · Undo" (or, with
  *               "Show completed tasks" on, drops to the bottom struck through); the count line follows.
- *   toolbar     the date range, "‹ Today ›", View options and New item. View options (a <dialog>; a bottom sheet
- *               on phones): the view, the filters, Show meals and default sharing apply live while it's open (the
- *               page underneath is fetched with them), Save posts them to the account, Cancel / Esc / the
- *               backdrop put the page back; its button's dot shows while something is filtered out. New item: a
- *               <dialog> with quick add first and "More options" bringing in the full form (new/?panel=1).
- *               Keys: D / W / M switch views, T today, N New item (not while typing or with a dialog open).
+ *   toolbar     the date range, Day / Week / Month (plain links that keep the date), "‹ Today ›", a date jump,
+ *               View options and New item. View options (a <dialog>; a bottom sheet on phones): the filters,
+ *               Show meals and default sharing apply live while it's open (the page underneath is fetched with
+ *               them), Save posts them to the account, Cancel / Esc / the backdrop put the page back; its button's
+ *               dot shows while something is filtered out. New item: a <dialog> with quick add first and "More
+ *               options" bringing in the full form (new/?panel=1). The jump form submits on change (a Go button
+ *               without JS). Keys: D / W / M switch views, T today, N New item, Left / Right previous or next
+ *               (not while typing or with a dialog open).
  *   Week        drag an item onto another day; a repeating one asks "This occurrence only / This and
  *               following / All occurrences" first
  *   the form    shows only the repeat fields that apply, reads the choice back in plain English, and ties
@@ -483,8 +485,8 @@
                   (meals && !meals.checked));
     }
     function previewUrl() {
-        var view = optionsForm.querySelector("input[name=view]:checked");
-        var url = new URL(view.getAttribute("data-url"), window.location.origin);
+        var tab = document.querySelector("#pl-views a[aria-current='page']");
+        var url = new URL((tab && tab.getAttribute("href")) || window.location.href, window.location.origin);
         url.searchParams.set("kind", optionsForm.elements.kind.value);
         url.searchParams.set("done", optionsForm.elements.hide_done.checked ? "0" : "1");
         url.searchParams.set("who", chosen("who"));
@@ -595,21 +597,38 @@
         });
     }
 
-    // ---------- Keys (desktop): D / W / M views, T today, N New item ----------
+    // ---------- Date jump: submit on change (the Go button is there without JS) ----------
+    var jumpForm = document.getElementById("pl-jump"), jumpInput = document.getElementById("pl-jump-date");
+    if (jumpForm && jumpInput) {
+        jumpInput.addEventListener("change", function () { if (jumpInput.value) jumpForm.submit(); });
+    }
+
+    function goNav(id) {
+        var el = document.getElementById(id);
+        if (el && el.getAttribute("href")) window.location.href = el.getAttribute("href");
+    }
+
+    // ---------- Keys (desktop): D / W / M views, T today, N New item, Left / Right prev / next ----------
     document.addEventListener("keydown", function (event) {
-        if (!head || !optionsForm || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+        if (!head || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
         if (event.target.closest && event.target.closest("input, textarea, select, [contenteditable]")) return;
         if (document.querySelector("dialog[open]")) return;
         var key = (event.key || "").toLowerCase(), views = {d: "day", w: "week", m: "month"};
         if (views[key]) {
-            var radio = optionsForm.querySelector('input[name=view][value="' + views[key] + '"]');
-            if (radio && !radio.checked) { event.preventDefault(); window.location.href = radio.getAttribute("data-url"); }
+            var tab = document.querySelector('#pl-views a[data-tab="' + views[key] + '"]');
+            if (tab && tab.getAttribute("aria-current") !== "page") { event.preventDefault(); window.location.href = tab.getAttribute("href"); }
         } else if (key === "t") {
             event.preventDefault();
-            window.location.href = document.getElementById("pl-today").getAttribute("href");
+            goNav("pl-today");
         } else if (key === "n") {
             event.preventDefault();
             openNew();
+        } else if (key === "arrowleft") {
+            event.preventDefault();
+            goNav("pl-prev");
+        } else if (key === "arrowright") {
+            event.preventDefault();
+            goNav("pl-next");
         }
     });
 
