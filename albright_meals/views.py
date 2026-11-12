@@ -1,4 +1,4 @@
-"""Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes (mine, shared with me, the library).
+"""Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes (mine, shared with me, the library), Eat out.
 Everything belongs to a space - someone's Personal space or a circle's (scope.py, which asks albright_labs.circles).
 Each page shows one space (the switcher; ?space=<id>, remembered); changing something works in any space you see, and
 anything in a space you don't see is a 404 (Meals access itself is checked first - albright_labs.app_access). A
@@ -24,7 +24,7 @@ from django.views.decorators.http import require_POST
 from albright_labs import circles, sharing
 from albright_labs.models import ShareGrant
 
-from . import groceries, importer, plan, recipe_nutrition, scope, signals
+from . import eatout, groceries, importer, plan, recipe_nutrition, scope, signals
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
 from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
@@ -839,3 +839,73 @@ def recipe_nutrition_manual(request, pk):
     recipe_nutrition.set_manual(obj, values, request.user)
     messages.success(request, "Saved the nutrition per serving.")
     return redirect("albright_meals:recipe", pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# Eat out (idea #78)
+# ---------------------------------------------------------------------------
+
+def _eatout_json(request):
+    """Body of a JSON POST, or an empty dict if it isn't JSON."""
+    import json
+    try:
+        data = json.loads(request.body.decode() or "{}")
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+@login_required
+@scope.space_required
+def eat_out(request):
+    """Guided questions and a ranked shortlist of nearby places (F1). A GET
+    form; a down Overpass or geocode API never fails the page."""
+    filters = eatout.filters_from_get(request.GET)
+    loc, loc_error, home, current, redirect_to = eatout.resolve_location(request.user, request.GET)
+    if redirect_to:
+        params = eatout.filter_params(
+            filters,
+            eatout.Location(redirect_to["label"], redirect_to["lat"], redirect_to["lon"], "typed"),
+        )
+        return redirect(f"{reverse('albright_meals:eat_out')}?{urlencode(params)}")
+    result = eatout.search(loc, filters, request.user)
+    pick = eatout.pick_index(result.places, request.GET.get("pick"))
+    next_pick = (pick % len(result.places) + 1) if result.places else 0
+    return render(request, "albright_meals/eatout.html", {
+        "filters": filters,
+        "loc": loc,
+        "loc_error": loc_error,
+        "loc_caption": eatout.source_caption(loc.source) if loc else "",
+        "home": home,
+        "current": current,
+        "places": result.places,
+        "offline": result.offline,
+        "offline_message": result.offline_message,
+        "empty_message": result.empty_message,
+        "attribution": result.attribution,
+        "steps": eatout.steps_done(filters),
+        "summary": eatout.summary_text(filters),
+        "pick": pick,
+        "next_pick": next_pick,
+        "qs": eatout.query_string(filters, loc),
+        "pick_qs": eatout.query_string(filters, loc, pick or 1),
+        "next_pick_qs": eatout.query_string(filters, loc, next_pick),
+        "budget_note": bool(filters.budget),
+        "cravings": eatout.CRAVINGS,
+        "budgets": eatout.BUDGETS,
+        "distances": eatout.DISTANCES,
+        "modes": eatout.MODES,
+        "weather_auto": eatout.weather_follows_device(request.user),
+        "location_url": reverse("albright_meals:eat_out_location"),
+    })
+
+
+@login_required
+@require_POST
+def eat_out_location(request):
+    """The browser's rough coordinates, saved onto PlannerSettings.weather_auto_*
+    the same way Planner weather already does. Lives under /meals/ so a
+    Meals-only account can reach it."""
+    body = _eatout_json(request)
+    payload, status = eatout.set_current_location(request.user, body.get("lat"), body.get("lon"))
+    return JsonResponse(payload, status=status)

@@ -1,0 +1,145 @@
+{% extends "index.html" %}
+{% load static cache_bust %}
+{% block page_title %}Eat out · {% endblock %}
+{% block app_head %}<link rel="stylesheet" href="{% static_version 'meals/eatout.css' %}">{% endblock %}
+{% block content %}
+{% comment %}
+Eat out (idea #78, layout F1): a short GET questionnaire on the left (stacked
+on a phone) and a ranked shortlist on the right. Works without JavaScript;
+eatout.js auto-submits chips and posts a rough GPS fix the same way Planner
+weather does. Save to try is deferred (idea #21).
+{% endcomment %}
+<div class="container meals-page eo-page eo eo--wizard"{% if weather_auto %} data-eo-auto="1" data-eo-location-url="{{ location_url }}"{% endif %}>
+{% csrf_token %}
+{% include "albright_labs/_space_switch.html" %}
+    {% include "albright_meals/_notices.html" %}
+
+    <div class="eo-head">
+      <div>
+        <h1 class="eo-head__title">Eat out</h1>
+        <p class="eo-head__sub">Answer a few questions. We’ll rank a short list.</p>
+      </div>
+    </div>
+
+    <div class="card eo-loc">
+      <span class="eo-loc__pin"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.4c-2.5 0-4.5 1.95-4.5 4.4 0 3.3 4.5 8.5 4.5 8.5s4.5-5.2 4.5-8.5c0-2.45-2-4.4-4.5-4.4z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="5.7" r="1.5" fill="currentColor"/></svg></span>
+      <div>
+        <div class="eo-loc__label">{% if loc %}{{ loc.label }}{% else %}No place set{% endif %}</div>
+        <div class="eo-loc__how">{% if loc_caption %}{{ loc_caption }}{% elif weather_auto %}Waiting for current location — or type a place.{% else %}Type a place, or use Home if you have one on Planner.{% endif %}</div>
+      </div>
+      <details class="eo-loc__change"{% if loc_error %} open{% endif %}>
+        <summary class="btn btn-secondary btn-sm">Change</summary>
+        <form method="get" action="{% url 'albright_meals:eat_out' %}" class="eo-loc__form">
+          {% for craving in filters.cravings %}<input type="hidden" name="craving" value="{{ craving }}">{% endfor %}
+          {% if filters.other %}<input type="hidden" name="other" value="{{ filters.other }}">{% endif %}
+          {% if filters.budget %}<input type="hidden" name="budget" value="{{ filters.budget }}">{% endif %}
+          <input type="hidden" name="far" value="{{ filters.far }}">
+          <input type="hidden" name="mode" value="{{ filters.mode }}">
+          <input type="hidden" name="open" value="{% if filters.open_now %}1{% else %}0{% endif %}">
+          <div class="field">
+            <label for="eo-q">City or address</label>
+            <input type="text" name="q" id="eo-q" class="ledger-input" value="{{ request.GET.q|default:'' }}" placeholder="City, or lat, lon" maxlength="200" autocomplete="off">
+          </div>
+          <div class="eo-loc__actions">
+            <button type="submit" class="btn btn-primary btn-sm">Use this place</button>
+            {% if current %}<button type="submit" name="src" value="current" class="btn btn-secondary btn-sm">Use current location</button>{% endif %}
+            {% if home %}<button type="submit" name="src" value="home" class="btn btn-secondary btn-sm">Use Home</button>{% endif %}
+          </div>
+          {% if loc_error %}<p class="field-error">{{ loc_error }}</p>{% endif %}
+        </form>
+      </details>
+    </div>
+
+    <div class="eo-split">
+
+    <form method="get" action="{% url 'albright_meals:eat_out' %}" class="card eo-wizard-card" id="eo-form">
+      {% if loc and loc.source == 'typed' %}
+      <input type="hidden" name="lat" value="{{ loc.lat }}">
+      <input type="hidden" name="lon" value="{{ loc.lon }}">
+      <input type="hidden" name="label" value="{{ loc.label }}">
+      {% elif loc and loc.source == 'current' or loc and loc.source == 'home' %}
+      <input type="hidden" name="src" value="{{ loc.source }}">
+      {% endif %}
+      <div class="eo-steps" aria-label="Progress">{% for done in steps %}<span{% if done %} class="is-done"{% endif %}></span>{% endfor %}</div>
+      <p class="eo-head__sub" style="margin-bottom: var(--space-4);">A few quick taps, then a short list.</p>
+      <div class="eo-q">
+        <span class="eo-q__label" id="eo-craving-label">What are you craving?</span>
+        <div class="eo-chips" role="group" aria-labelledby="eo-craving-label">
+          {% for key, label in cravings %}
+          <label class="eo-chip"><input type="checkbox" name="craving" value="{{ key }}"{% if key in filters.cravings %} checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+        <label for="eo-other" class="visually-hidden">Or type a cuisine</label>
+        <input type="text" name="other" id="eo-other" class="ledger-input eo-other" value="{{ filters.other }}" placeholder="Or type a cuisine" maxlength="80" autocomplete="off">
+      </div>
+      <div class="eo-q">
+        <span class="eo-q__label" id="eo-budget-label">Budget</span>
+        <div class="eo-chips" role="group" aria-labelledby="eo-budget-label">
+          {% for key, label in budgets %}
+          <label class="eo-chip"><input type="radio" name="budget" value="{{ key }}"{% if filters.budget == key %} checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="eo-q">
+        <span class="eo-q__label" id="eo-far-label">How far?</span>
+        <div class="eo-chips" role="group" aria-labelledby="eo-far-label">
+          {% for key, label in distances %}
+          <label class="eo-chip"><input type="radio" name="far" value="{{ key }}"{% if filters.far == key %} checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="eo-q">
+        <span class="eo-q__label" id="eo-mode-label">Dine-in or takeout?</span>
+        <div class="eo-chips" role="group" aria-labelledby="eo-mode-label">
+          {% for key, label in modes %}
+          <label class="eo-chip"><input type="radio" name="mode" value="{{ key }}"{% if filters.mode == key %} checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="eo-q">
+        <input type="hidden" name="open" value="0">
+        <label class="eo-toggle"><input type="checkbox" name="open" value="1"{% if filters.open_now %} checked{% endif %}><span class="eo-toggle__box" aria-hidden="true"></span> Open now</label>
+      </div>
+      <button type="submit" class="btn btn-primary eo-find">Find places</button>
+    </form>
+
+    <div>
+      <div class="eo-list-head">
+        <div>
+          <h2>{% if places %}{{ places|length }} place{{ places|length|pluralize }}, ranked{% elif offline %}Places unavailable{% elif loc %}No matches{% else %}Set a place to begin{% endif %}</h2>
+          <p>{% if loc %}{{ summary }}{% else %}Current location, Home, or a city you type.{% endif %}</p>
+        </div>
+        {% if places %}<a href="?{{ pick_qs }}#eo-pick" class="btn btn-primary">{% if pick %}Pick again{% else %}Pick for me{% endif %}</a>{% endif %}
+      </div>
+      {% if budget_note %}<p class="eo-note">Prices aren’t listed on these places, so budget isn’t used to rank them yet.</p>{% endif %}
+      {% if offline %}<p class="eo-note eo-note--warn">{{ offline_message }}</p>{% endif %}
+      {% if empty_message and not offline %}<p class="eo-note">{{ empty_message }}</p>{% endif %}
+      {% if not loc %}<p class="eo-note">Add a place to see what’s nearby. Type a city, or allow current location — the same one Planner weather uses.</p>{% endif %}
+      <div class="eo-list">
+        {% for place in places %}
+        <article class="card eo-place{% if pick == forloop.counter %} is-pick{% endif %}"{% if pick == forloop.counter %} id="eo-pick"{% endif %}>
+          <span class="eo-place__rank">{{ forloop.counter }}</span>
+          <div>
+            <h3 class="eo-place__name">{{ place.name }}</h3>
+            <p class="eo-place__meta">{% if place.cuisine_label %}{{ place.cuisine_label }}{% endif %}{% if place.cuisine_label and place.style %} · {% endif %}{% if place.style %}{{ place.style }}{% endif %}{% if place.address %}{% if place.cuisine_label or place.style %} · {% endif %}{{ place.address }}{% endif %}</p>
+            {% if place.why %}<p class="eo-place__why">{{ place.why }}</p>{% endif %}
+            <div class="eo-place__stats">
+              <span class="eo-stat">{{ place.distance_label }}</span>
+              <span class="eo-stat{% if place.open_state == 'open' %} eo-stat--open{% elif place.open_state == 'closed' %} eo-stat--closed{% endif %}">{{ place.hours_label }}</span>
+            </div>
+          </div>
+          <div class="eo-place__actions">
+            <a href="{{ place.directions_url }}" class="btn {% if pick == forloop.counter %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" target="_blank" rel="noopener noreferrer">{% if pick == forloop.counter %}I’ll go here{% else %}Choose{% endif %}</a>
+            <a href="{{ place.map_url }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">Map</a>
+            {% if pick == forloop.counter and next_pick %}<a href="?{{ next_pick_qs }}#eo-pick" class="btn btn-secondary btn-sm">Not this — pick again</a>{% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% if loc or places or offline %}<p class="eo-attr">{{ attribution }}</p>{% endif %}
+    </div>
+
+    </div>
+</div>
+{% endblock %}
+{% block app_scripts %}<script src="{% static_version 'meals/eatout.js' %}" defer></script>{% endblock %}
