@@ -264,7 +264,7 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
   display: flex; flex-direction: column; gap: 6px; }
 .pl-col.is-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); }
 .pl-col.is-drop { background: var(--accent-soft); border-style: dashed; }
-.pl-col__head { display: flex; align-items: baseline; gap: 6px; text-decoration: none; color: var(--text-primary); padding: 0 2px; }
+.pl-col__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; text-decoration: none; color: var(--text-primary); padding: 0 2px; }
 .pl-col__dow { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--pl-muted); }
 .pl-col__num { font-size: 1.125rem; font-weight: 700; }
 .pl-col.is-today .pl-col__num { color: var(--accent); }
@@ -272,7 +272,10 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl-col .pl-item { padding: 0 6px 0 8px; column-gap: 6px; font-size: 0.8125rem; }
 .pl-col .pl-item__body { gap: 5px; }
 .pl-col .pl-ind { gap: 5px; }
-.pl-col .pl-ind__text, .pl-col .pl-time__ampm { display: none; }
+.pl-col .pl-ind__text, .pl-col .pl-time__ampm, .pl-col .pl-item .pl-wx__low { display: none; }
+.pl-col__head .pl-wx { width: 100%; margin: 1px 0 2px; font-size: 0.6875rem; gap: 3px; }
+.pl-col__head .pl-wx__low { color: var(--pl-muted); font-weight: 400; }
+.pl-col .pl-item .pl-wx { font-size: 0.6875rem; gap: 3px; }
 .pl-col .pl-cl-toggle { padding: 0 3px; }
 .pl-col .pl-item__cl { margin-left: 4px !important; }
 @media (min-width: 900px) {
@@ -434,3 +437,17 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl-cl-edit__btn:hover { color: var(--text-primary); border-color: var(--accent); }
 .pl-cl-edit__row:last-child .pl-cl-edit__btn { visibility: hidden; }       /* the empty "Add an item" line */
 @media (max-width: 480px) { .pl-cl-edit__btn[data-cl-move] { display: none; } }   /* phones: drag, or retype */
+
+/* ---------- Weather (Open-Meteo daily forecast on Day and Week) ---------- */
+.pl-wx { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;
+  font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-secondary); line-height: 1; }
+.pl-wx__icon { display: inline-flex; color: var(--text-primary); }
+.pl-wx__icon svg, .pl-wx__pin svg { display: block; }
+.pl-wx__pin { display: inline-flex; color: var(--pl-muted); }
+.pl-wx__temps { letter-spacing: -0.01em; }
+.pl-wx__low { font-weight: 500; color: var(--pl-muted); }
+.pl-wx__label { font-weight: 500; }
+.pl-wx__place { font-weight: 500; color: var(--pl-muted); }
+.pl-wx.is-rich { font-size: 0.9375rem; gap: 6px; color: var(--text-primary); }
+.pl-wx.is-rich .pl-wx__icon svg { width: 20px; height: 20px; }
+.pl-day-wx { display: flex; align-items: center; gap: 8px; margin: -6px 0 16px; min-height: 28px; }

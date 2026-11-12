@@ -2,6 +2,7 @@
 {% block page_title %}{{ title }} · {% endblock %}
 {% block planner %}
 {% include "albright_planner/_toolbar.html" %}
+{% if day_weather %}<p class="pl-day-wx" id="pl-day-wx">{% include "albright_planner/_weather.html" with wx=day_weather place=weather_place show_label=True show_place=True %}</p>{% endif %}
 <div class="pl-day" id="pl-day">
     {% if overdue %}
     <section class="pl-section pl-section--overdue" aria-labelledby="pl-overdue-h">

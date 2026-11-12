@@ -80,6 +80,11 @@ class ScheduleItem(models.Model):
     start_time = models.TimeField(null=True, blank=True)          # empty = all day
     end_time = models.TimeField(null=True, blank=True)
     timezone = models.CharField(max_length=64, default=DEFAULT_TIMEZONE)
+    # Optional place this item happens when it isn't at the viewer's home (PlannerSettings.weather_*).
+    # Empty: Day and Week use the viewer's home forecast. The label is the geocoded name.
+    location_label = models.CharField(max_length=200, blank=True)
+    location_lat = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    location_lon = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
     checkable = models.BooleanField(default=True)                 # tasks always; events if you like
     priority = models.CharField(max_length=6, choices=PRIORITIES, default="none")
     color = models.CharField(max_length=7, blank=True)            # "#84CC16", or blank for the app's accent
@@ -200,8 +205,9 @@ class ItemException(models.Model):
 
 
 class PlannerSettings(models.Model):
-    """Per-user Planner preferences: the Meals overlay, which apps may add items (sources.SOURCES), and the views'
-    saved filters (View options - the same on every device; a link's ?kind= / ?done= / ?who= still overrides)."""
+    """Per-user Planner preferences: the Meals overlay, which apps may add items (sources.SOURCES), the views'
+    saved filters (View options - the same on every device; a link's ?kind= / ?done= / ?who= still overrides),
+    and the home location used for weather (empty: weather is hidden unless an item has its own place)."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="planner_settings")
     show_meals = models.BooleanField(default=True)
     filter_kind = models.CharField(max_length=10, blank=True, default="")     # "" | "task" | "event"
@@ -216,6 +222,11 @@ class PlannerSettings(models.Model):
     # it follows the browser (base.html posts the browser's zone to planner/timezone/); off: the one set here.
     timezone = models.CharField(max_length=64, default=DEFAULT_TIMEZONE)
     auto_timezone = models.BooleanField(default=True)
+    # Home location for Day/Week forecasts. Empty (no lat/lon): no home weather; an item with its
+    # own location still shows one. The label is the geocoded name; lat/lon are what we fetch with.
+    weather_label = models.CharField(max_length=200, blank=True)
+    weather_lat = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    weather_lon = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
 
     @classmethod
     def for_user(cls, user):

@@ -48,6 +48,13 @@ source off takes its items off the Planner; a deleted item never comes back.
             <label class="pl-field" for="pl-timezone-name">Time zone (used when the box above is off)</label>
             <input type="text" name="timezone" id="pl-timezone-name" class="pl-input" value="{{ prefs.timezone }}" maxlength="64" placeholder="America/Denver" autocomplete="off" spellcheck="false">
         </fieldset>
+        <fieldset class="pl-fieldset" id="pl-weather">
+            <legend class="pl-section__title">Weather</legend>
+            <p class="pl-help">Forecasts on Day and Week come from this location, unless an item has its own. Leave empty to hide them. Forecasts cover about the next 16 days, in °F.</p>
+            <label class="pl-field" for="pl-weather-location">Home location</label>
+            <input type="text" name="weather_location" id="pl-weather-location" class="pl-input" value="{{ prefs.weather_label }}" maxlength="200" placeholder="Lone Tree, CO" autocomplete="off" spellcheck="false">
+            <span class="pl-help">A city, a ZIP code, or coordinates like 39.54, -104.88.</span>
+        </fieldset>
         <div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">Save</button></div>
     </form>
 </div>

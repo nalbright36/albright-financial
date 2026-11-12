@@ -16,6 +16,7 @@ editor). It posts to the page that rendered it.
             <div class="pl-field">{{ form.start_time.label_tag }}{{ form.start_time }}<span class="pl-help">{{ form.start_time.help_text }}</span>{% for e in form.start_time.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
             <div class="pl-field">{{ form.end_time.label_tag }}{{ form.end_time }}{% for e in form.end_time.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
         </div>
+        <div class="pl-field" id="pl-location-field">{{ form.location.label_tag }}{{ form.location }}<span class="pl-help">{{ form.location.help_text }}</span>{% for e in form.location.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
 
         <div class="pl-repeat" id="pl-repeat">
             <div class="pl-field">{{ form.repeat.label_tag }}{{ form.repeat }}</div>

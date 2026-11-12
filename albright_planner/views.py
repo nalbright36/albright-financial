@@ -26,7 +26,7 @@ from django.views.decorators.http import require_POST
 
 from albright_labs import sharing
 
-from . import checklist, planner, quickadd, recurrence, sources
+from . import checklist, planner, quickadd, recurrence, sources, weather
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
 from .models import NOTES_MAX, PlannerSettings, ScheduleItem, home_zone
 
@@ -240,6 +240,7 @@ def day_view(request):
     meals = sources.meals(request.user, day, day, show=_options(request)["meals"])
     top = meals + top
     overdue = overdue_occs
+    day_wx = weather.attach(request.user, occs + overdue_occs, [day])
     first = min([FIRST_HOUR] + [o.start_time.hour for o in timed])
     last = max([LAST_HOUR] + [o.start_time.hour for o in timed])
     hours = [{"hour": h, "label": datetime(2000, 1, 1, h).strftime("%I %p").lstrip("0"),
@@ -247,7 +248,8 @@ def day_view(request):
     context = _frame(request, "day", day, day - timedelta(days=1), day + timedelta(days=1),
                      f"{day:%A, %B} {day.day}" + (f", {day.year}" if day.year != today.year else ""))
     context.update({"top": top, "hours": hours, "overdue": overdue, "is_today": day == today,
-                    "empty": not (occs or overdue or meals)})
+                    "empty": not (occs or overdue or meals),
+                    "day_weather": day_wx.get(day), "weather_place": weather.home_label(request.user)})
     return _remember(render(request, "albright_planner/day.html", context), "day")
 
 
@@ -269,14 +271,16 @@ def week_view(request):
                            if not (start <= o.date <= end)]
         if overdue_outside:
             checklist.attach(overdue_outside)
+    week_days = [start + timedelta(days=i) for i in range(7)]
+    home_wx = weather.attach(request.user, list(occs) + overdue_outside, week_days)
     days = []
-    for i in range(7):
-        d = start + timedelta(days=i)
+    for d in week_days:
         top, timed = _split([o for o in occs if o.date == d])
         if d == today and overdue_outside:
             top = overdue_outside + top
         top = [m for m in meals if m.date == d] + top
-        days.append({"date": d, "top": top, "timed": timed, "is_today": d == today})
+        days.append({"date": d, "top": top, "timed": timed, "is_today": d == today,
+                     "weather": home_wx.get(d)})
     title = f"{start:%b} {start.day} – " + (f"{end.day}" if end.month == start.month else f"{end:%b} {end.day}") + f", {end.year}"
     context = _frame(request, "week", day, day - timedelta(days=7), day + timedelta(days=7), title)
     context["days"] = days
@@ -407,6 +411,7 @@ def view_item(request, pk):
         occurrence = planner.current_or_first(item)
     back = _next(request)
     occ = planner.occurrence_for(item, occurrence, request.user)
+    weather.attach(request.user, [occ], [occ.date])
     can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
     rows = checklist.occurrence_rows(item, occurrence)
     shared_with = planner.shared_names(item) if is_owner else []
@@ -456,7 +461,10 @@ def edit_item(request, pk):
         occurrence = planner.current_or_first(item)
     can_edit, is_owner = item.can_edit(request.user), item.owner_id == request.user.pk
     viewer = planner.user_zone(request.user)
-    form = ItemForm(request.POST or None, initial=ItemForm.initial_for(item, occurrence, viewer), show_scope=item.repeats)
+    saved_place = ((item.location_label, item.location_lat, item.location_lon)
+                   if item.location_lat is not None else None)
+    form = ItemForm(request.POST or None, initial=ItemForm.initial_for(item, occurrence, viewer),
+                    show_scope=item.repeats, saved_place=saved_place)
     if request.method == "POST":
         if not can_edit:
             raise Http404
@@ -784,6 +792,27 @@ def _real_zone(name):
     return True
 
 
+def _save_weather(request, prefs):
+    """Apply the home-location field on a settings POST. Returns an error string, or
+    None. Missing field (older tests, a stale form): leave what's stored alone."""
+    if "weather_location" not in request.POST:
+        return None
+    raw = request.POST.get("weather_location", "").strip()[:200]
+    if not raw:
+        prefs.weather_label, prefs.weather_lat, prefs.weather_lon = "", None, None
+        return None
+    if weather.same_place(prefs.weather_label, prefs.weather_lat, prefs.weather_lon, raw):
+        return None
+    try:
+        found = weather.geocode(raw)
+    except weather.LookupDown:
+        return "Couldn't look up that place right now - try again in a moment."
+    if not found:
+        return "Couldn't find that place - try a city and state, like Lone Tree, CO."
+    prefs.weather_label, prefs.weather_lat, prefs.weather_lon = found["label"], found["lat"], found["lon"]
+    return None
+
+
 @login_required
 def settings_view(request):
     prefs = PlannerSettings.for_user(request.user)
@@ -805,10 +834,14 @@ def settings_view(request):
                 prefs.timezone = zone_name
             else:
                 messages.error(request, f"“{zone_name}” isn't a time zone - try one like America/Denver.")
+        weather_error = _save_weather(request, prefs)
         prefs.save(update_fields=["sources_on", "show_meals", "complete_when_checklist_done", "auto_timezone",
-                                  "timezone"])
+                                  "timezone", "weather_label", "weather_lat", "weather_lon"])
         sources.sync(request.user)              # the only place source items are added or updated
-        messages.success(request, "Planner settings saved.")
+        if weather_error:
+            messages.error(request, weather_error)
+        else:
+            messages.success(request, "Planner settings saved.")
         return redirect("albright_planner:settings")
     return render(request, "albright_planner/settings.html", {
         "sources": [{"source": s, "on": prefs.source_on(s.key)} for s in available], "prefs": prefs,

@@ -441,7 +441,7 @@ def _toggle_one_at_a_time(item, occurrence_date, user, done):
 
 def _apply(item, changes):
     for name in ("title", "notes", "kind", "start_time", "end_time", "checkable", "priority", "color",
-                 "repeat_from_completion"):
+                 "repeat_from_completion", "location_label", "location_lat", "location_lon"):
         if name in changes:
             setattr(item, name, changes[name])
     if item.kind == ScheduleItem.TASK:
@@ -462,7 +462,8 @@ def _set_rule(item, changes, moved_from=None):
 
 def change(item, occurrence_date, scope, changes):
     """Edit or move an item. changes: any of title, notes, kind, date (the occurrence's new day), start_time,
-    end_time, checkable, priority, color, and (for a series) recurrence / recurrence_until / recurrence_count.
+    end_time, checkable, priority, color, location_label / location_lat / location_lon,
+    and (for a series) recurrence / recurrence_until / recurrence_count.
     Returns the item now holding that occurrence. A new title, day or time on a shared item shows in others'
     activity."""
     before = (item.title, occurrence_date, item.start_time, item.end_time)

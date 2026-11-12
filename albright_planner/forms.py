@@ -45,10 +45,17 @@ class ItemForm(forms.Form):
                   "Tasks that never end show one at a time either way.")
     scope = forms.ChoiceField(choices=SCOPES, initial="this", widget=forms.RadioSelect, required=False,
                               label="Apply this change to")
+    location = forms.CharField(
+        required=False, max_length=200, label="Location",
+        help_text="Leave empty to use your home location (Planner settings). For a trip, or anything that isn't at home.")
 
-    def __init__(self, *args, show_scope=False, **kwargs):
+    def __init__(self, *args, show_scope=False, saved_place=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.show_scope = show_scope
+        # saved_place: (label, lat, lon) already on the item, so an unchanged
+        # field doesn't geocode again. self.place is set in clean_location.
+        self.saved_place = saved_place
+        self.place = saved_place or ("", None, None)
         for name, field in self.fields.items():
             if not isinstance(field.widget, (forms.RadioSelect, forms.CheckboxSelectMultiple, forms.CheckboxInput)):
                 field.widget.attrs.setdefault("class", "pl-input")
@@ -81,7 +88,27 @@ class ItemForm(forms.Form):
             "month_day": rule["month_day"], "nth": rule["nth"], "nth_weekday": rule["nth_weekday"],
             "ends": "on" if item.recurrence_until else "after" if item.recurrence_count else "never",
             "until": item.recurrence_until, "count": item.recurrence_count, "scope": "this",
+            "location": item.location_label,
         }
+
+    def clean_location(self):
+        raw = (self.cleaned_data.get("location") or "").strip()
+        if not raw:
+            self.place = ("", None, None)
+            return ""
+        saved = self.saved_place
+        if saved and saved[1] is not None and raw == saved[0]:
+            self.place = saved
+            return saved[0]
+        from . import weather
+        try:
+            found = weather.geocode(raw)
+        except weather.LookupDown:
+            raise forms.ValidationError("Couldn't look up that place right now - try again in a moment.")
+        if not found:
+            raise forms.ValidationError("Couldn't find that place - try a city and state, like Lone Tree, CO.")
+        self.place = (found["label"], found["lat"], found["lon"])
+        return found["label"]
 
     def clean(self):
         data = super().clean()
@@ -117,6 +144,9 @@ class ItemForm(forms.Form):
             "recurrence_count": d.get("count") if rule and d.get("ends") == "after" else None,
             "repeat_from_completion": bool(rule and kind == ScheduleItem.TASK and d.get("ends") == "never"
                                            and d.get("repeat_from_completion")),
+            "location_label": (self.place[0] if self.place else "") or "",
+            "location_lat": self.place[1] if self.place else None,
+            "location_lon": self.place[2] if self.place else None,
         }
 
 
