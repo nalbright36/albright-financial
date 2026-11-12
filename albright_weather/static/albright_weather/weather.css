@@ -1,0 +1,209 @@
+/* Albright Weather: B1 dashboard grid on desktop, B2 single column on phones,
+   B4 place chips across the top. Cyan accent comes from body[data-app="weather"]. */
+.wx {
+  --wx-rain: #2563EB;
+  --wx-rain-soft: color-mix(in srgb, #2563EB 16%, transparent);
+  display: grid;
+  gap: 16px;
+  padding-top: 16px;
+  padding-bottom: 40px;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "messages"
+    "chips"
+    "alerts"
+    "hero"
+    "details"
+    "hourly"
+    "outlook"
+    "radar"
+    "tropics";
+}
+[data-theme="dark"] .wx {
+  --wx-rain: #7DD3FC;
+  --wx-rain-soft: color-mix(in srgb, #7DD3FC 20%, transparent);
+}
+.wx > .wx-messages { grid-area: messages; }
+.wx > .wx-chips { grid-area: chips; }
+.wx > .wx-alerts { grid-area: alerts; }
+.wx > .wx-hero { grid-area: hero; }
+.wx > .wx-details { grid-area: details; }
+.wx > .wx-hourly { grid-area: hourly; }
+.wx > .wx-outlook { grid-area: outlook; }
+.wx > .wx-radar { grid-area: radar; }
+.wx > .wx-tropics { grid-area: tropics; }
+.wx > .wx-empty { grid-area: hero; }
+
+.wx h1, .wx h2 { margin: 0 0 8px; }
+.wx h1 { font-size: 1.25rem; font-weight: 700; }
+.wx h2 { font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.01em; }
+.wx .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+}
+.wx-muted { color: var(--text-secondary); margin: 0; }
+.wx-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.wx-icon { display: inline-flex; color: var(--text-primary); flex-shrink: 0; }
+.wx-icon svg { display: block; }
+.wx-icon--lg svg { width: 36px; height: 36px; }
+
+.wx-messages { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wx-messages__item {
+  padding: 8px 12px; border-radius: 8px; font-size: 0.875rem;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.wx-messages__item.is-error { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: var(--red-bg); }
+
+/* Place chips — a horizontal row, never stretch to full width. */
+.wx-chips {
+  display: flex; align-items: center; gap: 8px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.wx-chip-wrap { display: flex; align-items: center; flex: 0 0 auto; width: auto; position: relative; }
+.wx-chip {
+  display: inline-flex; align-items: center; width: auto; flex: 0 0 auto;
+  padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-primary); font: inherit; font-size: 0.875rem; font-weight: 600;
+  text-decoration: none; white-space: nowrap; cursor: pointer;
+}
+.wx-chip:hover { background: var(--surface-hover); }
+.wx-chip.is-active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+}
+.wx-chip--add { color: var(--text-secondary); border-style: dashed; }
+.wx-chip__remove-form { margin: 0 0 0 -12px; }
+.wx-chip__remove {
+  width: 22px; height: 22px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-secondary); cursor: pointer;
+  font-size: 16px; line-height: 1;
+}
+.wx-chip__remove:hover { color: var(--red); background: var(--red-bg); }
+.wx-add { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.wx-add[hidden] { display: none; }
+.wx-add input[type="text"] {
+  min-width: 160px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-primary);
+  font: inherit; font-size: 0.875rem;
+}
+
+.wx-alerts { display: grid; gap: 8px; }
+.wx-alert {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; border-radius: var(--radius-md, 12px);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+  background: var(--amber-bg); color: var(--text-primary);
+  font-size: 0.8125rem; line-height: 1.4;
+}
+.wx-alert__icon {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--amber); color: #1C1917; font-weight: 800; font-size: 12px;
+  margin-top: 1px;
+}
+.wx-alert strong { display: block; font-weight: 700; }
+.wx-alert__when { display: block; font-weight: 600; margin: 1px 0 2px; }
+.wx-alert__body { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+.wx-hero__now { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-top: 8px; }
+.wx-hero__temp { display: flex; align-items: center; gap: 10px; }
+.wx-hero__deg { font-size: 4rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+.wx-hero__meta { display: grid; gap: 2px; font-size: 0.9375rem; color: var(--text-secondary); }
+.wx-hero__cond { margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--text-primary); }
+.wx-hero__hl, .wx-hero__wind { margin: 0; }
+.wx-hero__place p { margin: 4px 0 0; font-size: 0.8125rem; }
+
+.wx-details {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.wx-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wx-stat__label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.wx-stat__value { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); }
+.wx-stat__note { font-size: 0.75rem; color: var(--text-secondary); }
+.is-aqi-good { color: var(--emerald); }
+.is-aqi-moderate { color: var(--amber); }
+.is-aqi-usg, .is-aqi-unhealthy, .is-aqi-very, .is-aqi-hazardous { color: var(--red); }
+
+.wx-chart { width: 100%; overflow: hidden; }
+.wx-chart__svg { width: 100%; height: auto; max-height: 240px; display: block; }
+.wx-chart__bg { fill: transparent; }
+.wx-chart__rain { fill: var(--wx-rain-soft); stroke: none; }
+.wx-chart__temp { stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.wx-chart__dot { fill: var(--accent); }
+.wx-chart__axis { fill: var(--text-tertiary, var(--text-secondary)); font-size: 11px; font-family: inherit; }
+.wx-chart__wind { fill: var(--text-tertiary, var(--text-secondary)); font-size: 9px; font-family: inherit; }
+.wx-chart__legend { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 0.75rem; color: var(--text-secondary); }
+.wx-chart__swatch { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+.wx-chart__swatch.is-temp { background: var(--accent); }
+.wx-chart__swatch.is-rain { height: 10px; background: var(--wx-rain-soft); }
+
+.wx-outlook__list { list-style: none; margin: 0; padding: 0; display: grid; }
+.wx-day {
+  display: grid;
+  grid-template-columns: 3.2rem 1.25rem minmax(0, 1.1fr) 2.4rem 2.2rem minmax(4rem, 1.4fr) 2.2rem;
+  align-items: center; gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+.wx-day:first-child { border-top: 0; }
+.wx-day.is-today { font-weight: 700; }
+.wx-day__name { font-weight: 600; }
+.wx-day__cond { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-pop { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.wx-pop.is-likely { color: var(--wx-rain); font-weight: 700; }
+.wx-day__low { text-align: right; color: var(--text-secondary); }
+.wx-day__high { text-align: right; font-weight: 700; }
+.wx-day__bar {
+  position: relative; height: 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 80%, var(--surface));
+}
+.wx-day__range {
+  position: absolute; top: 0; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, #38BDF8), var(--accent));
+}
+
+.wx-radar__links, .wx-tropics__links { margin: 8px 0 0; padding: 0; }
+.wx-tropics__links { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.wx-tropics__links a, .wx-radar__links a { font-weight: 600; }
+.wx-empty p { margin: 8px 0 0; color: var(--text-secondary); }
+
+@media (min-width: 900px) {
+  .wx {
+    grid-template-columns: 1.2fr 0.8fr;
+    grid-template-areas:
+      "messages messages"
+      "chips chips"
+      "alerts alerts"
+      "hero hero"
+      "details details"
+      "hourly outlook"
+      "radar tropics";
+    align-items: start;
+  }
+  .wx-outlook { min-height: 100%; }
+}
+
+@media (max-width: 899px) {
+  .wx-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wx-stat:last-child { grid-column: 1 / -1; }
+  .wx-hero__deg { font-size: 3.25rem; }
+}
+
+@media (max-width: 640px) {
+  .wx { gap: 12px; padding-top: 12px; }
+  .wx .card { padding: 14px 14px; }
+  .wx-day {
+    grid-template-columns: 2.8rem 1.1rem minmax(0, 1fr) 2.2rem 2rem minmax(3rem, 1.1fr) 2rem;
+    gap: 6px;
+  }
+  .wx-day__cond { display: none; }
+}

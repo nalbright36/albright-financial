@@ -99,6 +99,11 @@ def fitness(user):
     return status_line(user)
 
 
+def weather(user):
+    from albright_weather.services import launcher_line
+    return launcher_line(user)
+
+
 def admin(user):
     from albright_control import jobs
     problems = sum(1 for row in jobs.health_rows() if row["status"] in ("failing", "late"))
@@ -106,7 +111,7 @@ def admin(user):
 
 
 LINES = {"trade": trade, "resell": resell, "opps": opps, "meals": meals, "notes": notes, "planner": planner, "money": money,
-         "fitness": fitness, "admin": admin}
+         "fitness": fitness, "weather": weather, "admin": admin}
 
 
 def _line(key, user):

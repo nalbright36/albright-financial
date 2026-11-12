@@ -123,6 +123,12 @@ def fitness(user):
             "tone": "" if planned and done >= planned else ""}
 
 
+def weather(user):
+    """Current temperature and conditions at Home or Current location."""
+    from albright_weather.services import tile_line
+    return tile_line(user)
+
+
 def admin(user):
     """Scheduled jobs that are late or failing (Admin > System health)."""
     from albright_control import jobs

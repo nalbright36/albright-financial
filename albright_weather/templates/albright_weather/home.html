@@ -1,0 +1,141 @@
+{% extends "albright_weather/base.html" %}
+{% block page_title %}{% if chosen %}{{ chosen.label }} · {% endif %}Weather · {% endblock %}
+{% block content %}
+<div class="container wx" id="weather">
+    {% if messages %}
+    <ul class="wx-messages">
+        {% for message in messages %}
+        <li class="wx-messages__item{% if message.tags %} is-{{ message.tags }}{% endif %}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="wx-chips" role="tablist" aria-label="Places">
+        {% for chip in chips %}
+        <div class="wx-chip-wrap">
+            <a href="{{ chip.href }}" class="wx-chip{% if chip.selected %} is-active{% endif %}"{% if chip.selected %} aria-current="page"{% endif %}>{{ chip.label }}</a>
+            {% if chip.removable %}
+            <form method="post" action="{% url 'albright_weather:place_remove' chip.pk %}" class="wx-chip__remove-form">
+                {% csrf_token %}
+                <button type="submit" class="wx-chip__remove" aria-label="Remove {{ chip.label }}">&times;</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="button" class="wx-chip wx-chip--add" id="wx-add-open">+ Place</button>
+        <form method="post" action="{% url 'albright_weather:place_add' %}" class="wx-add" id="wx-add" hidden>
+            {% csrf_token %}
+            <label class="visually-hidden" for="wx-add-q">City or coordinates</label>
+            <input id="wx-add-q" type="text" name="q" placeholder="City or lat, lon" maxlength="200" required>
+            <button type="submit" class="btn btn-primary btn-sm">Add</button>
+        </form>
+    </div>
+
+    {% if not chosen %}
+    <section class="wx-empty card">
+        <h1>Weather</h1>
+        <p>Set a Home location in <a href="{% url 'albright_planner:settings' %}">Planner settings</a>, or add a place above. The Weather app always shows, even when weather is turned off on the Planner.</p>
+    </section>
+    {% else %}
+
+    {% if alerts %}
+    <div class="wx-alerts" aria-label="Active alerts">
+        {% for alert in alerts %}
+        <div class="wx-alert">
+            <span class="wx-alert__icon" aria-hidden="true">!</span>
+            <div>
+                <strong>{{ alert.event }}</strong>
+                {% if alert.onset or alert.ends %}
+                <span class="wx-alert__when">{% if alert.onset %}{{ alert.onset }}{% endif %}{% if alert.onset and alert.ends %} – {% endif %}{% if alert.ends %}{{ alert.ends }}{% endif %}</span>
+                {% endif %}
+                {% if alert.headline %}<p class="wx-alert__body">{{ alert.headline }}</p>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <section class="wx-hero card" aria-label="Current conditions">
+        <div class="wx-hero__place">
+            <h1>{{ chosen.label }}</h1>
+            {% if now_display %}<p class="wx-muted">{{ now_display }}</p>{% endif %}
+        </div>
+        {% if current %}
+        <div class="wx-hero__now">
+            <div class="wx-hero__temp">
+                <span class="wx-icon wx-icon--lg">{% include "albright_planner/_weather_icon.html" with icon=current.icon %}</span>
+                <span class="wx-hero__deg wx-num">{% if current.temp is not None %}{{ current.temp }}°{% else %}—{% endif %}</span>
+            </div>
+            <div class="wx-hero__meta">
+                <p class="wx-hero__cond">{{ current.label }}</p>
+                {% if current.feels is not None %}<p>Feels like <span class="wx-num">{{ current.feels }}°</span></p>{% endif %}
+                <p class="wx-hero__hl">{% if current.high is not None %}H<span class="wx-num">{{ current.high }}°</span>{% endif %}{% if current.low is not None %} <span class="wx-muted">L<span class="wx-num">{{ current.low }}°</span></span>{% endif %}</p>
+                <p class="wx-hero__wind">{% if current.wind is not None %}<span class="wx-num">{{ current.wind }}</span> mph{% if current.wind_dir %} {{ current.wind_dir }}{% endif %}{% endif %}{% if current.humidity is not None %} · <span class="wx-num">{{ current.humidity }}%</span> humidity{% endif %}</p>
+            </div>
+        </div>
+        {% elif offline %}
+        <p class="wx-muted">The forecast isn’t available right now. Try again in a bit.</p>
+        {% else %}
+        <p class="wx-muted">No current conditions for this place yet.</p>
+        {% endif %}
+    </section>
+
+    {% if details %}
+    <section class="wx-details" aria-label="Details">
+        <div class="wx-stat card"><span class="wx-stat__label">UV index</span><span class="wx-stat__value wx-num">{% if details.uv is not None %}{{ details.uv }}{% else %}—{% endif %}</span><span class="wx-stat__note">{{ details.uv_label }}</span></div>
+        <div class="wx-stat card"><span class="wx-stat__label">Dew point</span><span class="wx-stat__value wx-num">{% if details.dew is not None %}{{ details.dew }}°{% else %}—{% endif %}</span><span class="wx-stat__note">Fahrenheit</span></div>
+        <div class="wx-stat card"><span class="wx-stat__label">Pressure</span><span class="wx-stat__value wx-num">{% if details.pressure is not None %}{{ details.pressure }}{% else %}—{% endif %}</span><span class="wx-stat__note">{% if details.pressure is not None %}inHg{% endif %}</span></div>
+        <div class="wx-stat card"><span class="wx-stat__label">Sun</span><span class="wx-stat__value">{% if details.sunrise %}{{ details.sunrise }}{% else %}—{% endif %}</span><span class="wx-stat__note">{% if details.sunset %}Sunset {{ details.sunset }}{% endif %}</span></div>
+        <div class="wx-stat card"><span class="wx-stat__label">Air quality</span><span class="wx-stat__value wx-num{% if details.aqi_tone %} is-aqi-{{ details.aqi_tone }}{% endif %}">{% if details.aqi is not None %}{{ details.aqi }}{% else %}—{% endif %}</span><span class="wx-stat__note">{{ details.aqi_label }}</span></div>
+    </section>
+    {% endif %}
+
+    <section class="wx-hourly card" aria-label="Hourly forecast">
+        <h2>Hourly</h2>
+        {% if chart %}
+        <div class="wx-chart">{{ chart }}</div>
+        <p class="wx-chart__legend"><span class="wx-chart__swatch is-temp"></span> Temperature (°F) <span class="wx-chart__swatch is-rain"></span> Chance of rain</p>
+        {% else %}
+        <p class="wx-muted">Hourly forecast isn’t available right now.</p>
+        {% endif %}
+    </section>
+
+    <section class="wx-outlook card" aria-label="16-day outlook">
+        <h2>16-day outlook</h2>
+        {% if outlook %}
+        <ol class="wx-outlook__list">
+            {% for day in outlook %}
+            <li class="wx-day{% if day.is_today %} is-today{% endif %}">
+                <span class="wx-day__name">{{ day.weekday }}</span>
+                <span class="wx-icon">{% include "albright_planner/_weather_icon.html" with icon=day.icon %}</span>
+                <span class="wx-day__cond">{{ day.label }}</span>
+                {% if day.pop is not None %}<span class="wx-pop{% if day.pop >= 50 %} is-likely{% endif %}">{{ day.pop }}%</span>{% else %}<span class="wx-pop"></span>{% endif %}
+                <span class="wx-day__low wx-num">{{ day.low }}°</span>
+                <span class="wx-day__bar" aria-hidden="true"><span class="wx-day__range" style="left: {{ day.bar_left }}%; width: {{ day.bar_width }}%;"></span></span>
+                <span class="wx-day__high wx-num">{{ day.high }}°</span>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <p class="wx-muted">The outlook isn’t available right now.</p>
+        {% endif %}
+    </section>
+
+    <section class="wx-radar card" aria-label="Radar">
+        <h2>Radar</h2>
+        <p class="wx-muted">Live radar on this page arrives in a later slice. For now, open a full map:</p>
+        <p class="wx-radar__links"><a href="{{ radar.rainviewer }}" rel="noopener noreferrer" target="_blank">RainViewer</a> · <a href="{{ radar.zoom_earth }}" rel="noopener noreferrer" target="_blank">Zoom Earth</a></p>
+    </section>
+
+    <section class="wx-tropics card" id="tropics" aria-label="Tropics">
+        <h2>Tropics</h2>
+        <p class="wx-muted">Atlantic and Pacific tropics — official outlooks and storm-surge maps.</p>
+        <ul class="wx-tropics__links">
+            <li><a href="{{ tropics.nhc }}" rel="noopener noreferrer" target="_blank">National Hurricane Center</a></li>
+            <li><a href="{{ tropics.cera }}" rel="noopener noreferrer" target="_blank">CERA storm surge</a></li>
+            <li><a href="{{ tropics.zoom_earth }}" rel="noopener noreferrer" target="_blank">Zoom Earth storms</a></li>
+        </ul>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
