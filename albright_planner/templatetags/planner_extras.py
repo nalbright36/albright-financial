@@ -49,3 +49,19 @@ def planner_zone(context):
     if row is None:
         return {"name": DEFAULT_TIMEZONE, "auto": True}
     return {"name": row["timezone"], "auto": row["auto_timezone"]}
+
+
+@register.simple_tag(takes_context=True)
+def planner_wx(context):
+    """Whether weather follows the device, for base.html's geolocation script.
+    No settings row yet: the default (on) - nothing is written on a page view."""
+    from albright_planner.models import PlannerSettings
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    auto = True
+    if user is not None and user.is_authenticated:
+        row = PlannerSettings.objects.filter(user=user).values("weather_auto").first()
+        if row is not None:
+            auto = row["weather_auto"]
+    return {"auto": auto}
+

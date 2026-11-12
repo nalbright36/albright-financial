@@ -7,11 +7,17 @@ includes on every Planner page.
 data-planner-tz: the zone times are shown in (PlannerSettings.timezone). While it follows the browser
 (data-planner-tz-auto="1"), the script below sends the browser's zone when it differs and reloads, so a trip
 across zones shows every timed item at the right local time (planner.to_viewer).
+data-planner-wx-auto: while weather follows the device, a second script asks for a rough location
+(low accuracy, at most every 30 minutes) and posts it to planner/location/; a change reloads so
+the header forecast updates. A denial is remembered in localStorage. Off, or a denial, uses the
+typed Home location.
 {% endcomment %}
-{% block content %}{% load planner_extras %}{% planner_zone as planner_tz %}
+{% block content %}{% load planner_extras %}{% planner_zone as planner_tz %}{% planner_wx as planner_wx %}
 <div class="container pl" id="planner" data-view-url="{% url 'albright_planner:item' 0 %}"
      data-planner-tz="{{ planner_tz.name }}" data-planner-tz-auto="{{ planner_tz.auto|yesno:'1,0' }}"
-     data-planner-tz-url="{% url 'albright_planner:timezone' %}">
+     data-planner-tz-url="{% url 'albright_planner:timezone' %}"
+     data-planner-wx-auto="{{ planner_wx.auto|yesno:'1,0' }}"
+     data-planner-wx-url="{% url 'albright_planner:weather_location' %}">
     {% block planner %}{% endblock %}
 </div>
 <script>
@@ -31,6 +37,61 @@ across zones shows every timed item at the right local time (planner.to_viewer).
     }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) { if (data && data.changed) location.reload(); })
       .catch(function () {});
+})();
+(function () {
+    /* Weather auto-location: same pattern as the time zone, but the browser
+       has to ask first. A denial is remembered in localStorage so we don't
+       prompt again; a later "granted" still posts. Only on Planner pages
+       (this template), and only while weather_auto is on. */
+    var root = document.getElementById("planner");
+    if (!root || root.dataset.plannerWxAuto !== "1" || !navigator.geolocation || !window.fetch) return;
+    var deniedKey = "pl-wx-geo-denied";
+    function token() {
+        var match = document.cookie.match(/csrftoken=([^;]+)/);
+        var input = document.querySelector("input[name=csrfmiddlewaretoken]");
+        return match ? match[1] : (input ? input.value : "");
+    }
+    function rememberedDenied() {
+        try { return localStorage.getItem(deniedKey) === "1"; } catch (e) { return false; }
+    }
+    function rememberDenied() {
+        try { localStorage.setItem(deniedKey, "1"); } catch (e) {}
+    }
+    function forgetDenied() {
+        try { localStorage.removeItem(deniedKey); } catch (e) {}
+    }
+    function post(lat, lon) {
+        var url = root.dataset.plannerWxUrl;
+        if (!url) return;
+        fetch(url, {
+            method: "POST", credentials: "same-origin",
+            headers: {"Content-Type": "application/json", "X-CSRFToken": token(), "X-Requested-With": "XMLHttpRequest"},
+            body: JSON.stringify({lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100})
+        }).then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) { if (data && data.changed) location.reload(); })
+          .catch(function () {});
+    }
+    function onError(err) {
+        if (err && err.code === 1) rememberDenied();
+    }
+    function ask() {
+        navigator.geolocation.getCurrentPosition(
+            function (pos) { forgetDenied(); post(pos.coords.latitude, pos.coords.longitude); },
+            onError,
+            {enableHighAccuracy: false, maximumAge: 30 * 60 * 1000, timeout: 10000}
+        );
+    }
+    function maybeAsk(state) {
+        if (state === "denied") return;
+        if (state === "granted") { forgetDenied(); ask(); return; }
+        if (rememberedDenied()) return;
+        ask();
+    }
+    if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({name: "geolocation"}).then(function (p) { maybeAsk(p.state); }).catch(function () { maybeAsk("prompt"); });
+    } else {
+        maybeAsk("prompt");
+    }
 })();
 </script>
 {% endblock %}

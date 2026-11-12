@@ -50,8 +50,13 @@ source off takes its items off the Planner; a deleted item never comes back.
         </fieldset>
         <fieldset class="pl-fieldset" id="pl-weather">
             <legend class="pl-section__title">Weather</legend>
-            <p class="pl-help">Forecasts on Day and Week come from this location, unless an item has its own. Leave empty to hide them. Forecasts cover about the next 16 days, in °F.</p>
-            <label class="pl-field" for="pl-weather-location">Home location</label>
+            <p class="pl-help">Forecasts on Day and Week come from your current location when the box is on, or from the Home location below. An item with its own Location uses that place instead. Forecasts cover about the past week through the next 16 days, in °F.</p>
+            <label class="pl-setting">
+                <input type="checkbox" name="weather_auto" value="1"{% if prefs.weather_auto %} checked{% endif %}>
+                <span><strong>Use my current location</strong><span class="pl-help">Asks this device for a rough location (about 1 km) and updates when you move. If you say no, or turn this off, it uses the Home location below.</span></span>
+            </label>
+            {% if prefs.weather_auto and prefs.weather_auto_label %}<p class="pl-help">Currently using: <strong>{{ prefs.weather_auto_label }}</strong>.</p>{% endif %}
+            <label class="pl-field" for="pl-weather-location">Home location (used when the box above is off, or if you don't share your location)</label>
             <input type="text" name="weather_location" id="pl-weather-location" class="pl-input" value="{{ prefs.weather_label }}" maxlength="200" placeholder="Lone Tree, CO" autocomplete="off" spellcheck="false">
             <span class="pl-help">A city, a ZIP code, or coordinates like 39.54, -104.88.</span>
         </fieldset>

@@ -224,9 +224,16 @@ class PlannerSettings(models.Model):
     auto_timezone = models.BooleanField(default=True)
     # Home location for Day/Week forecasts. Empty (no lat/lon): no home weather; an item with its
     # own location still shows one. The label is the geocoded name; lat/lon are what we fetch with.
+    # weather_auto: follow this device (base.html posts coordinates to planner/location/) and
+    # fall back to the typed home if the person says no or turns the box off. The last GPS fix
+    # is stored on weather_auto_* so the typed home is kept as the fallback.
     weather_label = models.CharField(max_length=200, blank=True)
     weather_lat = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
     weather_lon = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    weather_auto = models.BooleanField(default=True)
+    weather_auto_label = models.CharField(max_length=200, blank=True)
+    weather_auto_lat = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    weather_auto_lon = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
 
     @classmethod
     def for_user(cls, user):

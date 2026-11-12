@@ -450,4 +450,6 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl-wx__place { font-weight: 500; color: var(--pl-muted); }
 .pl-wx.is-rich { font-size: 0.9375rem; gap: 6px; color: var(--text-primary); }
 .pl-wx.is-rich .pl-wx__icon svg { width: 20px; height: 20px; }
+.pl-wx.is-minimal { font-size: 0.75rem; gap: 3px; }
+.pl-wx.is-away .pl-wx__pin { color: var(--text-secondary); }
 .pl-day-wx { display: flex; align-items: center; gap: 8px; margin: -6px 0 16px; min-height: 28px; }

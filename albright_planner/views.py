@@ -792,6 +792,38 @@ def _real_zone(name):
     return True
 
 
+@login_required
+@require_POST
+def set_weather_location(request):
+    """The browser's rough coordinates (base.html's script): {"lat": 39.52, "lon": -104.88}.
+    Saved only while weather follows the device (weather_auto), and only if the point
+    moved about 0.05°. The label is a city-level reverse geocode (or the coordinates
+    if that lookup is down). The typed home is left alone."""
+    body = _json(request)
+    pair = weather.rounded(body.get("lat"), body.get("lon"))
+    if not pair:
+        return JsonResponse({"ok": False, "error": "Invalid coordinates."}, status=400)
+    prefs = PlannerSettings.for_user(request.user)
+    if not prefs.weather_auto:
+        return JsonResponse({"ok": True, "auto": False, "changed": False,
+                             "label": prefs.weather_label})
+    if not weather.moved(prefs.weather_auto_lat, prefs.weather_auto_lon, pair[0], pair[1]):
+        return JsonResponse({"ok": True, "auto": True, "changed": False,
+                             "label": prefs.weather_auto_label,
+                             "lat": float(prefs.weather_auto_lat),
+                             "lon": float(prefs.weather_auto_lon)})
+    found = weather.reverse_geocode(pair[0], pair[1]) or {
+        "label": f"{float(pair[0]):.2f}, {float(pair[1]):.2f}", "lat": pair[0], "lon": pair[1],
+    }
+    prefs.weather_auto_label = found["label"]
+    prefs.weather_auto_lat, prefs.weather_auto_lon = found["lat"], found["lon"]
+    prefs.save(update_fields=["weather_auto_label", "weather_auto_lat", "weather_auto_lon"])
+    return JsonResponse({"ok": True, "auto": True, "changed": True,
+                         "label": prefs.weather_auto_label,
+                         "lat": float(prefs.weather_auto_lat),
+                         "lon": float(prefs.weather_auto_lon)})
+
+
 def _save_weather(request, prefs):
     """Apply the home-location field on a settings POST. Returns an error string, or
     None. Missing field (older tests, a stale form): leave what's stored alone."""
@@ -834,9 +866,10 @@ def settings_view(request):
                 prefs.timezone = zone_name
             else:
                 messages.error(request, f"“{zone_name}” isn't a time zone - try one like America/Denver.")
+        prefs.weather_auto = request.POST.get("weather_auto") == "1"
         weather_error = _save_weather(request, prefs)
         prefs.save(update_fields=["sources_on", "show_meals", "complete_when_checklist_done", "auto_timezone",
-                                  "timezone", "weather_label", "weather_lat", "weather_lon"])
+                                  "timezone", "weather_auto", "weather_label", "weather_lat", "weather_lon"])
         sources.sync(request.user)              # the only place source items are added or updated
         if weather_error:
             messages.error(request, weather_error)
