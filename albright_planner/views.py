@@ -245,11 +245,21 @@ def day_view(request):
     last = max([LAST_HOUR] + [o.start_time.hour for o in timed])
     hours = [{"hour": h, "label": datetime(2000, 1, 1, h).strftime("%I %p").lstrip("0"),
               "items": [o for o in timed if o.start_time.hour == h]} for h in range(first, last + 1)]
+    wx = day_wx.get(day)
+    day_hours = []
+    if wx and day >= today:
+        now_hour = wx.current_hour if day == today else None
+        if day == today and now_hour is None:
+            n = weather.local_now(request.user)
+            if n.date() == today:
+                now_hour = n.hour
+        day_hours = weather.display_hours(wx, timed, now_hour=now_hour)
     context = _frame(request, "day", day, day - timedelta(days=1), day + timedelta(days=1),
                      f"{day:%A, %B} {day.day}" + (f", {day.year}" if day.year != today.year else ""))
     context.update({"top": top, "hours": hours, "overdue": overdue, "is_today": day == today,
                     "empty": not (occs or overdue or meals),
-                    "day_weather": day_wx.get(day), "weather_place": weather.home_label(request.user)})
+                    "day_weather": wx, "weather_place": weather.home_label(request.user),
+                    "day_hours": day_hours})
     return _remember(render(request, "albright_planner/day.html", context), "day")
 
 
@@ -867,9 +877,14 @@ def settings_view(request):
             else:
                 messages.error(request, f"“{zone_name}” isn't a time zone - try one like America/Denver.")
         prefs.weather_auto = request.POST.get("weather_auto") == "1"
+        # Hidden 0 + checkbox 1: last value wins. A stale form without the field
+        # leaves the stored value alone (same idea as the home-location box).
+        if "show_weather" in request.POST:
+            prefs.show_weather = request.POST.get("show_weather") == "1"
         weather_error = _save_weather(request, prefs)
         prefs.save(update_fields=["sources_on", "show_meals", "complete_when_checklist_done", "auto_timezone",
-                                  "timezone", "weather_auto", "weather_label", "weather_lat", "weather_lon"])
+                                  "timezone", "weather_auto", "show_weather",
+                                  "weather_label", "weather_lat", "weather_lon"])
         sources.sync(request.user)              # the only place source items are added or updated
         if weather_error:
             messages.error(request, weather_error)

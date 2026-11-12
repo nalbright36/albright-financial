@@ -234,6 +234,9 @@ class PlannerSettings(models.Model):
     weather_auto_label = models.CharField(max_length=200, blank=True)
     weather_auto_lat = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
     weather_auto_lon = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    # show_weather: when off, Day and Week (and the item panel) hide every forecast
+    # and weather.attach skips the Open-Meteo fetches. Default on.
+    show_weather = models.BooleanField(default=True)
 
     @classmethod
     def for_user(cls, user):

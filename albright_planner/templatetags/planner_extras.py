@@ -54,14 +54,18 @@ def planner_zone(context):
 @register.simple_tag(takes_context=True)
 def planner_wx(context):
     """Whether weather follows the device, for base.html's geolocation script.
-    No settings row yet: the default (on) - nothing is written on a page view."""
+    auto is also off when Show weather is off, so we don't ask for a location
+    that won't be shown. No settings row yet: the defaults (on) - nothing is
+    written on a page view."""
     from albright_planner.models import PlannerSettings
     request = context.get("request")
     user = getattr(request, "user", None)
     auto = True
+    show = True
     if user is not None and user.is_authenticated:
-        row = PlannerSettings.objects.filter(user=user).values("weather_auto").first()
+        row = PlannerSettings.objects.filter(user=user).values("weather_auto", "show_weather").first()
         if row is not None:
             auto = row["weather_auto"]
-    return {"auto": auto}
+            show = row["show_weather"]
+    return {"auto": auto and show, "show": show}
 

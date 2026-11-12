@@ -1,5 +1,5 @@
-"""Weather for the Planner (idea #77): daily forecasts from Open-Meteo (no API
-key; api.open-meteo.com and geocoding-api.open-meteo.com are on PythonAnywhere's
+"""Weather for the Planner (idea #77): forecasts from Open-Meteo (no API key;
+api.open-meteo.com and geocoding-api.open-meteo.com are on PythonAnywhere's
 free-account whitelist). Reverse-geocoding a GPS fix uses Nominatim
 (nominatim.openstreetmap.org, also on the whitelist), at city level only.
 
@@ -7,19 +7,25 @@ A person has a home location on PlannerSettings (weather_label / _lat / _lon).
 When weather_auto is on, the browser posts a rough location to planner/location/
 and that fix (weather_auto_*) is used instead; the typed home is the fallback
 if they say no or turn the box off. An item can have its own place when it
-won't happen at home.
+won't happen at home. show_weather (default on) hides every forecast and
+skips the fetches when off.
 
 Day and Week show the home forecast at the top (the Day header and each Week
-column). Items at home don't repeat it; an item at another place keeps a small
-pin and that place's high. The item view panel still shows the full forecast.
+column): high/low, rain chance, and, on today, the current temperature. The
+Day view also has an hourly temperature and rain-chance strip (today and
+future days), with a Now marker and ticks for timed events. Items at home
+don't repeat the forecast; an item at another place keeps a small pin and
+that place's high. The item view panel still shows the full forecast.
 
 Forecasts cover about the past week through the next 16 days, in the viewer's
-time zone, cached a few hours per rounded lat/lon. Past that window, nothing
-is shown. Every fetch is wrapped: a down or slow API never fails the page.
+time zone. Daily and hourly data is cached a few hours per rounded lat/lon;
+the current temperature uses a shorter (20-minute) cache of its own. Past
+that window, nothing is shown. Every fetch is wrapped: a down or slow API
+never fails the page.
 """
 import re
 from collections import namedtuple
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -30,6 +36,7 @@ FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 CACHE_SECONDS = 4 * 3600
+CURRENT_CACHE_SECONDS = 20 * 60
 EMPTY_CACHE_SECONDS = 10 * 60
 REVERSE_CACHE_SECONDS = 30 * 24 * 3600
 FORECAST_DAYS = 16
@@ -45,8 +52,23 @@ USER_AGENT = "AlbrightPlanner/1.0 (https://natealbright36.pythonanywhere.com)"
 COORD_PLACES = 2
 # Save a new GPS fix only when it moved about this far (roughly 5 km).
 MOVE_DEGREES = 0.05
+# Default hourly strip: 6 AM through 10 PM, expanded to include Now and events.
+HOUR_FIRST = 6
+HOUR_LAST = 22
+# Rain-chance styling: "likely" at this percent or above.
+POP_LIKELY = 50
 
-Weather = namedtuple("Weather", "date high low label icon")
+# pop: daily chance of precipitation (0-100), or None if the API omitted it.
+# temp / feels / current_hour: current conditions, only on the day that
+# matches the API's current.time. hourly: a tuple of Hour for that date.
+Weather = namedtuple(
+    "Weather",
+    "date high low label icon pop temp feels hourly current_hour",
+    defaults=(None, None, None, (), None),
+)
+# hour: 0-23. events: short titles of timed items starting in this hour.
+# label: "6a", "12p". is_now: the current hour on today.
+Hour = namedtuple("Hour", "hour temp pop is_now events label", defaults=(False, (), ""))
 
 
 class LookupDown(Exception):
@@ -103,7 +125,12 @@ def _round(value):
 
 
 def _cache_key(lat, lon, tz="auto"):
-    return f"planner.wx:{_round(lat):.2f}:{_round(lon):.2f}:{tz}"
+    # wx2: daily + hourly payload (the previous planner.wx: key was daily only).
+    return f"planner.wx2:{_round(lat):.2f}:{_round(lon):.2f}:{tz}"
+
+
+def _current_key(lat, lon, tz="auto"):
+    return f"planner.wxcur:{_round(lat):.2f}:{_round(lon):.2f}:{tz}"
 
 
 def _place_key(lat, lon):
@@ -297,41 +324,74 @@ def _zone_name(user):
         return "auto"
 
 
+def local_now(user):
+    """The current datetime in the viewer's Planner zone (UTC if the zone is unknown)."""
+    from django.utils import timezone as djtz
+    name = _zone_name(user)
+    try:
+        tz = ZoneInfo("UTC") if name == "auto" else ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        tz = ZoneInfo("UTC")
+    return djtz.now().astimezone(tz)
+
+
 def forecasts(lat, lon, tz=None):
     """{date: Weather} for PAST_DAYS through the next FORECAST_DAYS at this point.
-    Empty on any failure. tz: IANA name (the viewer's zone); default 'auto'."""
+    Empty on any failure. tz: IANA name (the viewer's zone); default 'auto'.
+    Daily and hourly data is cached CACHE_SECONDS; current temperature uses a
+    separate CURRENT_CACHE_SECONDS key. One Open-Meteo call fills both; a later
+    current-only refresh does not refetch the forecast."""
     tz = tz or "auto"
     try:
         pair = coords(lat, lon)
         if not pair:
             return {}
-        key = _cache_key(pair[0], pair[1], tz)
-        raw = cache.get(key)
-        if raw is not None:
-            return {} if raw.get("_empty") else _parse(raw)
-        raw = _fetch(pair[0], pair[1], tz)
+        fkey = _cache_key(pair[0], pair[1], tz)
+        ckey = _current_key(pair[0], pair[1], tz)
+        raw = cache.get(fkey)
+        current = cache.get(ckey)
         if raw is None:
-            cache.set(key, {"_empty": True}, EMPTY_CACHE_SECONDS)
+            payload = _fetch(pair[0], pair[1], tz, what="full")
+            if payload is None:
+                cache.set(fkey, {"_empty": True}, EMPTY_CACHE_SECONDS)
+                return {}
+            raw, current = _split_payload(payload)
+            cache.set(fkey, raw, CACHE_SECONDS)
+            cache.set(ckey, current if current else {"_empty": True}, CURRENT_CACHE_SECONDS)
+        elif raw.get("_empty"):
             return {}
-        cache.set(key, raw, CACHE_SECONDS)
-        return _parse(raw)
+        elif current is None:
+            payload = _fetch(pair[0], pair[1], tz, what="current")
+            current = (
+                payload.get("current")
+                if isinstance(payload, dict) and isinstance(payload.get("current"), dict)
+                else None
+            )
+            cache.set(ckey, current if current else {"_empty": True}, CURRENT_CACHE_SECONDS)
+        if isinstance(current, dict) and current.get("_empty"):
+            current = None
+        return _parse(raw, current)
     except Exception:
         return {}
 
 
-def _fetch(lat, lon, tz="auto"):
+def _fetch(lat, lon, tz="auto", what="full"):
+    params = {
+        "latitude": float(lat),
+        "longitude": float(lon),
+        "temperature_unit": "fahrenheit",
+        "timezone": tz or "auto",
+        "current": "temperature_2m,apparent_temperature,weather_code",
+    }
+    if what != "current":
+        params["daily"] = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+        params["hourly"] = "temperature_2m,precipitation_probability,weather_code"
+        params["forecast_days"] = FORECAST_DAYS
+        params["past_days"] = PAST_DAYS
     try:
         response = requests.get(
             FORECAST_URL,
-            params={
-                "latitude": float(lat),
-                "longitude": float(lon),
-                "daily": "weather_code,temperature_2m_max,temperature_2m_min",
-                "temperature_unit": "fahrenheit",
-                "timezone": tz or "auto",
-                "forecast_days": FORECAST_DAYS,
-                "past_days": PAST_DAYS,
-            },
+            params=params,
             headers={"Accept": "application/json", "User-Agent": USER_AGENT},
             timeout=TIMEOUT,
         )
@@ -343,9 +403,27 @@ def _fetch(lat, lon, tz="auto"):
         data = response.json()
     except ValueError:
         return None
-    if not isinstance(data, dict) or not isinstance(data.get("daily"), dict):
+    if not isinstance(data, dict):
         return None
-    return data["daily"]
+    if what != "current" and not isinstance(data.get("daily"), dict):
+        return None
+    return data
+
+
+def _split_payload(payload):
+    """((daily, hourly) raw, current dict or None) from a full Open-Meteo body,
+    or from an older cache entry that was just the daily dict."""
+    if not isinstance(payload, dict):
+        return {"_empty": True}, None
+    if isinstance(payload.get("daily"), dict):
+        hourly = payload.get("hourly") if isinstance(payload.get("hourly"), dict) else {}
+        raw = {"daily": payload["daily"], "hourly": hourly}
+    elif "time" in payload and ("temperature_2m_max" in payload or "temperature_2m_min" in payload):
+        raw = {"daily": payload, "hourly": {}}
+    else:
+        raw = payload
+    current = payload.get("current") if isinstance(payload.get("current"), dict) else None
+    return raw, current
 
 
 def _num(values, i):
@@ -355,17 +433,50 @@ def _num(values, i):
         return None
 
 
-def _parse(daily):
+def _hour_label(hour):
+    try:
+        hour = int(hour)
+    except (TypeError, ValueError):
+        return ""
+    if hour == 0:
+        return "12a"
+    if hour < 12:
+        return f"{hour}a"
+    if hour == 12:
+        return "12p"
+    return f"{hour - 12}p"
+
+
+def _parse_dt(raw):
+    """A date or datetime from an Open-Meteo time string, or None."""
+    if isinstance(raw, datetime):
+        return raw
+    if isinstance(raw, date) and not isinstance(raw, datetime):
+        return raw
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        try:
+            return date.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return None
+
+
+def _parse(raw, current=None):
+    if not isinstance(raw, dict):
+        return {}
+    daily = raw.get("daily") if isinstance(raw.get("daily"), dict) else raw
     times = daily.get("time") or []
     codes = daily.get("weather_code") or daily.get("weathercode") or []
     highs = daily.get("temperature_2m_max") or []
     lows = daily.get("temperature_2m_min") or []
+    pops = daily.get("precipitation_probability_max") or daily.get("precipitation_probability") or []
     out = {}
     for i, raw_day in enumerate(times):
-        try:
-            day = date.fromisoformat(raw_day)
-        except (TypeError, ValueError):
+        parsed = _parse_dt(raw_day)
+        if parsed is None:
             continue
+        day = parsed.date() if isinstance(parsed, datetime) else parsed
         high, low = _num(highs, i), _num(lows, i)
         if high is None and low is None:
             continue
@@ -378,7 +489,103 @@ def _parse(daily):
         except IndexError:
             code = None
         label, icon = describe(code)
-        out[day] = Weather(day, high, low, label, icon)
+        pop = _num(pops, i)
+        out[day] = Weather(day, high, low, label, icon, pop)
+    hourly_by_day = _parse_hourly(raw.get("hourly") if isinstance(raw.get("hourly"), dict) else {})
+    cur_temp, cur_feels, cur_hour, cur_day = _parse_current(current)
+    for day, wx in list(out.items()):
+        hours = hourly_by_day.get(day, ())
+        temp = feels = current_hour = None
+        if cur_day == day:
+            temp, feels, current_hour = cur_temp, cur_feels, cur_hour
+        out[day] = wx._replace(hourly=hours, temp=temp, feels=feels, current_hour=current_hour)
+    return out
+
+
+def _parse_hourly(hourly):
+    """{date: tuple[Hour]} from an Open-Meteo hourly block. Missing values skipped."""
+    if not hourly:
+        return {}
+    times = hourly.get("time") or []
+    temps = hourly.get("temperature_2m") or []
+    pops = hourly.get("precipitation_probability") or []
+    by_day = {}
+    for i, raw in enumerate(times):
+        parsed = _parse_dt(raw)
+        if not isinstance(parsed, datetime):
+            continue
+        day, hour = parsed.date(), parsed.hour
+        temp, pop = _num(temps, i), _num(pops, i)
+        if temp is None and pop is None:
+            continue
+        by_day.setdefault(day, []).append(Hour(hour, temp, pop, False, (), _hour_label(hour)))
+    return {day: tuple(rows) for day, rows in by_day.items()}
+
+
+def _parse_current(current):
+    """(temp, feels, hour, date) from an Open-Meteo current block; any field may be None."""
+    if not isinstance(current, dict) or current.get("_empty"):
+        return None, None, None, None
+    parsed = _parse_dt(current.get("time"))
+    day = hour = None
+    if isinstance(parsed, datetime):
+        day, hour = parsed.date(), parsed.hour
+    elif isinstance(parsed, date):
+        day = parsed
+    temp = _num([current.get("temperature_2m")], 0)
+    feels = _num([current.get("apparent_temperature")], 0)
+    if temp is None and feels is None:
+        return None, None, hour, day
+    return temp, feels, hour, day
+
+
+def _short_title(title):
+    """A short tick label for the hourly strip (first word, up to 12 characters)."""
+    title = " ".join((title or "").split())
+    if not title:
+        return ""
+    word = title.split(" ", 1)[0]
+    if len(word) > 12:
+        return word[:11] + "…"
+    return word
+
+
+def display_hours(wx, occs=None, now_hour=None, first=HOUR_FIRST, last=HOUR_LAST):
+    """The Day view's hourly strip: 6 AM–10 PM, expanded to include Now and
+    any timed events. Empty when there is no hourly data. now_hour (0-23) marks
+    Now; leave it None on past and future days."""
+    if wx is None or not getattr(wx, "hourly", None):
+        return []
+    hours = {h.hour: h for h in wx.hourly}
+    events = {}
+    for o in occs or []:
+        if getattr(o, "is_meal", False):
+            continue
+        start = getattr(o, "start_time", None)
+        if start is None:
+            continue
+        title = getattr(o, "title", "") or ""
+        if not title and getattr(o, "item", None) is not None:
+            title = getattr(o.item, "title", "") or ""
+        short = _short_title(title)
+        if short:
+            events.setdefault(start.hour, []).append(short)
+    lo, hi = first, last
+    if now_hour is not None:
+        lo, hi = min(lo, now_hour), max(hi, now_hour)
+    if events:
+        lo, hi = min(lo, min(events)), max(hi, max(events))
+    lo, hi = max(0, lo), min(23, hi)
+    out = []
+    for h in range(lo, hi + 1):
+        src = hours.get(h)
+        ev = tuple(events.get(h, ()))
+        is_now = now_hour is not None and h == now_hour
+        if src is None:
+            if ev or is_now:
+                out.append(Hour(h, None, None, is_now, ev, _hour_label(h)))
+            continue
+        out.append(Hour(src.hour, src.temp, src.pop, is_now, ev, src.label or _hour_label(h)))
     return out
 
 
@@ -418,6 +625,18 @@ def home_label(user):
     return found[0] if found else ""
 
 
+def enabled(user):
+    """False when the person has turned 'Show weather' off (default is on)."""
+    from .models import PlannerSettings
+    if user is None:
+        return True
+    try:
+        prefs = PlannerSettings.for_user(user)
+    except Exception:
+        return True
+    return bool(getattr(prefs, "show_weather", True))
+
+
 def _window(user):
     from . import planner
     start = planner.today(user) - timedelta(days=PAST_DAYS)
@@ -431,11 +650,15 @@ def _in_window(day, start, end):
 def attach(user, occs, days):
     """Set o.weather (and o.weather_place, when the item is not at home) on
     each occurrence. Returns {date: Weather} for the user's home, for Day and
-    Week headers. Never raises."""
+    Week headers. Never raises. When show_weather is off, returns {} and
+    leaves occurrences alone (no fetches)."""
     from .models import PlannerSettings
     home_wx = {}
     try:
-        home_place = home(PlannerSettings.for_user(user))
+        prefs = PlannerSettings.for_user(user)
+        if not getattr(prefs, "show_weather", True):
+            return {}
+        home_place = home(prefs)
         start, end = _window(user)
         tz = _zone_name(user)
         wanted = {}
