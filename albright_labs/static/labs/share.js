@@ -276,6 +276,14 @@
         return fallback ? fallback.value : "";
     }
 
+    function formAction(form) {
+        // An <input name="action"> (add / permission / remove) shadows
+        // HTMLFormElement.action in every major browser: form.action is the
+        // input, not the URL. fetch(form.action) throws TypeError: Failed to
+        // fetch, which showed as "Not saved - try again" with no request sent.
+        return (form && form.getAttribute && form.getAttribute("action")) || "";
+    }
+
     document.addEventListener("change", function (event) {
         var t = event.target;
         if (t.matches && t.matches("[data-share-filter]")) t.form.submit();
@@ -292,12 +300,13 @@
         var headers = {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"};
         var token = csrfToken(form);
         if (token) headers["X-CSRFToken"] = token;
-        fetch(form.action, {
+        fetch(formAction(form), {
             method: "POST", body: new FormData(form), credentials: "same-origin",
             headers: headers
         }).then(function (r) {
             return r.json().then(function (data) { return data; }, function () {
-                return {ok: false, error: "Not saved - try again."};
+                var hint = r.status ? " (HTTP " + r.status + ")" : "";
+                return {ok: false, error: "Not saved" + hint + " - try again."};
             });
         }).then(function (data) {
             if (data.html && box) {

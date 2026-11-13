@@ -214,6 +214,38 @@ class PickerAndSearchTests(Base):
         planner = pathlib.Path(finders.find("albright_planner/planner.js")).read_text(encoding="utf-8")
         self.assertRegex(planner, r'box\.innerHTML = html;\s*if \(window\.AlbrightShare')
 
+    def test_share_js_posts_to_the_action_attribute_not_form_action(self):
+        """The Share forms have <input name="action">, which in every major browser
+        shadows HTMLFormElement.action (form.action is the input, not the URL).
+        fetch(form.action) throws Failed to fetch and the status line shows
+        "Not saved - try again" without a request ever leaving the phone."""
+        js = pathlib.Path(finders.find("labs/share.js")).read_text(encoding="utf-8")
+        self.assertIn('form.getAttribute("action")', js)
+        self.assertIn("fetch(formAction(form)", js)
+        self.assertNotIn("fetch(form.action,", js)
+        # The server's error text is what the status line shows; a non-JSON body
+        # (403, a login page) includes the HTTP status so it's diagnosable.
+        self.assertIn('data.error || "Not saved - try again."', js)
+        self.assertIn('(HTTP "', js)
+        self.family(self.sam)
+        page = self.client.get(reverse("albright_planner:item", args=[self.item().pk])).content.decode()
+        self.assertIn('name="action" value="add"', page)
+        self.assertRegex(page, r'<form method="post" action="[^"]+" class="share-add"')
+
+    def test_share_error_json_includes_the_server_message(self):
+        """A failed add (empty target, as if the 'Share with…' placeholder was
+        posted) returns the ShareError text in JSON so share.js can show it."""
+        self.family(self.sam)
+        item = self.item()
+        url = reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk])
+        empty = self.client.post(url, {"action": "add", "target": "", "permission": "view"},
+                                 HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(empty.status_code, 400)
+        data = empty.json()
+        self.assertFalse(data["ok"])
+        self.assertTrue(data["error"])
+        self.assertNotEqual(data["error"], "Not saved - try again.")
+
     def test_sharing_a_planner_task_from_the_view_panel_markup(self):
         """Two circle-mates: the view panel (the modal's markup) lists the other person, and
         posting the fallback form's fields the way share.js does (AJAX, target=user:<id>) saves."""
