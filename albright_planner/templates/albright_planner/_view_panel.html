@@ -5,7 +5,7 @@ calendar; item.html is the same panel as a page. Every empty section is left out
 the footer stay put and the middle (.pl-view__body) scrolls. A linked note shows in full - its checklist boxes
 tick right here (saved to the note) for someone who can edit it.
 {% endcomment %}{% load planner_extras %}
-<article class="pl-view{% if o.done %} is-done{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
+<article class="pl-view{% if o.done %} is-done{% endif %}{% if item.source_app == 'fitness' %} is-fitness{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if item.source_app == "fitness" and fitness.start_url %} data-log-url="{{ fitness.start_url }}"{% endif %}{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
     <header class="pl-view__head">
         {% if item.checkable %}{% if can_edit %}
         <form method="post" action="{% url 'albright_planner:toggle' item.pk %}" class="pl-check-form">{% csrf_token %}
@@ -50,6 +50,13 @@ tick right here (saved to the note) for someone who can edit it.
         {% if item.parent_id %}<span class="pl-view__fact" id="pl-view-parent">Subtask of <a href="{% url 'albright_planner:item' item.parent_id %}" data-view>{{ item.parent.title }}</a> &rarr;</span>{% endif %}
         {% if item.idea_id %}<a href="{% url 'albright_control:idea' item.idea_id %}" class="pl-view__fact" id="pl-view-idea">Idea #{{ item.idea_id }} &rarr;</a>{% endif %}
     </p>
+    {% endif %}
+    {% if fitness %}
+    <section class="pl-view__section pl-view__fitness" id="pl-view-fitness" aria-labelledby="pl-view-fit-h">
+        <h3 class="pl-view__label" id="pl-view-fit-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workout</h3>
+        {% if fitness.rows %}<ul class="pl-view__rows">{% for r in fitness.rows %}<li class="pl-view__row"><span class="pl-view__row-name" title="{{ r.exercise.name }}">{{ r.exercise.name }}{% if r.last %}<span class="pl-view__last" title="Last time: {{ r.last }}">Last time: {{ r.last }}</span>{% endif %}</span>{% if r.target %}<span class="pl-view__row-ind">{{ r.target }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+        {% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
+    </section>
     {% endif %}
     {% if subtasks %}
     <section class="pl-view__section" id="pl-view-subtasks" aria-labelledby="pl-view-sub-h">

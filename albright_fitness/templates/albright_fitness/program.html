@@ -5,6 +5,8 @@
 One program (views.program): its days (name, weekdays) and each day's exercises with their targets; on / off;
 "Schedule this program" puts each day on your Planner as a private repeating task with its exercises as the
 checklist (programs.schedule) - changes here follow it there; turning it off ends those tasks after today.
+"Scheduled" (and each day's "Schedule this day") puts one session on a date I pick, optionally repeating, with an
+optional target (schedule.py) - Edit / Remove there.
 {% endcomment %}
 <div class="fx-narrow fx-narrow--wide">
 <div class="fx-head">
@@ -26,6 +28,9 @@ checklist (programs.schedule) - changes here follow it there; turning it off end
         <span class="fx-help">{% if p.active %}On: it plans your week here.{% else %}Off: not planned{% if p.scheduled_from %}{% endif %}.{% endif %}</span></form>
 </div>
 
+{% url 'albright_fitness:schedule_new' 'program' p.pk as program_schedule_url %}
+{% include "albright_fitness/_scheduled.html" with show_name=True schedule_url=program_schedule_url %}
+
 {% for day in days %}
 <section class="card fx-card fx-day" id="day-{{ day.pk }}" aria-labelledby="day-{{ day.pk }}-h">
     <form method="post" class="fx-day__head">{% csrf_token %}<input type="hidden" name="action" value="edit_day"><input type="hidden" name="day" value="{{ day.pk }}"><input type="hidden" name="anchor" value="#day-{{ day.pk }}">
@@ -46,6 +51,7 @@ checklist (programs.schedule) - changes here follow it there; turning it off end
         <label class="fx-mini"><span>Mi</span><input type="text" name="miles" inputmode="decimal" placeholder="-" class="ledger-input"></label>
         <button type="submit" class="btn btn-secondary btn-sm">Add</button>
     </form>
+    {% url 'albright_fitness:schedule_new' 'day' day.pk as day_schedule_url %}{% with day_pk=day.pk|stringformat:"s" %}{% with day_p="fx-sched-day-"|add:day_pk %}{% include "albright_fitness/_schedule_box.html" with url=day_schedule_url p=day_p label="Schedule this day" %}{% endwith %}{% endwith %}
     <form method="post" class="fx-delete" data-confirm="Delete the day {{ day.name }}?">{% csrf_token %}<input type="hidden" name="action" value="delete_day"><input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="fx-link-btn fx-danger">Delete this day</button></form>
 </section>
 {% endfor %}

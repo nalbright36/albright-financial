@@ -1,0 +1,13 @@
+{# One set row on the Log card (_log_card.html): big inputs for one hand - weight × reps, or time and distance for cardio - and remove. "+ Set" copies the row before it (fitness.js). #}
+<li class="fx-log__set" data-log-row{% if spare %} data-log-spare{% endif %}>
+    <span class="fx-set__type" aria-hidden="true" data-log-n>{{ n }}</span>
+    {% if ex.is_cardio %}
+    <label class="fx-field"><span class="visually-hidden">Time (mm:ss)</span><input type="text" name="duration" inputmode="numeric" placeholder="mm:ss" value="{{ row.duration|default:'' }}" class="fx-input" autocomplete="off"></label>
+    <label class="fx-field"><span class="visually-hidden">Distance</span><input type="text" name="distance" inputmode="decimal" placeholder="distance" value="{{ row.distance_text|default:'' }}" class="fx-input" autocomplete="off"></label>
+    {% else %}
+    <label class="fx-field"><span class="visually-hidden">Weight</span><input type="text" name="weight" inputmode="decimal" placeholder="{% if ex.kind == 'bodyweight' %}BW{% else %}weight{% endif %}" value="{{ row.weight_text|default:'' }}" class="fx-input" autocomplete="off"></label>
+    <span class="fx-x" aria-hidden="true">&times;</span>
+    <label class="fx-field fx-field--reps"><span class="visually-hidden">Reps</span><input type="text" name="reps" inputmode="numeric" placeholder="reps" value="{{ row.reps|default_if_none:'' }}" class="fx-input" autocomplete="off"></label>
+    {% endif %}
+    <button type="button" class="fx-icon-btn fx-log__remove" data-log-remove aria-label="Remove this set" hidden>&times;</button>
+</li>

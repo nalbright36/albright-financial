@@ -2,10 +2,10 @@
 {% block page_title %}Today · {% endblock %}
 {% block fitness %}
 {% comment %}
-The dashboard (views.dashboard, stats.py): today's planned workout with Start, today's food vs targets (and the
+The dashboard / Today page (views.dashboard, stats.py): the Quick log card (_quick_log.html - a workout, food or
+a weigh-in), today's planned workout with Start, today's food vs targets (and the
 7-day average calories and protein), this week's done vs planned, the
-streak (weeks with every planned workout done), this week's working sets by muscle group, recent records, and the
-quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
+streak (weeks with every planned workout done), this week's working sets by muscle group and recent records.
 {% endcomment %}
 <div class="fx-head">
     <div><h1 class="fx-head__title">{% now "l" %}</h1><p class="fx-head__sub">{% now "F j" %}</p></div>
@@ -13,6 +13,8 @@ quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
 </div>
 
 {% if open_workout %}<a href="{% url 'albright_fitness:workout' open_workout.pk %}" class="card fx-resume" id="fx-resume"><strong>Continue {{ open_workout.title }}</strong> <span class="fx-muted">started {{ open_workout.date|date:"M j" }}</span> &rarr;</a>{% endif %}
+
+{% include "albright_fitness/_quick_log.html" %}
 
 <div class="fx-grid fx-grid--today">
 <section class="card fx-card fx-today" id="fx-today" aria-labelledby="fx-today-h">
@@ -44,12 +46,7 @@ quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
 <section class="card fx-card" id="fx-weigh-card" aria-labelledby="fx-weigh-card-h">
     <h2 class="fx-card__title" id="fx-weigh-card-h"><a href="{% url 'albright_fitness:body' %}" class="fx-title-link">Weight &rarr;</a></h2>
     {% if weight.average %}<p class="fx-week-line">{{ weight.average }} {{ weight.unit }} <span class="fx-muted fx-small">7-day average{% if weight.change %} &middot; {{ weight.change.text }}{% endif %}</span></p>{% endif %}
-    <form method="post" action="{% url 'albright_fitness:log_weight' %}" class="fx-row-form">{% csrf_token %}
-        <input type="hidden" name="next" value="{% url 'albright_fitness:dashboard' %}"><input type="hidden" name="unit" value="{{ weight.unit }}">
-        <label for="fx-dash-weight" class="visually-hidden">Today's weight ({{ weight.unit }})</label>
-        <input type="number" name="weight" id="fx-dash-weight" class="ledger-input fx-weigh__input" step="0.1" min="20" max="880" inputmode="decimal" required placeholder="{% if weight.today %}Logged today{% else %}Today, {{ weight.unit }}{% endif %}">
-        <button type="submit" class="btn btn-secondary btn-sm">Log</button>
-    </form>
+    <p class="fx-help">{% if weight.today %}Logged today.{% else %}Not logged today - Quick log &rsaquo; Weight.{% endif %}</p>
 </section>
 {% endif %}
 </div>
@@ -61,16 +58,6 @@ quick text log ("squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30").
     <div class="card fx-stat" id="fx-streak"><span class="card__label">Streak</span>
         <span class="fx-stat__value">{{ streak }}</span>
         <span class="fx-stat__note">week{{ streak|pluralize }} with every planned workout done</span></div>
-</section>
-
-<section class="card fx-card" aria-labelledby="fx-quick-h">
-    <h2 class="fx-card__title" id="fx-quick-h">Quick log</h2>
-    <form method="post" action="{% url 'albright_fitness:quick' %}" class="fx-row-form" id="fx-quick">{% csrf_token %}
-        <label for="fx-quick-text" class="visually-hidden">What you did</label>
-        <input type="text" name="text" id="fx-quick-text" class="ledger-input fx-input-wide" maxlength="2000" required placeholder="squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30" autocomplete="off">
-        <button type="submit" class="btn btn-primary">Log</button>
-    </form>
-    <p class="fx-help">Weight × reps × sets, or reps per set (8,8,7). Cardio: a distance and/or a time. Saved as today's workout.</p>
 </section>
 
 <section class="card fx-card" aria-labelledby="fx-volume-h">

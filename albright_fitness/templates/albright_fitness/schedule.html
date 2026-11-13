@@ -1,0 +1,16 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}{% if editing %}Edit schedule{% else %}Schedule{% endif %} · {% endblock %}
+{% block fitness %}
+{% comment %}Schedule (log_views.schedule_new / schedule_edit): the form on its own page - for Edit, and when the in-place form had a problem. Puts a private task on my Planner (schedule.py).{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">{% if editing %}Edit schedule{% else %}Schedule{% endif %}</h1><p class="fx-head__sub">{{ name }}</p></div></div>
+<div class="card fx-card">
+    <form method="post" action="{{ action }}" class="fx-form" id="fx-schedule-form">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ back }}">
+        {% include "albright_fitness/_schedule_fields.html" with p="fx-sched" %}
+        <div class="fx-form__row"><button type="submit" class="btn btn-primary">{% if editing %}Save{% else %}Put on my Planner{% endif %}</button> <a href="{{ back }}" class="btn btn-secondary">Cancel</a></div>
+    </form>
+    {% if editing %}<form method="post" action="{% url 'albright_fitness:schedule_remove' session.pk %}" class="fx-row-form" data-confirm="Remove {{ name }} from your Planner?">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button type="submit" class="fx-link-btn fx-danger" id="fx-schedule-remove">Remove from my Planner</button></form>{% endif %}
+</div>
+</div>
+{% endblock %}

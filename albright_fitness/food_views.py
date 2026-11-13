@@ -24,6 +24,7 @@ SLOT_KEYS = dict(FoodLogEntry.SLOTS)
 TABS = [("search", "Search"), ("recent", "Recent"), ("mine", "My foods"), ("quick", "Quick add"), ("recipes", "Recipes")]
 MAX_SERVINGS = Decimal(50)
 MAX_GRAMS = Decimal(5000)
+PICK_FIELD = {"custom": "food", "recent": "entry", "recipe": "recipe"}
 PLAN_SLOT = {"breakfast": "breakfast", "lunch": "lunch", "dinner": "dinner", "snack": "snack"}
 
 
@@ -228,7 +229,13 @@ def _log_recipe(user, recipe, servings, on, slot, plan_entry=None):
 @require_POST
 def log(request):
     """One tap logging: kind = recent (copy an earlier entry), custom (one of My foods x servings), quick (just the
-    numbers), recipe (a Meals recipe x servings), plan (a planned meal x servings)."""
+    numbers), recipe (a Meals recipe x servings), plan (a planned meal x servings). The Today page's Quick log posts
+    one form with a button per food instead: pick = "custom:<id>", "recent:<id>" or "recipe:<id>"."""
+    post = request.POST.copy()
+    pick_kind, _sep, pick_id = post.get("pick", "").partition(":")
+    if pick_kind in PICK_FIELD and pick_id.isdigit():
+        post["kind"], post[PICK_FIELD[pick_kind]] = pick_kind, pick_id
+    request.POST = post
     user, kind = request.user, request.POST.get("kind")
     on, slot = _day(request.POST.get("date")), _slot(request.POST.get("slot"))
     servings = _number(request.POST.get("servings") or "1", high=MAX_SERVINGS)

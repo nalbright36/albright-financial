@@ -128,3 +128,85 @@ def complete_occurrence(item, day, user):
     """Check off one occurrence (e.g. a workout logged for it). Returns True, or None if it isn't scheduled then."""
     from .planner import toggle
     return toggle(item, day, user, done=True)
+
+
+# ---------------------------------------------------------------------------
+# Tasks a person schedules themselves from another app (Fitness "Schedule")
+# ---------------------------------------------------------------------------
+# Not an automatic source: no Planner setting turns these on or off, and DeletedSourceItem doesn't apply - every
+# schedule gets a fresh source_id, so deleting one schedule never blocks the next one. Each is the person's own
+# private task.
+
+def _task_fields(title, date, time, rule, until, url):
+    return {"title": (title or "").strip()[:SOURCE_TITLE_MAX] or "Untitled", "date": date, "start_time": time,
+            "end_time": None, "recurrence": rule or "", "recurrence_until": until if rule else None,
+            "recurrence_count": None, "checkable": True, "kind": ScheduleItem.TASK, "source_url": (url or "")[:1000],
+            "archived": False}
+
+
+@transaction.atomic
+def create_scheduled_task(user, source_app, source_id, title, date, time=None, rule="", until=None, checklist=(), url=""):
+    """A new task the user asked for (a one-off, or repeating by `rule` - an RRULE from recurrence.build - until
+    `until`), with `checklist` as its subtasks. Always made: the user chose it."""
+    from . import checklist as checklists
+    item = ScheduleItem.objects.create(owner=user, source_app=source_app, source_id=str(source_id)[:64],
+                                       created_by=source_app, timezone=home_zone(user),
+                                       **_task_fields(title, date, time, rule, until, url))
+    checklists.create_rows(item, checklist)
+    return item
+
+
+@transaction.atomic
+def update_scheduled_task(item, title, date, time=None, rule="", until=None, checklist=(), url=""):
+    """Change a scheduled task in place (Edit). Its check-offs stay."""
+    from . import checklist as checklists
+    fields = _task_fields(title, date, time, rule, until, url)
+    changed = [name for name, value in fields.items() if getattr(item, name) != value]
+    for name in changed:
+        setattr(item, name, fields[name])
+    if changed:
+        item.save(update_fields=[*changed, "updated_at"])
+    current = checklists.current_rows(item)
+    wanted = checklists.clean_texts(checklist)
+    if [r.text for r in current] != wanted:
+        checklists.save_rows(item, [(r.pk, text) for r, text in zip(current, wanted)]
+                             + [(None, text) for text in wanted[len(current):]])
+    return item
+
+
+def delete_scheduled_task(item):
+    """Remove one scheduled task (all its occurrences) - an item or its pk. Not recorded as a deleted source item:
+    it was the user's own."""
+    pk = getattr(item, "pk", item)
+    if pk:
+        ScheduleItem.objects.filter(pk=pk).delete()
+
+
+def upcoming_dates(item, start, limit=3):
+    """The next `limit` dates (from `start`) this task is due and not yet checked off."""
+    from . import recurrence
+    from .models import ItemCompletion, ItemException
+    if item is None or item.archived:
+        return []
+    done = set(ItemCompletion.objects.filter(item=item, occurrence_date__gte=start).values_list("occurrence_date", flat=True))
+    done |= set(ItemException.objects.filter(item=item, occurrence_date__gte=start, action=ItemException.SKIP)
+                .values_list("occurrence_date", flat=True))
+    if not item.recurrence:
+        return [item.date] if item.date >= start and item.date not in done else []
+    out = []
+    for day in recurrence.dates_from(item, start, limit=120):
+        if day not in done:
+            out.append(day)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def is_done(item, day):
+    from .models import ItemCompletion
+    return ItemCompletion.objects.filter(item=item, occurrence_date=day).exists()
+
+
+def is_scheduled(item, day):
+    from . import recurrence
+    return item is not None and not item.archived and recurrence.is_scheduled(item, day)

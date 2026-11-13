@@ -1,0 +1,29 @@
+{% comment %}
+"Log this exercise" (log_views.card_context): last time, the suggested target, and set rows pre-filled from it. Save
+adds the exercise (its sets done) to today's workout in progress, or logs it as a new workout for today; the reply
+lists any new records and, on the exercise page, Progress and Records update in place (fitness.js). Also the
+bottom sheet from the Exercises list and the Today page's recent chips (sheet). Without JS the form posts and comes
+back with a message; one spare empty row stands in for "+ Set".
+{% endcomment %}
+<section class="card fx-card fx-log" id="fx-log" aria-labelledby="fx-log-h" data-log-card>
+    <h2 class="fx-card__title" id="fx-log-h">{% if sheet %}Log {{ ex.name }}{% else %}Log this exercise{% endif %}</h2>
+    <p class="fx-log__line" id="fx-log-last">{% if last_text %}<span class="fx-muted">Last time{% if last_date %} &middot; {{ last_date|date:"M j" }}{% endif %}:</span> {{ last_text }}{% else %}<span class="fx-muted">First time - enter what you did.</span>{% endif %}</p>
+    {% if tip %}<p class="fx-log__line" id="fx-log-tip"><span class="fx-muted">Suggested:</span> <span class="fx-tip{% if tip.increase %} is-up{% endif %}">{{ tip.text }}</span></p>{% endif %}
+    <form method="post" action="{% url 'albright_fitness:exercise_log' ex.pk %}" class="fx-log__form" data-log-form>{% csrf_token %}
+        <input type="hidden" name="next" value="{{ back|default:request.get_full_path }}">
+        <ol class="fx-log__sets" data-log-sets>{% for row in rows %}{% include "albright_fitness/_log_row.html" with n=forloop.counter %}{% endfor %}
+            {% include "albright_fitness/_log_row.html" with row=None n="+" spare=True %}
+        </ol>
+        <template data-log-template>{% include "albright_fitness/_log_row.html" with row=None n="" %}</template>
+        <div class="fx-log__bar">
+            <button type="button" class="btn btn-secondary btn-sm" data-log-add hidden>+ Set</button>
+            {% if ex.is_cardio %}<label class="fx-unit-select"><span class="visually-hidden">Distance unit</span><select name="distance_unit" class="ledger-input">{% for key, label in distance_units %}<option value="{{ key }}"{% if key == distance_unit %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+            {% elif ex.kind != "bodyweight" %}<label class="fx-unit-select"><span class="visually-hidden">Weight unit</span><select name="unit" class="ledger-input">{% for key, label in units %}<option value="{{ key }}"{% if key == unit %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary fx-log__save" id="fx-log-save">{% if today_workout %}Add to today's workout{% else %}Log as new workout{% endif %}</button>
+        {% if today_workout %}<p class="fx-help">Adds to <a href="{% url 'albright_fitness:workout' today_workout.pk %}">{{ today_workout.title }}</a>, in progress.</p>{% endif %}
+        <div class="fx-log__status" role="status" aria-live="polite" data-log-status hidden></div>
+    </form>
+    <form method="post" action="{% url 'albright_fitness:start' %}" class="fx-log__start">{% csrf_token %}<input type="hidden" name="exercise" value="{{ ex.pk }}">
+        <button type="submit" class="fx-link-btn" id="fx-log-start">Start a full workout with this &rarr;</button></form>
+</section>

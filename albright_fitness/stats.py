@@ -101,11 +101,16 @@ def dashboard(user):
             "programs": Program.objects.filter(owner=user, active=True).count()}
 
 
-def exercise_history(user, exercise, limit=40):
+def exercise_history(user, exercise, limit=40, include_today=False):
     """[{"date", "value", "label", "workout"}] oldest first: the best estimated 1RM per session (strength), the
-    most reps (bodyweight), or the longest distance / time (cardio). And the unit for the chart's title."""
+    most reps (bodyweight), or the longest distance / time (cardio). And the unit for the chart's title.
+    include_today: today's workout in progress counts too (its done sets - the exercise page's Log card)."""
+    from django.db.models import Q
     rows = []
-    sessions = WorkoutExercise.objects.filter(workout__owner=user, exercise=exercise, workout__finished_at__isnull=False) \
+    shown = Q(workout__finished_at__isnull=False)
+    if include_today:
+        shown |= Q(workout__date=timezone.localdate())
+    sessions = WorkoutExercise.objects.filter(shown, workout__owner=user, exercise=exercise) \
         .select_related("workout").prefetch_related("sets").order_by("-workout__date", "-pk")[:limit]
     unit = "lb (est. 1RM)"
     for we in reversed(list(sessions)):

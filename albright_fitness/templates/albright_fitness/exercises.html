@@ -1,7 +1,7 @@
 {% extends "albright_fitness/base.html" %}{% load fitness_extras %}
 {% block page_title %}Exercises · {% endblock %}
 {% block fitness %}
-{% comment %}The exercise library (views.exercises): the built-in ones and your own, searchable and filtered by muscle group and equipment; add your own at the bottom.{% endcomment %}
+{% comment %}The exercise library (views.exercises): the built-in ones and your own, searchable and filtered by muscle group and equipment; add your own at the bottom. Each row's Log opens its Log card in a bottom sheet (fitness.js; the exercise page without JS).{% endcomment %}
 <div class="fx-head"><div><h1 class="fx-head__title">Exercises</h1><p class="fx-head__sub">{{ exercises|length }} shown</p></div></div>
 <form method="get" class="fx-filters" role="search">
     <label class="fx-filters__q"><span class="visually-hidden">Search</span><input type="search" name="q" value="{{ q }}" class="ledger-input" placeholder="Search exercises"></label>
@@ -10,9 +10,10 @@
     <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
 </form>
 <div class="card fx-card"><ul class="fx-list">{% for e in exercises %}
-    <li><a href="{% url 'albright_fitness:exercise' e.pk %}" class="fx-row fx-row--link" title="{{ e.name }}">
+    <li class="fx-ex-row"><a href="{% url 'albright_fitness:exercise' e.pk %}" class="fx-row fx-row--link" title="{{ e.name }}">
         <span class="fx-row__title">{{ e.name }}{% if e.owner_id %} <span class="fx-pill">Mine</span>{% endif %}</span>
-        <span class="fx-row__ind">{% for m in e.primary_muscles %}{{ muscle_names|get_item:m }}{% if not forloop.last %}, {% endif %}{% endfor %} &middot; {{ e.get_equipment_display }}</span></a></li>
+        <span class="fx-row__ind">{% for m in e.primary_muscles %}{{ muscle_names|get_item:m }}{% if not forloop.last %}, {% endif %}{% endfor %} &middot; {{ e.get_equipment_display }}</span></a>
+        <a href="{% url 'albright_fitness:exercise' e.pk %}#fx-log" class="btn btn-secondary btn-sm fx-ex-row__log" data-sheet-url="{% url 'albright_fitness:exercise_log' e.pk %}?next={{ request.get_full_path|urlencode }}" aria-label="Log {{ e.name }}">Log</a></li>
 {% empty %}<li class="fx-empty">Nothing matches.</li>{% endfor %}</ul></div>
 
 <details class="card fx-card" id="fx-add-exercise">

@@ -1,0 +1,9 @@
+{# "Schedule": a small form that opens in place (exercise page, a program, each program day) - puts it on my Planner (log_views.schedule_new). p: its id prefix. #}
+<details class="fx-schedule" id="{{ p }}">
+    <summary class="btn btn-secondary btn-sm fx-schedule__btn">{{ label|default:"Schedule" }}</summary>
+    <form method="post" action="{{ url }}" class="fx-form fx-schedule__form">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}#fx-scheduled">
+        {% include "albright_fitness/_schedule_fields.html" with form=schedule_form %}
+        <button type="submit" class="btn btn-primary">Put on my Planner</button>
+    </form>
+</details>

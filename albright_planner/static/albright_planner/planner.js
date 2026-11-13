@@ -2,8 +2,9 @@
  * Albright Planner - included on every Planner page by templates/index.html (apps_registry: Planner's script)
  * and by Home for its Today panel. Vanilla JS; everything also works without it (forms post normally).
  *
- *   workouts    checking off a Fitness workout task (data-log-url) without logging it first asks "Log the
- *               workout?" - Log opens Fitness for that occurrence (finishing it there checks it off)
+ *   workouts    checking off a Fitness workout task (data-log-url) first asks "Log this workout?" - Log now opens
+ *               Fitness for that occurrence, pre-filled (finishing it there checks it off); Mark done without
+ *               logging just checks it off; Cancel leaves it
  *   rows        every item is one line; its checklist chevron opens the subtasks under it (and closes them) - kept
  *               open only while you stay on the page; a click anywhere else on the row opens it like its title does
  *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through.
@@ -48,10 +49,10 @@
     }
 
     // ---------- Check-off ----------
-    // A Fitness workout task, checked without logging: "Log the workout?" - "log" / "task" / null (cancelled).
+    // A Fitness workout task, checked without logging: "Log this workout?" - "log" / "task" / null (cancelled).
     function askLog(near) {
         if (!document.createElement("dialog").showModal) {
-            return Promise.resolve(window.confirm("Log the workout in Fitness? (Cancel just checks it off.)") ? "log" : "task");
+            return Promise.resolve(window.confirm("Log this workout in Fitness now? (Cancel marks it done without logging.)") ? "log" : "task");
         }
         var dialog = document.getElementById("pl-log-workout");
         if (!dialog) {
@@ -59,11 +60,11 @@
             dialog.className = "pl-dialog";
             dialog.id = "pl-log-workout";
             dialog.setAttribute("aria-labelledby", "pl-log-workout-h");
-            dialog.innerHTML = '<form method="dialog"><h2 id="pl-log-workout-h">Log the workout?</h2>' +
+            dialog.innerHTML = '<form method="dialog"><h2 id="pl-log-workout-h">Log this workout?</h2>' +
                 '<p class="pl-muted">Logging it in Fitness keeps your sets and records - and checks this off when you finish.</p>' +
                 '<div class="pl-dialog__actions">' +
-                '<button type="submit" class="pl-btn pl-btn--primary" value="log">Log workout</button>' +
-                '<button type="submit" class="pl-btn" value="task">Just check it off</button>' +
+                '<button type="submit" class="pl-btn pl-btn--primary" value="log">Log now</button>' +
+                '<button type="submit" class="pl-btn" value="task">Mark done without logging</button>' +
                 '<button type="submit" class="pl-btn pl-btn--ghost" value="cancel">Cancel</button></div></form>';
             ((near && near.closest(".pl")) || document.querySelector(".pl") || document.body).appendChild(dialog);
         }
@@ -197,7 +198,7 @@
         if (!any && !empty) {
             empty = document.createElement("li");
             empty.className = "pl-empty";
-            empty.textContent = "No tasks today.";
+            empty.textContent = list.getAttribute("data-empty") || "No tasks today.";
             list.appendChild(empty);
         }
     }

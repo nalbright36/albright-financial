@@ -1,0 +1,18 @@
+{% comment %}The quick log preview (log_views.quick_preview): each exercise the text names and the sets that will be saved, one line each. A name it doesn't know gets a picker (match-<n>, posted with Save); a picked one keeps its choice. Anything it can't read is flagged and left out.{% endcomment %}
+{% if parsed %}
+<p class="fx-label">Will save</p>
+<ul class="fx-list fx-preview-list" id="fx-quick-preview-list">{% for p in parsed %}
+    <li class="fx-row fx-preview-row{% if p.problem %} is-problem{% endif %}">
+        {% if p.unknown %}
+        <span class="fx-row__title"><span class="fx-warn">&ldquo;{{ p.name }}&rdquo;?</span></span>
+        <label class="fx-preview-pick"><span class="visually-hidden">Which exercise is &ldquo;{{ p.name }}&rdquo;?</span>
+            <select name="match-{{ p.index }}" class="ledger-input" data-quick-match><option value="">Pick an exercise&hellip;</option>{% for e in library %}<option value="{{ e.pk }}">{{ e.name }}</option>{% endfor %}</select></label>
+        {% elif p.exercise %}
+        <span class="fx-row__title">{{ p.exercise.name }}{% if p.picked %}<input type="hidden" name="match-{{ p.index }}" value="{{ p.exercise.pk }}">{% endif %}</span>
+        <span class="fx-row__ind">{% if p.problem %}<span class="fx-warn">{{ p.problem }}</span>{% else %}{{ p.summary }}{% endif %}</span>
+        {% else %}
+        <span class="fx-row__title">{{ p.text }}</span><span class="fx-row__ind fx-warn">{{ p.problem }}</span>
+        {% endif %}
+    </li>{% endfor %}
+</ul>
+{% endif %}

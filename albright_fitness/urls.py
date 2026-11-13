@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import body_views, challenge_views, food_views, views
+from . import body_views, challenge_views, food_views, log_views, views
 
 app_name = "albright_fitness"
 
@@ -18,6 +18,12 @@ urlpatterns = [
     path("entries/<int:pk>/photo/", challenge_views.challenge_photo, name="challenge_photo"),
     path("exercises/", views.exercises, name="exercises"),
     path("exercises/<int:pk>/", views.exercise, name="exercise"),
+    # The Log card (also the bottom sheet), the quick log preview, and Schedule (log_views, schedule.py).
+    path("exercises/<int:pk>/log/", log_views.exercise_log, name="exercise_log"),
+    path("quick/preview/", log_views.quick_preview, name="quick_preview"),
+    path("schedule/<str:kind>/<int:pk>/", log_views.schedule_new, name="schedule_new"),
+    path("scheduled/<int:pk>/edit/", log_views.schedule_edit, name="schedule_edit"),
+    path("scheduled/<int:pk>/remove/", log_views.schedule_remove, name="schedule_remove"),
     path("start/", views.start, name="start"),
     path("quick/", views.quick, name="quick"),
     path("workouts/<int:pk>/", views.workout, name="workout"),

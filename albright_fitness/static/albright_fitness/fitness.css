@@ -303,3 +303,68 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-form input[type="file"] { max-width: 100%; }
 
 .fx-warn { margin: 0 0 var(--space-3); padding: 8px 12px; border-left: 4px solid var(--loss); background: var(--surface-hover); font-size: var(--text-sm); }
+
+/* ---------- The Log card ("Log this exercise"; also the bottom sheet) ---------- */
+.fx-log { border-left: 4px solid var(--accent); }
+.fx-log__line { margin: 0 0 4px; font-size: var(--text-sm); line-height: 1.45; overflow-wrap: anywhere; }
+.fx-log__form { margin: var(--space-3) 0 0; }
+.fx-log__sets { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fx-log__set { display: flex; align-items: center; gap: 6px; }
+.fx-log__set .fx-set__type { cursor: default; }
+.fx-log__set[data-log-spare] .fx-set__type { color: var(--text-tertiary); }
+.fx-log__remove { flex-shrink: 0; }
+.fx-log__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: var(--space-3); }
+.fx-log__bar .fx-unit-select { margin-left: auto; }
+.fx-log__save { width: 100%; min-height: 48px; }
+.fx-log__start { margin: var(--space-3) 0 0; text-align: center; }
+.fx-log__status { margin-top: var(--space-3); padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: var(--text-sm); }
+.fx-log__status.is-error { background: color-mix(in srgb, var(--loss) 12%, transparent); color: var(--text-primary); }
+.fx-log__done { margin: 0; }
+.fx-log__prs { list-style: none; margin: 6px 0 0; padding: 0; font-weight: 600; }
+
+/* ---------- The bottom sheet ---------- */
+.fx-sheet { width: min(560px, 100%); max-width: 100%; max-height: 88vh; margin: auto auto 0; padding: 12px 0 0; border: 0;
+  border-radius: 16px 16px 0 0; background: var(--bg); color: var(--text-primary); overflow: auto; }
+.fx-sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
+.fx-sheet__close { position: sticky; top: 0; float: right; margin: 0 8px 0 0; z-index: 1; }
+.fx-sheet__body { padding: 0 12px 16px; }
+.fx-sheet .fx-log { margin: 0; }
+@media (min-width: 640px) { .fx-sheet { margin: auto; border-radius: 16px; } }
+
+/* ---------- Exercises list: one line with its Log button ---------- */
+.fx-ex-row { display: flex; align-items: center; gap: 8px; }
+.fx-ex-row > .fx-row { flex: 1 1 auto; min-width: 0; }
+.fx-ex-row__log { flex-shrink: 0; }
+
+/* ---------- The Today page's Quick log ---------- */
+.fx-quicklog { border-left: 4px solid var(--accent); }
+.fx-quicklog__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.fx-quicklog__head .fx-card__title { margin: 0; }
+.fx-quicklog__tabs { flex: 1 1 240px; margin: 0; }
+.fx-quicklog__panel { margin-top: var(--space-3); }
+.fx-quicklog.has-tabs .fx-quicklog__nojs { display: none; }
+.fx-quicklog__preview:empty { display: none; }
+.fx-quicklog__preview { margin-top: var(--space-2); }
+.fx-preview-row.is-problem .fx-row__title { color: var(--text-secondary); }
+.fx-preview-pick { flex: 1 1 160px; min-width: 0; }
+.fx-preview-pick select { width: 100%; }
+.fx-quicklog__recent { margin-top: var(--space-3); }
+.fx-quicklog__recent .fx-chips { margin: 4px 0 0; list-style: none; }
+.fx-quicklog__recent .fx-chip { color: var(--text-primary); text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-quicklog__recent .fx-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.fx-quicklog__start { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-3); }
+.fx-quicklog__start form { margin: 0; }
+.fx-quicklog__food-opts { margin-bottom: var(--space-2); }
+.fx-quicklog__search { width: 100%; margin-bottom: var(--space-2); }
+.fx-quicklog__foods { max-height: 320px; overflow: auto; }
+.fx-food-pick { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; font: inherit; color: var(--text-primary); text-align: left; cursor: pointer; }
+.fx-quicklog__qa { margin-top: var(--space-3); }
+
+/* ---------- Schedule ---------- */
+.fx-schedule { margin-top: var(--space-3); }
+.fx-schedule > summary { list-style: none; display: inline-flex; }
+.fx-schedule > summary::-webkit-details-marker { display: none; }
+.fx-schedule__form { margin-top: var(--space-3); }
+.fx-schedule__fields [hidden] { display: none !important; }
+.fx-sched .fx-row__title { flex: 1 1 auto; }
+.fx-sched form { margin: 0; }

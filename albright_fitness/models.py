@@ -131,6 +131,51 @@ class ProgramExercise(models.Model):
         return f"{self.target_sets} × {self.target_reps}" if self.target_reps else f"{self.target_sets} sets"
 
 
+class ScheduledSession(models.Model):
+    """Something I put on my Planner myself with Schedule (schedule.py): one exercise, a whole program or one program
+    day, with an optional target (sets × reps). Its Planner task - mine, private, source "fitness", source_id
+    "session-<pk>" - is made through the Planner's service helpers. Deleting the task deletes this schedule (and
+    only this one); Remove here deletes the task."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_sessions")
+    exercise = models.ForeignKey(Exercise, on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    program = models.ForeignKey(Program, on_delete=models.CASCADE, null=True, blank=True, related_name="sessions")
+    program_day = models.ForeignKey(ProgramDay, on_delete=models.CASCADE, null=True, blank=True, related_name="sessions")
+    target_sets = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(20)])
+    target_reps = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(100)])
+    planner_item = models.OneToOneField("albright_planner.ScheduleItem", on_delete=models.CASCADE, null=True, blank=True,
+                                        related_name="fitness_session")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [models.CheckConstraint(
+            condition=(Q(exercise__isnull=False, program__isnull=True, program_day__isnull=True)
+                       | Q(exercise__isnull=True, program__isnull=False, program_day__isnull=True)
+                       | Q(exercise__isnull=True, program__isnull=True, program_day__isnull=False)),
+            name="fitness_session_one_target")]
+
+    def __str__(self):
+        return f"Scheduled {self.title}"
+
+    @property
+    def source_id(self):
+        return f"session-{self.pk}"
+
+    @property
+    def title(self):
+        if self.exercise_id:
+            return self.exercise.name
+        if self.program_day_id:
+            return f"{self.program_day.name} ({self.program_day.program.name})"
+        return self.program.name
+
+    @property
+    def target_text(self):
+        if not self.target_sets:
+            return ""
+        return f"{self.target_sets} × {self.target_reps}" if self.target_reps else f"{self.target_sets} sets"
+
+
 class WorkoutQuerySet(models.QuerySet):
     def visible_to(self, user):
         """Mine, and ones shared with me (a person or a circle - albright_labs.sharing)."""

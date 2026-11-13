@@ -1,0 +1,6 @@
+{# The exercise page's Records card (views.exercise; re-rendered after the Log card saves). #}
+<section class="card fx-card" aria-labelledby="fx-records-h">
+    <h2 class="fx-card__title" id="fx-records-h">Records</h2>
+    {% for r, text in records %}<div class="fx-row fx-row--wrap"><span class="fx-row__title">{{ text }}</span><span class="fx-row__ind">{{ r.achieved_on|date:"M j, Y" }}</span></div>
+    {% empty %}<p class="fx-empty">None yet - records start from your second session.</p>{% endfor %}
+</section>

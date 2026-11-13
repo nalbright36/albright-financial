@@ -95,9 +95,10 @@ def start_url(day):
 # ---------------------------------------------------------------------------
 
 @transaction.atomic
-def start_workout(user, day=None, planner_item=None, planner_date=None, name=""):
+def start_workout(user, day=None, planner_item=None, planner_date=None, name="", rows=None):
     """A new workout - from a program day it's pre-filled with the day's exercises and targets (and last time's
-    progression). Started from a Planner task, finishing it checks off that occurrence."""
+    progression); `rows` (schedule.rows_for, or one exercise) pre-fill it the same way. Started from a Planner
+    task, finishing it checks off that occurrence."""
     now = timezone.localtime()
     workout = Workout.objects.create(owner=user, date=planner_date or now.date(), start_time=now.time().replace(microsecond=0),
                                      name=name or (day.name if day else ""), program_day=day,
@@ -110,6 +111,11 @@ def start_workout(user, day=None, planner_item=None, planner_date=None, name="")
                                                 target_sets=pe.target_sets, target_reps=pe.target_reps)
             training.prefill(we, user, target_sets=pe.target_sets, target_reps=pe.target_reps,
                              target_seconds=pe.target_seconds, target_distance=pe.target_distance)
+    for order, row in enumerate(rows or []):
+        we = WorkoutExercise.objects.create(workout=workout, exercise=row["exercise"], order=order,
+                                            target_sets=row.get("sets"), target_reps=row.get("reps"))
+        training.prefill(we, user, target_sets=row.get("sets"), target_reps=row.get("reps"),
+                         target_seconds=row.get("seconds"), target_distance=row.get("distance"))
     return workout
 
 
@@ -166,6 +172,8 @@ def finish(workout):
     records = training.detect_records(workout)
     if workout.planner_item_id and workout.planner_date and workout.planner_item.owner_id == workout.owner_id:
         services.complete_occurrence(workout.planner_item, workout.planner_date, workout.owner)
+    from . import schedule
+    schedule.complete_matching(workout)                # the same exercise / program day scheduled that day
     _record_finish(workout, records)
     return records
 

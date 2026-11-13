@@ -2,9 +2,15 @@
 {% comment %}
 Albright Fitness's base template. Its stylesheet and script (albright_fitness/fitness.css, fitness.js) come from
 the app registry, which index.html includes on every Fitness page - like the header, the back chip and the theme.
+The bottom sheet below is for Log cards opened from a list (fitness.js).
 {% endcomment %}
 {% block content %}
 <div class="container fx" id="fitness">
     {% block fitness %}{% endblock %}
+    {# The bottom sheet (fitness.js): an exercise's Log card opened from the Exercises list or the Today page's chips. #}
+    <dialog class="fx-sheet" id="fx-sheet" aria-label="Log an exercise">
+        <button type="button" class="fx-icon-btn fx-sheet__close" data-sheet-close aria-label="Close">&times;</button>
+        <div class="fx-sheet__body" data-sheet-body></div>
+    </dialog>
 </div>
 {% endblock %}

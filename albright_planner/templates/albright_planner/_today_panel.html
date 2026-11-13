@@ -1,7 +1,10 @@
 {% comment %}
 Home's "Today" panel (albright_labs.views.hub, for people who can open the
-Planner): the open tasks - overdue ones first, then today's - with their checkboxes,
-and today's events. With Home's "Show completed tasks" on, today's finished tasks
+Planner): "Meals today" (Meals orange, view only - tapping one opens it in Meals) and
+"Workouts today" (Fitness yellow, with their checkboxes - checking one asks "Log this
+workout?" like the Planner - and Start), each only with Meals / Fitness access and
+something in it; then the open tasks - overdue ones first, then today's - with their
+checkboxes, and today's events. With Home's "Show completed tasks" on, today's finished tasks
 follow, struck through. The count line says what's shown ("3 open today").
 Checking a task off here takes it out of the list at once, with "Done · Undo"
 (planner.js); with completed tasks shown it moves to the bottom instead.
@@ -14,6 +17,18 @@ Styles and check-off: the Planner's planner.css / planner.js.
         <a href="{% url 'albright_planner:day' %}" class="pl-small">Open Planner &rarr;</a>
     </div>
     <p class="pl-today__count pl-small" id="planner-today-count" data-open="{{ planner_today.open }}" data-overdue="{{ planner_today.overdue }}" data-done="{{ planner_today.done }}">{% if planner_today.open %}{{ planner_today.open }} open today{% else %}Nothing open today{% endif %}{% if planner_today.overdue %} &middot; {{ planner_today.overdue }} overdue{% endif %}{% if planner_today.done %} &middot; {{ planner_today.done }} done{% endif %}</p>
+    {% if planner_today.meals %}
+    <div class="pl-today__sec pl-today__sec--meals" id="planner-today-meals">
+        <h3 class="pl-label"><span class="pl-meal-icon" aria-hidden="true">{% include "albright_planner/_fork.html" %}</span> Meals today</h3>
+        <ul class="pl-list">{% for o in planner_today.meals %}{% include "albright_planner/_meal.html" %}{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if planner_today.workouts %}
+    <div class="pl-today__sec pl-today__sec--workouts" id="planner-today-workouts">
+        <h3 class="pl-label"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workouts today</h3>
+        <ul class="pl-list" data-empty="No workouts left today.">{% for o in planner_today.workouts %}{% include "albright_planner/_occ.html" with here=planner_today.here start=True %}{% endfor %}</ul>
+    </div>
+    {% endif %}
     <div class="pl-today__cols">
         <div>
             <h3 class="pl-label">Tasks</h3>

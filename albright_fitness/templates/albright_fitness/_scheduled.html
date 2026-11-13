@@ -1,0 +1,15 @@
+{% comment %}"Scheduled" (log_views.scheduled_for): upcoming sessions I put on my Planner for this exercise or program (and
+its days) - the next date, time, repeat and target - with Edit and Remove; Schedule adds another. show_name: which
+thing each one is (a program's page lists its days' too).{% endcomment %}
+<section class="card fx-card" id="fx-scheduled" aria-labelledby="fx-scheduled-h">
+    <h2 class="fx-card__title" id="fx-scheduled-h">Scheduled</h2>
+    {% for session, dates in scheduled %}
+    <div class="fx-row fx-sched" id="fx-session-{{ session.pk }}">
+        <span class="fx-row__title" title="{{ session.title }}">{% if show_name %}{{ session.title }} &middot; {% endif %}{{ dates.0|date:"D M j" }}{% if session.planner_item.start_time %} {{ session.planner_item.start_time|time:"g:i A" }}{% endif %}{% if session.planner_item.recurrence %} <span class="fx-muted" title="Repeats" aria-label="Repeats">&#x21bb;</span>{% endif %}</span>
+        {% if session.target_text %}<span class="fx-row__ind">{{ session.target_text }}</span>{% endif %}
+        <a href="{% url 'albright_fitness:schedule_edit' session.pk %}?next={{ request.path|urlencode }}%23fx-scheduled" class="fx-link-btn" aria-label="Edit {{ session.title }} on {{ dates.0|date:'M j' }}">Edit</a>
+        <form method="post" action="{% url 'albright_fitness:schedule_remove' session.pk %}" data-confirm="Remove {{ session.title }} from your Planner{% if session.planner_item.recurrence %} (every occurrence){% endif %}?">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}#fx-scheduled"><button type="submit" class="fx-icon-btn" aria-label="Remove {{ session.title }} from your Planner">&times;</button></form>
+    </div>
+    {% empty %}<p class="fx-empty">Nothing scheduled. Schedule puts it on your Planner as a task.</p>{% endfor %}
+    {% if schedule_url %}{% include "albright_fitness/_schedule_box.html" with url=schedule_url p="fx-sched-new" %}{% endif %}
+</section>

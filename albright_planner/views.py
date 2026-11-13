@@ -11,6 +11,7 @@ Items another app keeps up to date (sources.py) are brought up to date when a vi
 are read live from Meals for people who can open it (and haven't hidden them).
 Opening the Planner at all needs access in Admin > Users (albright_labs.app_access)."""
 import json
+import logging
 from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -29,6 +30,8 @@ from albright_labs import sharing
 from . import checklist, planner, quickadd, recurrence, sources, weather
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
 from .models import NOTES_MAX, PlannerSettings, ScheduleItem, home_zone
+
+log = logging.getLogger(__name__)
 
 VIEWS = ("day", "week", "month")
 VIEW_COOKIE = "planner_view"
@@ -407,6 +410,19 @@ def notes_preview(request):
     return JsonResponse({"html": render_markdown(request.POST.get("notes", "")[:NOTES_MAX])})
 
 
+def _fitness_panel(item, user, occurrence):
+    """A Fitness task's exercises, targets and last time, with Start workout (albright_fitness.schedule.panel) - for
+    someone who can open Fitness. A failure just leaves the section out."""
+    if item.source_app != "fitness" or not sources.can_open(user, "fitness"):
+        return None
+    try:
+        from albright_fitness import schedule
+        return schedule.panel(item, user, occurrence)
+    except Exception:  # noqa: BLE001 - the panel must still open
+        log.exception("Fitness section of the view panel failed for item %s", item.pk)
+        return None
+
+
 @login_required
 @never_cache
 def view_item(request, pk):
@@ -438,6 +454,7 @@ def view_item(request, pk):
         "share": sharing.control(request.user, item),
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "can_check_groceries": sources.can_open(request.user, "meals"),
+        "fitness": _fitness_panel(item, request.user, occurrence),
         "linked_note": planner.linked_note(item, request.user, full=True),
         "can_skip": can_skip, "can_move": can_edit, "can_delete": can_delete,
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),

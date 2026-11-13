@@ -19,8 +19,8 @@ from django.views.decorators.http import require_POST
 from albright_labs import sharing
 
 from . import body, insights, nutrition, programs, stats, training
-from .models import (EQUIPMENT, MUSCLES, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord, Program, ProgramDay,
-                     ProgramExercise, Workout, WorkoutExercise, WorkoutSet)
+from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord, Program,
+                     ProgramDay, ProgramExercise, ScheduledSession, Workout, WorkoutExercise, WorkoutSet)
 
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -71,7 +71,40 @@ def dashboard(request):
         "food_average": nutrition.averages(request.user), "tracked": profile.tracked or [],
         "week_summary": insights.week(request.user, stats.week_start(timezone.localdate())), "weight": _dashboard_weight(request.user, profile),
         "records_text": [(r, training.record_text(r)) for r in data["records"]],
-        "recent": Workout.objects.filter(owner=request.user, finished_at__isnull=False).select_related("program_day")[:5]})
+        "recent": Workout.objects.filter(owner=request.user, finished_at__isnull=False).select_related("program_day")[:5],
+        "quick": _quick_log(request.user, profile)})
+
+
+RECENT_EXERCISES = 8
+
+
+def recent_exercises(user, limit=RECENT_EXERCISES):
+    """My most recently logged exercises, newest first, each once."""
+    seen, out = set(), []
+    for we in WorkoutExercise.objects.filter(workout__owner=user).select_related("exercise")             .order_by("-workout__date", "-workout__pk", "-pk")[:200]:
+        if we.exercise_id not in seen:
+            seen.add(we.exercise_id)
+            out.append(we.exercise)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _default_slot(now=None):
+    hour = (now or timezone.localtime()).hour
+    return "breakfast" if hour < 11 else "lunch" if hour < 15 else "dinner" if hour < 21 else "snack"
+
+
+def _quick_log(user, profile):
+    """The Today page's Quick log card: Workout (the text log, recent exercises, start buttons), Food (my foods,
+    recent foods and recipes - one tap - and quick add) and Weight (hidden when weight is turned off)."""
+    from .food_views import _readable_recipes
+    recipes = _readable_recipes(user)
+    return {"recent_exercises": recent_exercises(user), "my_foods": CustomFood.objects.filter(owner=user),
+            "recent_foods": [entry for entry, _times in nutrition.recent_foods(user)],
+            "recipes": recipes.order_by("title")[:100] if recipes is not None else [],
+            "slots": FoodLogEntry.SLOTS, "slot": _default_slot(), "weight_unit": profile.weight_unit,
+            "show_weight": not profile.hide_weight, "today": timezone.localdate()}
 
 
 def _dashboard_weight(user, profile):
@@ -120,14 +153,19 @@ def exercises(request):
 
 
 @login_required
+@never_cache
 def exercise(request, pk):
+    """One exercise: the Log card first (log_views), then progress, records, what's scheduled, how to."""
+    from . import log_views, schedule
     ex = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
-    history, unit = stats.exercise_history(request.user, ex)
+    history, unit = stats.exercise_history(request.user, ex, include_today=True)
     records = PersonalRecord.objects.filter(owner=request.user, exercise=ex)[:10]
     return render(request, "albright_fitness/exercise.html", {
-        "ex": ex, "history": history, "unit": unit, "chart": _chart(history),
+        **log_views.card_context(request.user, ex), "history": history, "unit": unit, "chart": _chart(history),
         "records": [(r, training.record_text(r)) for r in records], "muscle_names": dict(MUSCLES),
-        "tip": training.suggest(request.user, ex)})
+        "scheduled": log_views.scheduled_for(request.user, exercise=ex),
+        "schedule_form": schedule.ScheduleForm(initial={"date": timezone.localdate(), "repeat": "none", "interval": 2}),
+        "schedule_url": reverse("albright_fitness:schedule_new", args=["exercise", ex.pk])})
 
 
 def _chart(rows):
@@ -152,25 +190,47 @@ def _chart(rows):
 
 @login_required
 def start(request):
-    """Start a workout - from a program day (pre-filled; GET shows what's in it, POST starts it), or blank."""
+    """Start a workout - from a program day (pre-filled; GET shows what's in it, POST starts it), from a scheduled
+    session (?session=: its exercises and targets - the Planner's "Log now"; finishing it checks that occurrence
+    off), with one exercise first (the exercise page's "Start a full workout with this"), or blank."""
+    from . import schedule
     user = request.user
-    day = None
-    if request.GET.get("day") or request.POST.get("day"):
-        day = get_object_or_404(ProgramDay.objects.select_related("program"), pk=request.GET.get("day") or request.POST.get("day"),
-                                program__owner=user)
+    param = lambda name: request.GET.get(name) or request.POST.get(name)  # noqa: E731
+    day = session = first = None
+    if param("day"):
+        day = get_object_or_404(ProgramDay.objects.select_related("program"), pk=param("day"), program__owner=user)
+    elif param("session"):
+        session = get_object_or_404(ScheduledSession.objects.select_related("planner_item", "exercise", "program",
+                                                                            "program_day__program"),
+                                    pk=param("session"), owner=user, planner_item__isnull=False)
+    elif param("exercise"):
+        first = get_object_or_404(Exercise.objects.visible_to(user), pk=param("exercise"))
     requested = None
     try:
-        requested = date.fromisoformat(request.GET.get("date") or request.POST.get("date") or "")
+        requested = date.fromisoformat(param("date") or "")
     except ValueError:
         pass
-    item, when = programs.planner_occurrence(user, day, requested) if day else (None, None)
+    item, when, rows = None, None, None
+    if day:
+        item, when = programs.planner_occurrence(user, day, requested)
+    elif session:
+        rows = schedule.rows_for(session)
+        when = requested or timezone.localdate()
+        from albright_planner import services
+        item, when = (session.planner_item, when) if services.is_scheduled(session.planner_item, when) else (None, None)
+    elif first:
+        rows = [{"exercise": first}]
     if request.method == "POST":
-        workout = programs.start_workout(user, day=day, planner_item=item, planner_date=when,
-                                         name=request.POST.get("name", "").strip()[:100])
+        name = request.POST.get("name", "").strip()[:100] or (session.title if session else "")
+        workout = programs.start_workout(user, day=day, planner_item=item, planner_date=when, name=name, rows=rows)
+        if session and session.program_day_id:                 # it counts as that program day's workout
+            workout.program_day = session.program_day
+            workout.save(update_fields=["program_day"])
         return redirect("albright_fitness:workout", pk=workout.pk)
+    shown = [{"exercise": pe.exercise, "target": pe.target_text} for pe in day.exercises.select_related("exercise")] if day \
+        else [{"exercise": r["exercise"], "target": r.get("target", "")} for r in (rows or [])]
     return render(request, "albright_fitness/start.html", {
-        "day": day, "planner_date": when, "rows": day.exercises.select_related("exercise") if day else [],
-        "requested": requested})
+        "day": day, "session": session, "first": first, "planner_date": when, "rows": shown, "requested": requested})
 
 
 @login_required
@@ -178,7 +238,8 @@ def start(request):
 def quick(request):
     """The quick text log: a finished workout, today, from "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30" (it
     counts as today's planned program day when it matches one - programs.log_parsed)."""
-    parsed = training.parse_quick(request.POST.get("text", "")[:2000], request.user)
+    from .log_views import posted_matches
+    parsed = training.parse_quick(request.POST.get("text", "")[:2000], request.user, posted_matches(request))
     good = [p for p in parsed if not p.problem]
     for p in parsed:
         if p.problem:
@@ -199,13 +260,7 @@ def _blocks(workout, user, editable):
     return out
 
 
-def _set_text(s):
-    if s.distance or s.duration_seconds:
-        return " ".join(p for p in (f"{training.fmt_weight(s.distance)} {s.distance_unit}" if s.distance else "",
-                                     training.clock(s.duration_seconds) if s.duration_seconds else "") if p)
-    if s.weight is not None and s.reps:
-        return f"{training.fmt_weight(s.weight)}×{s.reps}"
-    return f"{s.reps or 0} reps"
+_set_text = training.set_text
 
 
 @login_required
@@ -414,10 +469,14 @@ def program(request, pk):
         return redirect(reverse("albright_fitness:program", args=[p.pk]) + request.POST.get("anchor", ""))
     days = list(p.days.prefetch_related("exercises__exercise"))
     from albright_planner import services
+
+    from . import log_views, schedule
     return render(request, "albright_fitness/program.html", {
         "p": p, "days": days, "weekday_names": list(enumerate(WEEKDAY_NAMES)),
         "library": Exercise.objects.visible_to(request.user), "kinds": Exercise.KINDS,
-        "on_planner": [d for d in days if services.source_item(request.user, programs.SOURCE, f"day-{d.pk}")]})
+        "on_planner": [d for d in days if services.source_item(request.user, programs.SOURCE, f"day-{d.pk}")],
+        "scheduled": log_views.scheduled_for(request.user, program=p),
+        "schedule_form": schedule.ScheduleForm(initial={"date": timezone.localdate(), "repeat": "none", "interval": 2})})
 
 
 def _program_post(request, p):

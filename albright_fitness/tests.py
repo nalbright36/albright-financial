@@ -333,7 +333,7 @@ class ProgramTests(Base):
         page = self.client.get(reverse("albright_planner:week") + f"?date={item.date}").content.decode()
         self.assertIn(f'data-log-url="/fitness/start/?day={day.pk}&amp;date={item.date}"', page)
         js = static("albright_planner/planner.js")
-        self.assertIn("Log the workout?", js)
+        self.assertIn("Log this workout?", js)
         self.assertIn('if (logChoice === "log") { window.location.href = logUrl; return null; }', js)
 
     def test_turning_a_program_off_ends_its_planner_items_but_keeps_history(self):

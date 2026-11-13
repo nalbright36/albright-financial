@@ -353,20 +353,30 @@ def is_completed(occ):
 
 
 def today_panel(user, show_completed=False):
-    """Home's Today panel: the open tasks - overdue ones first, then today's - and today's events. show_completed
-    (Home's "Show completed tasks"): today's finished tasks too, at the bottom. "open" / "overdue" / "done": the
-    count line's numbers for what's shown."""
-    from . import checklist
+    """Home's Today panel: "Meals today" (Meals' plan, view only) and "Workouts today" (today's Fitness tasks, with
+    their checkboxes) - each only for someone who can open that app, and only when it has something - then the open
+    tasks - overdue ones first, then today's - and today's events. show_completed (Home's "Show completed tasks"):
+    today's finished tasks and workouts too, at the bottom of their lists. "open" / "overdue" / "done": the count
+    line's numbers for what's shown (workouts included)."""
+    from . import checklist, sources
     day = today(user)
     late = overdue(user, day)
     occs = checklist.attach(occurrences(user, day, day) + late)
     todays = [o for o in occs if o.item.kind == ScheduleItem.TASK and not getattr(o, "overdue", False)]
+    fitness = sources.can_open(user, "fitness")
+    workouts = [o for o in todays if fitness and o.item.source_app == "fitness"]
+    todays = [o for o in todays if o not in workouts]
     open_tasks = late + [o for o in todays if not is_completed(o)]
     done = [o for o in todays if is_completed(o)] if show_completed else []
-    for o in done:
+    open_workouts = [o for o in workouts if not is_completed(o)]
+    done_workouts = [o for o in workouts if is_completed(o)] if show_completed else []
+    for o in done + done_workouts:
         o.done = True                                  # struck through, even if only its checklist is finished
+    meals = sources.meals(user, day, day, show=True) if sources.can_open(user, "meals") else []
     return {"date": day, "tasks": open_tasks + done, "events": [o for o in occs if o.item.kind == ScheduleItem.EVENT],
-            "open": len(open_tasks), "overdue": len(late), "done": len(done), "show_completed": show_completed}
+            "meals": meals, "workouts": open_workouts + done_workouts,
+            "open": len(open_tasks) + len(open_workouts), "overdue": len(late), "done": len(done) + len(done_workouts),
+            "show_completed": show_completed}
 
 
 # ---------------------------------------------------------------------------

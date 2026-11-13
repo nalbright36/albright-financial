@@ -86,23 +86,34 @@ def fmt_weight(value):
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def suggested_rows(user, exercise, before=None, target_sets=None, target_reps=None, target_seconds=None,
+                   target_distance=None, tip=None):
+    """The sets to start from - the suggestion (or a target): [{"reps", "weight", "unit"}] or, for cardio,
+    [{"duration_seconds", "distance", "distance_unit"}]. With nothing to go on: 3 empty sets (1 for cardio)."""
+    tip = tip if tip is not None else suggest(user, exercise, before, target_reps, target_sets)
+    count = target_sets or (tip.sets if tip and tip.sets else (1 if exercise.is_cardio else 3))
+    rows = []
+    for _n in range(count):
+        if exercise.is_cardio:
+            last = tip.last[0] if tip and tip.last else None
+            rows.append({"duration_seconds": target_seconds or (last.duration_seconds if last else None),
+                         "distance": target_distance or (last.distance if last else None),
+                         "distance_unit": last.distance_unit if last else MI})
+        else:
+            row = {"reps": (tip.reps if tip and tip.reps else None) or target_reps, "weight": None, "unit": LB}
+            if tip and tip.weight is not None:
+                row["weight"], row["unit"] = tip.weight, tip.unit
+            elif tip and tip.last and tip.last[0].unit:
+                row["unit"] = tip.last[0].unit
+            rows.append(row)
+    return rows
+
+
 def prefill(workout_exercise, user, target_sets=None, target_reps=None, target_seconds=None, target_distance=None):
     """New sets for an exercise just added to a workout: from the suggestion (or the program's target)."""
-    tip = suggest(user, workout_exercise.exercise, workout_exercise.workout, target_reps, target_sets)
-    count = target_sets or (tip.sets if tip and tip.sets else (1 if workout_exercise.exercise.is_cardio else 3))
-    rows = []
-    for n in range(count):
-        s = WorkoutSet(workout_exercise=workout_exercise, order=n)
-        if workout_exercise.exercise.is_cardio:
-            last = tip.last[0] if tip and tip.last else None
-            s.duration_seconds = target_seconds or (last.duration_seconds if last else None)
-            s.distance = target_distance or (last.distance if last else None)
-            s.distance_unit = last.distance_unit if last else MI
-        else:
-            s.reps = (tip.reps if tip and tip.reps else None) or target_reps
-            if tip and tip.weight is not None:
-                s.weight, s.unit = tip.weight, tip.unit
-        rows.append(s)
+    rows = [WorkoutSet(workout_exercise=workout_exercise, order=n, **row)
+            for n, row in enumerate(suggested_rows(user, workout_exercise.exercise, workout_exercise.workout,
+                                                   target_sets, target_reps, target_seconds, target_distance))]
     WorkoutSet.objects.bulk_create(rows)
     return rows
 
@@ -147,6 +158,23 @@ class Parsed:
     exercise: object = None
     sets: list = field(default_factory=list)       # [{"reps", "weight", "unit", "duration_seconds", "distance", "distance_unit"}]
     problem: str = ""
+    index: int = 0                                 # its place in the text (the preview's picker posts match-<index>)
+    name: str = ""                                 # the name as typed
+    unknown: bool = False                          # no exercise by that name: the preview offers a picker
+    picked: bool = False                           # the exercise came from that picker
+
+    @property
+    def summary(self):
+        """"185×8, 185×8, 185×7" - what will be saved."""
+        return ", ".join(set_text(_RowSet(row)) for row in self.sets)
+
+
+class _RowSet:
+    """A parsed set row with a set's attributes, for set_text()."""
+    def __init__(self, row):
+        self.reps, self.weight = row.get("reps"), row.get("weight")
+        self.distance, self.distance_unit = row.get("distance"), row.get("distance_unit", MI)
+        self.duration_seconds = row.get("duration_seconds")
 
 
 def find_exercise(user, name):
@@ -166,20 +194,22 @@ def find_exercise(user, name):
     return min(candidates, key=lambda e: (len(e.name), e.owner_id is None), default=None)
 
 
-def parse_quick(text, user):
-    """[Parsed] - one per exercise in "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30"."""
+def parse_quick(text, user, matches=None):
+    """[Parsed] - one per exercise in "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30". matches: {index: Exercise}
+    - what the person picked for a name that didn't match (the Today page's preview)."""
     out = []
-    for chunk in re.split(r",\s*(?=[A-Za-z])|;|\n", text or ""):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
+    chunks = [c.strip() for c in re.split(r",\s*(?=[A-Za-z])|;|\n", text or "") if c.strip()]
+    for index, chunk in enumerate(chunks):
         m = re.match(r"^(?P<name>[A-Za-z][A-Za-z \-']*?)\s+(?P<rest>[\d(].*)$", chunk)
         if not m:
-            out.append(Parsed(chunk, problem="no numbers after the exercise"))
+            out.append(Parsed(chunk, problem="no numbers after the exercise", index=index))
             continue
-        item = Parsed(chunk, exercise=find_exercise(user, m.group("name")))
+        name = m.group("name").strip()
+        picked = (matches or {}).get(index)
+        item = Parsed(chunk, exercise=picked or find_exercise(user, name), index=index, name=name, picked=bool(picked))
         if item.exercise is None:
-            item.problem = f"couldn't find an exercise called “{m.group('name').strip()}”"
+            item.problem = f"couldn't find an exercise called “{name}”"
+            item.unknown = True
             out.append(item)
             continue
         rest = m.group("rest").strip()
@@ -279,10 +309,15 @@ def _bests(sets):
     return out
 
 
-def detect_records(workout):
-    """Store this finished workout's new personal records and return them."""
+def detect_records(workout, exercises=None):
+    """Store this workout's new personal records and return them (only `exercises`' when given - the exercise
+    page's Log card, before the workout is finished). One record per kind (and weight) per workout and exercise:
+    checking again later raises it if beaten, never adds a second."""
     found = []
-    for we in workout.exercises.select_related("exercise").prefetch_related("sets"):
+    blocks = workout.exercises.select_related("exercise").prefetch_related("sets")
+    if exercises is not None:
+        blocks = blocks.filter(exercise__in=exercises)
+    for we in blocks:
         now = _bests(we.sets.all())
         earlier = WorkoutSet.objects.filter(workout_exercise__exercise=we.exercise, workout_exercise__workout__owner=workout.owner,
                                             workout_exercise__workout__finished_at__isnull=False) \
@@ -292,9 +327,16 @@ def detect_records(workout):
         before = _bests(earlier)
 
         def add(kind, value, previous, at=None):
-            found.append(PersonalRecord.objects.create(owner=workout.owner, exercise=we.exercise, kind=kind, value=value,
-                                                       previous=previous, at_weight=at, workout=workout,
-                                                       achieved_on=workout.date))
+            same = PersonalRecord.objects.filter(owner=workout.owner, exercise=we.exercise, kind=kind, workout=workout,
+                                                 at_weight=at).first()
+            if same is None:
+                found.append(PersonalRecord.objects.create(owner=workout.owner, exercise=we.exercise, kind=kind,
+                                                           value=value, previous=previous, at_weight=at, workout=workout,
+                                                           achieved_on=workout.date))
+            elif (value < same.value) if kind == "pace" else (value > same.value):
+                same.value = value
+                same.save(update_fields=["value"])
+                found.append(same)
         for kind in ("weight", "e1rm", "distance", "duration"):
             if kind in now and now[kind] > before.get(kind, 0):
                 add(kind, now[kind], before.get(kind))
@@ -327,6 +369,16 @@ def record_text(record):
     if record.previous is not None:
         text += f" (was {show(record.kind, record.previous)})"
     return text
+
+
+def set_text(s):
+    """One set as text: "185×8", "12 reps", "3.1 mi 28:30"."""
+    if s.distance or s.duration_seconds:
+        return " ".join(p for p in (f"{fmt_weight(s.distance)} {s.distance_unit}" if s.distance else "",
+                                     clock(s.duration_seconds) if s.duration_seconds else "") if p)
+    if s.weight is not None and s.reps:
+        return f"{fmt_weight(s.weight)}×{s.reps}"
+    return f"{s.reps or 0} reps"
 
 
 def clock(seconds):

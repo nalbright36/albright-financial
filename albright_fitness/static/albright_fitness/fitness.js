@@ -12,6 +12,13 @@
  *   board      the challenge leaderboard (#fx-board) refreshes every 15s
  *   rules      on Edit rules / New challenge, a two-step activity + measure picker
  *              (the grouped <select name="activity"> still works without JS)
+ *   log card   "Log this exercise": + Set copies the set before it, x removes one, Save posts in the background
+ *              and shows what was saved and any new records; on the exercise page Progress and Records update
+ *   sheet      a Log card opened from a list (Exercises' Log buttons, the Today page's recent chips) in a bottom
+ *              sheet (<dialog>); without JS those links open the exercise page
+ *   quick log  the Today page's tabs (the last one used is remembered on this device), the workout text's
+ *              preview as you type (with pickers for names it doesn't know), and the food list's search
+ *   schedule   the Schedule form shows only the repeat fields that apply
  */
 (function () {
     "use strict";
@@ -141,7 +148,7 @@
     }
 
     // ---------- The progress chart: the nearest point to the pointer ----------
-    document.querySelectorAll("[data-chart]").forEach(function (box) {
+    function initChart(box) {
         var plot = box.querySelector("[data-plot]"), tip = box.querySelector("[data-tip]"), cross = box.querySelector("[data-cross]");
         var dots = Array.prototype.slice.call(plot.querySelectorAll("[data-x]"));
         function pick(clientX) {
@@ -162,7 +169,8 @@
             cross.hidden = true;
             dots.forEach(function (d) { d.classList.remove("is-on"); });
         });
-    });
+    }
+    document.querySelectorAll("[data-chart]").forEach(initChart);
 
     // A USDA food's amount (food_usda.html): the macros for what's typed, as you type. data-per100 is calories,
     // protein, carbs, fat, fiber per 100 g; each portion option carries its grams.
@@ -302,4 +310,188 @@
         fillFrom(selectedActivity());
     }
     document.querySelectorAll("[data-rule-picker]").forEach(setupRulePicker);
+
+    // ---------- The Log card: + Set, remove, save in the background ----------
+    function renumber(list) {
+        var rows = list.querySelectorAll("[data-log-row]");
+        rows.forEach(function (row, i) {
+            var n = row.querySelector("[data-log-n]");
+            if (n) n.textContent = String(i + 1);
+            var remove = row.querySelector("[data-log-remove]");
+            if (remove) remove.hidden = rows.length < 2;
+        });
+    }
+    function initLogCard(card) {
+        if (!card || card.getAttribute("data-bound") === "1") return;
+        card.setAttribute("data-bound", "1");
+        var list = card.querySelector("[data-log-sets]"), add = card.querySelector("[data-log-add]");
+        var spare = list && list.querySelector("[data-log-spare]");
+        if (spare && list.querySelectorAll("[data-log-row]").length > 1) spare.parentNode.removeChild(spare);
+        else if (spare) spare.removeAttribute("data-log-spare");
+        if (add) add.hidden = false;
+        renumber(list);
+    }
+    function addSet(card) {
+        var list = card.querySelector("[data-log-sets]"), rows = list.querySelectorAll("[data-log-row]");
+        var last = rows[rows.length - 1], row;
+        if (last) {
+            row = last.cloneNode(true);                       // "+ Set" copies the set before it
+            var from = last.querySelectorAll("input"), to = row.querySelectorAll("input");
+            for (var i = 0; i < to.length; i++) to[i].value = from[i].value;
+        } else {
+            var tpl = card.querySelector("[data-log-template]");
+            row = tpl.content.firstElementChild.cloneNode(true);
+        }
+        list.appendChild(row);
+        renumber(list);
+        var first = row.querySelector("input");
+        if (first) first.focus();
+    }
+    function logStatus(card, html, error) {
+        var box = card.querySelector("[data-log-status]");
+        if (!box) return;
+        box.innerHTML = html;
+        box.classList.toggle("is-error", !!error);
+        box.hidden = false;
+    }
+    function escapeHtml(text) {
+        var d = document.createElement("div");
+        d.textContent = text;
+        return d.innerHTML;
+    }
+    document.addEventListener("click", function (event) {
+        var addBtn = event.target.closest && event.target.closest("[data-log-add]");
+        if (addBtn) { addSet(addBtn.closest("[data-log-card]")); return; }
+        var remove = event.target.closest && event.target.closest("[data-log-remove]");
+        if (remove) {
+            var list = remove.closest("[data-log-sets]"), row = remove.closest("[data-log-row]");
+            if (list.querySelectorAll("[data-log-row]").length > 1) { list.removeChild(row); renumber(list); }
+        }
+    });
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form.matches || !form.matches("[data-log-form]") || !window.fetch) return;
+        event.preventDefault();
+        var card = form.closest("[data-log-card]"), save = form.querySelector("[type=submit]");
+        if (save) save.disabled = true;
+        fetch(form.action, {method: "POST", credentials: "same-origin", body: new FormData(form),
+                            headers: {"X-CSRFToken": csrf(), "X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { return r.json().catch(function () { return {ok: false, error: "Not saved - try again."}; }); })
+            .then(function (data) {
+                if (!data.ok) { logStatus(card, escapeHtml(data.error || "Not saved - try again."), true); return; }
+                var html = '<p class="fx-log__done">' + escapeHtml(data.message) +
+                    ' <a href="' + data.workout_url + '">Open the workout</a></p>';
+                if (data.records && data.records.length) {
+                    html += '<ul class="fx-log__prs" aria-label="New records">' + data.records.map(function (t) {
+                        return '<li><span aria-hidden="true">&#x1F3C6;</span> ' + escapeHtml(t) + "</li>";
+                    }).join("") + "</ul>";
+                }
+                logStatus(card, html, false);
+                if (save && data.added_to_open === false) save.textContent = "Add to today's workout";
+                var progress = document.getElementById("fx-progress-box"), records = document.getElementById("fx-records-box");
+                if (progress && data.progress_html && !card.closest("#fx-sheet")) {
+                    progress.innerHTML = data.progress_html;
+                    progress.querySelectorAll("[data-chart]").forEach(initChart);
+                }
+                if (records && data.records_html && !card.closest("#fx-sheet")) records.innerHTML = data.records_html;
+            })
+            .catch(function () { logStatus(card, "Not saved - check your connection and try again.", true); })
+            .then(function () { if (save) save.disabled = false; });
+    });
+    document.querySelectorAll("[data-log-card]").forEach(initLogCard);
+
+    // ---------- The bottom sheet: a Log card opened from a list ----------
+    var sheet = document.getElementById("fx-sheet");
+    document.addEventListener("click", function (event) {
+        var opener = event.target.closest && event.target.closest("[data-sheet-url]");
+        if (!opener || !sheet || !sheet.showModal || !window.fetch) return;
+        event.preventDefault();
+        var body = sheet.querySelector("[data-sheet-body]");
+        fetch(opener.getAttribute("data-sheet-url"), {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .then(function (html) {
+                body.innerHTML = html;
+                body.querySelectorAll("[data-log-card]").forEach(initLogCard);
+                sheet.showModal();
+                var first = body.querySelector(".fx-input");
+                if (first) first.focus();
+            })
+            .catch(function () { window.location.href = opener.href; });
+    });
+    if (sheet) {
+        sheet.addEventListener("click", function (event) {
+            if (event.target === sheet || (event.target.closest && event.target.closest("[data-sheet-close]"))) sheet.close();
+        });
+    }
+
+    // ---------- Quick log: tabs, the workout preview, the food search ----------
+    var quick = document.querySelector("[data-quicklog]");
+    if (quick) {
+        var tabs = Array.prototype.slice.call(quick.querySelectorAll("[data-quick-tab]"));
+        var choose = function (key, focus) {
+            if (!quick.querySelector('[data-quick-panel="' + key + '"]')) key = "workout";
+            tabs.forEach(function (t) {
+                var on = t.getAttribute("data-quick-tab") === key;
+                t.classList.toggle("is-on", on);
+                t.setAttribute("aria-selected", String(on));
+                t.tabIndex = on ? 0 : -1;
+                if (on && focus) t.focus();
+            });
+            quick.querySelectorAll("[data-quick-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-quick-panel") !== key; });
+            store("fx-quick-tab", key);
+        };
+        quick.querySelector("[data-quick-tabs]").hidden = false;
+        quick.classList.add("has-tabs");
+        choose(store("fx-quick-tab") || "workout");
+        tabs.forEach(function (t, i) {
+            t.addEventListener("click", function () { choose(t.getAttribute("data-quick-tab")); });
+            t.addEventListener("keydown", function (e) {
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                var next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                choose(next.getAttribute("data-quick-tab"), true);
+            });
+        });
+
+        var qform = quick.querySelector("[data-quick-form]"), preview = quick.querySelector("[data-quick-preview]"), wait = null;
+        var showPreview = function () {
+            var text = qform.elements.text.value.trim();
+            if (!text) { preview.innerHTML = ""; return; }
+            fetch(qform.getAttribute("data-preview-url"), {method: "POST", credentials: "same-origin", body: new FormData(qform),
+                                                           headers: {"X-CSRFToken": csrf(), "X-Requested-With": "XMLHttpRequest"}})
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) { if (data) preview.innerHTML = data.html; })
+                .catch(function () {});
+        };
+        if (qform && preview && window.fetch) {
+            qform.elements.text.addEventListener("input", function () { clearTimeout(wait); wait = setTimeout(showPreview, 350); });
+            preview.addEventListener("change", function (e) { if (e.target.matches("[data-quick-match]")) showPreview(); });
+        }
+
+        var filter = quick.querySelector("[data-food-filter]"), foods = quick.querySelector("[data-food-list]");
+        if (filter && foods) {
+            filter.addEventListener("input", function () {
+                var q = filter.value.trim().toLowerCase(), shown = 0;
+                foods.querySelectorAll("[data-food-name]").forEach(function (li) {
+                    var hit = !q || li.getAttribute("data-food-name").indexOf(q) !== -1;
+                    li.hidden = !hit;
+                    if (hit) shown += 1;
+                });
+                var none = quick.querySelector("[data-food-none]");
+                if (none) none.hidden = shown > 0 || !q;
+            });
+        }
+    }
+
+    // ---------- The Schedule form: only the repeat fields that apply ----------
+    function syncRepeat(box) {
+        var repeat = box.querySelector("[data-repeat]");
+        if (!repeat) return;
+        box.querySelectorAll("[data-show-for]").forEach(function (el) {
+            el.hidden = (" " + el.getAttribute("data-show-for") + " ").indexOf(" " + repeat.value + " ") === -1;
+        });
+    }
+    document.querySelectorAll("[data-repeat-form]").forEach(syncRepeat);
+    document.addEventListener("change", function (event) {
+        if (event.target.matches && event.target.matches("[data-repeat]")) syncRepeat(event.target.closest("[data-repeat-form]"));
+    });
 })();

@@ -1,0 +1,89 @@
+{% comment %}
+The Today page's Quick log (views._quick_log), three tabs - the last one used is remembered on this device
+(fitness.js); without JS all three show, one under the other.
+  Workout  the text log ("bench 185x8,8,7, run 3.1mi 28:30") with a preview of what will be saved as you type
+           (log_views.quick_preview - a name it doesn't know gets a picker); my 8 most recent exercises as chips
+           (each opens its Log card in a bottom sheet); Start empty workout, and Start <day> for today's planned day.
+  Food     one form: servings and meal, then a tap on any of my recent foods, My foods or recipes logs it
+           (food_views.log, pick=...); the search box filters the list; Quick add takes calories and macros.
+  Weight   one number for today (body_views.log_weight) - not shown when weight is turned off.
+{% endcomment %}
+<section class="card fx-card fx-quicklog" id="fx-quicklog" aria-labelledby="fx-quick-h" data-quicklog>
+    <div class="fx-quicklog__head">
+        <h2 class="fx-card__title" id="fx-quick-h">Quick log</h2>
+        <div class="fx-tabs fx-quicklog__tabs" role="tablist" aria-label="What to log" data-quick-tabs hidden>
+            <button type="button" role="tab" class="fx-tabs__item is-on" id="fx-qt-workout" aria-controls="fx-qp-workout" aria-selected="true" data-quick-tab="workout">Workout</button>
+            <button type="button" role="tab" class="fx-tabs__item" id="fx-qt-food" aria-controls="fx-qp-food" aria-selected="false" tabindex="-1" data-quick-tab="food">Food</button>
+            {% if quick.show_weight %}<button type="button" role="tab" class="fx-tabs__item" id="fx-qt-weight" aria-controls="fx-qp-weight" aria-selected="false" tabindex="-1" data-quick-tab="weight">Weight</button>{% endif %}
+        </div>
+    </div>
+
+    <div class="fx-quicklog__panel" role="tabpanel" id="fx-qp-workout" aria-labelledby="fx-qt-workout" data-quick-panel="workout">
+        <h3 class="fx-label fx-quicklog__nojs">Workout</h3>
+        <form method="post" action="{% url 'albright_fitness:quick' %}" id="fx-quick" data-quick-form data-preview-url="{% url 'albright_fitness:quick_preview' %}">{% csrf_token %}
+            <label for="fx-quick-text" class="visually-hidden">What you did</label>
+            <div class="fx-row-form">
+                <input type="text" name="text" id="fx-quick-text" class="ledger-input fx-input-wide" maxlength="2000" required placeholder="bench 185x8,8,7, run 3.1mi 28:30" autocomplete="off" aria-describedby="fx-quick-help">
+                <button type="submit" class="btn btn-primary" id="fx-quick-save">Save</button>
+            </div>
+            <div class="fx-quicklog__preview" id="fx-quick-preview" aria-live="polite" data-quick-preview></div>
+        </form>
+        <p class="fx-help" id="fx-quick-help">Weight × reps × sets, or reps per set (8,8,7). Cardio: a distance and/or a time. Saved as today's workout.</p>
+        {% if quick.recent_exercises %}
+        <div class="fx-quicklog__recent" id="fx-recent-ex"><span class="fx-label">Recent</span>
+            <ul class="fx-chips" role="list">{% for e in quick.recent_exercises %}<li><a href="{% url 'albright_fitness:exercise' e.pk %}#fx-log" class="fx-chip" data-sheet-url="{% url 'albright_fitness:exercise_log' e.pk %}?next={% url 'albright_fitness:dashboard' %}">{{ e.name }}</a></li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+        <div class="fx-quicklog__start">
+            <form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="fx-start-empty">Start empty workout</button></form>
+            {% for day, done in today %}{% if not done %}<form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="btn btn-primary btn-sm fx-start-day">Start {{ day.name }}</button></form>{% endif %}{% endfor %}
+        </div>
+    </div>
+
+    <div class="fx-quicklog__panel" role="tabpanel" id="fx-qp-food" aria-labelledby="fx-qt-food" data-quick-panel="food">
+        <h3 class="fx-label fx-quicklog__nojs">Food</h3>
+        {# The search box sits outside the form: Enter in it must never log the first food. #}
+        <label for="fx-food-q" class="visually-hidden">Search my foods</label>
+        <input type="search" id="fx-food-q" class="ledger-input fx-input-wide fx-quicklog__search" placeholder="Search my foods, recent foods and recipes" autocomplete="off" data-food-filter>
+        <form method="post" action="{% url 'albright_fitness:food_log' %}" id="fx-quick-food">{% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'albright_fitness:dashboard' %}"><input type="hidden" name="date" value="{{ quick.today|date:'Y-m-d' }}">
+            <div class="fx-row-form fx-quicklog__food-opts">
+                <label class="fx-mini"><span>Servings</span><input type="number" name="servings" value="1" min="0.25" max="50" step="0.25" inputmode="decimal" class="ledger-input"></label>
+                <label class="fx-mini"><span>Meal</span><select name="slot" class="ledger-input">{% for key, label in quick.slots %}<option value="{{ key }}"{% if key == quick.slot %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+            </div>
+            <ul class="fx-list fx-quicklog__foods" id="fx-quick-foods" data-food-list>
+                {% for e in quick.recent_foods %}<li data-food-name="{{ e.label|lower }}"><button type="submit" name="pick" value="recent:{{ e.pk }}" class="fx-row fx-row--link fx-food-pick"><span class="fx-row__title">{{ e.label }}</span><span class="fx-row__ind">Recent{% if e.calories is not None %} &middot; {{ e.calories|floatformat:0 }} kcal{% endif %}</span></button></li>{% endfor %}
+                {% for f in quick.my_foods %}<li data-food-name="{{ f.name|lower }}"><button type="submit" name="pick" value="custom:{{ f.pk }}" class="fx-row fx-row--link fx-food-pick"><span class="fx-row__title">{{ f.name }}</span><span class="fx-row__ind">My food &middot; {{ f.serving_label }}</span></button></li>{% endfor %}
+                {% for r in quick.recipes %}<li data-food-name="{{ r.title|lower }}"><button type="submit" name="pick" value="recipe:{{ r.pk }}" class="fx-row fx-row--link fx-food-pick"><span class="fx-row__title">{{ r.title }}</span><span class="fx-row__ind">Recipe &middot; per serving</span></button></li>{% endfor %}
+            </ul>
+            {% if not quick.recent_foods and not quick.my_foods and not quick.recipes %}<p class="fx-empty">Foods you log, <a href="{% url 'albright_fitness:my_foods' %}">My foods</a> and recipes with nutrition show here.</p>{% endif %}
+            <p class="fx-empty" data-food-none hidden>Nothing matches - <a href="{% url 'albright_fitness:food_add' %}">search all foods</a>.</p>
+        </form>
+        <details class="fx-quicklog__qa" id="fx-quick-add">
+            <summary class="fx-label">Quick add</summary>
+            <form method="post" action="{% url 'albright_fitness:food_log' %}" class="fx-form">{% csrf_token %}
+                <input type="hidden" name="kind" value="quick"><input type="hidden" name="next" value="{% url 'albright_fitness:dashboard' %}"><input type="hidden" name="date" value="{{ quick.today|date:'Y-m-d' }}">
+                <div class="fx-macro-inputs">
+                    <label class="fx-mini"><span>Meal</span><select name="slot" class="ledger-input">{% for key, label in quick.slots %}<option value="{{ key }}"{% if key == quick.slot %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label class="fx-mini"><span>kcal</span><input type="text" name="calories" inputmode="decimal" class="ledger-input"></label>
+                    <label class="fx-mini"><span>Protein g</span><input type="text" name="protein" inputmode="decimal" class="ledger-input"></label>
+                    <label class="fx-mini"><span>Carbs g</span><input type="text" name="carbs" inputmode="decimal" class="ledger-input"></label>
+                    <label class="fx-mini"><span>Fat g</span><input type="text" name="fat" inputmode="decimal" class="ledger-input"></label>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+            </form>
+        </details>
+    </div>
+
+    {% if quick.show_weight %}
+    <div class="fx-quicklog__panel" role="tabpanel" id="fx-qp-weight" aria-labelledby="fx-qt-weight" data-quick-panel="weight">
+        <h3 class="fx-label fx-quicklog__nojs">Weight</h3>
+        <form method="post" action="{% url 'albright_fitness:log_weight' %}" class="fx-row-form" id="fx-quick-weight">{% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'albright_fitness:dashboard' %}"><input type="hidden" name="unit" value="{{ quick.weight_unit }}"><input type="hidden" name="date" value="{{ quick.today|date:'Y-m-d' }}">
+            <label for="fx-quick-weight-n" class="fx-label">{{ quick.today|date:"D M j" }}</label>
+            <input type="number" name="weight" id="fx-quick-weight-n" class="ledger-input fx-weigh__input" step="0.1" min="20" max="880" inputmode="decimal" required placeholder="{{ quick.weight_unit }}">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </form>
+    </div>
+    {% endif %}
+</section>
