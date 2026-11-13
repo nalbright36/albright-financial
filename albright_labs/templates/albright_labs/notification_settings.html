@@ -10,6 +10,71 @@ either narrows it.
 <div class="container circles-page">
     <h1 class="circles-title">Notifications</h1>
     <p class="circles-lead">The bell shows what others change in things shared with you and in your circles - never your own actions.</p>
+    <section class="card circles-card" id="notif-device"
+             data-vapid="{{ vapid_public_key }}"
+             data-subscribe="{% url 'labs:push_subscribe' %}"
+             data-unsubscribe="{% url 'labs:push_unsubscribe' %}"
+             data-offline="{% url 'offline' %}"
+             data-sw="{% url 'service_worker' %}">
+        <h2 class="circles-card__title">This device</h2>
+        <div class="circles-toggle">
+            <span class="circles-toggle__label">
+                <strong>Notify this device</strong>
+                <span class="notif-device-status" data-push-status></span>
+            </span>
+            <button type="button" class="circles-switch" id="notif-push-switch" aria-pressed="false" aria-label="Notify this device">
+                <span></span>
+            </button>
+        </div>
+        <div class="notif-push-panel" data-push-on hidden>
+            <p class="circles-muted">This device will get a banner when something new arrives, even if the site is closed. Quiet hours still apply. The same app and circle settings as below decide what is sent.</p>
+        </div>
+        <div class="notif-push-panel" data-push-off hidden>
+            <p class="circles-muted">Turn on to get banners on this phone or computer when something new arrives.</p>
+        </div>
+        <div class="notif-push-panel" data-push-ios hidden>
+            <div class="notif-callout">
+                <p><strong>Add Albright to your Home Screen first.</strong> On iPhone, banners only work from the home-screen app (iOS 16.4 or later), not from a Safari tab.</p>
+                <ol class="notif-callout__steps">
+                    <li><span class="notif-callout__num">1</span><span>Tap Share in Safari.</span></li>
+                    <li><span class="notif-callout__num">2</span><span>Choose Add to Home Screen, then Add.</span></li>
+                    <li><span class="notif-callout__num">3</span><span>Open Albright from the new icon and turn this on.</span></li>
+                </ol>
+            </div>
+        </div>
+        <div class="notif-push-panel" data-push-denied hidden>
+            <div class="notif-callout notif-callout--warn">
+                <p><strong>Notifications are blocked</strong> for this site in your browser settings. Open them, allow Albright, then turn this on again.</p>
+            </div>
+        </div>
+        <div class="notif-push-panel" data-push-unsupported hidden>
+            <div class="notif-callout notif-callout--muted">
+                <p>This browser can’t receive banners. Try Chrome, Edge, Firefox, or Safari on a home-screen app (iPhone, iOS 16.4 or later).</p>
+            </div>
+        </div>
+        <div class="notif-push-panel" data-push-unavailable hidden>
+            <div class="notif-callout notif-callout--muted">
+                <p>Banners aren’t set up on this site yet.</p>
+            </div>
+        </div>
+        <ul class="notif-devices" data-push-devices{% if not push_subscriptions %} hidden{% endif %}>
+            {% for sub in push_subscriptions %}
+            <li class="notif-device" data-endpoint="{{ sub.endpoint }}" data-id="{{ sub.pk }}">
+                <span class="notif-device__icon" aria-hidden="true">{% if "iPhone" in sub.device_name or "iPad" in sub.device_name or "Android" in sub.device_name %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>{% endif %}</span>
+                <span class="notif-device__main">
+                    <span class="notif-device__name">{{ sub.device_name }}</span>
+                    <span class="notif-device__meta">Last used {{ sub.last_used }}</span>
+                </span>
+                <span class="notif-device__tag" data-this-device hidden>This device</span>
+                <form method="post" action="{% url 'labs:push_remove' sub.pk %}" class="notif-device__remove" data-push-remove>{% csrf_token %}
+                    <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        <noscript><p class="circles-muted">Turning on banners needs JavaScript. You can still remove a device below.</p></noscript>
+    </section>
+
     <form method="post" class="notif-settings">{% csrf_token %}
         <section class="card circles-card" id="notif-apps" aria-labelledby="notif-apps-h">
             <h2 class="circles-card__title" id="notif-apps-h">By app</h2>

@@ -413,6 +413,7 @@
             })();
         </script>
         <script src="{% static_version 'labs/launcher.js' %}"></script>
+        <script src="{% static_version 'labs/push.js' %}"></script>
         {% if user.is_authenticated %}<script src="{% static_version 'labs/notifications.js' %}"></script>{% endif %}
         {% if user.is_authenticated %}<script src="{% static_version 'labs/share.js' %}" defer></script>{% endif %}
         <script src="{% static_version 'js/app_nav.js' %}"></script>

@@ -189,6 +189,14 @@ EMAIL_CONFIGURED = bool(EMAIL_HOST_USER and EMAIL_HOST_PASSWORD) or EMAIL_BACKEN
 # Links in emails and in Admin (invites, password setup/reset) always use the site's real
 # address, never the host a request happened to arrive on (e.g. 127.0.0.1 while testing).
 SITE_URL = os.environ.get("SITE_URL", "").strip().rstrip("/") or "https://natealbright36.pythonanywhere.com"
+
+# Web Push (My account > Notifications, "Notify this device"). All three must be set or
+# sending is silently disabled. Generate with: python manage.py generate_vapid_keys
+# VAPID_SUBJECT should be a mailto: address you control (or an https: URL).
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "").strip()
+
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24 * 3   # setup/reset links work for 3 days
 
 

@@ -2,7 +2,7 @@
 from functools import wraps
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-       "manifest-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
+       "manifest-src 'self'; connect-src 'self'; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
        "form-action 'self'; frame-ancestors 'none'")
 
 

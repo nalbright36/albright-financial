@@ -23,6 +23,7 @@ from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
 from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
 from albright_labs import password_views
+from albright_labs import push_views
 from albright_trading_proj import site_icons
 
 urlpatterns = [
@@ -31,6 +32,9 @@ urlpatterns = [
     path("favicon.ico", site_icons.favicon, name="favicon"),
     path("apple-touch-icon.png", site_icons.apple_touch_icon, name="apple_touch_icon"),
     path("site.webmanifest", site_icons.manifest, name="site_manifest"),
+    # Service worker (root scope) and the offline fallback (albright_labs.push_views).
+    path("sw.js", push_views.service_worker, name="service_worker"),
+    path("offline/", push_views.offline, name="offline"),
     # Password setup/reset links (Admin > Users "Send password setup link", and "Reset password" on sign-in).
     path("reset_password/", password_views.reset_request, name="password_reset"),
     path("reset_password/sent/", password_views.ResetDone.as_view(), name="password_reset_done"),

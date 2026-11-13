@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import activity_views, circle_views, invite_views, share_views, views
+from . import activity_views, circle_views, invite_views, push_views, share_views, views
 
 app_name = "labs"
 
@@ -24,6 +24,9 @@ urlpatterns = [
     # Activity and notifications (activity_views; the rules: albright_labs.activity).
     path("home/account/activity/", activity_views.activity_page, name="activity"),
     path("home/account/notifications/", activity_views.notification_settings, name="notification_settings"),
+    path("home/account/notifications/push/subscribe/", push_views.subscribe, name="push_subscribe"),
+    path("home/account/notifications/push/unsubscribe/", push_views.unsubscribe, name="push_unsubscribe"),
+    path("home/account/notifications/push/<int:pk>/remove/", push_views.remove, name="push_remove"),
     path("notifications/panel/", activity_views.panel, name="notifications_panel"),
     path("notifications/<int:pk>/open/", activity_views.open_event, name="notification_open"),
     path("notifications/read-all/", activity_views.read_all, name="notifications_read_all"),

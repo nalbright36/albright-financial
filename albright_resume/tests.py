@@ -55,6 +55,7 @@ class PageTests(Base):
         r = self.client.get(PAGE)
         self.assertEqual(r.status_code, 200)
         self.assertIn("script-src 'self'", r["Content-Security-Policy"])
+        self.assertIn("worker-src 'self'", r["Content-Security-Policy"])
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
         for private in ("/control/", "/bot-api/", "/albright_reselling_app/", "/opportunities/", "user_login"):
             self.assertNotContains(r, private)

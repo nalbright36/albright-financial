@@ -308,7 +308,7 @@ class SecurityHeaderScopeTests(TestCase):
                     response = self.client.get(url)
                 csp = response["Content-Security-Policy"]
                 for directive in ("default-src 'self'", "script-src 'self'", "style-src 'self'",
-                                  "font-src 'self'", "img-src 'self' data:"):
+                                  "font-src 'self'", "img-src 'self' data:", "worker-src 'self'"):
                     self.assertIn(directive, csp)
                 self.assertIsNone(re.search(self.PUBLIC_INLINE, response.content.decode()), url)
 
@@ -361,6 +361,7 @@ class SecurityHeaderScopeTests(TestCase):
         from albright_resume.security import CSP
         self.assertIn("manifest-src 'self'", CSP)
         self.assertIn("img-src 'self'", CSP)
+        self.assertIn("worker-src 'self'", CSP)
 
 
 class LocalStaticServingTests(TestCase):

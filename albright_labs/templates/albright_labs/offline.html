@@ -1,0 +1,21 @@
+{% extends "index.html" %}
+{% block page_title %}You’re offline · {% endblock %}
+{% block content %}
+{% comment %}Public offline fallback (labs.push_views.offline), shown by /sw.js when a navigation can't reach the site. Keeps the site header from index.html.{% endcomment %}
+<div class="container offline-page">
+    <div class="card offline-card">
+        <div class="offline-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8A16 16 0 0112 5c2.2 0 4.3.4 6.2 1.2"/><path d="M5 12.2A11 11 0 0112 10c1.5 0 3 .3 4.3.8"/><path d="M8.4 15.5A6 6 0 0112 14.5c.7 0 1.4.1 2 .4"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/></svg>
+        </div>
+        <h1>You’re offline</h1>
+        <p>Albright can’t reach the site right now. Pages you already opened may still work. Check your connection, then try again.</p>
+        <button type="button" class="btn btn-primary" id="offline-retry">Try again</button>
+    </div>
+</div>
+{% endblock %}
+{% block app_scripts %}
+<script>
+    var btn = document.getElementById("offline-retry");
+    if (btn) btn.addEventListener("click", function () { location.reload(); });
+</script>
+{% endblock %}

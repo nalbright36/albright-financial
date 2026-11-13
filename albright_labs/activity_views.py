@@ -19,8 +19,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import activity, circles, sharing
-from .models import CIRCLE_APPS, NotificationSettings
+from . import activity, circles, push, sharing
+from .models import CIRCLE_APPS, NotificationSettings, PushSubscription
 
 PANEL_SIZE = 20
 PAGE_SIZE = 50
@@ -147,9 +147,14 @@ def notification_settings(request):
     level_rows = [{"key": f"app:{key}", "label": label, "value": activity.level(prefs, f"app:{key}")} for key, label in apps]
     circle_rows = [{"key": f"circle:{c.pk}", "label": c.name, "value": activity.level(prefs, f"circle:{c.pk}")}
                    for c in my_circles]
+    subscriptions = list(PushSubscription.objects.filter(user=user))
+    for sub in subscriptions:
+        sub.last_used = activity.when(sub.last_seen_at)
     return render(request, "albright_labs/notification_settings.html", {
         "prefs": prefs, "app_rows": level_rows, "circle_rows": circle_rows, "levels": NotificationSettings.LEVELS,
-        "has_email": bool(user.email), "quiet_now": activity.in_quiet_hours(prefs)})
+        "has_email": bool(user.email), "quiet_now": activity.in_quiet_hours(prefs),
+        "push_enabled": push.vapid_enabled(), "vapid_public_key": push.public_key() if push.vapid_enabled() else "",
+        "push_subscriptions": subscriptions})
 
 
 def recent_for_circle(user, circle, limit=15):

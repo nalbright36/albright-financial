@@ -118,6 +118,17 @@ def _audience_key(obj):
     return f"s{space}|" + ",".join(shares) if space else ",".join(shares)
 
 
+
+def _saved(event):
+    """An event was written; queue Web Push (never raises, never blocks a rollback)."""
+    try:
+        from . import push
+        push.schedule(event)
+    except Exception:
+        pass
+    return event
+
+
 def record_activity(app, verb, summary, *, obj=None, actor=None, via=None, circle=None, audience=None, recipient=None,
                     owner=None, url="", group="", plural="", count=1, window=GROUP_WINDOW):
     """Record (or merge into) one event; returns it, or None when nothing is recorded.
@@ -163,11 +174,11 @@ def record_activity(app, verb, summary, *, obj=None, actor=None, via=None, circl
             for name, value in fields.items():
                 setattr(existing, name, value)
             existing.save(update_fields=["count", "summary", "updated_at", "url", "content_type", "object_id"])
-            return existing
+            return _saved(existing)
     text = plural.format(n=count) if plural and count > 1 else summary
-    return ActivityEvent.objects.create(actor=actor, via=via, app=app, verb=verb, summary=text[:300], count=count,
+    return _saved(ActivityEvent.objects.create(actor=actor, via=via, app=app, verb=verb, summary=text[:300], count=count,
                                         group_key=group[:120], audience=audience, circle=circle, recipient=recipient,
-                                        owner=owner, url=(url or "")[:300], created_at=now, updated_at=now, **fields)
+                                        owner=owner, url=(url or "")[:300], created_at=now, updated_at=now, **fields))
 
 
 def quote(title, limit=60):

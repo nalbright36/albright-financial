@@ -445,3 +445,28 @@ class NotificationSettings(models.Model):
     @classmethod
     def for_user(cls, user):
         return cls.objects.get_or_create(user=user)[0]
+
+
+class PushSubscription(models.Model):
+    """One browser or phone that should get a Web Push banner for this person's notifications
+    (My account > Notifications, "Notify this device"). endpoint is unique: the same device
+    signing in as someone else moves the row. last_seen_at is updated on subscribe and on a
+    successful push. user_agent is stored so the settings page can show "iPhone · Safari"."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_subscriptions")
+    endpoint = models.TextField(unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=200)
+    user_agent = models.CharField(max_length=400, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-last_seen_at", "-pk"]
+
+    def __str__(self):
+        return f"{self.user} {self.endpoint[:48]}"
+
+    def device_name(self):
+        from . import push
+        return push.device_name(self.user_agent)
+
