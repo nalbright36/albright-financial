@@ -86,6 +86,9 @@
         var picker = root.querySelector("[data-share-picker]");
         var select = root.querySelector("[data-share-target], [data-share-mode]");
         if (!picker || picker.getAttribute("data-bound") === "1") return;
+        var input = picker.querySelector("[data-share-picker-input]");
+        var list = picker.querySelector("[data-share-list]");
+        if (!input || !list) return;
         picker.setAttribute("data-bound", "1");
         picker.hidden = false;
         if (select) {
@@ -101,8 +104,6 @@
         if (isNew) hidden.value = "default";
         picker.parentNode.insertBefore(hidden, picker);
 
-        var input = picker.querySelector("[data-share-picker-input]");
-        var list = picker.querySelector("[data-share-list]");
         var data = choicesOf(root);
         var live = data;
         var active = 0;
@@ -244,10 +245,35 @@
         node.querySelectorAll("[data-share], [data-share-new]").forEach(bindPicker);
     }
 
+    // Planner's view panel (and anything else that injects the Share control after
+    // load) swaps the markup in with innerHTML - enhance on DOMContentLoaded never
+    // sees it. Expose enhance and watch the DOM so a dynamically inserted box
+    // gets the type-ahead instead of the no-JS <select>.
+    window.AlbrightShare = {enhance: enhance};
+
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () { enhance(document); });
     } else {
         enhance(document);
+    }
+
+    if (window.MutationObserver) {
+        new MutationObserver(function (records) {
+            records.forEach(function (rec) {
+                Array.prototype.forEach.call(rec.addedNodes, function (n) {
+                    if (n.nodeType === 1) enhance(n);
+                });
+            });
+        }).observe(document.documentElement, {childList: true, subtree: true});
+    }
+
+    function csrfToken(form) {
+        var input = form && form.querySelector && form.querySelector("input[name=csrfmiddlewaretoken]");
+        if (input && input.value) return input.value;
+        var match = document.cookie.match(/csrftoken=([^;]+)/);
+        if (match) return decodeURIComponent(match[1]);
+        var fallback = document.querySelector("input[name=csrfmiddlewaretoken]");
+        return fallback ? fallback.value : "";
     }
 
     document.addEventListener("change", function (event) {
@@ -263,10 +289,17 @@
         if (!form.matches || !form.matches("[data-share-form]")) return;
         event.preventDefault();
         var box = form.closest("[data-share]");
+        var headers = {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"};
+        var token = csrfToken(form);
+        if (token) headers["X-CSRFToken"] = token;
         fetch(form.action, {
             method: "POST", body: new FormData(form), credentials: "same-origin",
-            headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
-        }).then(function (r) { return r.json(); }).then(function (data) {
+            headers: headers
+        }).then(function (r) {
+            return r.json().then(function (data) { return data; }, function () {
+                return {ok: false, error: "Not saved - try again."};
+            });
+        }).then(function (data) {
             if (data.html && box) {
                 var holder = document.createElement("div");
                 holder.innerHTML = data.html;

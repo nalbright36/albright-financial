@@ -2577,6 +2577,14 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 .share-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
 .share-add .ledger-input, .share-new .ledger-input { width: auto; min-height: 40px; background: var(--bg-elevated); border-color: var(--border-strong); }
 .share-add .share-add__target, .share-add .share-add__who { flex: 1 1 160px; min-width: 0; }
+/* The no-JS fallback is a single-line dropdown. Without a cap, a <select> with
+   flex: 1 1 160px becomes 160px tall once .share-add is a column on a phone,
+   and iOS Safari paints it as a huge gray listbox. */
+select.share-add__target, select[data-share-target], select[data-share-mode] {
+  height: 40px; max-height: 44px; overflow: hidden;
+  appearance: menulist; -webkit-appearance: menulist;
+}
+.pl-view-dialog .share-box { flex: 0 0 auto; }
 .circles-links { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 var(--space-4); }
 .swm-row { color: var(--text-primary); text-decoration: none; }
 .swm-row:hover { background: var(--surface-hover); text-decoration: none; }
@@ -2638,6 +2646,7 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 
 @media (max-width: 640px) {
   .share-add { flex-direction: column; align-items: stretch; }
+  .share-add .share-add__target, .share-add .share-add__who { flex: 0 0 auto; width: 100%; height: 40px; max-height: 44px; }
   .share-picker { flex: 1 1 auto; width: 100%; }
   .share-picker .share-list { position: relative; top: auto; left: auto; right: auto; max-height: none; }
   .share-add__actions { display: flex; gap: 8px; }

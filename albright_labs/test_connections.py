@@ -1,10 +1,16 @@
 """Connections and the share picker (albright_labs.connections, Option C slice 1): implicit connections
 from circle co-membership and past person shares; Remove hides grants both ways without deleting them
 and restores them when you join a circle together; the type-ahead and search endpoint only ever
-return the connected set; My account > People lists people and offers Remove."""
+return the connected set; My account > People lists people and offers Remove.
+
+Also the view-panel modal fix: the no-JS <select> stays a single-line dropdown, the picker
+initializes when the Share box is injected after load, and sharing a Planner task from that
+markup with target=user:<id> saves."""
+import pathlib
 import re
 
 from django.contrib.auth.models import User
+from django.contrib.staticfiles import finders
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -189,6 +195,46 @@ class PickerAndSearchTests(Base):
         self.assertNotIn("Exact username or email", box)
         self.assertIn("Albright Family", box)
         self.assertIn("/home/account/people/search/", box)
+
+    def test_fallback_select_is_a_single_line_dropdown(self):
+        self.family(self.sam)
+        page = self.client.get(reverse("albright_planner:item", args=[self.item().pk])).content.decode()
+        self.assertRegex(page, r'<select name="target"[^>]*\bsize="1"')
+        self.assertIn("Share with…", page)
+        css = pathlib.Path(finders.find("style.css")).read_text(encoding="utf-8")
+        self.assertIn("select.share-add__target, select[data-share-target], select[data-share-mode]", css)
+        self.assertIn("max-height: 44px", css)
+        self.assertIn(".share-add .share-add__target, .share-add .share-add__who { flex: 0 0 auto;", css)
+
+    def test_picker_js_initializes_dynamically_inserted_share_boxes(self):
+        js = pathlib.Path(finders.find("labs/share.js")).read_text(encoding="utf-8")
+        self.assertIn("window.AlbrightShare", js)
+        self.assertIn("MutationObserver", js)
+        self.assertIn('headers["X-CSRFToken"]', js)
+        planner = pathlib.Path(finders.find("albright_planner/planner.js")).read_text(encoding="utf-8")
+        self.assertRegex(planner, r'box\.innerHTML = html;\s*if \(window\.AlbrightShare')
+
+    def test_sharing_a_planner_task_from_the_view_panel_markup(self):
+        """Two circle-mates: the view panel (the modal's markup) lists the other person, and
+        posting the fallback form's fields the way share.js does (AJAX, target=user:<id>) saves."""
+        self.family(self.sam)
+        item = ScheduleItem.objects.create(owner=self.sam, title="Test from Abby's phone", date=self.today)
+        client = self.as_user(self.sam)
+        url = reverse("albright_planner:item", args=[item.pk])
+        panel = client.get(url, {"panel": "1", "date": self.today.isoformat()}).content.decode()
+        self.assertIn('id="pl-view-panel"', panel)
+        self.assertIn('id="share-box"', panel)
+        self.assertIn(f'value="user:{self.nate.pk}"', panel)
+        share_url = reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk])
+        self.assertIn(share_url, panel)
+        response = client.post(share_url, {"action": "add", "target": f"user:{self.nate.pk}", "permission": "view"},
+                               HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"], data)
+        self.assertTrue(sharing.can_view(self.nate, item))
+        self.assertIn("share-chip", data["html"])
+        self.assertIn("Nathan", data["html"])
 
     def test_share_via_user_id_requires_a_connection(self):
         self.family(self.sam)

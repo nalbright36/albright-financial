@@ -41,7 +41,8 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
     <form method="post" action="{{ share.url }}" class="share-add" data-share-form data-share-add>{% csrf_token %}
         <input type="hidden" name="action" value="add"><input type="hidden" name="next" value="{{ request.get_full_path }}">
         <label class="visually-hidden" for="share-target">Share with</label>
-        <select name="target" id="share-target" class="ledger-input share-add__target" data-share-target>
+        <select name="target" id="share-target" class="ledger-input share-add__target" data-share-target size="1">
+            <option value="" disabled selected>Share with…</option>
             {% for c in share.circles %}<option value="circle:{{ c.pk }}">{{ c.name }} (circle)</option>{% endfor %}
             {% for p in share.people %}<option value="{{ p.target }}"{% if p.already %} disabled{% endif %}>{{ p.name }}{% if p.already %} (already shared){% endif %}</option>{% endfor %}
         </select>
@@ -65,7 +66,7 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
 <fieldset class="share-new" data-share-new>
     <legend class="share-box__title">Sharing</legend>
     <label class="visually-hidden" for="share-mode">Share with</label>
-    <select name="share_mode" id="share-mode" class="ledger-input" data-share-mode>
+    <select name="share_mode" id="share-mode" class="ledger-input" data-share-mode size="1">
         <option value="default" selected>Default: {{ share.default }}</option>
         <option value="me">Only me</option>
         {% for c in share.circles %}<option value="circle:{{ c.pk }}">{{ c.name }} (circle)</option>{% endfor %}

@@ -341,6 +341,7 @@
             // Only ever an item's view panel - anything else (a whole page) is followed as a link instead.
             if (html.indexOf('id="pl-view-panel"') < 0) throw new Error("not a view panel");
             box.innerHTML = html;
+            if (window.AlbrightShare && typeof window.AlbrightShare.enhance === "function") window.AlbrightShare.enhance(box);
             var edit = box.querySelector("[data-view-edit]");
             if (edit) edit.href = edit.href.replace("then=view", "then=panel");     // saving comes back to this dialog
             if (!box.open) box.showModal();
