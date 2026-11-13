@@ -1,0 +1,4 @@
+{# The 4xx buttons after "Go back": Home (the app picker signed in, the landing page signed out), "Go to <App>" when the URL belongs to an app this user can open, and Sign in (with next) for signed-out visitors on 403/404/CSRF. #}
+<a class="err__btn{% if not app_button and not sign_in_url %} err__btn--primary{% endif %}" href="{{ home_url }}" id="error-home">Home</a>
+{% if app_button %}<a class="err__btn{% if not sign_in_url %} err__btn--primary{% endif %}" href="{{ app_button.url }}" id="error-app">{{ app_button.label }}</a>{% endif %}
+{% if sign_in_url %}<a class="err__btn err__btn--primary" href="{{ sign_in_url }}" id="error-sign-in">Sign in</a>{% endif %}

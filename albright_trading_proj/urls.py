@@ -76,3 +76,9 @@ urlpatterns = [
 # /static/ mapping answers those requests before they ever reach Django.
 if not settings.DEBUG and settings.SERVE_STATIC_LOCALLY:
     urlpatterns.append(re_path(r"^static/(?P<path>.*)$", serve_static, {"insecure": True}))
+
+# Branded error pages, JSON under /api/ (albright_trading_proj.errors). Preview: /control/error-preview/<code>/.
+handler400 = "albright_trading_proj.errors.bad_request"
+handler403 = "albright_trading_proj.errors.permission_denied"
+handler404 = "albright_trading_proj.errors.page_not_found"
+handler500 = "albright_trading_proj.errors.server_error"

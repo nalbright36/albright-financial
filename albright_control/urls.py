@@ -18,6 +18,7 @@ urlpatterns = [
          name="suggestion_notes"),
     path("suggestions/<int:pk>/delete/", review_list_views.suggestion_delete, name="suggestion_delete"),
     path("health/", views.health, name="health"),
+    path("error-preview/<str:code>/", views.error_preview, name="error_preview"),
     path("integrations/", views.integrations_view, name="integrations"),
     path("integrations/<str:key>/test/", views.test_integration, name="test_integration"),
     path("ai-usage/", views.ai_usage_view, name="ai_usage"),

@@ -1,0 +1,4 @@
+{% extends "errors/_layout.html" %}
+{# Rendered with a fixed context only (errors.render_500): no user, session, DB or context processors. #}
+{% block reference %}<p class="err__ref" id="error-reference">Reference: <code>{{ reference }}</code></p>{% endblock %}
+{% block buttons %}<a class="err__btn err__btn--primary" href="/" id="error-home">Home</a>{% endblock %}

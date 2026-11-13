@@ -89,6 +89,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Brands empty-bodied 4xx responses (require_POST's 405...) - albright_trading_proj.errors.
+    'albright_trading_proj.errors.ErrorPageMiddleware',
     # 404 for any view of an app the user can't open (Admin > Users).
     'albright_labs.app_access.AppAccessMiddleware',
     # Activity (albright_labs.activity) is recorded as the signed-in person.
@@ -99,6 +101,15 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'albright_trading_proj.urls'
+
+# Cleans leftover rows out of the kept test database and stops two test runs sharing it (runner.py).
+TEST_RUNNER = 'albright_trading_proj.runner.AlbrightTestRunner'
+
+# The branded "Your session expired" page (albright_trading_proj.errors) instead of Django's CSRF 403.
+CSRF_FAILURE_VIEW = 'albright_trading_proj.errors.csrf_failure'
+# A 500 sends a Telegram alert with its reference code (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID; at most one per
+# worker every 5 minutes). ERROR_TELEGRAM_ALERTS=0 in .env turns it off.
+ERROR_TELEGRAM_ALERTS = os.environ.get("ERROR_TELEGRAM_ALERTS", "1").strip() != "0"
 
 TEMPLATES = [
     {

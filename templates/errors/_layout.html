@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+{# Every error page (albright_trading_proj.errors). Standalone on purpose: no index.html, no {% load %}, no
+   context processors, inline CSS and script - it has to render when the database, the session or the static
+   files are what's broken. Colors mirror style.css's dark/light tokens; the theme follows the stored choice
+   (localStorage "theme", like index.html), else the system setting. #}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{ status }} · {{ title }} · Albright</title>
+<script>
+(function () {
+    var stored = null;
+    try { stored = localStorage.getItem("theme"); } catch (e) {}
+    if (stored === "light" || stored === "dark") document.documentElement.setAttribute("data-theme", stored);
+})();
+</script>
+<style>
+:root {
+  --bg: #0B0D10; --surface: #12151A; --border: rgba(255, 255, 255, 0.08);
+  --text-primary: #E6E8EB; --text-secondary: #8B93A1;
+  --accent: #2DD4BF; --accent-solid: #2DD4BF; --on-accent: #042F2B; --code-bg: #171B21;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #F3F4F6; --surface: #FFFFFF; --border: #E2E5EA;
+    --text-primary: #0E1116; --text-secondary: #5B6472;
+    --accent: #0F766E; --accent-solid: #0F766E; --on-accent: #FFFFFF; --code-bg: #F3F4F6;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #F3F4F6; --surface: #FFFFFF; --border: #E2E5EA;
+  --text-primary: #0E1116; --text-secondary: #5B6472;
+  --accent: #0F766E; --accent-solid: #0F766E; --on-accent: #FFFFFF; --code-bg: #F3F4F6;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--bg); color: var(--text-primary);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px 16px;
+}
+.err { width: 100%; max-width: 440px; text-align: center; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 16px; padding: 32px 24px; }
+.err__logo { display: inline-block; height: 48px; width: auto; margin: 0 0 16px; }
+.err__logo--on-light { display: none; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .err__logo--on-dark { display: none; }
+  :root:not([data-theme="dark"]) .err__logo--on-light { display: inline-block; }
+}
+:root[data-theme="light"] .err__logo--on-dark { display: none; }
+:root[data-theme="light"] .err__logo--on-light { display: inline-block; }
+.err__code { font-size: 4.5rem; line-height: 1; font-weight: 700; letter-spacing: -0.03em; color: var(--accent);
+  margin: 0; font-variant-numeric: tabular-nums; }
+.err__title { font-size: 1.375rem; margin: 12px 0 8px; font-weight: 650; }
+.err__text { color: var(--text-secondary); margin: 0 0 24px; line-height: 1.5; }
+.err__ref { color: var(--text-secondary); font-size: 0.875rem; margin: -12px 0 24px; }
+.err__ref code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px;
+  color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; user-select: all; }
+.err__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.err__btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px;
+  border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-primary);
+  font: inherit; font-weight: 550; text-decoration: none; cursor: pointer; }
+.err__btn:hover { border-color: var(--accent); }
+.err__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.err__btn--primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.err__btn[hidden] { display: none; }
+@media (max-width: 420px) { .err__actions { flex-direction: column; } .err__btn { width: 100%; } }
+</style>
+</head>
+<body>
+<main class="err" id="error-page" data-status="{{ status }}">
+    <img class="err__logo err__logo--on-dark" src="{{ logo_on_dark }}" alt="Albright" width="97" height="48">
+    <img class="err__logo err__logo--on-light" src="{{ logo_on_light }}" alt="Albright" width="97" height="48">
+    <p class="err__code">{{ status }}</p>
+    <h1 class="err__title">{{ title }}</h1>
+    <p class="err__text">{{ sentence }}</p>
+    {% block reference %}{% endblock %}
+    <div class="err__actions">
+        <button type="button" class="err__btn" id="error-back" hidden>&larr; Go back</button>
+        {% block buttons %}{% endblock %}
+    </div>
+</main>
+<script>
+(function () {
+    var back = document.getElementById("error-back");
+    if (back && window.history.length > 1) {
+        back.hidden = false;
+        back.addEventListener("click", function () { window.history.back(); });
+    }
+})();
+</script>
+</body>
+</html>

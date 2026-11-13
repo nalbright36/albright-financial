@@ -11,7 +11,6 @@ asked - so it never tells whether an account or invite exists.
 """
 from datetime import timedelta
 
-from django.shortcuts import render
 from django.utils import timezone
 
 from .models import RateLimitHit
@@ -48,7 +47,6 @@ def clear(request, scope):
 
 
 def too_many(request, scope):
-    minutes = LIMITS[scope][1]
-    response = render(request, "albright_labs/rate_limited.html", {"minutes": minutes}, status=429)
-    response["Retry-After"] = str(minutes * 60)
-    return response
+    """The site's branded 429 page (albright_trading_proj.errors), with Retry-After."""
+    from albright_trading_proj.errors import too_many_requests
+    return too_many_requests(request, minutes=LIMITS[scope][1])

@@ -229,3 +229,30 @@ def audit_log(request):
         "entries": entries[:AUDIT_LIMIT], "actions": AuditEntry.objects.values_list("action", flat=True).distinct()
         .order_by("action"), "action": action, "limit": AUDIT_LIMIT,
     })
+
+
+# ---------------------------------------------------------------------------
+# Error page preview (with DEBUG on, Django shows its debug pages instead)
+# ---------------------------------------------------------------------------
+
+@superuser_required
+def error_preview(request, code):
+    """/control/error-preview/<code>/: 400 403 404 405 429 500 or csrf, rendered as visitors see them
+    (answered 200, so it isn't logged as an error). ?as=visitor shows the signed-out version of 403/404."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.http import Http404
+
+    from albright_trading_proj import errors
+    if code == "500":
+        return errors.render_500("PREVIEW", http_status=200)
+    key = "csrf" if code == "csrf" else (int(code) if code.isdigit() else None)
+    if key not in errors.PAGES:
+        raise Http404
+    if request.GET.get("as") == "visitor":
+        request.user = AnonymousUser()
+    status = 403 if key == "csrf" else key
+    if key == 429:
+        response = errors.too_many_requests(request)
+        response.status_code = 200
+        return response
+    return errors.render_error(request, status, key, http_status=200)
