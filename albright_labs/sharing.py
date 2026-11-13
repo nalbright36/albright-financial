@@ -97,7 +97,7 @@ def _grants_for(user, kind, permission=None):
     """ShareGrants that reach this person for this kind (none when they can't open the app)."""
     if not _authed(user) or not circles.can_use_app(user, kind.app):
         return ShareGrant.objects.none()
-    grants = ShareGrant.objects.filter(content_type=_ct(kind.model)).filter(
+    grants = ShareGrant.objects.filter(content_type=_ct(kind.model), hidden_at__isnull=True).filter(
         Q(user=user) | Q(circle_id__in=circle_ids(user, kind.app)))
     return grants.filter(permission=EDIT) if permission == EDIT else grants
 
@@ -167,9 +167,11 @@ def permission_for(user, obj):
 # Sharing (owner only)
 # ---------------------------------------------------------------------------
 
-def grants(obj):
-    return list(ShareGrant.objects.filter(content_type=_ct(type(obj)), object_id=obj.pk)
-                .select_related("user", "circle").order_by("circle__name", "user__username", "pk"))
+def grants(obj, *, include_hidden=False):
+    qs = ShareGrant.objects.filter(content_type=_ct(type(obj)), object_id=obj.pk)
+    if not include_hidden:
+        qs = qs.filter(hidden_at__isnull=True)
+    return list(qs.select_related("user", "circle").order_by("circle__name", "user__username", "pk"))
 
 
 def shareable_circles(user, app):
@@ -182,29 +184,41 @@ def _owner_only(user, obj):
         raise ShareError("Only its owner can share it.")
 
 
-def resolve_target(user, kind, circle_id=None, who=""):
-    """{"circle": ...} or {"user": ...} this owner may share with (one of their circles that shares the app, or a person
-    by exact username / email who can open it) - else ShareError."""
+def resolve_target(user, kind, circle_id=None, who="", user_id=None):
+    """{"circle": ...} or {"user": ...} this owner may share with (one of their circles that shares the app, or a
+    person) - else ShareError. A user_id must be someone they're connected with (albright_labs.connections).
+    Exact username / email (who) still finds any account who can open the app - the first-contact path until
+    slice 2 replaces it with a connection request - except a person they've Removed, who stays disconnected
+    until they reconnect."""
+    from . import connections
     if circle_id not in (None, ""):
         circle = next((c for c in shareable_circles(user, kind.app) if str(c.pk) == str(circle_id)), None)
         if circle is None:
             raise ShareError("You can share only with circles that share this app and that you've joined it in.")
         return {"circle": circle}
-    person = circles.find_person(who)
-    if person is None or not circles.can_use_app(person, kind.app):
-        raise ShareError("No one who can open this app matches that exactly - check their username or email.")
+    if user_id not in (None, ""):
+        person = connections.person_if_connected(user, user_id)
+        if person is None or not circles.can_use_app(person, kind.app):
+            raise ShareError("No one you're connected with who can open this app matches that.")
+    else:
+        person = circles.find_person(who)
+        if person is None or not circles.can_use_app(person, kind.app):
+            raise ShareError("No one who can open this app matches that exactly - check their username or email.")
+        if connections.is_removed(user, person):
+            raise ShareError("They're not in your connections.")
     if person.pk == user.pk:
         raise ShareError("That's you.")
     return {"user": person}
 
 
-def share(user, obj, permission=VIEW, circle_id=None, who="", by=None):
-    """Share with a circle (id) or a person (exact username / email). Returns the grant (updated if it existed)."""
+def share(user, obj, permission=VIEW, circle_id=None, who="", user_id=None, by=None):
+    """Share with a circle (id), a connected person (user_id), or a person by exact username / email (who).
+    Returns the grant (updated if it existed)."""
     _owner_only(user, obj)
     kind = kind_of(obj)
     if permission not in PERMISSIONS:
         raise ShareError("Pick View or Edit.")
-    target = resolve_target(user, kind, circle_id, who)
+    target = resolve_target(user, kind, circle_id, who, user_id)
     if "user" in target and kind.is_owner(target["user"], obj):
         raise ShareError("They already see it - it's theirs too.")
     grant, _created = ShareGrant.objects.update_or_create(
@@ -226,7 +240,7 @@ def unshare(user, obj, grant_id):
 
 
 def copy_grants(source, target, by=None):
-    """A copy of something (a Planner fork) gets the same shares."""
+    """A copy of something (a Planner fork) gets the same shares (not ones hidden by a removed connection)."""
     for g in grants(source):
         ShareGrant.objects.get_or_create(content_type=_ct(type(target)), object_id=target.pk, user=g.user, circle=g.circle,
                                          defaults={"permission": g.permission, "created_by": by or g.created_by})
@@ -280,8 +294,8 @@ def _record_created(obj, actor):
 
 
 def apply_posted(request, obj, prefix="share"):
-    """The Share control in a "New" form: share_mode = "default" (or missing) | "me" | "circle:<id>" | "person",
-    with share_perm and share_who. Applies it to the just-created thing."""
+    """The Share control in a "New" form: share_mode = "default" (or missing) | "me" | "circle:<id>" | "user:<id>"
+    | "person" (with share_who - the exact-match path). Applies it to the just-created thing."""
     mode = request.POST.get(f"{prefix}_mode", "default")
     perm = request.POST.get(f"{prefix}_perm", VIEW)
     if mode == "default":
@@ -291,6 +305,8 @@ def apply_posted(request, obj, prefix="share"):
     made = []
     if mode.startswith("circle:"):
         made = [share(request.user, obj, perm, circle_id=mode.split(":", 1)[1])]
+    elif mode.startswith("user:"):
+        made = [share(request.user, obj, perm, user_id=mode.split(":", 1)[1])]
     elif mode == "person" and request.POST.get(f"{prefix}_who", "").strip():
         made = [share(request.user, obj, perm, who=request.POST[f"{prefix}_who"])]
     _record_created(obj, request.user)
@@ -362,8 +378,19 @@ def control(user, obj=None, app=None):
             rows.append({"grant": g, "is_circle": bool(g.circle_id),
                          "name": g.circle.name if g.circle_id else person_name(g.user),
                          "initials": "" if g.circle_id else initials(g.user), "explain": explain(kind, g)})
+    people, choices = [], {"circles": [], "people": [], "presets": [], "search": ""}
+    if owner:
+        from . import connections
+        people, choices = connections.picker_payload(user, kind.app, obj=obj)
+        if obj is None:
+            choices["presets"] = [
+                {"target": "default", "name": f"Default: {default_text(user, kind.app)}", "meta": "", "already": False},
+                {"target": "me", "name": "Only me", "meta": "", "already": False},
+            ]
     return {"obj": obj, "kind": kind, "owner": owner, "rows": rows, "label": kind.label,
             "circles": shareable_circles(user, kind.app) if owner else [],
+            "people": people,
+            "choices": choices,
             "default": default_text(user, kind.app) if obj is None else "",
             "url": reverse("labs:share", args=[kind.label, obj.pk]) if obj is not None else "",
             "owner_name": person_name(kind.owner_of(obj)) if obj is not None and not owner else ""}

@@ -205,6 +205,7 @@
                         <div class="navbar__dropdown-menu navbar__dropdown-menu--end" id="account-menu">
                             <a href="{% url 'labs:account' %}" id="nav-account-link">My account</a>
                             <a href="{% url 'labs:circles' %}" id="nav-circles-link">Circles{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }}</span>{% endif %}</a>
+                            <a href="{% url 'labs:people' %}" id="nav-people-link">People</a>
                             <a href="{% url 'user_logout' %}">Logout</a>
                         </div>
                     </div>

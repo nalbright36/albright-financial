@@ -1,0 +1,39 @@
+{% extends "index.html" %}
+{% block page_title %}People · {% endblock %}
+{% block content %}
+{% comment %}
+My account > People (labs.share_views.people_page; the rules: albright_labs.connections): everyone you're
+connected with - circle-mates, anyone you've already shared with (either way), and anyone you've
+connected with. Remove hides person shares both ways until you reconnect. Circle-mates stay until
+you leave the circle. Connection requests are slice 2.
+{% endcomment %}
+<div class="container people-page">
+    <h1 class="circles-title">People</h1>
+    <p class="people-lead">People you can share with one at a time — everyone in your circles, anyone you’ve already shared with, and anyone you’ve connected with. Circles themselves still have their own page.</p>
+    <nav class="circles-links" aria-label="Sharing"><a href="{% url 'labs:circles' %}" class="btn btn-secondary btn-sm">Circles</a> <a href="{% url 'labs:shared_with_me' %}" class="btn btn-secondary btn-sm">Shared with me</a> <a href="{% url 'labs:sharing_defaults' %}" class="btn btn-secondary btn-sm">Sharing defaults</a></nav>
+
+    <section class="card circles-card" aria-labelledby="people-h">
+        <h2 class="circles-card__title" id="people-h">Your people</h2>
+        {% for r in rows %}
+        <div class="people-row" data-person="{{ r.user.pk }}">
+            <span class="share-chip__avatar" aria-hidden="true">{{ r.initials }}</span>
+            <span class="people-row__main">
+                <span class="people-row__name">{{ r.name }}</span>
+                <span class="people-row__meta">{{ r.meta }}</span>
+            </span>
+            {% if r.can_remove %}
+            <div class="people-row__actions">
+                <form method="post" action="{% url 'labs:people_remove' r.user.pk %}" data-confirm="Remove {{ r.name }}? Your shares with each other will be hidden until you reconnect.">{% csrf_token %}
+                    <button type="submit" class="btn btn-secondary btn-sm">Remove</button>
+                </form>
+            </div>
+            {% else %}
+            <span class="circles-muted people-row__stay">{% if r.circles|length == 1 %}<a href="{% url 'labs:circle' r.circles.0.pk %}">Leave the circle to disconnect</a>{% else %}<a href="{% url 'labs:circles' %}">Leave the circles to disconnect</a>{% endif %}</span>
+            {% endif %}
+        </div>
+        {% empty %}
+        <p class="circles-muted">You’re not connected with anyone yet. People in your circles, and anyone you’ve already shared with, will show up here.</p>
+        {% endfor %}
+    </section>
+</div>
+{% endblock %}

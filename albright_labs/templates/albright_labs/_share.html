@@ -3,10 +3,11 @@ The one Share control (albright_labs.sharing.control -> `share`), on every share
 "New" form - Planner items, notes, recipes, workouts. labs/share.js saves without reloading; without JS each form
 posts and comes back.
   - A thing that exists: "Only me" or a chip per person / circle (View / Edit, remove) - changing them is the
-    owner's alone; others see who shared it with them. Add: one of my circles that share this app, or a person's
-    exact username or email (nobody is listed or suggested). One line each says what they'll see.
-  - A "New" form (share.obj is None): fields inside that form - the default ("Default: Albright Family"), Only me, a
-    circle, or a person - applied when it's created (sharing.apply_posted).
+    owner's alone; others see who shared it with them. Add: a type-ahead over your shareable circles and the
+    people you're connected with (albright_labs.connections) - never every user on the site. Without JS, a
+    <select> of the same list. One line each says what they'll see.
+  - A "New" form (share.obj is None): fields inside that form - the default ("Default: Albright Family"), Only me,
+    a circle, or a connected person - applied when it's created (sharing.apply_posted).
 Must sit OUTSIDE another <form> when share.obj exists (it has its own).
 {% endcomment %}
 {% if share.obj %}
@@ -37,19 +38,26 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
     </ul>
     {% else %}<p class="share-box__only" data-share-only>Only {% if share.owner %}me{% else %}its owner{% endif %}</p>{% endif %}
     {% if share.owner %}
-    <form method="post" action="{{ share.url }}" class="share-add" data-share-form>{% csrf_token %}
+    <form method="post" action="{{ share.url }}" class="share-add" data-share-form data-share-add>{% csrf_token %}
         <input type="hidden" name="action" value="add"><input type="hidden" name="next" value="{{ request.get_full_path }}">
         <label class="visually-hidden" for="share-target">Share with</label>
         <select name="target" id="share-target" class="ledger-input share-add__target" data-share-target>
             {% for c in share.circles %}<option value="circle:{{ c.pk }}">{{ c.name }} (circle)</option>{% endfor %}
-            <option value="person"{% if not share.circles %} selected{% endif %}>A person…</option>
+            {% for p in share.people %}<option value="{{ p.target }}"{% if p.already %} disabled{% endif %}>{{ p.name }}{% if p.already %} (already shared){% endif %}</option>{% endfor %}
         </select>
-        <label class="visually-hidden" for="share-who">Their exact username or email</label>
-        <input type="text" name="who" id="share-who" class="ledger-input share-add__who" placeholder="Exact username or email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" data-share-who{% if share.circles %} hidden{% endif %}>
+        <div class="share-picker" data-share-picker hidden>
+            <label class="visually-hidden" for="share-picker-input">Search people or circles</label>
+            <input type="text" id="share-picker-input" class="ledger-input share-picker__input" placeholder="Search people or circles…" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="share-list" aria-haspopup="listbox" data-share-picker-input>
+            <ul class="share-list" id="share-list" role="listbox" hidden data-share-list></ul>
+        </div>
+        <div class="share-add__actions">
         <label class="visually-hidden" for="share-perm">Permission</label>
         <select name="permission" id="share-perm" class="ledger-input share-add__perm"><option value="view">View</option><option value="edit">Edit</option></select>
-        <button type="submit" class="btn btn-secondary btn-sm">Share</button>
+        <button type="submit" class="btn btn-secondary btn-sm"{% if not share.circles and not share.people %} disabled{% endif %}>Share</button>
+        </div>
     </form>
+    {% if not share.circles and not share.people %}<p class="share-box__note">No one to share with yet — people in your circles and anyone you’ve shared with will appear here. Manage them in <a href="{% url 'labs:people' %}">People</a>.</p>{% endif %}
+    {{ share.choices|json_script:"share-choices" }}
     <p class="share-box__status" data-share-status role="status" aria-live="polite"></p>
     {% endif %}
 </section>
@@ -61,12 +69,16 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
         <option value="default" selected>Default: {{ share.default }}</option>
         <option value="me">Only me</option>
         {% for c in share.circles %}<option value="circle:{{ c.pk }}">{{ c.name }} (circle)</option>{% endfor %}
-        <option value="person">A person…</option>
+        {% for p in share.people %}<option value="{{ p.target }}">{{ p.name }}</option>{% endfor %}
     </select>
-    <label class="visually-hidden" for="share-new-who">Their exact username or email</label>
-    <input type="text" name="share_who" id="share-new-who" class="ledger-input" placeholder="Exact username or email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" data-share-new-who hidden>
+    <div class="share-picker" data-share-picker hidden>
+        <label class="visually-hidden" for="share-new-picker-input">Search people or circles</label>
+        <input type="text" id="share-new-picker-input" class="ledger-input share-picker__input" placeholder="Search people or circles…" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="share-new-list" aria-haspopup="listbox" data-share-picker-input>
+        <ul class="share-list" id="share-new-list" role="listbox" hidden data-share-list></ul>
+    </div>
     <label class="visually-hidden" for="share-new-perm">Permission</label>
     <select name="share_perm" id="share-new-perm" class="ledger-input" data-share-new-perm><option value="view">View</option><option value="edit">Edit</option></select>
+    {{ share.choices|json_script:"share-choices-new" }}
     <p class="share-box__note">Change your default in <a href="{% url 'labs:sharing_defaults' %}">Sharing defaults</a>.</p>
 </fieldset>
 {% endif %}

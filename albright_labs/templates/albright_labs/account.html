@@ -7,8 +7,9 @@
     <p style="margin: 0 0 8px; color: var(--text-secondary);">Signed in as <strong>{{ user.username }}</strong>. Choose which apps show in your navigation, their order, and what opens after you sign in. You can also arrange and pin your apps from <a href="{{ home_url }}&amp;edit=1">Home</a>.</p>
     <section class="card" id="circles-link" style="margin-top: var(--space-5, 20px);">
         <div class="card__header"><span class="card__label">Circles</span>{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }} invite{{ circle_invites|pluralize }}</span>{% endif %}</div>
-        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">Groups of people you choose to share some apps with - Meals, Money and more. Your personal things stay yours.</p>
+        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">Groups of people you choose to share some apps with - Meals, Money and more - and people you can share with one at a time. Your personal things stay yours.</p>
         <a href="{% url 'labs:circles' %}" class="btn btn-secondary">Circles</a>
+        <a href="{% url 'labs:people' %}" class="btn btn-secondary">People</a>
     </section>
     <section class="card" id="activity-link" style="margin-top: var(--space-5, 20px);">
         <div class="card__header"><span class="card__label">Activity</span>{% if notification_count %} <span class="badge navbar__badge">{{ notification_count_label }} unread</span>{% endif %}</div>

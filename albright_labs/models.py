@@ -315,7 +315,9 @@ SHARE_APPS = ("planner", "notes", "meals", "fitness")
 class ShareGrant(models.Model):
     """One shared thing (any model - content type + id) shown to one person or one circle, to view or to edit.
     A circle grant counts only for its ACTIVE members who opted in to the thing's app (albright_labs.circles).
-    seen_at: when a person saw the "<name> shared <thing> with you" notice (person grants)."""
+    seen_at: when a person saw the "<name> shared <thing> with you" notice (person grants).
+    hidden_at: set when a connection is removed (albright_labs.connections) - the grant stays but confers no
+    access until the two reconnect, at which point it is cleared."""
     VIEW, EDIT = "view", "edit"
     PERMISSIONS = [(VIEW, "Can view"), (EDIT, "Can edit")]
     content_type = models.ForeignKey("contenttypes.ContentType", on_delete=models.CASCADE, related_name="+")
@@ -328,6 +330,7 @@ class ShareGrant(models.Model):
                                    related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
     seen_at = models.DateTimeField(null=True, blank=True)
+    hidden_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at", "pk"]
@@ -365,6 +368,34 @@ class SharingDefault(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.app}: {self.mode}"
+
+
+
+class Connection(models.Model):
+    """One pair of people (canonical: user_a_id < user_b_id). Implicit connections - a shared active circle,
+    or a visible person ShareGrant either way - do not need a row. A REMOVED row is written when either of
+    you clicks Remove (My account > People): person ShareGrants between you are hidden, not deleted, and
+    restored when you reconnect (joining a circle together; slice 2 also restores when a request is accepted).
+    CONNECTED is an explicit accepted request (slice 2). albright_labs.connections enforces every rule."""
+    CONNECTED, REMOVED = "connected", "removed"
+    STATUSES = [(CONNECTED, "Connected"), (REMOVED, "Removed")]
+    user_a = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections_as_a")
+    user_b = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections_as_b")
+    status = models.CharField(max_length=10, choices=STATUSES, default=CONNECTED)
+    removed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+    removed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user_a", "user_b"], name="labs_one_connection_per_pair"),
+            models.CheckConstraint(condition=models.Q(user_a_id__lt=models.F("user_b_id")),
+                                   name="labs_connection_ordered"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_a} / {self.user_b} ({self.status})"
 
 
 # ---------------------------------------------------------------------------

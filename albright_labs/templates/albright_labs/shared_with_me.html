@@ -23,6 +23,6 @@ shared with me - directly or through a circle - across Planner, Notes, Recipes a
         </a>
         {% empty %}<p class="circles-muted">Nothing's shared with you{% if app or circle %} here{% endif %} yet.</p>{% endfor %}
     </section>
-    <p><a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:sharing_defaults' %}">Sharing defaults</a></p>
+    <p><a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:people' %}">People</a> &middot; <a href="{% url 'labs:sharing_defaults' %}">Sharing defaults</a></p>
 </div>
 {% endblock %}

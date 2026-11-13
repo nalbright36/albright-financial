@@ -35,6 +35,6 @@ and by my bots (albright_labs.sharing.apply_defaults). People are added by exact
         <p class="circles-muted">Only circles that share {{ r.label }} and that you've joined it in are listed.</p>
     </section>
     {% empty %}<p class="circles-muted">None of your apps can share things yet.</p>{% endfor %}
-    <p><a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:shared_with_me' %}">Shared with me</a></p>
+    <p><a href="{% url 'labs:circles' %}">Circles</a> &middot; <a href="{% url 'labs:people' %}">People</a> &middot; <a href="{% url 'labs:shared_with_me' %}">Shared with me</a></p>
 </div>
 {% endblock %}

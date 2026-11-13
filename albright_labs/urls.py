@@ -16,8 +16,11 @@ urlpatterns = [
     path("home/account/circles/<int:pk>/", circle_views.circle_page, name="circle"),
     path("home/account/circles/invites/<int:pk>/", circle_views.invite_page, name="circle_invite"),
     path("circles/join/<str:token>/", circle_views.invite_link, name="circle_join"),
-    # Sharing (share_views; the rules: albright_labs.sharing).
+    # Sharing (share_views; the rules: albright_labs.sharing) and People (albright_labs.connections).
     path("share/<str:label>/<int:pk>/", share_views.share, name="share"),
+    path("home/account/people/", share_views.people_page, name="people"),
+    path("home/account/people/search/", share_views.people_search, name="people_search"),
+    path("home/account/people/<int:pk>/remove/", share_views.people_remove, name="people_remove"),
     path("home/account/circles/sharing/", share_views.defaults, name="sharing_defaults"),
     path("home/account/circles/shared-with-me/", share_views.shared_with_me, name="shared_with_me"),
     path("home/account/household/", circle_views.household_redirect, name="household"),
