@@ -109,7 +109,7 @@ class OpportunitiesNavTests(TestCase):
         tabs = content.split('id="settings-tabs"')[1].split("</nav>")[0]
         self.assertEqual(re.findall(r'href="([^"]+)"', tabs), [
             reverse("albright_crypto_app:profile"), reverse("albright_crypto_app:filters"),
-            reverse("albright_crypto_app:settings"), reverse("albright_crypto_app:gmail")])
+            reverse("albright_crypto_app:settings")])
 
     def test_verbose_name(self, _outlook):
         self.assertEqual(apps.get_app_config("albright_crypto_app").verbose_name, "Opportunities")

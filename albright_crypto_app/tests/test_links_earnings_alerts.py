@@ -15,21 +15,17 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from albright_crypto_app.alerts import digest_lines, send_deadline_reminders, send_new_opportunity_alerts
 from albright_crypto_app.models import Earning, Opportunity, TimeLog
 from albright_crypto_app.tests.test_pipeline import make
 from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "etherscan.io"], "budget_usd": 0,
        "alert_min_ev_per_hour": 15, "alert_min_confidence": "medium"}
-TELEGRAM = "albright_crypto_app.alerts.send_telegram"
 
 
 def render_link(url, label=""):
     return Template('{% load crypto_links %}{% external_link url label %}').render(Context({"url": url, "label": label}))
 
-
-@override_settings(CRYPTO=CFG)
 class LinkTests(TestCase):
     def setUp(self):
         self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
@@ -76,7 +72,6 @@ class LinkTests(TestCase):
             self.assertNotIn('href="https://someproject.dev', content, name)
             self.assertIn("leave/?to=https%3A%2F%2Fsomeproject.dev", content, name)
 
-
 @override_settings(CRYPTO=CFG)
 class EarningsTests(TestCase):
     def setUp(self):
@@ -122,76 +117,3 @@ class EarningsTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.opp.earnings.count(), 2)
 
-
-@override_settings(CRYPTO=CFG)
-class AlertTests(TestCase):
-    def qualifying(self, **overrides):
-        facts = dict(reward_usd=Decimal("200"), reward_type="bounty", hours_estimate=Decimal("4"), evidence="explicit",
-                     evidence_quote="Bounty: $200 in USDC")
-        facts.update(overrides)
-        return make(**facts)
-
-    @mock.patch(TELEGRAM)
-    def test_alert_once_for_a_qualifying_opportunity(self, send):
-        opp = self.qualifying(title="Great bounty")
-
-        self.assertEqual(send_new_opportunity_alerts([opp]), [opp.pk])
-        self.assertEqual(send_new_opportunity_alerts([Opportunity.objects.get(pk=opp.pk)]), [])
-        send.assert_called_once()
-        message = send.call_args.args[0]
-        self.assertIn("Great bounty", message)
-        self.assertIn("EV/hour $32.50", message)
-        self.assertIn(reverse("albright_crypto_app:opportunity", args=[opp.pk]), message)
-
-    @mock.patch(TELEGRAM)
-    def test_no_alert_for_blocked_excluded_low_confidence_or_low_ev(self, send):
-        blocked = make(title="Scam", text="Send 0.1 ETH to unlock your reward", reward_usd=Decimal("500"),
-                       reward_type="bounty", hours_estimate=Decimal("1"), evidence="explicit")
-        excluded = self.qualifying(title="Spend", requires_spending=True)
-        low_conf = make(title="Vague", reward_type="bounty", hours_estimate=Decimal("1"))
-        low_ev = self.qualifying(title="Slow", hours_estimate=Decimal("40"))
-
-        self.assertEqual(send_new_opportunity_alerts([blocked, excluded, low_conf, low_ev]), [])
-        send.assert_not_called()
-
-    @mock.patch(TELEGRAM)
-    def test_unverified_listing_is_not_linked_directly_in_alerts(self, send):
-        opp = self.qualifying(title="Off-list", url="https://someproject.dev/bounty")
-        Opportunity.objects.filter(pk=opp.pk).update(confidence="medium", ev_per_hour=Decimal("20"),
-                                                     safety_verdict="warn")
-        send_new_opportunity_alerts([Opportunity.objects.get(pk=opp.pk)])
-        self.assertNotIn("someproject.dev", send.call_args.args[0])
-
-    @mock.patch(TELEGRAM)
-    def test_deadline_reminder_24h_before_for_working_only(self, send):
-        now = timezone.now()
-        doing = make(title="Due soon", deadline=now + timedelta(hours=20))
-        Opportunity.objects.filter(pk=doing.pk).update(status="working")
-        make(title="Not doing", deadline=now + timedelta(hours=20))
-        later = make(title="Due later", deadline=now + timedelta(hours=40))
-        Opportunity.objects.filter(pk=later.pk).update(status="working")
-
-        self.assertEqual(send_deadline_reminders(now=now), [doing.pk])
-        self.assertEqual(send_deadline_reminders(now=now), [])
-        self.assertIn("Due soon", send.call_args.args[0])
-
-    def test_digest_section(self):
-        now = timezone.now()
-        self.qualifying(title="Fresh bounty")
-        make(title="Blocked one", text="Enter your seed phrase to claim")
-        due = make(title="Due this week", deadline=now + timedelta(days=3))
-        Opportunity.objects.filter(pk=due.pk).update(status="working")
-        Earning.objects.create(amount=Decimal("25"), currency="USDC", usd_value_at_receipt=Decimal("25"))
-
-        text = "\n".join(digest_lines(now=now))
-
-        self.assertIn("<b>Opportunities</b>", text)
-        self.assertIn("Crypto: 2 new (24h), 1 blocked", text)
-        self.assertIn("Income: 0 new (24h), 0 blocked", text)
-        self.assertIn("Fresh bounty", text)
-        self.assertIn("Due this week", text)
-        self.assertIn("Earned this week (confirmed): $25.00", text)
-
-    def test_digest_section_is_in_the_daily_digest(self):
-        from albright_reselling_app.scanner.alerts import build_digest_message
-        self.assertIn("<b>Opportunities</b>", build_digest_message())

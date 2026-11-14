@@ -1,8 +1,4 @@
-"""No import cycles in albright_crypto_app: each module that pulls in the
-collectors' helpers is imported FIRST in a fresh Python process (in this
-process everything is already loaded, so a cycle would never show). The
-shared helpers live in collectors/utils.py, which imports no collector, and
-collectors/__init__.py builds COLLECTORS lazily."""
+"""Core Opportunities modules still import in a fresh process (no cycles)."""
 import os
 import subprocess
 import sys
@@ -13,20 +9,16 @@ from django.test import SimpleTestCase
 
 FIRST_IMPORTS = [
     "albright_crypto_app.templatetags.crypto_links",
-    "albright_crypto_app.collectors.utils",
-    "albright_crypto_app.collectors.json_api",
-    "albright_crypto_app.collectors.job_boards",
-    "albright_crypto_app.collectors",
     "albright_crypto_app.inbox_views",
     "albright_crypto_app.pipeline",
+    "albright_labs.guards",
+    "albright_labs.links",
+    "albright_labs.ai_tasks",
 ]
 SCRIPT = """
 import importlib, sys, django
 django.setup()
 importlib.import_module(sys.argv[1])
-from albright_crypto_app.collectors import COLLECTORS
-assert len(COLLECTORS) == 11, COLLECTORS
-print(",".join(sorted(m.split(".")[-1] for m in sys.modules if m.startswith("albright_crypto_app.collectors."))))
 """
 
 
@@ -43,8 +35,3 @@ class ImportCycleTests(SimpleTestCase):
                 result = self.run_first(module)
                 self.assertEqual(result.returncode, 0, result.stderr[-2000:])
                 self.assertNotIn("partially initialized", result.stderr)
-
-    def test_helpers_module_imports_nothing_from_the_app(self):
-        source = (Path(settings.BASE_DIR) / "albright_crypto_app" / "collectors" / "utils.py").read_text(encoding="utf-8")
-        imports = [line for line in source.splitlines() if line.startswith(("import ", "from "))]
-        self.assertEqual(imports, ["import html", "import re", "from urllib.parse import urlparse"])

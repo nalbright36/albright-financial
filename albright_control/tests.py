@@ -294,16 +294,13 @@ class HealthTests(AdminTestCase):
         rows = {r["job"]: r for r in self.client.get(reverse("albright_control:health")).context["rows"]}
         for source in settings.RESELLING_SCANNER["SOURCES"]:
             self.assertIn(f"scan_lots:{source}", rows)
-        for job in ("watchlist_alerts", "track_closed", "fetch_spot_prices", "alert_digest", "calibrate", "prune_lots", "gmail"):
+        for job in ("watchlist_alerts", "track_closed", "fetch_spot_prices", "alert_digest", "calibrate", "prune_lots"):
             self.assertIn(job, rows)
         self.assertEqual(rows["watchlist_alerts"]["status"], "ok")
         self.assertEqual((rows["alert_digest"]["status"], rows["alert_digest"]["last_error"]), ("failing", "Telegram down"))
         self.assertEqual(rows["calibrate"]["status"], "late")      # never ran
         self.assertEqual(rows["scan_lots:hibid"]["status"], "ok")
-        crypto = [r for k, r in rows.items() if k.startswith("scan_crypto:")]
-        self.assertEqual({r["label"]: r["status"] for r in crypto},
-                         {"Opportunities scan - Feed": "ok", "Opportunities scan - Remotive": "off"})
-        self.assertEqual(rows["gmail"]["status"], "off")
+        self.assertFalse([k for k in rows if k.startswith("scan_crypto:") or k == "gmail"])
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +319,7 @@ class IntegrationTests(AdminTestCase):
         statuses = {r["key"]: r["status"] for r in response.context["rows"]}
         self.assertEqual(statuses["telegram"], "configured")
         self.assertEqual(statuses["ebay"], "configured")
-        self.assertEqual(set(statuses), {"openai", "telegram", "goldapi", "alpaca", "gmail", "github", "ebay", "email"})
+        self.assertEqual(set(statuses), {"openai", "telegram", "goldapi", "alpaca", "ebay", "email"})
 
     def test_missing_and_failing(self):
         with mock.patch.dict("os.environ", {}, clear=False):
@@ -354,10 +351,7 @@ class IntegrationTests(AdminTestCase):
         self.assertTrue(IntegrationCheck.objects.get(integration="telegram").ok)
         self.assertEqual(AuditEntry.objects.get().action, "integration_test")
 
-    def test_gmail_check_and_no_spot_price_test(self):
-        self.client.post(reverse("albright_control:test_integration", args=["gmail"]))
-        check = IntegrationCheck.objects.get(integration="gmail")
-        self.assertEqual((check.ok, check.message), (False, "Gmail isn't connected."))
+    def test_no_spot_price_test(self):
         with mock.patch("albright_reselling_app.management.commands.fetch_spot_prices.Command.handle") as fetch:
             response = self.client.post(reverse("albright_control:test_integration", args=["goldapi"]))
         fetch.assert_not_called()

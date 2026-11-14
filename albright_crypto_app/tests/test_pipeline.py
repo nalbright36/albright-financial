@@ -15,7 +15,7 @@ from django.urls import reverse
 from albright_crypto_app.core.safety import check_opportunity
 from albright_crypto_app.core.scoring import score
 from albright_crypto_app.models import Opportunity, Source, TaskStep
-from albright_crypto_app.pipeline import add_manual, extract_and_score, rescore, sync_sources
+from albright_crypto_app.pipeline import add_manual, extract_and_score, rescore
 from albright_crypto_app.tests.test_extraction import GOOD, TEXT, fake_client
 from albright_labs.testing import with_apps
 
@@ -84,9 +84,9 @@ class PipelineTests(TestCase):
         self.assertEqual((opp.confidence, float(opp.ev_mid), float(opp.ev_per_hour)), ("high", 130.0, 32.5))
 
     def test_edit_rejects_a_quote_not_in_the_text(self):
-        opp = make()
         user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(user)
+        opp = make()
 
         response = self.client.post(reverse("albright_crypto_app:opportunity", args=[opp.pk]), {
             "action": "edit", "reward_usd": "500", "reward_type": "bounty", "evidence": "explicit",
@@ -109,18 +109,6 @@ class PipelineTests(TestCase):
         self.assertEqual(again.pk, opp.pk)
         self.assertEqual((opp.source.kind, opp.extraction_status, opp.confidence), ("manual", "done", "high"))
 
-    def test_sync_sources_from_config(self):
-        with override_settings(CRYPTO={**settings.CRYPTO, "rss_feeds": ["https://a.example/feed"],
-                                       "github_queries": ["label:bounty state:open"]}):
-            sync_sources()
-            self.assertEqual(set(Source.objects.values_list("kind", "url")),
-                             {("github", "label:bounty state:open"), ("rss", "https://a.example/feed"), ("manual", "")})
-        with override_settings(CRYPTO={**settings.CRYPTO, "rss_feeds": [], "github_queries": []}):
-            sync_sources()
-            self.assertFalse(Source.objects.get(kind="rss").active)  # removed feed: deactivated, not deleted
-
-
-@override_settings(CRYPTO={**settings.CRYPTO, "allowlist": ALLOW, "budget_usd": 0})
 class RoutingTests(TestCase):
     def setUp(self):
         user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))

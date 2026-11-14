@@ -20,17 +20,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from albright_crypto_app import config, relevance, workflow
-from albright_crypto_app.alerts import send_followup_reminders, send_new_opportunity_alerts
 from albright_crypto_app.models import (AIExtraction, ApplicationDraft, Earning, MyProfile, Opportunity, Source,
                                         TimeLog, Walkthrough)
 from albright_crypto_app.my_profile import RESUME_PREFILL, check_text, prefill_profile, profile_text
-from albright_crypto_app.pipeline import (add_manual, extract_and_score, rescore, store, sync_default_income_sources)
-from albright_crypto_app.collectors.base import RawOpportunity
+from albright_crypto_app.pipeline import (RawOpportunity, add_manual, extract_and_score, rescore, store)
 from albright_crypto_app.tests.test_extraction import fake_client
 from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "jobs.example.com"], "budget_usd": 0, "ai_daily_limit": 30}
-TELEGRAM = "albright_crypto_app.alerts.send_telegram"
 JOB_TEXT = "We need SQL, Python and Power BI for executive dashboards. Remote within the US."
 
 
@@ -385,17 +382,6 @@ class FitTests(ProfileMixin, TestCase):
         opp.refresh_from_db()
         self.assertEqual(opp.hidden_reason, "seniority: VP / C-level")
 
-    def test_hidden_postings_are_never_alerted(self):
-        opp = job("Contract Data Analyst", score=False, pay_type="hourly", pay_rate_usd=Decimal("90"),
-                  reward_usd=Decimal("900"), reward_type="freelance", hours_estimate=Decimal("10"),
-                  evidence="explicit", evidence_quote="SQL")
-        extract_and_score(opp, client=fake_client(fit_reply(30)))
-        opp.refresh_from_db()
-        with mock.patch(TELEGRAM) as telegram:
-            self.assertEqual(send_new_opportunity_alerts([opp]), [])
-        telegram.assert_not_called()
-
-
 # ---------------------------------------------------------------------------
 # Inbox
 # ---------------------------------------------------------------------------
@@ -593,38 +579,6 @@ class PipelineBoardTests(TestCase):
         opp.refresh_from_db()
         self.assertEqual((opp.status, opp.close_reason), ("closed", "declined"))
 
-    def test_follow_up_after_seven_quiet_days_shown_and_sent_once(self):
-        opp = job("Data Analyst", company="Acme")
-        workflow.move(opp, "applied", now=timezone.now() - timedelta(days=8))
-        recent = job("BI Analyst")
-        workflow.move(recent, "applied", now=timezone.now() - timedelta(days=3))
-        moved_on = job("Data Engineer")
-        workflow.move(moved_on, "applied", now=timezone.now() - timedelta(days=10))
-        workflow.move(moved_on, "talking", now=timezone.now() - timedelta(days=1))
-        opp.refresh_from_db()
-        self.assertTrue(opp.followup_due)
-        page = self.client.get(reverse("albright_crypto_app:pipeline")).content.decode()
-        self.assertIn("Follow up - applied", page)
-        self.assertIn("1 to follow up.", page)
-        with mock.patch(TELEGRAM) as telegram:
-            self.assertEqual(send_followup_reminders(), [opp.pk])
-            self.assertEqual(send_followup_reminders(), [])     # once only
-        self.assertEqual(telegram.call_count, 1)
-        message = telegram.call_args.args[0]
-        self.assertIn("Follow up on an application", message)
-        self.assertIn("Data Analyst at Acme", message)
-
-    def test_follow_up_for_a_job_board_posting_hides_its_details(self):
-        remotive = board(kind="remotive", url="https://remotive.com/api/remote-jobs", name="Remotive")
-        opp = job("Data Analyst", source=remotive, company="Acme")
-        workflow.move(opp, "applied", now=timezone.now() - timedelta(days=8))
-        with mock.patch(TELEGRAM) as telegram:
-            send_followup_reminders()
-        message = telegram.call_args.args[0]
-        self.assertNotIn("Data Analyst", message)
-        self.assertNotIn("Acme", message)
-        self.assertIn("via Remotive", message)
-
     def test_detail_page_stage_buttons_and_draft_sent(self):
         opp = job("Data Analyst")
         self.client.post(reverse("albright_crypto_app:opportunity", args=[opp.pk]),
@@ -750,7 +704,7 @@ class CleanupTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Earnings by type, default sources
+# Earnings by type
 # ---------------------------------------------------------------------------
 
 @override_settings(CRYPTO=CFG)
@@ -771,28 +725,3 @@ class EarningsByTypeTests(TestCase):
         self.assertNotIn("jobs", rows)
         page = self.client.get(reverse("albright_crypto_app:earnings")).content.decode()
         self.assertIn('id="earnings-by-type"', page)
-
-
-class DefaultSourceTests(TestCase):
-    def test_default_job_sources_respect_terms_per_site(self):
-        Source.objects.create(kind="remotive", name="My Remotive", url="https://remotive.com/api/remote-jobs",
-                              opportunity_type="income", terms_checked=True)
-        sync_default_income_sources()
-        remotive = Source.objects.filter(kind="remotive").exclude(name="My Remotive")
-        self.assertEqual(sorted(s.options.get("category") or s.options.get("search") for s in remotive),
-                         ["analytics engineer", "data", "power bi", "salesforce administrator", "software-dev", "tableau"])
-        self.assertTrue(all(s.terms_checked for s in remotive))                 # Remotive's terms already checked
-        remoteok = Source.objects.filter(kind="remoteok")
-        self.assertEqual(sorted(s.options["tag"] for s in remoteok), ["analytics", "data", "python", "salesforce"])
-        self.assertFalse(any(s.terms_checked for s in remoteok))                # never checked - won't run
-        self.assertFalse(any(s.runnable for s in remoteok))
-        wwr = Source.objects.filter(kind="rss_income", url__contains="weworkremotely.com")
-        self.assertEqual(wwr.count(), 2)
-        self.assertTrue(wwr.get(url__contains="programming").active)
-        self.assertFalse(wwr.get(url__contains="data").active)                  # unconfirmed URL starts off
-        self.assertTrue(Source.objects.filter(kind="hn_hiring").exists())
-        before = Source.objects.count()
-        Source.objects.filter(kind="remoteok").update(active=False)
-        sync_default_income_sources()
-        self.assertEqual(Source.objects.count(), before)                         # never re-added or switched back on
-        self.assertFalse(Source.objects.filter(kind="remoteok", active=True).exists())

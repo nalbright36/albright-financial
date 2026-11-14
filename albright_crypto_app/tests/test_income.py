@@ -14,21 +14,16 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from albright_crypto_app.alerts import digest_lines, send_new_opportunity_alerts
-from albright_crypto_app.collectors.json_api import JsonApiCollector
 from albright_crypto_app.extraction import INCOME_SYSTEM_PROMPT, SYSTEM_PROMPT, extract, validate
 from albright_crypto_app.models import Earning, Opportunity, Source, TimeLog
-from albright_crypto_app.pipeline import (REFUNDABLE_DEPOSIT_REASON, add_manual, extract_and_score, manual_source,
-                                          rescore, scan_sources)
+from albright_crypto_app.pipeline import (REFUNDABLE_DEPOSIT_REASON, extract_and_score, manual_source, rescore)
 from albright_crypto_app.skills import skill_match
-from albright_crypto_app.tests.test_collectors import GET, NO_SLEEP, _resp
 from albright_crypto_app.tests.test_extraction import fake_client
 from albright_crypto_app.tests.test_pipeline import make
 from albright_labs.testing import with_apps
 
 CFG = {**settings.CRYPTO, "allowlist": ["github.com", "jobs.example.com"], "budget_usd": 0,
        "alert_min_ev_per_hour": 15, "alert_min_confidence": "medium"}
-TELEGRAM = "albright_crypto_app.alerts.send_telegram"
 MY_SKILLS = settings.CRYPTO.get("skills") or ["Python", "Django", "PostgreSQL", "data pipelines", "API integrations",
                                               "web scraping", "Excel", "VBA", "Power BI", "automation",
                                               "financial applications"]
@@ -39,6 +34,7 @@ JOB_TEXT = ("Remote (US only). We need a Python/Django developer to build API in
 FIXED_TEXT = "Fixed price: $800 to automate our Excel reports with VBA. Remote, worldwide."
 BANK_TEXT = ("Open a checking account and make direct deposits of $500 to receive a $300 bonus. "
              "The deposits stay in your account.")
+
 
 
 def make_income(title="Django contract", url="https://jobs.example.com/1", text=JOB_TEXT, **facts):
@@ -289,132 +285,7 @@ class IncomeExtractionTests(TestCase):
 
 
 @override_settings(CRYPTO=CFG)
-class IncomeSourceTests(TestCase):
-    def setUp(self):
-        NO_SLEEP.start()
-        self.addCleanup(NO_SLEEP.stop)
 
-    API = {"jobs": [
-        {"id": 7, "url": "https://jobs.example.com/7", "title": "Python data pipeline contractor",
-         "company_name": "Acme", "candidate_required_location": "USA only", "salary": "$70/hour",
-         "description": "<p>Build <b>data pipelines</b> in Python.</p>", "publication_date": "2026-10-18T09:00:00"},
-        {"id": 8, "title": "No link"},
-    ]}
-
-    def test_income_source_does_not_run_until_terms_are_checked(self):
-        source = Source.objects.create(kind="api_income", name="Jobs API", url="https://jobs.example.com/api",
-                                       opportunity_type="income")
-        with mock.patch(GET, return_value=_resp(json_data=self.API)) as get:
-            new, errors = scan_sources(use_ai=False)
-            self.assertEqual((new, errors), ([], []))
-            scan_sources(sources=[source], use_ai=False)  # even when named explicitly
-            get.assert_not_called()
-
-            source.terms_checked = True
-            source.save()
-            new, errors = scan_sources(use_ai=False)
-        self.assertEqual(errors, [])
-        self.assertEqual([o.title for o in new], ["Python data pipeline contractor"])
-        self.assertEqual(new[0].opportunity_type, "income")
-        get.assert_called_once()
-
-    def test_inactive_income_source_never_runs(self):
-        Source.objects.create(kind="rss_income", name="Feed", url="https://jobs.example.com/feed",
-                              opportunity_type="income", terms_checked=True, active=False)
-        with mock.patch(GET) as get:
-            scan_sources(use_ai=False)
-        get.assert_not_called()
-
-    def test_json_api_collector_reads_items(self):
-        source = Source(kind="api_income", url="https://jobs.example.com/api", opportunity_type="income")
-        with mock.patch(GET, return_value=_resp(json_data=self.API)):
-            items = list(JsonApiCollector().collect(source))
-        self.assertEqual(len(items), 1)  # the item without a link is skipped
-        item = items[0]
-        self.assertEqual((item.external_id, item.url), ("api:7", "https://jobs.example.com/7"))
-        self.assertIn("Build data pipelines in Python.", item.text)
-        self.assertIn("Location: USA only", item.text)
-        self.assertIn("Salary: $70/hour", item.text)
-        self.assertEqual(item.published.year, 2026)
-
-    def test_json_api_list_payload_skips_non_items(self):
-        payload = [{"legal": "notice"}, {"id": "a1", "link": "https://jobs.example.com/a1", "position": "VBA dev"}]
-        with mock.patch(GET, return_value=_resp(json_data=payload)):
-            items = list(JsonApiCollector().collect(Source(kind="api_income", url="https://jobs.example.com/x")))
-        self.assertEqual([i.title for i in items], ["VBA dev"])
-
-    def test_add_income_source_on_settings_page(self):
-        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
-        response = self.client.post(reverse("albright_crypto_app:settings"), {
-            "action": "add_source", "source-name": "Remote jobs feed", "source-kind": "rss_income",
-            "source-url": "https://jobs.example.com/remote.rss", "source-notes": "Terms: feed may be polled hourly"})
-        self.assertEqual(response.status_code, 302)
-        source = Source.objects.get(name="Remote jobs feed")
-        self.assertEqual((source.kind, source.opportunity_type, source.terms_checked, source.runnable),
-                         ("rss_income", "income", False, False))
-
-        page = self.client.get(reverse("albright_crypto_app:settings"))
-        self.assertContains(page, "It won't run until you tick it.")
-        self.assertContains(page, '<option value="api_income">API (income)</option>')
-        self.assertNotContains(page, '<option value="github">')  # only income kinds can be added here
-
-        duplicate = self.client.post(reverse("albright_crypto_app:settings"), {
-            "action": "add_source", "source-name": "Again", "source-kind": "rss_income",
-            "source-url": "https://jobs.example.com/remote.rss"})
-        self.assertContains(duplicate, "already in your list")
-
-        self.client.post(reverse("albright_crypto_app:settings"), {
-            "action": "sources", f"active_{source.pk}": "on", f"terms_{source.pk}": "on"})
-        source.refresh_from_db()
-        self.assertTrue(source.runnable)
-
-    def test_add_source_rejects_non_web_urls(self):
-        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
-        response = self.client.post(reverse("albright_crypto_app:settings"), {
-            "action": "add_source", "source-name": "Bad", "source-kind": "api_income", "source-url": "ftp://x.example/a"})
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Source.objects.filter(name="Bad").exists())
-
-
-@override_settings(CRYPTO=CFG)
-class IncomeAlertTests(TestCase):
-    @mock.patch(TELEGRAM)
-    def test_freelance_alert_needs_skill_match_60(self, send):
-        good = freelance("Good fit", ["Python", "Django", "PostgreSQL", "React"])   # 75
-        weak = freelance("Weak fit", ["Python", "React", "Vue", "Go", "Rust"])     # 20
-        border = freelance("Border fit", ["Python", "Django", "React", "Vue", "Excel"])  # 60
-        self.assertGreaterEqual(good.ev_per_hour, 15)
-        self.assertIn(good.confidence, ("medium", "high"))
-
-        sent = send_new_opportunity_alerts([good, weak, border])
-
-        self.assertEqual(sorted(sent), sorted([good.pk, border.pk]))
-        message = send.call_args_list[0].args[0]
-        self.assertIn("<b>Income: new opportunity</b>", message)
-        self.assertIn("Hourly $60.00/h", message)
-        self.assertIn("skill match 75%", message)
-
-    @mock.patch(TELEGRAM)
-    def test_non_freelance_income_uses_the_usual_thresholds(self, send):
-        study = make_income(title="Paid study", url="https://jobs.example.com/study",
-                            text="Paid research study: $100 for a one hour interview.", reward_type="research_study",
-                            reward_usd=Decimal("100"), hours_estimate=Decimal("1"), evidence="explicit",
-                            evidence_quote="$100 for a one hour interview")
-        self.assertEqual(send_new_opportunity_alerts([study]), [study.pk])
-
-    def test_digest_has_crypto_and_income_lines(self):
-        make(title="Crypto thing")
-        freelance("Great Django gig", ["Python", "Django"])
-        freelance("Poor fit gig", ["React", "Vue"])
-        text = "\n".join(digest_lines())
-        self.assertIn("<b>Opportunities</b>", text)
-        self.assertIn("Crypto: 1 new (24h)", text)
-        self.assertIn("Income: 2 new (24h)", text)
-        self.assertIn("Great Django gig", text)
-        self.assertNotIn("Poor fit gig", text)  # below the freelance skill-match cutoff
-
-
-@override_settings(CRYPTO=CFG)
 class IncomeDetailAndEditTests(TestCase):
     def setUp(self):
         self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
