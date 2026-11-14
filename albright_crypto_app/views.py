@@ -43,11 +43,12 @@ def _wants_json(request):
     return request.headers.get("x-requested-with") == "XMLHttpRequest"
 
 
-def dashboard_tiles(today=None, opportunity_type=None):
+def dashboard_tiles(user, today=None, opportunity_type=None):
     today = today or timezone.localdate()
-    confirmed = Earning.objects.filter(kind="confirmed")
-    potential_qs = Opportunity.objects.filter(status__in=ACTIVE_STATUSES, excluded=False).exclude(safety_verdict="block")
-    time_logs = TimeLog.objects.all()
+    confirmed = Earning.objects.filter(kind="confirmed", opportunity__owner=user)
+    potential_qs = (Opportunity.objects.filter(owner=user, status__in=ACTIVE_STATUSES, excluded=False)
+                    .exclude(safety_verdict="block"))
+    time_logs = TimeLog.objects.filter(opportunity__owner=user)
     if opportunity_type:
         confirmed = confirmed.filter(opportunity_type=opportunity_type)
         potential_qs = potential_qs.filter(opportunity_type=opportunity_type)
@@ -68,7 +69,7 @@ def dashboard_tiles(today=None, opportunity_type=None):
 
 @login_required
 def opportunity_detail(request, pk):
-    opp = get_object_or_404(Opportunity.objects.select_related("source"), pk=pk)
+    opp = get_object_or_404(Opportunity.objects.select_related("source").filter(owner=request.user), pk=pk)
     edit_form = OpportunityEditForm(instance=opp)
     time_form = TimeLogForm()
     earning_form = EarningForm()
@@ -169,7 +170,8 @@ def _run_ai_action(request, opp, action):
 @login_required
 def draft_download(request, pk):
     """A tailored resume as .docx, or a proposal as .txt."""
-    draft = get_object_or_404(ApplicationDraft.objects.select_related("opportunity"), pk=pk)
+    draft = get_object_or_404(ApplicationDraft.objects.select_related("opportunity"),
+                               pk=pk, opportunity__owner=request.user)
     stem = f"{draft.kind}-{draft.opportunity_id}-{draft.created_at:%Y%m%d}"
     if draft.kind == "resume":
         response = HttpResponse(my_profile.resume_docx(MyProfile.load(), draft), content_type=(
@@ -208,7 +210,7 @@ def profile_view(request):
 @login_required
 @require_POST
 def toggle_step(request, pk, step_id):
-    step = get_object_or_404(TaskStep, pk=step_id, opportunity_id=pk)
+    step = get_object_or_404(TaskStep, pk=step_id, opportunity_id=pk, opportunity__owner=request.user)
     step.done = not step.done
     step.save(update_fields=["done"])
     if _wants_json(request):
@@ -222,7 +224,8 @@ def add_opportunity(request):
     form = ManualOpportunityForm(request.POST or None, initial={"opportunity_type": initial_type})
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
-        opp, created = add_manual(data["url"], data["title"], data["text"], opportunity_type=data["opportunity_type"])
+        opp, created = add_manual(data["url"], data["title"], data["text"], opportunity_type=data["opportunity_type"],
+                                  owner=request.user)
         if created and opp.opportunity_type == "income" and (data.get("reward_type") or data.get("platform_name")
                                                             or data.get("pay_rate_usd") is not None
                                                             or data.get("application_status")):
@@ -246,7 +249,7 @@ def add_opportunity(request):
 @login_required
 def earnings(request):
     type_filter = request.GET.get("type") if request.GET.get("type") in TYPE_LABELS else ""
-    rows = Earning.objects.filter(kind="confirmed").select_related("opportunity")
+    rows = Earning.objects.filter(kind="confirmed", opportunity__owner=request.user).select_related("opportunity")
     if type_filter:
         rows = rows.filter(opportunity_type=type_filter)
     if request.GET.get("export") == "csv":
@@ -265,7 +268,7 @@ def earnings(request):
     by_currency = rows.values("currency").annotate(amount=Sum("amount"), usd=Sum("usd_value_at_receipt")).order_by("currency")
     return render(request, "albright_crypto_app/earnings.html", {
         "earnings": rows, "total_usd": totals["usd"] or Decimal("0"), "by_currency": by_currency,
-        "tiles": dashboard_tiles(opportunity_type=type_filter or None), "type_filter": type_filter,
+        "tiles": dashboard_tiles(request.user, opportunity_type=type_filter or None), "type_filter": type_filter,
         "opportunity_types": OPPORTUNITY_TYPES, "by_type": by_type,
         "csv_query": urlencode({"export": "csv", **({"type": type_filter} if type_filter else {})}),
     })

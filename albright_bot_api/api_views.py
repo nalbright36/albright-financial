@@ -584,10 +584,10 @@ def reseller_inventory_suggestion(request, token, entry_id):
 # ---------------------------------------------------------------------------
 
 def _visible_opportunities(token):
-    """Site-collected openings, and ones a bot added to this token owner's inbox (never another person's)."""
+    """Openings the token owner added or a bot pushed to their inbox (never another person's, never unowned)."""
     from albright_crypto_app.models import Opportunity, Source
     return (Opportunity.objects.exclude(safety_verdict="block").filter(excluded=False, duplicate_of__isnull=True)
-            .filter(Q(owner__isnull=True) | Q(owner=token.owner))
+            .filter(owner=token.owner)
             .exclude(source__kind__in=list(Source.ATTRIBUTED_KINDS)))   # their terms forbid passing jobs on
 
 

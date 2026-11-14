@@ -57,7 +57,7 @@ def _watchlist(user, today):
 def _opportunities(user, today):
     from albright_crypto_app.models import Opportunity
     rows = []
-    qs = Opportunity.objects.filter(status__in=OPEN_PIPELINE, duplicate_of__isnull=True)
+    qs = Opportunity.objects.filter(owner=user, status__in=OPEN_PIPELINE, duplicate_of__isnull=True)
     for opp in qs.filter(status="saved").exclude(application_deadline__isnull=True, deadline__isnull=True):
         day, at = _local(opp.any_deadline)
         rows.append({"id": f"deadline:{opp.pk}", "title": f"Apply by: {opp.title}", "date": day, "time": at,

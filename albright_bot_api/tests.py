@@ -62,16 +62,17 @@ class BotApiTestCase(TestCase):
     def opportunity_data(self):
         from albright_crypto_app.models import Opportunity, Source
         from albright_crypto_app.tests.test_pipeline import make
-        self.fresh = make(title="Fresh bounty", reward_usd=Decimal("200"), reward_type="bounty")
-        self.blocked = make(title="Scam", text="Enter your seed phrase to claim 500 USDC")
+        self.fresh = make(title="Fresh bounty", reward_usd=Decimal("200"), reward_type="bounty", owner=self.user)
+        self.blocked = make(title="Scam", text="Enter your seed phrase to claim 500 USDC", owner=self.user)
         self.excluded = make(title="Deposit promo", reward_usd=Decimal("40"), reward_type="promo_reward",
-                             requires_spending=True)
-        self.old = make(title="Old bounty")
+                             requires_spending=True, owner=self.user)
+        self.old = make(title="Old bounty", owner=self.user)
         Opportunity.objects.filter(pk=self.old.pk).update(discovered_at=timezone.now() - timedelta(days=8))
         remotive = Source.objects.create(kind="remotive", name="Remotive", url="https://remotive.com/api/remote-jobs",
                                          opportunity_type="income", terms_checked=True)
-        self.remotive_job = Opportunity.objects.create(source=remotive, opportunity_type="income", external_id="r1",
-                                                       title="Remotive job", url="https://remotive.com/remote-jobs/x/1")
+        self.remotive_job = Opportunity.objects.create(source=remotive, owner=self.user, opportunity_type="income",
+                                                       external_id="r1", title="Remotive job",
+                                                       url="https://remotive.com/remote-jobs/x/1")
 
 
 class TokenTests(BotApiTestCase):

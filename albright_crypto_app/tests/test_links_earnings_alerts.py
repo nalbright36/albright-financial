@@ -80,7 +80,8 @@ class EarningsTests(TestCase):
         today = timezone.localdate()
         Earning.objects.create(opportunity=self.opp, date=today, amount=Decimal("200"), currency="USDC",
                                usd_value_at_receipt=Decimal("199.80"))
-        Earning.objects.create(date=today.replace(day=1) - timedelta(days=40), amount=Decimal("0.01"),
+        earlier = make(title="Earlier payout", url="https://github.com/acme/widget/issues/2")
+        Earning.objects.create(opportunity=earlier, date=today.replace(day=1) - timedelta(days=40), amount=Decimal("0.01"),
                                currency="ETH", usd_value_at_receipt=Decimal("31.25"))
         TimeLog.objects.create(opportunity=self.opp, minutes=150)
 

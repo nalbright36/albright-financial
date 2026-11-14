@@ -641,12 +641,15 @@ INBOX_MAX_AGE = timedelta(days=14)
 FULL_TIME_MAX_AGE = timedelta(days=30)
 
 
-def expire_stale(now=None):
+def expire_stale(now=None, user=None):
     """Inbox items whose deadline has passed, or posted more than 14 days ago
     (30 for full-time), are closed as expired. Returns how many."""
     from .models import Opportunity
     now = now or timezone.now()
-    inbox = Opportunity.objects.filter(status="inbox").annotate(posted_on=Coalesce("posted_at", "discovered_at"))
+    inbox = Opportunity.objects.filter(status="inbox")
+    if user is not None:
+        inbox = inbox.filter(owner=user)
+    inbox = inbox.annotate(posted_on=Coalesce("posted_at", "discovered_at"))
     stale = inbox.filter(
         Q(deadline__lt=now) | Q(application_deadline__lt=now)
         | (Q(posted_on__lt=now - INBOX_MAX_AGE) & ~Q(work_type="full_time"))

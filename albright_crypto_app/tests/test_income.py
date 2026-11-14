@@ -37,8 +37,20 @@ BANK_TEXT = ("Open a checking account and make direct deposits of $500 to receiv
 
 
 
+def _income_source():
+    """Per-user manual source when exactly one test user exists; otherwise a shared test source."""
+    users = User.objects.all()
+    if users.count() == 1:
+        return manual_source("income", owner=users.get())
+    source, _ = Source.objects.get_or_create(kind="manual", url="test:income", opportunity_type="income",
+                                             defaults={"name": "Manual (income)"})
+    return source
+
+
 def make_income(title="Django contract", url="https://jobs.example.com/1", text=JOB_TEXT, **facts):
-    source = manual_source("income")
+    source = _income_source()
+    if "owner" not in facts and source.url.startswith("user:"):
+        facts["owner"] = User.objects.get(pk=int(source.url.split(":")[1]))
     opp = Opportunity.objects.create(source=source, opportunity_type="income", external_id=f"{title}:{url}",
                                      title=title, url=url, raw_text=text, extraction_status="done", **facts)
     return rescore(opp)
@@ -182,6 +194,8 @@ class TypeSeparationTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class RefundableDepositTests(TestCase):
     def test_refundable_deposit_is_warned_not_excluded(self):
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(user)
         opp = make_income(title="Bank bonus", url="https://jobs.example.com/bank", text=BANK_TEXT,
                           reward_type="bonus", reward_usd=Decimal("300"), evidence="explicit",
                           evidence_quote="to receive a $300 bonus", refundable_deposit_usd=Decimal("500"),
@@ -192,8 +206,6 @@ class RefundableDepositTests(TestCase):
         self.assertEqual(opp.safety_reasons.count(REFUNDABLE_DEPOSIT_REASON), 1)
         self.assertIn(opp, list(Opportunity.objects.filter(excluded=False, opportunity_type="income")))
 
-        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
-        self.client.force_login(user)
         detail = self.client.get(reverse("albright_crypto_app:opportunity", args=[opp.pk]))
         self.assertContains(detail, "requires a refundable deposit")
         self.assertContains(detail, "$500.00 (you get it back - not spending)")
@@ -227,7 +239,7 @@ INCOME_FACTS = {
 @override_settings(CRYPTO=CFG)
 class IncomeExtractionTests(TestCase):
     def setUp(self):
-        self.opp = Opportunity.objects.create(source=manual_source("income"), opportunity_type="income",
+        self.opp = Opportunity.objects.create(source=_income_source(), opportunity_type="income",
                                               external_id="1", title="Django contract",
                                               url="https://jobs.example.com/1", raw_text=JOB_TEXT)
 

@@ -56,7 +56,7 @@ def resell(user):
 
 def opps(user):
     from albright_crypto_app.inbox_views import inbox_queryset
-    return f"{inbox_queryset().count()} new in Inbox"
+    return f"{inbox_queryset(user).count()} new in Inbox"
 
 
 def meals(user):

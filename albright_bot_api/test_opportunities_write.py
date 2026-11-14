@@ -1,6 +1,6 @@
 """POST opportunities (scope opportunities:write): a bot adds a job or freelance opening to its owner's Opps
 inbox - owner set, its own "My bot" source, the same url again is the same opening, bad input refused - and
-GET opportunities/new shows each owner only their own bot items plus the site-collected ones."""
+GET opportunities/new shows each owner only their own items (never unowned or someone else's)."""
 from datetime import datetime, timezone as dt_timezone
 
 from django.contrib.auth.models import User
@@ -65,19 +65,22 @@ class OpportunitiesWriteTests(BotApiTestCase):
                 self.assertIn(f'"{field}"', response.json()["error"])
         self.assertFalse(Opportunity.objects.exists())
 
-    def test_reading_shows_only_my_bot_items_and_site_collected_ones(self):
+    def test_reading_shows_only_the_token_owners_items(self):
         mine = self.call("POST", CREATE, JOB).json()["id"]
         from albright_crypto_app.tests.test_pipeline import make
-        site = make(title="Site-collected bounty")
+        site = make(title="Site-collected bounty")   # unowned once a second user exists (make leaves owner unset)
         other = User.objects.create_superuser(username="other-admin", password="pw-not-real-12345", email="")
+        # Recreate the site row as unowned so it is never listed to either owner.
+        site.owner = None
+        site.save(update_fields=["owner"])
         _token, raw = BotToken.issue(other, "Their bot", ["opportunities:read", "opportunities:write",
                                                           "opportunities:suggest"])
         ids = [row["id"] for row in self.call("GET", NEW, raw=raw).json()["opportunities"]]
-        self.assertIn(site.pk, ids)
+        self.assertNotIn(site.pk, ids)
         self.assertNotIn(mine, ids)
         own = [row["id"] for row in self.call("GET", NEW).json()["opportunities"]]
         self.assertIn(mine, own)
-        self.assertIn(site.pk, own)
+        self.assertNotIn(site.pk, own)
         # Their own bot keeps a separate source and inbox entry for the same url.
         theirs = self.call("POST", CREATE, JOB, raw=raw)
         self.assertEqual(theirs.status_code, 201)

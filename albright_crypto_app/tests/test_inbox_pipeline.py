@@ -31,6 +31,11 @@ CFG = {**settings.CRYPTO, "allowlist": ["github.com", "jobs.example.com"], "budg
 JOB_TEXT = "We need SQL, Python and Power BI for executive dashboards. Remote within the US."
 
 
+def _default_owner():
+    users = User.objects.all()
+    return users.get() if users.count() == 1 else None
+
+
 def board(kind="rss_income", url="https://jobs.example.com/feed", name="Job feed", terms=True):
     source, _ = Source.objects.get_or_create(kind=kind, url=url, opportunity_type="income",
                                              defaults={"name": name, "terms_checked": terms})
@@ -45,6 +50,10 @@ def job(title="Data Analyst", source=None, location="Remote (US)", text=JOB_TEXT
     source = source or board()
     n = next(_counter)
     fields.setdefault("extraction_status", "done")
+    if "owner" not in fields:
+        owner = _default_owner()
+        if owner is not None:
+            fields["owner"] = owner
     opp = Opportunity.objects.create(
         source=source, opportunity_type="income", external_id=f"job-{n}", url=f"https://jobs.example.com/{n}",
         title=title, raw_text=text, location_requirement=location, **fields)
@@ -279,8 +288,9 @@ class FilterTests(TestCase):
         self.assertEqual(config.filters()["negative_keywords"], ["nurse", "tableau"])
 
     def test_manual_adds_are_never_filtered(self):
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         opp, _ = add_manual("https://jobs.example.com/rn", "Registered Nurse", "A nursing job.", use_ai=False,
-                            opportunity_type="income")
+                            opportunity_type="income", owner=user)
         self.assertEqual(opp.hidden_reason, "")
         self.assertTrue(opp.show_anyway)
 
@@ -292,6 +302,7 @@ class FilterTests(TestCase):
 @override_settings(CRYPTO=CFG)
 class FitTests(ProfileMixin, TestCase):
     def test_ai_fit_is_stored_and_shown(self):
+        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         opp = job(score=False)
         client = fake_client(fit_reply(85))
         extract_and_score(opp, client=client)
@@ -306,7 +317,6 @@ class FitTests(ProfileMixin, TestCase):
         sent = client.responses.create.call_args.kwargs
         self.assertIn("TARGET ROLES: Data Analyst; Business Intelligence Analyst/Developer", sent["input"])
         self.assertIn("Remote (US)", sent["input"])
-        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         page = self.client.get(reverse("albright_crypto_app:inbox")).content.decode()
         data = json.loads(page.split('<script id="inbox-data" type="application/json">')[1].split("</script>")[0])
         self.assertEqual(data[0]["matched_skills"], ["SQL", "Python", "Power BI"])
@@ -641,9 +651,11 @@ class CleanupTests(TestCase):
     def test_same_company_similar_title_from_another_source_is_merged(self):
         remotive = board(kind="remotive", url="https://remotive.com/api/remote-jobs", name="Remotive")
         feed = board()
-        first = store(remotive, self.raw("r1", "Senior Data Analyst", "Acme Inc.", "https://remotive.com/jobs/1"))
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
+        self.client.force_login(user)
+        first = store(remotive, self.raw("r1", "Senior Data Analyst", "Acme Inc.", "https://remotive.com/jobs/1"), owner=user)
         extract_and_score(first, use_ai=False)
-        second = store(feed, self.raw("w1", "Sr. Data Analyst (Remote)", "ACME", "https://jobs.example.com/acme"))
+        second = store(feed, self.raw("w1", "Sr. Data Analyst (Remote)", "ACME", "https://jobs.example.com/acme"), owner=user)
         client = fake_client(fit_reply(90))
         extract_and_score(second, client=client)
         client.responses.create.assert_not_called()       # a duplicate costs nothing
@@ -652,7 +664,6 @@ class CleanupTests(TestCase):
         self.assertEqual(second.duplicate_of, first)
         self.assertEqual(first.other_links, [{"source": "Job feed", "url": "https://jobs.example.com/acme",
                                               "opportunity": second.pk}])
-        self.client.force_login(with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345")))
         page = self.client.get(reverse("albright_crypto_app:opportunity", args=[first.pk])).content.decode()
         self.assertIn("Also posted on", page)
 

@@ -33,10 +33,13 @@ def move(opp, stage, reason="", now=None):
     return opp
 
 
-def skip_summary(now=None, days=7):
+def skip_summary(now=None, days=7, user=None):
     """[(reason label, count)] for this week's skips, most common first -
     shown in the Inbox so I can tune the filters."""
     now = now or timezone.now()
-    rows = (Opportunity.objects.filter(status="skipped", stage_changed_at__gte=now - timedelta(days=days))
+    rows = Opportunity.objects.filter(status="skipped", stage_changed_at__gte=now - timedelta(days=days))
+    if user is not None:
+        rows = rows.filter(owner=user)
+    rows = (rows
             .values("skip_reason").annotate(n=Count("pk")).order_by("-n", "skip_reason"))
     return [(SKIP_REASON_LABELS.get(r["skip_reason"], "no reason"), r["n"]) for r in rows]

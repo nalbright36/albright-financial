@@ -277,13 +277,16 @@ class SourceTests(Base):
     def test_opportunity_deadlines_and_follow_ups_are_tasks(self):
         from albright_crypto_app.models import Opportunity, Source
         source = Source.objects.create(kind="rss", name="feed", url="https://example.org/feed")
-        saved = Opportunity.objects.create(source=source, external_id="1", url="https://example.org/1", title="Grant",
-                                           status="saved", application_deadline=timezone.now() + timedelta(days=3))
-        applied = Opportunity.objects.create(source=source, external_id="2", url="https://example.org/2", title="Job",
-                                             status="applied", applied_at=timezone.now() - timedelta(days=8),
+        saved = Opportunity.objects.create(source=source, owner=self.me, external_id="1", url="https://example.org/1",
+                                           title="Grant", status="saved",
+                                           application_deadline=timezone.now() + timedelta(days=3))
+        applied = Opportunity.objects.create(source=source, owner=self.me, external_id="2", url="https://example.org/2",
+                                             title="Job", status="applied",
+                                             applied_at=timezone.now() - timedelta(days=8),
                                              stage_changed_at=timezone.now() - timedelta(days=8))
-        Opportunity.objects.create(source=source, external_id="3", url="https://example.org/3", title="Inbox one",
-                                   status="inbox", application_deadline=timezone.now() + timedelta(days=3))
+        Opportunity.objects.create(source=source, owner=self.me, external_id="3", url="https://example.org/3",
+                                   title="Inbox one", status="inbox",
+                                   application_deadline=timezone.now() + timedelta(days=3))
         self.assertEqual(self.sync()["opportunities"], 2)
         deadline = ScheduleItem.objects.get(source_id=f"deadline:{saved.pk}")
         follow = ScheduleItem.objects.get(source_id=f"followup:{applied.pk}")
@@ -312,8 +315,9 @@ class SourceTests(Base):
         from albright_reselling_app.models import LedgerEntry
         self.watched_lot()
         source = Source.objects.create(kind="rss", name="feed", url="https://example.org/feed")
-        Opportunity.objects.create(source=source, external_id="1", url="https://example.org/1", title="Grant",
-                                   status="saved", application_deadline=timezone.now() + timedelta(days=3))
+        Opportunity.objects.create(source=source, owner=self.me, external_id="1", url="https://example.org/1",
+                                   title="Grant", status="saved",
+                                   application_deadline=timezone.now() + timedelta(days=3))
         LedgerEntry.objects.create(owner=self.me, item="Spoon", cost=Decimal("5"), status="holding",
                                    listed_at=self.today - timedelta(days=20))
         self.sync()

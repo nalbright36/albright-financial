@@ -1,0 +1,200 @@
+diff --git a/albright_crypto_app/management/commands/wipe_opps.py b/albright_crypto_app/management/commands/wipe_opps.py
+new file mode 100644
+index 0000000..5b29dee
+--- /dev/null
++++ b/albright_crypto_app/management/commands/wipe_opps.py
+@@ -0,0 +1,64 @@
++"""Usage:
++    python manage.py wipe_opps         # print counts; delete nothing
++    python manage.py wipe_opps --yes   # delete every Opportunities row (keeps Meals recipe AIExtraction rows)
++
++Run this only after a verified database backup. It does not drop tables or fields.
++"""
++from django.core.management.base import BaseCommand, CommandError
++
++
++# (label, callable) - callables run at handle() so apps are loaded.
++def _targets():
++    from albright_bot_api.models import OpportunityNote
++    from albright_crypto_app.models import (AIExtraction, ApplicationDraft, ConfigOverride, Earning, GmailConnection,
++                                            MyProfile, Opportunity, ProcessedItem, ScanRun, Source, TaskStep, TimeLog,
++                                            Walkthrough)
++
++    return [
++        ("bot opportunity notes", OpportunityNote.objects.all()),
++        ("application drafts", ApplicationDraft.objects.all()),
++        ("walkthroughs", Walkthrough.objects.all()),
++        ("task steps", TaskStep.objects.all()),
++        ("time logs", TimeLog.objects.all()),
++        ("earnings", Earning.objects.all()),
++        ("non-recipe AI extractions", AIExtraction.objects.exclude(purpose="recipe")),
++        ("opportunities", Opportunity.objects.all()),
++        ("processed items", ProcessedItem.objects.all()),
++        ("scan runs", ScanRun.objects.all()),
++        ("sources", Source.objects.all()),
++        ("config overrides", ConfigOverride.objects.all()),
++        ("gmail connections", GmailConnection.objects.all()),
++        ("my profile rows", MyProfile.objects.all()),
++    ]
++
++
++class Command(BaseCommand):
++    help = ("Delete all Opportunities data after a verified backup. Keeps AIExtraction "
++            "rows with purpose='recipe' (Meals). Requires --yes to delete.")
++
++    def add_arguments(self, parser):
++        parser.add_argument("--yes", action="store_true",
++                            help="Actually delete the rows. Without this flag, only counts are printed.")
++
++    def handle(self, *args, yes=False, **opts):
++        from albright_crypto_app.models import AIExtraction, Opportunity
++
++        targets = _targets()
++        counts = [(label, qs.count()) for label, qs in targets]
++        recipes = AIExtraction.objects.filter(purpose="recipe").count()
++        for label, n in counts:
++            self.stdout.write(f"{n} {label}")
++        self.stdout.write(f"{recipes} AIExtraction recipe row(s) will be kept.")
++        if not yes:
++            self.stdout.write("Nothing deleted. Re-run with --yes after the backup is verified.")
++            return
++        if Opportunity.objects.exists() and not any(n for _, n in counts):
++            raise CommandError("Refusing to wipe: opportunity rows exist but no target counts were recorded.")
++        # Detach recipe rows so deleting opportunities cannot cascade into them.
++        AIExtraction.objects.filter(purpose="recipe").update(opportunity=None)
++        for label, qs in targets:
++            deleted, _ = qs.delete()
++            self.stdout.write(f"Deleted {deleted} {label}.")
++        kept = AIExtraction.objects.filter(purpose="recipe").count()
++        self.stdout.write(self.style.SUCCESS(
++            f"Opportunities data wiped. {kept} AIExtraction recipe row(s) remain."))
+diff --git a/albright_crypto_app/tests/test_scope_and_wipe.py b/albright_crypto_app/tests/test_scope_and_wipe.py
+new file mode 100644
+index 0000000..2e4a241
+--- /dev/null
++++ b/albright_crypto_app/tests/test_scope_and_wipe.py
+@@ -0,0 +1,124 @@
++"""Each user's Inbox, detail pages, tiles, launcher, Planner hooks and bot GET
++only see their own opportunities; wipe_opps prints counts, needs --yes, and
++keeps Meals recipe AIExtraction rows."""
++from decimal import Decimal
++from io import StringIO
++
++from django.contrib.auth.models import User
++from django.core.management import call_command
++from django.test import TestCase
++from django.urls import reverse
++from django.utils import timezone
++
++from albright_bot_api.models import OpportunityNote
++from albright_crypto_app.inbox_views import inbox_queryset
++from albright_crypto_app.models import (AIExtraction, ConfigOverride, Earning, MyProfile, Opportunity, Source)
++from albright_crypto_app.pipeline import add_manual
++from albright_labs import launcher, tiles
++from albright_labs.testing import with_apps
++from albright_planner import sources as planner_sources
++
++
++def _user(name):
++    return with_apps(User.objects.create_user(username=name, password="pw-not-real-12345"))
++
++
++def _opp(user, title, status="inbox"):
++    source, _ = Source.objects.get_or_create(kind="manual", url=f"user:{user.pk}", opportunity_type="income",
++                                             defaults={"name": "Manual (income)", "terms_checked": True})
++    return Opportunity.objects.create(source=source, owner=user, opportunity_type="income",
++                                      external_id=f"{user.pk}:{title}", url=f"https://jobs.example.com/{user.pk}",
++                                      title=title, status=status, show_anyway=True)
++
++
++class OwnerScopeTests(TestCase):
++    def setUp(self):
++        self.ann = _user("ann")
++        self.bob = _user("bob")
++        self.anns = _opp(self.ann, "Ann's opening")
++        self.bobs = _opp(self.bob, "Bob's opening")
++        Earning.objects.create(opportunity=self.anns, amount=Decimal("50"), currency="USD",
++                               usd_value_at_receipt=Decimal("50"), kind="confirmed")
++
++    def test_inbox_and_detail_are_per_user(self):
++        self.assertEqual(list(inbox_queryset(self.ann).values_list("title", flat=True)), ["Ann's opening"])
++        self.assertEqual(list(inbox_queryset(self.bob).values_list("title", flat=True)), ["Bob's opening"])
++        self.client.force_login(self.ann)
++        inbox = self.client.get(reverse("albright_crypto_app:inbox"))
++        body = inbox.content.decode()
++        self.assertIn("Ann", body)
++        self.assertNotIn("Bob", body)
++        self.assertIn("inbox-data", body)
++        self.assertEqual(self.client.get(reverse("albright_crypto_app:opportunity", args=[self.anns.pk])).status_code, 200)
++        self.assertEqual(self.client.get(reverse("albright_crypto_app:opportunity", args=[self.bobs.pk])).status_code, 404)
++
++    def test_pipeline_earnings_tiles_launcher_and_planner_are_per_user(self):
++        _opp(self.ann, "Ann saved", status="saved")
++        self.client.force_login(self.ann)
++        pipeline = self.client.get(reverse("albright_crypto_app:pipeline")).content.decode()
++        self.assertIn("Ann saved", pipeline)
++        self.assertNotIn("Bob's opening", pipeline)
++        earnings = self.client.get(reverse("albright_crypto_app:earnings")).content.decode()
++        self.assertIn("50", earnings)
++        self.assertEqual(tiles.opps(self.ann)["value"], "1")
++        self.assertEqual(tiles.opps(self.bob)["value"], "1")
++        self.assertIn("1 new in Inbox", launcher.opps(self.ann))
++        # Unowned rows never appear.
++        orphan = Opportunity.objects.create(
++            source=self.anns.source, opportunity_type="income", external_id="orphan",
++            url="https://jobs.example.com/orphan", title="Site-collected", status="inbox")
++        self.assertNotIn(orphan, list(inbox_queryset(self.ann)))
++        self.assertFalse(any(r["title"].startswith("Apply by:")
++                             for r in planner_sources._opportunities(self.bob, timezone.localdate())))
++
++    def test_the_same_url_can_be_added_by_two_people(self):
++        url = "https://jobs.example.com/shared"
++        a, made_a = add_manual(url, "Same role", "text", use_ai=False, opportunity_type="income", owner=self.ann)
++        b, made_b = add_manual(url, "Same role", "text", use_ai=False, opportunity_type="income", owner=self.bob)
++        self.assertTrue(made_a and made_b)
++        self.assertNotEqual(a.pk, b.pk)
++        self.assertEqual((a.owner, b.owner), (self.ann, self.bob))
++        self.assertEqual(a.source.url, f"user:{self.ann.pk}")
++        again, created = add_manual(url, "Same role", "text", use_ai=False, opportunity_type="income", owner=self.ann)
++        self.assertFalse(created)
++        self.assertEqual(again.pk, a.pk)
++
++
++class WipeOppsTests(TestCase):
++    def setUp(self):
++        self.user = _user("nate")
++        self.opp = _opp(self.user, "To wipe")
++        Earning.objects.create(opportunity=self.opp, amount=Decimal("10"), currency="USD",
++                               usd_value_at_receipt=Decimal("10"))
++        MyProfile.objects.create(name="Nate")
++        ConfigOverride.objects.create(key="budget_usd", value=0)
++        AIExtraction.objects.create(purpose="recipe", model_name="test")
++        AIExtraction.objects.create(purpose="extract", model_name="test", opportunity=self.opp)
++        OpportunityNote.objects.create(opportunity=self.opp, kind="note", text="a note")
++
++    def test_without_yes_prints_counts_and_deletes_nothing(self):
++        out = StringIO()
++        call_command("wipe_opps", stdout=out)
++        text = out.getvalue()
++        self.assertIn("1 opportunities", text)
++        self.assertIn("1 earnings", text)
++        self.assertIn("1 non-recipe AI extractions", text)
++        self.assertIn("1 AIExtraction recipe row(s) will be kept.", text)
++        self.assertIn("Nothing deleted", text)
++        self.assertTrue(Opportunity.objects.filter(pk=self.opp.pk).exists())
++        self.assertEqual(AIExtraction.objects.filter(purpose="recipe").count(), 1)
++
++    def test_yes_deletes_opps_rows_and_keeps_recipes(self):
++        out = StringIO()
++        call_command("wipe_opps", "--yes", stdout=out)
++        text = out.getvalue()
++        self.assertIn("Opportunities data wiped", text)
++        self.assertFalse(Opportunity.objects.exists())
++        self.assertFalse(Earning.objects.exists())
++        self.assertFalse(Source.objects.exists())
++        self.assertFalse(MyProfile.objects.exists())
++        self.assertFalse(ConfigOverride.objects.exists())
++        self.assertFalse(OpportunityNote.objects.exists())
++        self.assertEqual(AIExtraction.objects.count(), 1)
++        self.assertEqual(AIExtraction.objects.get().purpose, "recipe")
++        self.assertIsNone(AIExtraction.objects.get().opportunity_id)

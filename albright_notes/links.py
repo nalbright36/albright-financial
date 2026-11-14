@@ -52,7 +52,7 @@ KINDS = (
          "albright_reselling_app:ledger_manage", "entry_id", owner_field="owner"),
     Kind("resell", "lot", "Auction lot", "albright_reselling_app.SourcedLot", "title", external_url_field="url"),
     Kind("opps", "opportunity", "Opportunity", "albright_crypto_app.Opportunity", "title",
-         "albright_crypto_app:opportunity"),
+         "albright_crypto_app:opportunity", owner_field="owner"),
     Kind("trade", "strategy", "Strategy", "albright_trading_app.Strategy", "name", "strategy_detail", "strategy_id",
          owner_field="user"),
     Kind("trade", "option_strategy", "Options strategy", "albright_trading_app.OptionStrategy", "name",

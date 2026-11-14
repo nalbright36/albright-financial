@@ -36,7 +36,7 @@ class Fixtures:
         LedgerEntry.objects.create(owner=self.me, item="Silver spoon", cost=Decimal("5"), status="holding",
                                    listed_at=today - timedelta(days=20), list_price=Decimal("30"))
         feed = Source.objects.create(kind="rss", name="feed", url="https://example.org/feed")
-        Opportunity.objects.create(source=feed, external_id="1", url="https://example.org/1", title="Grant",
+        Opportunity.objects.create(source=feed, owner=self.me, external_id="1", url="https://example.org/1", title="Grant",
                                    status="saved", application_deadline=timezone.now() + timedelta(days=3))
         return lot
 

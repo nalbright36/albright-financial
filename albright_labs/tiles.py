@@ -54,7 +54,7 @@ def resell(user):
 def opps(user):
     """What's waiting in the Opportunities Inbox (and how much arrived today)."""
     from albright_crypto_app.inbox_views import inbox_queryset
-    inbox = inbox_queryset()
+    inbox = inbox_queryset(user)
     today = inbox.filter(discovered_at__date=timezone.localdate()).count()
     return {"value": str(inbox.count()), "note": f"in the Inbox · {today} new today"}
 

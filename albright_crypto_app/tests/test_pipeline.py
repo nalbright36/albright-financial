@@ -22,8 +22,17 @@ from albright_labs.testing import with_apps
 ALLOW = ["github.com"]
 
 
+def _default_owner():
+    users = User.objects.all()
+    return users.get() if users.count() == 1 else None
+
+
 def make(title="CSV parser bounty", url="https://github.com/acme/widget/issues/1", text=TEXT, **facts):
     source, _ = Source.objects.get_or_create(kind="github", url="label:bounty", defaults={"name": "q"})
+    if "owner" not in facts:
+        owner = _default_owner()
+        if owner is not None:
+            facts["owner"] = owner
     opp = Opportunity.objects.create(source=source, external_id=f"{title}:{url}", title=title, url=url,
                                      raw_text=text, extraction_status="done", **facts)
     return rescore(opp)
@@ -68,10 +77,10 @@ class PipelineTests(TestCase):
         self.assertEqual(opp.exclude_reason, "requires spending above your budget")
 
     def test_rescore_on_edit(self):
-        opp = make()
-        self.assertEqual(opp.confidence, "low")
         user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         self.client.force_login(user)
+        opp = make()
+        self.assertEqual(opp.confidence, "low")
 
         response = self.client.post(reverse("albright_crypto_app:opportunity", args=[opp.pk]), {
             "action": "edit", "reward_usd": "200", "reward_currency": "USDC", "reward_type": "bounty",
@@ -99,10 +108,11 @@ class PipelineTests(TestCase):
         self.assertIsNone(opp.reward_usd)
 
     def test_manual_add_extracts_and_scores_once(self):
+        user = with_apps(User.objects.create_user(username="tester", password="pw-not-real-12345"))
         opp, created = add_manual("https://github.com/acme/widget/issues/9", "Found it", TEXT,
-                                  client=fake_client(GOOD))
+                                  client=fake_client(GOOD), owner=user)
         again, created_again = add_manual("https://github.com/acme/widget/issues/9", "Found it", TEXT,
-                                          client=fake_client(GOOD))
+                                          client=fake_client(GOOD), owner=user)
 
         self.assertTrue(created)
         self.assertFalse(created_again)

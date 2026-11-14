@@ -51,24 +51,29 @@ def _json_body(request):
     return request.POST
 
 
-def base_queryset():
+def owned_queryset(user):
+    """This user's opportunities only - never someone else's, never unowned site-collected rows."""
+    return Opportunity.objects.select_related("source").filter(owner=user)
+
+
+def base_queryset(user):
     """Not merged into another posting; still in the Inbox."""
-    return Opportunity.objects.select_related("source").filter(status="inbox", duplicate_of__isnull=True)
+    return owned_queryset(user).filter(status="inbox", duplicate_of__isnull=True)
 
 
-def inbox_queryset(type_key="all"):
+def inbox_queryset(user, type_key="all"):
     """What the Inbox shows: not blocked, not excluded, not filtered out.
     Highest fit first, then the soonest deadline; among the rest (bounties,
     paid tasks, crypto - no fit score) the best EV/hour, then newest."""
-    qs = (base_queryset().filter(hidden_reason="", excluded=False).exclude(safety_verdict="block")
+    qs = (base_queryset(user).filter(hidden_reason="", excluded=False).exclude(safety_verdict="block")
           .annotate(next_deadline=Coalesce(Least("application_deadline", "deadline"), "application_deadline", "deadline"))
           .order_by(F("fit_score").desc(nulls_last=True), F("next_deadline").asc(nulls_last=True),
                     F("ev_per_hour").desc(nulls_last=True), "-discovered_at"))
     return relevance.type_filter(qs, type_key)
 
 
-def hidden_queryset(type_key="all"):
-    qs = base_queryset().filter(Q(safety_verdict="block") | Q(excluded=True) | ~Q(hidden_reason=""))
+def hidden_queryset(user, type_key="all"):
+    qs = base_queryset(user).filter(Q(safety_verdict="block") | Q(excluded=True) | ~Q(hidden_reason=""))
     return relevance.type_filter(qs, type_key).order_by("-discovered_at")
 
 
@@ -144,15 +149,15 @@ def card(opp):
 
 @login_required
 def inbox(request):
-    relevance.expire_stale()   # cheap - so nothing stale is ever shown
+    relevance.expire_stale(user=request.user)   # cheap - so nothing stale is ever shown
     type_key = _type_key(request)
-    queue = [card(o) for o in inbox_queryset(type_key)[:300]]
+    queue = [card(o) for o in inbox_queryset(request.user, type_key)[:300]]
     return render(request, "albright_crypto_app/inbox.html", {
         "queue": queue, "total": len(queue), "type_key": type_key,
-        "type_options": [(key, label, inbox_queryset(key).count()) for key, label in relevance.TYPE_FILTERS],
-        "hidden_count": hidden_queryset(type_key).count(), "skip_summary": workflow.skip_summary(),
+        "type_options": [(key, label, inbox_queryset(request.user, key).count()) for key, label in relevance.TYPE_FILTERS],
+        "hidden_count": hidden_queryset(request.user, type_key).count(), "skip_summary": workflow.skip_summary(user=request.user),
         "shortcuts": SHORTCUTS, "skip_reasons": SKIP_REASON_KEYS,
-        "pending_fit": inbox_queryset(type_key).filter(fit_method="", work_type__in=relevance.JOB_WORK_TYPES).count(),
+        "pending_fit": inbox_queryset(request.user, type_key).filter(fit_method="", work_type__in=relevance.JOB_WORK_TYPES).count(),
     })
 
 
@@ -160,8 +165,8 @@ def inbox(request):
 def hidden(request):
     type_key = _type_key(request)
     return render(request, "albright_crypto_app/hidden.html", {
-        "opportunities": hidden_queryset(type_key)[:300], "type_key": type_key,
-        "type_filters": relevance.TYPE_FILTERS, "total": hidden_queryset(type_key).count(),
+        "opportunities": hidden_queryset(request.user, type_key)[:300], "type_key": type_key,
+        "type_filters": relevance.TYPE_FILTERS, "total": hidden_queryset(request.user, type_key).count(),
     })
 
 
@@ -169,7 +174,7 @@ def hidden(request):
 @require_POST
 def show_in_inbox(request, pk):
     """From Hidden: the filters stop hiding this one (blocked and over-budget stay hidden)."""
-    opp = get_object_or_404(Opportunity, pk=pk)
+    opp = get_object_or_404(owned_queryset(request.user), pk=pk)
     if opp.is_blocked or opp.excluded:
         messages.error(request, "Blocked and over-budget opportunities can't be moved to the Inbox.")
     else:
@@ -184,15 +189,15 @@ def show_in_inbox(request, pk):
 # Inbox card actions (JSON)
 # ---------------------------------------------------------------------------
 
-def _inbox_item(pk):
-    return get_object_or_404(Opportunity.objects.select_related("source"), pk=pk)
+def _inbox_item(request, pk):
+    return get_object_or_404(owned_queryset(request.user), pk=pk)
 
 
 @login_required
 @require_POST
 def inbox_keep(request, pk):
     """K: into the Pipeline as Saved."""
-    opp = workflow.move(_inbox_item(pk), "saved")
+    opp = workflow.move(_inbox_item(request, pk), "saved")
     return JsonResponse({"ok": True, "id": opp.pk, "status": opp.status})
 
 
@@ -204,7 +209,7 @@ def inbox_skip(request, pk):
     reason = _json_body(request).get("reason", "")
     if reason and reason not in dict(SKIP_REASONS):
         return JsonResponse({"error": "Unknown reason."}, status=400)
-    opp = workflow.move(_inbox_item(pk), "skipped", reason)
+    opp = workflow.move(_inbox_item(request, pk), "skipped", reason)
     return JsonResponse({"ok": True, "id": opp.pk, "status": opp.status, "reason": opp.skip_reason})
 
 
@@ -212,7 +217,7 @@ def inbox_skip(request, pk):
 @require_POST
 def inbox_undo(request, pk):
     """U: back to the Inbox, as if the keep/skip never happened."""
-    opp = _inbox_item(pk)
+    opp = _inbox_item(request, pk)
     if opp.status not in ("saved", "skipped"):
         return JsonResponse({"error": "Nothing to undo."}, status=400)
     workflow.move(opp, "inbox")
@@ -230,7 +235,7 @@ def _walkthrough_payload(w):
 @require_POST
 def inbox_walkthrough(request, pk):
     """W: the saved walkthrough if there is one (no new AI call), else a new one."""
-    opp = _inbox_item(pk)
+    opp = _inbox_item(request, pk)
     existing = opp.walkthroughs.first()
     if existing:
         return JsonResponse({"ok": True, "walkthrough": _walkthrough_payload(existing), "reused": True})
@@ -250,7 +255,7 @@ def inbox_walkthrough(request, pk):
 def inbox_draft(request, pk):
     """P: a proposal (or, with kind=resume, a tailored resume) - from My
     profile's facts only. The latest one is reused rather than paid for again."""
-    opp = _inbox_item(pk)
+    opp = _inbox_item(request, pk)
     kind = _json_body(request).get("kind") or "proposal"
     if kind not in ("proposal", "resume"):
         return JsonResponse({"error": "Unknown draft kind."}, status=400)
@@ -281,7 +286,7 @@ def inbox_draft(request, pk):
 
 @login_required
 def pipeline(request):
-    qs = (Opportunity.objects.select_related("source").filter(duplicate_of__isnull=True)
+    qs = (owned_queryset(request.user).filter(duplicate_of__isnull=True)
           .order_by(F("stage_changed_at").asc(nulls_first=True), "pk"))
     columns = [{"stage": stage, "label": label, "cards": list(qs.filter(status=stage))}
                for stage, label in workflow.BOARD_COLUMNS]
@@ -298,7 +303,7 @@ def pipeline(request):
 @login_required
 @require_POST
 def pipeline_move(request, pk):
-    opp = get_object_or_404(Opportunity, pk=pk)
+    opp = get_object_or_404(owned_queryset(request.user), pk=pk)
     stage = request.POST.get("stage")
     if stage not in dict(workflow.BOARD_COLUMNS + [("closed", "Closed"), ("inbox", "Inbox")]):
         messages.error(request, "Pick a stage.")

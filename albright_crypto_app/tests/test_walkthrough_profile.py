@@ -17,6 +17,21 @@ from albright_crypto_app import my_profile, walkthrough
 from albright_crypto_app.models import (AIExtraction, ApplicationDraft, MyProfile, Opportunity, Source, TaskStep,
                                         Walkthrough)
 from albright_crypto_app.pipeline import manual_source, rescore
+
+def _income_source():
+    users = User.objects.all()
+    if users.count() == 1:
+        return manual_source("income", owner=users.get())
+    source, _ = Source.objects.get_or_create(kind="manual", url="test:income", opportunity_type="income",
+                                             defaults={"name": "Manual (income)"})
+    return source
+
+
+def _owned_defaults():
+    users = User.objects.all()
+    return {"owner": users.get()} if users.count() == 1 else {}
+
+
 from albright_crypto_app.tests.test_extraction import fake_client
 from albright_crypto_app.tests.test_pipeline import make
 from albright_labs.testing import with_apps
@@ -226,7 +241,8 @@ class OtherWalkthroughTests(TestCase):
         self.assertEqual(w.content["warnings"], list(opp.safety_reasons))
 
     def test_income_walkthrough_has_red_flags_and_questions(self):
-        opp = Opportunity.objects.create(source=manual_source("income"), opportunity_type="income", external_id="j1",
+        opp = Opportunity.objects.create(source=_income_source(), opportunity_type="income", external_id="j1",
+                                         **_owned_defaults(),
                                          title="Contract Django dev", url="https://jobs.example.com/1",
                                          raw_text="Contract Django role. Interview on Telegram only.")
         rescore(opp)
@@ -263,9 +279,10 @@ POSTING = ("We need a Django developer to fix our billing API and automate Excel
 
 
 def income_opp():
-    opp = Opportunity.objects.create(source=manual_source("income"), opportunity_type="income", external_id="p1",
+    opp = Opportunity.objects.create(source=_income_source(), opportunity_type="income", external_id="p1",
                                      title="Django billing API + Excel automation", url="https://jobs.example.com/p1",
-                                     raw_text=POSTING, skills_required=["Django", "React", "AWS", "Excel"])
+                                     raw_text=POSTING, skills_required=["Django", "React", "AWS", "Excel"],
+                                     **_owned_defaults())
     return rescore(opp)
 
 

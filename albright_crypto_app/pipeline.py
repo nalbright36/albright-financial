@@ -58,9 +58,12 @@ AI_FACT_FIELDS = (
 # Manual source (typed in by the owner) and scoring
 # ---------------------------------------------------------------------------
 
-def manual_source(opportunity_type="crypto"):
-    source, _ = Source.objects.get_or_create(kind="manual", url="", opportunity_type=opportunity_type,
-                                             defaults={"name": MANUAL_SOURCE_NAMES[opportunity_type]})
+def manual_source(opportunity_type="crypto", owner=None):
+    if owner is None:
+        raise TypeError("manual_source requires owner")
+    source, _ = Source.objects.get_or_create(
+        kind="manual", url=f"user:{owner.pk}", opportunity_type=opportunity_type,
+        defaults={"name": MANUAL_SOURCE_NAMES[opportunity_type], "terms_checked": True})
     return source
 
 
@@ -174,7 +177,7 @@ def extract_and_score(opp, use_ai=True, client=None):
 # Ingest
 # ---------------------------------------------------------------------------
 
-def store(source, raw):
+def store(source, raw, owner=None):
     """Creates the Opportunity for a collected item, or returns None if
     it's already stored (same source + external_id)."""
     if Opportunity.objects.filter(source=source, external_id=raw.external_id).exists():
@@ -190,20 +193,22 @@ def store(source, raw):
         facts.update({k: fit[k] for k in FIT_FIELDS}, fit_method="ai")
         facts["company"] = fit.get("company") or ""
     return Opportunity.objects.create(
-        source=source, opportunity_type=source.opportunity_type, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
+        source=source, owner=owner, opportunity_type=source.opportunity_type, external_id=raw.external_id, url=raw.url[:1000], title=raw.title[:500] or raw.url[:500],
         raw_text=raw.text or "", metadata=metadata, posted_at=raw.published, **facts,
     )
 
 
-def add_manual(url, title, text, use_ai=True, client=None, opportunity_type="crypto"):
+def add_manual(url, title, text, use_ai=True, client=None, opportunity_type="crypto", owner=None):
     """The "Add opportunity" form: something I found myself."""
     from hashlib import sha256
-    source = manual_source(opportunity_type)
+    if owner is None:
+        raise TypeError("add_manual requires owner")
+    source = manual_source(opportunity_type, owner=owner)
     external_id = "manual:" + sha256(f"{url}\n{text}".encode()).hexdigest()[:32]
     opp, created = Opportunity.objects.get_or_create(
         source=source, external_id=external_id,
         defaults={"url": url, "title": (title or url)[:500], "raw_text": text or "",
-                  "opportunity_type": opportunity_type,
+                  "opportunity_type": opportunity_type, "owner": owner,
                   "show_anyway": True},   # something I added myself is never filtered out (only blocked)
     )
     if created:
