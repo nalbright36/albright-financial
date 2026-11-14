@@ -383,9 +383,9 @@ class AiFallbackTests(Base):
         client.responses.create.assert_not_called()
 
     def test_daily_limit(self, _dns):
-        from albright_crypto_app.extraction import ExtractionLimitReached
+        from albright_labs.ai_tasks import ExtractionLimitReached
         client = fake_ai(SOUP_AI_REPLY)
-        with mock.patch("albright_crypto_app.ai_tasks.check_limits", side_effect=ExtractionLimitReached("limit")):
+        with mock.patch("albright_labs.ai_tasks.check_limits", side_effect=ExtractionLimitReached("limit")):
             with self.assertRaises(RecipeImportError) as caught:
                 self.read(client)
         self.assertEqual(caught.exception.code, "ai_limit")
@@ -547,7 +547,7 @@ class WebsiteImportTests(Base):
         self.assertEqual(data["status"], "error")
         self.assertEqual(Recipe.objects.count(), 0)
 
-    @mock.patch("albright_crypto_app.ai_tasks.make_client")
+    @mock.patch("albright_labs.ai_tasks.make_client")
     def test_ai_recipe_shows_needs_review(self, make_client):
         make_client.return_value = fake_ai(SOUP_AI_REPLY)
         with fetching(fixture("no_structured_data.html"), "https://blog.example/soup"):
@@ -696,7 +696,7 @@ class BotImportTests(Base):
         self.assertEqual((again.json()["id"], again.json()["status"]), (recipe.pk, "already_saved"))
         self.assertEqual(Recipe.objects.count(), 1)
 
-    @mock.patch("albright_crypto_app.ai_tasks.make_client")
+    @mock.patch("albright_labs.ai_tasks.make_client")
     def test_needs_review(self, make_client):
         make_client.return_value = fake_ai(SOUP_AI_REPLY)
         with fetching(fixture("no_structured_data.html"), "https://blog.example/soup"):

@@ -36,7 +36,7 @@ PREVIEW_STRIP = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+
 
 def outbound_href(url):
     """Where a link to this external URL should point, or "" for no link (not http/https)."""
-    from albright_crypto_app.links import is_web_url, link_status
+    from albright_labs.links import is_web_url, link_status
     if not is_web_url(url):
         return ""
     if link_status(url)[1] == "allowlisted":

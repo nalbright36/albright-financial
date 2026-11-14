@@ -44,7 +44,7 @@ class AdminTestCase(TestCase):
 
 class AccessTests(AdminTestCase):
     def all_urls(self):
-        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "suggestion_status": [1], "suggestion_notes": [1], "suggestion_delete": [1], "idea_status": [1], "idea_notes": [1], "test_integration": ["telegram"], "backup": ["ledger"]}
+        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "suggestion_status": [1], "suggestion_notes": [1], "suggestion_delete": [1], "idea_status": [1], "idea_notes": [1], "test_integration": ["telegram"], "backup": ["ledger"], "error_preview": ["404"]}
         return [(p.name, reverse(f"albright_control:{p.name}", args=args.get(p.name, []))) for p in control_urls]
 
     def test_every_admin_page_is_404_for_non_superusers(self):

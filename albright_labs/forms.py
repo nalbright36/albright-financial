@@ -1,6 +1,6 @@
 from django import forms
 
-from albright_crypto_app.guards import reject_secrets
+from albright_labs.guards import reject_secrets
 
 from . import apps_registry
 from .models import INVITE_DAYS_CHOICES, LandingSettings

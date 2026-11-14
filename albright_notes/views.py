@@ -27,7 +27,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from albright_control.review_list import ago
-from albright_crypto_app.links import is_web_url, link_status
+from albright_labs.links import is_web_url, link_status
 
 from albright_labs import sharing
 

@@ -90,8 +90,8 @@ def _rank(field, ranks):
 
 def _links(urls):
     """Every link goes through the external-link check: verified domains open directly, anything else via
-    the "not on your verified list" page (albright_crypto_app.links)."""
-    from albright_crypto_app.links import link_status, outbound_href
+    the "not on your verified list" page (albright_labs.links)."""
+    from albright_labs.links import link_status, outbound_href
     return [{"text": url, "href": outbound_href(url), "verified": link_status(url)[1] == "allowlisted"}
             for url in urls or []]
 

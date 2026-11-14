@@ -171,7 +171,7 @@ class WalkthroughPageTests(TestCase):
 
     def post(self, data, plan=GITHUB_PLAN):
         with mock.patch(GH_GET, side_effect=FakeGitHub()), \
-                mock.patch("albright_crypto_app.ai_tasks.make_client", return_value=fake_client(plan)):
+                mock.patch("albright_labs.ai_tasks.make_client", return_value=fake_client(plan)):
             return self.client.post(reverse("albright_crypto_app:opportunity", args=[self.opp.pk]), data)
 
     def test_button_saves_regenerates_and_reopens(self):
@@ -352,9 +352,9 @@ class ProfileDraftTests(TestCase):
     def test_buttons_copy_download_docx_and_mark_sent(self):
         ai_resume = {"summary": "Django developer.", "skills": [1], "work": [{"index": 0, "bullets": [0]}],
                      "projects": [], "unmet_requirements": []}
-        with mock.patch("albright_crypto_app.ai_tasks.make_client", return_value=fake_client(ai_resume)):
+        with mock.patch("albright_labs.ai_tasks.make_client", return_value=fake_client(ai_resume)):
             self.client.post(reverse("albright_crypto_app:opportunity", args=[self.opp.pk]), {"action": "resume"})
-        with mock.patch("albright_crypto_app.ai_tasks.make_client",
+        with mock.patch("albright_labs.ai_tasks.make_client",
                         return_value=fake_client({"proposal_body": "Your billing API needs fixing."})):
             self.client.post(reverse("albright_crypto_app:opportunity", args=[self.opp.pk]), {"action": "proposal"})
         resume = ApplicationDraft.objects.get(kind="resume")
@@ -390,7 +390,7 @@ class ProfileDraftTests(TestCase):
 
     def test_empty_profile_sends_me_to_fill_it_in(self):
         MyProfile.objects.all().delete()
-        with mock.patch("albright_crypto_app.ai_tasks.make_client") as make_client:
+        with mock.patch("albright_labs.ai_tasks.make_client") as make_client:
             response = self.client.post(reverse("albright_crypto_app:opportunity", args=[self.opp.pk]),
                                         {"action": "proposal"})
         self.assertRedirects(response, reverse("albright_crypto_app:profile"))

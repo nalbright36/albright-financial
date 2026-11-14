@@ -13,7 +13,7 @@ recipe page's Re-import, and the Bot API's meals/recipes/import.
                        types, nested objects, @id references), else microdata.
   ai_extract()         No recipe data: the AI reads the page's VISIBLE text, with
                        the shared OpenAI setup, daily limit and monthly budget
-                       (albright_crypto_app.ai_tasks). Only what's on the page:
+                       (albright_labs.ai_tasks). Only what's on the page:
                        every ingredient line, step, time and serving count it
                        returns must appear in that text, or it's dropped. These
                        recipes are marked needs_review.
@@ -757,8 +757,7 @@ def _on_page(value, page):
 def ai_extract(html_text, page_url, client=None):
     """The recipe the AI finds in the page's visible text, keeping only what's really there; None if none.
     Raises RecipeImportError when the daily AI limit / monthly budget is used up or the AI can't run."""
-    from albright_crypto_app.ai_tasks import run_json
-    from albright_crypto_app.extraction import ExtractionLimitReached
+    from albright_labs.ai_tasks import ExtractionLimitReached, run_json
 
     text = visible_text(html_text)[:MAX_AI_TEXT]
     if len(text) < 40:

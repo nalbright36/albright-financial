@@ -23,8 +23,12 @@ import re
 from datetime import datetime, time
 from decimal import Decimal
 
-from django.db.models import Sum
 from django.utils import timezone
+
+from albright_labs.ai_tasks import (
+    ExtractionLimitReached, MAX_TEXT_CHARS, check_limits, make_client,
+    _extract_json, _get, _response_text,
+)
 
 from . import config
 from .models import PAY_TYPES, REWARD_TYPES_BY_OPPORTUNITY_TYPE, AIExtraction
@@ -35,7 +39,6 @@ REWARD_TYPE_KEYS = {t: {key for key, _label in choices} for t, choices in REWARD
 PAY_TYPE_KEYS = {key for key, _label in PAY_TYPES}
 MAX_SKILLS = 30
 EVIDENCE_KEYS = {"explicit", "stated", "none"}
-MAX_TEXT_CHARS = 12000
 
 SYSTEM_PROMPT = """You extract facts about one crypto-related opportunity (a bounty, promo, task, testnet, airdrop...).
 Use ONLY facts stated in the text. Never guess, infer amounts, or use outside knowledge.
@@ -82,77 +85,6 @@ Return ONLY a JSON object, no other text:
  "eligibility_notes": string (stated eligibility limits, or "")
 }"""
 PROMPTS = {"crypto": SYSTEM_PROMPT, "income": INCOME_SYSTEM_PROMPT}
-
-
-class ExtractionLimitReached(Exception):
-    """Daily extraction limit or the shared monthly AI budget is used up."""
-
-
-# ---------------------------------------------------------------------------
-# Limits (daily count; shared monthly budget with the reseller AI reviews)
-# ---------------------------------------------------------------------------
-
-def todays_extraction_count(today=None):
-    today = today or timezone.localdate()
-    return AIExtraction.objects.filter(created_at__date=today).count()
-
-
-def months_ai_spend(today=None):
-    """This app's extraction cost plus the reseller app's AI review cost
-    this month - one budget for both."""
-    from albright_reselling_app.scanner.ai_review_service import months_review_cost
-    today = today or timezone.localdate()
-    mine = AIExtraction.objects.filter(created_at__date__gte=today.replace(day=1)).aggregate(
-        total=Sum("cost_usd"))["total"] or Decimal("0")
-    return mine + months_review_cost(today)
-
-
-def check_limits():
-    limit = int(config.get("ai_daily_limit") or 0)
-    count = todays_extraction_count()
-    if count >= limit:
-        raise ExtractionLimitReached(f"Daily AI extraction limit reached ({count}/{limit})")
-    budget = Decimal(str(config.ai_review_cfg()["monthly_budget_usd"]))
-    spent = months_ai_spend()
-    if spent >= budget:
-        raise ExtractionLimitReached(f"Monthly AI budget reached (${spent:.2f} of ${budget:.2f})")
-
-
-# ---------------------------------------------------------------------------
-# The call (mockable: tests pass a fake client)
-# ---------------------------------------------------------------------------
-
-def make_client():
-    """Imported inside the function, like the reseller's _make_client - the
-    site still loads if the package is missing."""
-    from albright_reselling_app.scanner.ai_review_service import ProviderUnavailable
-    try:
-        import openai
-    except ImportError as exc:
-        raise ProviderUnavailable("The openai package is not installed on this server") from exc
-    return openai.OpenAI(timeout=60)
-
-
-def _get(obj, name, default=None):
-    return obj.get(name, default) if isinstance(obj, dict) else getattr(obj, name, default)
-
-
-def _response_text(resp):
-    texts = []
-    for item in _get(resp, "output") or []:
-        if _get(item, "type") == "message":
-            for part in _get(item, "content") or []:
-                if _get(part, "type") == "output_text":
-                    texts.append(_get(part, "text", ""))
-    return "\n".join(texts) or (_get(resp, "output_text") or "")
-
-
-def _extract_json(text):
-    text = re.sub(r"```(?:json)?", "", text or "")
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError("No JSON object in model response")
-    return json.loads(text[start:end + 1])
 
 
 def call_model(client, title, text, cfg, opportunity_type="crypto"):

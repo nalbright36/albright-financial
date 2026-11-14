@@ -163,7 +163,7 @@ class ScheduleItem(models.Model):
             return ""
         if url.startswith("/") and not url.startswith("//"):
             return url
-        from albright_crypto_app.links import outbound_href
+        from albright_labs.links import outbound_href
         return outbound_href(url)
 
     def can_edit(self, user):
