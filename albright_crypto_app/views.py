@@ -10,7 +10,6 @@ transaction, approves a token, or buys anything - it tracks opportunities
 and what I did about them.
 """
 import csv
-import secrets
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -28,14 +27,14 @@ from .forms import (EarningForm, FiltersForm, IncomeSourceForm, ManualOpportunit
                     SettingsForm, TimeLogForm)
 from .links import is_web_url, link_status
 from .models import ACTIVE_STATUSES, CLOSE_REASONS, OPPORTUNITY_TYPES, Earning, Opportunity, Source, TaskStep, TimeLog
-from .pipeline import add_manual, rescore, sync_default_income_sources, sync_sources
+from .pipeline import add_manual, rescore
 from .skills import matched_skills, skill_match
 
 # Features added later, kept together: walkthroughs, profile + drafts, Gmail.
-from . import gmail, my_profile, walkthrough as walkthroughs  # noqa: E402
+from . import my_profile, walkthrough as walkthroughs  # noqa: E402
 from .extraction import ExtractionLimitReached  # noqa: E402
-from .forms import GmailLabelForm, ProfileForm  # noqa: E402
-from .models import ApplicationDraft, GmailConnection, MyProfile, Walkthrough  # noqa: E402
+from .forms import ProfileForm  # noqa: E402
+from .models import ApplicationDraft, MyProfile, Walkthrough  # noqa: E402
 
 TYPE_LABELS = dict(OPPORTUNITY_TYPES)
 
@@ -317,8 +316,6 @@ def _recompute_skill_matches():
 
 @login_required
 def settings_view(request):
-    sync_sources()
-    sync_default_income_sources()
     action = request.POST.get("action") if request.method == "POST" else None
     if action == "sources":
         for source in Source.objects.exclude(kind="manual"):
@@ -340,7 +337,6 @@ def settings_view(request):
     if settings_post and form.is_valid():
         config.set_value("allowlist", form.cleaned_data["allowlist"])
         config.set_value("rss_feeds", form.cleaned_data["rss_feeds"])
-        sync_sources()
         Source.objects.filter(kind="rss", url__in=form.cleaned_data["rss_feeds"]).update(active=True)  # re-added = on
         messages.success(request, "Settings saved. Existing opportunities keep their scores until edited or rescanned.")
         return redirect("albright_crypto_app:settings")
@@ -383,95 +379,3 @@ def legacy_redirect(request, rest=""):
     url = reverse("albright_crypto_app:inbox") + rest
     query = request.META.get("QUERY_STRING", "")
     return HttpResponsePermanentRedirect(f"{url}?{query}" if query else url)
-
-
-# ---------------------------------------------------------------------------
-# Gmail (Email alerts source) - read-only, gmail.readonly scope only
-# ---------------------------------------------------------------------------
-
-GMAIL_STATE_KEY = "opportunities_gmail_oauth_state"
-
-
-def _gmail_redirect_uri(request):
-    return request.build_absolute_uri(reverse("albright_crypto_app:gmail_callback"))
-
-
-def email_source():
-    return Source.objects.filter(kind="email", opportunity_type="income").first()
-
-
-@login_required
-def gmail_setup(request):
-    connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
-    source = email_source()
-    form = GmailLabelForm(request.POST or None,
-                          initial={"label": (source.options or {}).get("label") if source else "opportunities"})
-    if request.method == "POST" and form.is_valid():
-        label = form.cleaned_data["label"].strip()
-        if source is None:
-            source = Source(kind="email", opportunity_type="income")
-        source.name, source.url, source.options = f"Gmail label: {label}", f"gmail:{label}", {"label": label}
-        source.save()
-        messages.success(request, f'Reading the "{label}" label.')
-        return redirect("albright_crypto_app:gmail")
-    configured = True
-    try:
-        gmail.client_config()
-    except gmail.GmailError:
-        configured = False
-    return render(request, "albright_crypto_app/gmail.html", {
-        "connection": connection, "source": source, "form": form, "configured": configured,
-        "redirect_uri": _gmail_redirect_uri(request), "scope": gmail.SCOPE,
-        "processed": source.processed_items.count() if source else 0, "settings_tab": "gmail",
-    })
-
-
-@login_required
-@require_POST
-def gmail_connect(request):
-    state = secrets.token_urlsafe(24)
-    request.session[GMAIL_STATE_KEY] = state
-    try:
-        return redirect(gmail.authorization_url(_gmail_redirect_uri(request), state))
-    except gmail.GmailError as exc:
-        messages.error(request, str(exc))
-        return redirect("albright_crypto_app:gmail")
-
-
-@login_required
-def gmail_callback(request):
-    expected = request.session.pop(GMAIL_STATE_KEY, None)
-    if not expected or request.GET.get("state") != expected:
-        messages.error(request, "That Gmail sign-in didn't match a connect request from this page - nothing was saved.")
-        return redirect("albright_crypto_app:gmail")
-    if request.GET.get("error") or not request.GET.get("code"):
-        messages.error(request, "Gmail access wasn't granted.")
-        return redirect("albright_crypto_app:gmail")
-    try:
-        token = gmail.exchange_code(request.GET["code"], _gmail_redirect_uri(request))
-        connection = GmailConnection(pk=GmailConnection.SINGLETON_PK, scope=token.get("scope", ""))
-        connection.set_token(token)
-        connection.email = gmail.GmailReader(connection).profile_email()
-        connection.save()
-    except (gmail.GmailError, ValueError, KeyError) as exc:
-        messages.error(request, str(exc) if isinstance(exc, gmail.GmailError) else "Couldn't finish connecting Gmail.")
-        return redirect("albright_crypto_app:gmail")
-    if email_source() is None:
-        Source.objects.create(kind="email", opportunity_type="income", name="Gmail label: opportunities",
-                              url="gmail:opportunities", options={"label": "opportunities"})
-    messages.success(request, f"Gmail connected ({connection.email}) - read-only.")
-    return redirect("albright_crypto_app:gmail")
-
-
-@login_required
-@require_POST
-def gmail_disconnect(request):
-    connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
-    if connection:
-        try:
-            gmail.revoke(connection.get_token())
-        except Exception:  # noqa: BLE001 - unreadable token: just forget it
-            pass
-        connection.delete()
-    messages.success(request, "Gmail disconnected - the stored token was deleted.")
-    return redirect("albright_crypto_app:gmail")

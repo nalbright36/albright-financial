@@ -11,7 +11,7 @@ through the "not on your verified list" warning page first (links.py).
 from django import template
 from django.utils.html import format_html
 
-from ..collectors.utils import on_site
+from albright_labs.links import on_site
 from ..links import link_status, outbound_href
 
 register = template.Library()

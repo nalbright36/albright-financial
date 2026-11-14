@@ -3,7 +3,7 @@ Skipped; then the Pipeline board's Saved -> Applied -> Talking/interview ->
 Working -> Paid, or Closed (lost / declined / expired). Every move records
 when the stage changed (the board's "days in stage"); the first move to
 Applied records the applied date, which the 7-day follow-up reminder
-(alerts.send_followup_reminders) counts from."""
+Planner's follow-up task counts from."""
 from datetime import timedelta
 
 from django.db.models import Count

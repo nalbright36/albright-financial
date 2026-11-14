@@ -46,3 +46,9 @@ def outbound_href(url, leave="albright_crypto_app:leave"):
     if link_status(url)[1] == "allowlisted":
         return url
     return reverse(leave) + "?to=" + quote(url, safe="")
+
+
+def on_site(url, domain):
+    """An https URL on the domain or one of its subdomains."""
+    host = (urlparse(url or "").hostname or "").lower()
+    return urlparse(url or "").scheme == "https" and (host == domain or host.endswith("." + domain))

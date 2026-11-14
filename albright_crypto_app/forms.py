@@ -218,38 +218,19 @@ class IncomeSourceForm(forms.ModelForm):
         return notes
 
     def clean(self):
-        from .collectors.job_boards import ENDPOINTS, endpoint_url
         cleaned = super().clean()
         kind = cleaned.get("kind")
-        if kind == "hn_hiring":
-            # The official HN API, always - the latest monthly thread is found automatically.
-            from .collectors.hn_hiring import API as HN_API
-            self.instance.options = {}
-            cleaned["url"] = HN_API
-            cleaned["name"] = cleaned.get("name") or "HN: Who is hiring"
-        elif kind in Source.ATTRIBUTED_KINDS:
-            # The request always goes to the site's fixed endpoint; url is that
-            # endpoint plus the options, so each combination is its own source.
-            options = {k: (cleaned.get(k) or "").strip() for k in ENDPOINTS[kind][1] if (cleaned.get(k) or "").strip()}
-            self.instance.options = options
-            cleaned["url"] = endpoint_url(kind, options)
-            if not cleaned.get("name"):
-                site = Source.ATTRIBUTED_KINDS[kind][0]
-                cleaned["name"] = f"{site}: {', '.join(options.values())}" if options else site
-        else:
-            self.instance.options = {}
-            if not cleaned.get("url") and "url" not in self.errors:
-                self.add_error("url", "Enter the feed or API URL.")
-            if not cleaned.get("name"):
-                self.add_error("name", "Give the source a name.")
+        self.instance.options = {}
+        if kind in Source.ATTRIBUTED_KINDS or kind in ("hn_hiring", "email"):
+            raise forms.ValidationError(
+                "Site-wide collectors have been turned off. Add an opening by pasting its URL, or connect your bot.")
+        if not cleaned.get("url") and "url" not in self.errors:
+            self.add_error("url", "Enter the feed or API URL.")
+        if not cleaned.get("name"):
+            self.add_error("name", "Give the source a name.")
         if Source.objects.filter(kind=kind, url=cleaned.get("url"), opportunity_type="income").exists():
             raise forms.ValidationError("That source is already in your list.")
         return cleaned
-
-
-class GmailLabelForm(forms.Form):
-    label = forms.CharField(max_length=100, initial="opportunities", widget=forms.TextInput(attrs=INPUT),
-                            help_text="The Gmail label your job-alert emails go to (set up a Gmail filter to apply it).")
 
 
 def _textarea(rows, placeholder=""):

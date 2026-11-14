@@ -20,7 +20,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import my_profile, relevance, walkthrough as walkthroughs, workflow
-from .collectors.utils import on_site
+from albright_labs.links import on_site
 from .extraction import ExtractionLimitReached
 from .links import outbound_href
 from .models import CLOSE_REASONS, SKIP_REASONS, MyProfile, Opportunity

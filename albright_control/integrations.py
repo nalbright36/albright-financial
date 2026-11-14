@@ -1,7 +1,7 @@
 """Integration status for the Admin area: Configured / Missing / Failing.
 Only ever reports WHETHER a key or token is set - never its value, not
 even a prefix. Test buttons exist only where a test is cheap and safe
-(Telegram test message, Gmail profile check, a test email to yourself);
+(Telegram test message, a test email to yourself);
 there's deliberately no spot price test, since goldapi's monthly quota is
 tiny. Each test takes the superuser who pressed it."""
 import os
@@ -32,12 +32,10 @@ def _recent_ai_failure():
 
 
 def integration_rows():
-    from albright_crypto_app.models import GmailConnection
     from albright_trading_app.models import AlpacaCredentials
     spot_run = JobRun.objects.filter(job="fetch_spot_prices").exclude(ok=None).first()
-    gmail_connected = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).exists()
     rows = [
-        {"key": "openai", "name": "OpenAI", "used_for": "Reseller AI reviews, Opportunities extraction, walkthroughs, proposals",
+        {"key": "openai", "name": "OpenAI", "used_for": "Reseller AI reviews, Meals recipe import, Opportunities extraction",
          "configured": _env("OPENAI_API_KEY"), "failing": _recent_ai_failure(),
          "failing_why": "the most recent AI call in the last 24h failed", "setting": "OPENAI_API_KEY"},
         {"key": "telegram", "name": "Telegram", "used_for": "Alerts and the daily digest",
@@ -50,12 +48,6 @@ def integration_rows():
         {"key": "alpaca", "name": "Alpaca", "used_for": "Market data (site key) and each user's own trading account",
          "configured": _env("ALPACA_API_KEY"), "setting": "ALPACA_API_KEY",
          "note": f"{AlpacaCredentials.objects.count()} user account(s) connected (keys stored encrypted)"},
-        {"key": "gmail", "name": "Gmail", "used_for": "Opportunities Email alerts (read-only)",
-         "configured": _env("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET") and gmail_connected,
-         "test": gmail_connected, "setting": "GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET + Connect Gmail",
-         "note": "" if gmail_connected else "OAuth client set but Gmail not connected" if _env("GOOGLE_OAUTH_CLIENT_ID") else ""},
-        {"key": "github", "name": "GitHub", "used_for": "Bounty search and walkthroughs (token optional - raises rate limits)",
-         "configured": _env("GITHUB_TOKEN"), "setting": "GITHUB_TOKEN"},
         {"key": "ebay", "name": "eBay", "used_for": "Reseller sold-price lookups",
          "configured": _env("EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET"), "setting": "EBAY_CLIENT_ID, EBAY_CLIENT_SECRET"},
         {"key": "email", "name": "Email", "used_for": "Invites and password setup/reset links (Gmail SMTP)",
@@ -79,21 +71,6 @@ def test_telegram(user=None):
     return ok, "Test message sent." if ok else "Telegram didn't accept the message (token, chat ID or network)."
 
 
-def test_gmail(user=None):
-    from albright_crypto_app.gmail import GmailError, GmailReader
-    from albright_crypto_app.models import GmailConnection
-    connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
-    if connection is None:
-        return False, "Gmail isn't connected."
-    try:
-        GmailReader(connection).profile_email()
-    except GmailError as exc:
-        return False, str(exc)[:250]
-    except Exception as exc:  # noqa: BLE001 - network etc.
-        return False, f"{type(exc).__name__} while reaching Gmail"
-    return True, "Gmail answered (read-only profile check)."
-
-
 def test_email(user=None):
     from albright_labs import emails
     if not (user and user.email):
@@ -101,4 +78,4 @@ def test_email(user=None):
     return emails.send("test", user.email, {})
 
 
-TESTS = {"telegram": test_telegram, "gmail": test_gmail, "email": test_email}
+TESTS = {"telegram": test_telegram, "email": test_email}

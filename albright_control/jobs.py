@@ -116,12 +116,8 @@ def interval_for(job):
 
 
 def health_rows(now=None):
-    from albright_crypto_app import config as crypto_config
-    from albright_crypto_app.collectors import COLLECTORS
-    from albright_crypto_app.models import GmailConnection, ScanRun as CryptoScanRun, Source
     from albright_reselling_app.scanner.dashboard import _expected_interval_hours, _source_display
     from albright_reselling_app.scanner_models import ScanRun, SourcedLot, SpotPrice
-    from .models import IntegrationCheck
 
     now = now or timezone.now()
     rows = []
@@ -147,38 +143,6 @@ def health_rows(now=None):
         elif job == "fetch_spot_prices":
             events.append((SpotPrice.objects.order_by("-fetched_at").values_list("fetched_at", flat=True).first(), True, ""))
         rows.append(summarize(job, label, interval_for(job), events, running, now=now))
-    # Opportunities scans, one row per active source.
-    scan_hours = float(crypto_config.get("scan_interval_hours") or 4)
-    recent_runs = list(CryptoScanRun.objects.exclude(finished_at=None).order_by("-started_at")[:30])
-    for source in Source.objects.exclude(kind="manual").filter(active=True):
-        collector = COLLECTORS.get(source.kind)
-        min_hours = collector.min_interval.total_seconds() / 3600 if collector and collector.min_interval else 0
-        events = []
-        for run in recent_runs:
-            error = next((e for e in run.errors or [] if e.startswith(f"{source.name}:")), "")
-            if error:
-                events.append((run.started_at, False, error))
-        if source.last_checked:
-            failed_at_last_check = any(t >= source.last_checked - timedelta(minutes=30) for t, _ok, _e in events)
-            if not failed_at_last_check:
-                events.append((source.last_checked, True, ""))
-        note = "" if source.runnable else ("terms not checked - not running" if source.needs_terms else "Gmail not connected")
-        row = summarize(f"scan_crypto:{source.pk}", f"Opportunities scan - {source.name}",
-                        timedelta(hours=max(scan_hours, min_hours)), events, note=note, now=now)
-        if not source.runnable:
-            row["status"] = "off"
-        rows.append(row)
-    # The Gmail connection itself: its latest test (Integrations page) and the Email alerts source.
-    connection = GmailConnection.objects.filter(pk=GmailConnection.SINGLETON_PK).first()
-    events = [(c.checked_at, c.ok, c.message) for c in IntegrationCheck.objects.filter(integration="gmail")[:20]]
-    row = summarize("gmail", "Gmail connection", timedelta(days=7), events,
-                    note=f"connected as {connection.email}" if connection else "not connected", now=now)
-    if connection is None:
-        row["status"] = "off"
-    elif not events:
-        row["status"] = "ok"
-        row["note"] += " - not tested yet (Integrations page)"
-    rows.append(row)
     return rows
 
 
