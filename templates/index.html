@@ -40,8 +40,8 @@
 
         <nav class="navbar">
             <div class="navbar__main-row">
-                {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). #}
-                <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__chip">{% include "_app_icon.html" with key=current_app_key %}<span class="navbar__chip-name">{{ app_label|default:"Trading" }}</span></span></a>
+                {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). Under 640px the chip shows only the app's icon (style.css); the name stays its label and tooltip. #}
+                <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand" aria-label="Albright - {{ app_label|default:"Trading" }}"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__chip" title="{{ app_label|default:"Trading" }}">{% include "_app_icon.html" with key=current_app_key %}<span class="navbar__chip-name">{{ app_label|default:"Trading" }}</span></span></a>
 
                 {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
                 <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">
@@ -155,9 +155,25 @@
                     {% else %}
                     <a href="{% url 'user_login' %}">Login</a>
                     {% endif %}
+                    {# Phones only (style.css - under 640px, in the hamburger panel): the theme toggle and the account menu's links, at the bottom of the menu, instead of beside the bell and launcher. #}
+                    <div class="navbar__menu-extra" id="navbar-menu-extra">
+                        <button type="button" class="navbar__menu-item navbar__menu-theme" id="theme-toggle-menu">
+                            <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
+                            <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                            <span class="navbar__menu-theme-dark">Dark mode</span><span class="navbar__menu-theme-light">Light mode</span>
+                        </button>
+                        {% if user.is_authenticated %}
+                        <p class="navbar__menu-who">Signed in as {{ user.get_username }}</p>
+                        <a href="{% url 'labs:account' %}" class="navbar__menu-item">My account</a>
+                        <a href="{% url 'labs:circles' %}" class="navbar__menu-item">Circles{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }}</span>{% endif %}</a>
+                        <a href="{% url 'labs:activity' %}" class="navbar__menu-item">Notifications</a>
+                        <a href="{% url 'labs:people' %}" class="navbar__menu-item">People</a>
+                        <a href="{% url 'user_logout' %}" class="navbar__menu-item">Logout</a>
+                        {% endif %}
+                    </div>
                 </div>
 
-                {# Far right in every app: the theme toggle, the app launcher, the account menu. #}
+                {# Far right in every app: the theme toggle, the notification bell, the app launcher, the account menu. On phones only the bell and launcher stay here, with the hamburger after them. #}
                 <div class="navbar__tools">
                     <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme">
                         <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
@@ -239,7 +255,9 @@
                     nav.classList.remove('navbar--collapsed', 'navbar--stacked');
                     var collapse = phone.matches || overflows();
                     nav.classList.toggle('navbar--collapsed', collapse);
-                    if (collapse && overflows()) nav.classList.add('navbar--stacked');
+                    // Phones always fit one row (logo, icon-only chip, bell, launcher, hamburger - style.css), so
+                    // never the stacked fallback there.
+                    if (collapse && !phone.matches && overflows()) nav.classList.add('navbar--stacked');
                     if (collapse !== was) setOpen(false);
                 }
                 fit();
@@ -364,12 +382,17 @@
                 });
             });
 
-            document.getElementById('theme-toggle').addEventListener('click', function () {
-                var current = document.documentElement.getAttribute('data-theme');
-                var next = current === 'light' ? 'dark' : 'light';
-                document.documentElement.setAttribute('data-theme', next);
-                try { localStorage.setItem('theme', next); } catch (e) {}
-                document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: next } }));
+            // The header's theme toggle, and its twin at the bottom of the phone menu.
+            ['theme-toggle', 'theme-toggle-menu'].forEach(function (id) {
+                var button = document.getElementById(id);
+                if (!button) return;
+                button.addEventListener('click', function () {
+                    var current = document.documentElement.getAttribute('data-theme');
+                    var next = current === 'light' ? 'dark' : 'light';
+                    document.documentElement.setAttribute('data-theme', next);
+                    try { localStorage.setItem('theme', next); } catch (e) {}
+                    document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: next } }));
+                });
             });
 
             // Confirmation before a destructive submit: data-confirm on the

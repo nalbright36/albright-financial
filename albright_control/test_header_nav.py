@@ -25,7 +25,12 @@ STYLE = Path(settings.BASE_DIR) / "albright_trading_app" / "static" / "style.css
 
 
 def links_html(content):
-    return content.split('id="navbar-links"', 1)[1].split('class="navbar__dropdown navbar__account"', 1)[0]
+    """The app's own links - not the phone-only theme/account section at the bottom of the panel."""
+    return content.split('id="navbar-links"', 1)[1].split('id="navbar-menu-extra"', 1)[0]
+
+
+def menu_extra(content):
+    return content.split('id="navbar-menu-extra"', 1)[1].split('<div class="navbar__tools">', 1)[0]
 
 
 def group_html(content, key):
@@ -198,3 +203,65 @@ class SharedHeaderRuleTests(Base):
                         "e.key === 'ArrowDown'", "e.key === 'Escape'", "'focusout'",
                         "document.documentElement.classList.add('js')"):
             self.assertIn(snippet, content)
+
+
+class PhoneHeaderTests(Base):
+    """Phones (under 640px): one row - logo, the app chip as just its icon, then the bell, the launcher and the
+    hamburger; the theme toggle and the account menu's links at the bottom of the hamburger panel."""
+
+    def phone_css(self):
+        css = STYLE.read_text(encoding="utf-8")
+        start = css.index("/* Phones (under 640px), every app: ONE row")
+        return css[start:css.index("@media (max-width: 370px)", start)]
+
+    def test_the_menu_ends_with_the_theme_toggle_and_account_links(self):
+        for url in (reverse("labs:hub"), reverse("albright_crypto_app:inbox"), reverse("albright_planner:day"),
+                    reverse("albright_control:overview")):
+            with self.subTest(url=url):
+                content = self.page(url)
+                extra = menu_extra(content)
+                self.assertIn('id="theme-toggle-menu"', extra)
+                self.assertEqual(hrefs(extra), [(reverse("labs:account"), "My account"),
+                                                (reverse("labs:circles"), "Circles"),
+                                                (reverse("labs:activity"), "Notifications"),
+                                                (reverse("labs:people"), "People"),
+                                                (reverse("user_logout"), "Logout")])
+                # Inside the hamburger panel, after the app's own links; the desktop tools keep theirs.
+                links_start = content.index('id="navbar-links"')
+                self.assertLess(links_start, content.index('id="navbar-menu-extra"'))
+                self.assertLess(content.index('id="navbar-menu-extra"'), content.index('<div class="navbar__tools">'))
+                self.assertIn('id="theme-toggle"', content.split('<div class="navbar__tools">', 1)[1])
+                self.assertIn('id="account-menu"', content)
+
+    def test_visitors_menu_has_only_the_theme_toggle(self):
+        self.client.logout()
+        extra = menu_extra(self.page(reverse("user_login")))
+        self.assertIn('id="theme-toggle-menu"', extra)
+        self.assertEqual(hrefs(extra), [])
+
+    def test_the_chip_names_the_app_as_its_label_and_tooltip(self):
+        for url, name in ((reverse("albright_crypto_app:inbox"), "Opportunities"),
+                          (reverse("albright_control:overview"), "Admin")):
+            with self.subTest(url=url):
+                content = self.page(url)
+                self.assertIn(f'class="navbar__brand" aria-label="Albright - {name}"', content)
+                self.assertIn(f'<span class="navbar__chip" title="{name}">', content)
+                self.assertIn(f'<span class="navbar__chip-name">{name}</span></span></a>', content)
+
+    def test_phone_css_one_row_icon_chip_and_tools_moved(self):
+        css = self.phone_css()
+        self.assertIn("@media (max-width: 639.98px) {", css)
+        for rule in ("flex-wrap: nowrap; white-space: nowrap;", "min-height: 56px;",
+                     "padding-top: env(safe-area-inset-top, 0px);", ".navbar__logo { height: 28px; }",
+                     ".navbar__chip { justify-content: center; gap: 0; width: 34px; height: 28px; padding: 0; }",
+                     ".navbar__chip-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);",
+                     "order: 2; margin-left: auto;", ".navbar__toggle { order: 3; margin-left: 0; }",
+                     ".navbar--collapsed .navbar__tools .theme-toggle,\n  .navbar--collapsed .navbar__account { display: none; }",
+                     ".navbar--collapsed .navbar__menu-extra { display: block;"):
+            self.assertIn(rule, css)
+        self.assertIn("\n.navbar__menu-extra { display: none; }", STYLE.read_text(encoding="utf-8"))
+
+    def test_scripts_never_stack_on_phones_and_both_theme_toggles_work(self):
+        content = self.page(reverse("trading_home"))
+        self.assertIn("if (collapse && !phone.matches && overflows()) nav.classList.add('navbar--stacked');", content)
+        self.assertIn("['theme-toggle', 'theme-toggle-menu'].forEach(", content)
