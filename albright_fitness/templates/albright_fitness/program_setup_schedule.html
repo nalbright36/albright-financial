@@ -1,0 +1,24 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}{{ p.name }}: schedule · {% endblock %}
+{% block fitness %}
+{% comment %}Step 3 of the guided setup (program_views.setup_schedule): when it starts, how long, and whether it goes on my Planner (each workout a private repeating task, at a time or all day). Save turns it on.{% endcomment %}
+<div class="fx-narrow fx-setup">
+<div class="fx-head"><div><h1 class="fx-head__title">{{ p.name }}</h1><p class="fx-head__sub">When do you want to start?</p></div></div>
+{% include "albright_fitness/_setup_steps.html" %}
+<form method="post" class="card fx-card" id="fx-setup-schedule" data-planner-form>{% csrf_token %}
+    <div class="fx-setup__grid">
+        <label class="fx-setup-field"><span class="fx-label">Start</span><input type="date" name="start_date" value="{{ start|date:'Y-m-d' }}" class="ledger-input" required></label>
+        <label class="fx-setup-field"><span class="fx-label">How long</span><select name="weeks" class="ledger-input fx-select">{% for v, label in week_choices %}<option value="{{ v }}"{% if v == weeks %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    </div>
+    <label class="fx-switch"><input type="checkbox" name="planner" value="1" id="fx-planner"{% if planner %} checked{% endif %} data-planner-toggle> <span>Add to my Planner</span></label>
+    <p class="fx-help">Each workout becomes a private repeating task on its days, with its exercises as the checklist. Finishing the workout checks it off.</p>
+    <label class="fx-setup-field" data-planner-time{% if not planner %} hidden{% endif %}><span class="fx-label">Time <span class="fx-muted">(optional - empty is all day)</span></span><input type="time" name="time" value="{{ at|time:'H:i' }}" class="ledger-input"></label>
+    <h2 class="fx-card__title fx-setup__sub">Your week</h2>
+    <ul class="fx-list">{% for d in days %}<li class="fx-row"><span class="fx-row__title">{{ d.name }}</span><span class="fx-row__ind">{{ d.weekdays|days|default:"no days" }} &middot; {{ d.exercises.all|length }} exercise{{ d.exercises.all|length|pluralize }}</span></li>{% endfor %}</ul>
+    <div class="fx-setup__bar">
+        <a href="{% url 'albright_fitness:program_setup_exercises' p.pk %}" class="btn btn-secondary">Back</a>
+        <button type="submit" class="btn btn-primary" id="fx-setup-save">{% if p.is_draft %}Save program{% else %}Save changes{% endif %}</button>
+    </div>
+</form>
+</div>
+{% endblock %}

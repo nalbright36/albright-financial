@@ -1,0 +1,17 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}Templates · {% endblock %}
+{% block fitness %}
+{% comment %}Start from a template (program_views.program_templates): pick days a week, then Use this - a draft copy opens at step 2 to check the exercises.{% endcomment %}
+<div class="fx-narrow fx-setup">
+<div class="fx-head"><div><h1 class="fx-head__title">Start from a template</h1><p class="fx-head__sub">Pick one, then change anything.</p></div></div>
+<nav class="fx-chips" aria-label="Days a week"><a href="?" class="fx-chip{% if not want %} is-on{% endif %}">Any</a>{% for n in counts %}<a href="?days={{ n }}" class="fx-chip{% if want == n|stringformat:'s' %} is-on{% endif %}">{{ n }} days a week</a>{% endfor %}</nav>
+{% for t in templates %}
+<div class="card fx-card fx-template">
+    <div class="fx-template__head"><h2 class="fx-template__name">{{ t.name }}</h2><span class="fx-pill">{{ t.per_week }} days a week{% if t.weeks %} &middot; {{ t.weeks }} weeks{% endif %}</span></div>
+    <ul class="fx-list">{% for name, weekdays, count in t.days %}<li class="fx-row"><span class="fx-row__title">{{ name }}</span><span class="fx-row__ind">{{ weekdays|days }} &middot; {{ count }} exercise{{ count|pluralize }}</span></li>{% endfor %}</ul>
+    <form method="post">{% csrf_token %}<input type="hidden" name="template" value="{{ t.key }}"><button type="submit" class="btn btn-primary btn-sm">Use this</button></form>
+</div>
+{% empty %}<p class="fx-empty">No template with that many days - <a href="?">see them all</a>.</p>{% endfor %}
+<p class="fx-help"><a href="{% url 'albright_fitness:program_new' %}">Build my own instead</a></p>
+</div>
+{% endblock %}

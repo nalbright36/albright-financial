@@ -1,0 +1,50 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% block page_title %}{{ p.name }}: exercises · {% endblock %}
+{% block fitness %}
+{% comment %}Step 2 of the guided setup (program_views.setup_exercises): one tab per workout. Search (the type-ahead fills results as you type - fitness.js; without JS, Search reloads), tap Add for a sensible target, change targets in place, move with the arrows. Every button saves the targets first.{% endcomment %}
+<div class="fx-narrow fx-setup">
+<div class="fx-head"><div><h1 class="fx-head__title">{{ p.name }}</h1><p class="fx-head__sub">Add the exercises for each workout.</p></div></div>
+{% include "albright_fitness/_setup_steps.html" %}
+{% if days|length > 1 %}<nav class="fx-tabs" aria-label="Workouts">{% for d in days %}<a href="?day={{ d.pk }}" class="fx-tabs__item{% if d == day %} is-on{% endif %}"{% if d == day %} aria-current="page"{% endif %}>{{ d.name }}</a>{% endfor %}</nav>{% endif %}
+<section class="card fx-card" aria-labelledby="fx-pe-h">
+    <h2 class="fx-card__title" id="fx-pe-h">{{ day.name }} <span class="fx-muted fx-small">{{ day.weekdays|days }}</span></h2>
+    <form method="get" class="fx-search" role="search" data-ex-search data-url="{% url 'albright_fitness:exercise_search' %}">
+        <input type="hidden" name="day" value="{{ day.pk }}">
+        <label class="visually-hidden" for="fx-ex-q">Find an exercise</label>
+        <input type="search" name="q" id="fx-ex-q" class="ledger-input fx-input-wide" value="{{ q }}" placeholder="Type an exercise - e.g. squat" autocomplete="off">
+        <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+    </form>
+    <form method="post" id="fx-pe-form">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}">
+        <button type="submit" name="action" value="save" class="visually-hidden" tabindex="-1">Save</button>
+        <ul class="fx-list fx-ex-results" data-ex-results aria-live="polite">
+            {% for e in found %}<li class="fx-row"><span class="fx-row__title">{{ e.name }} <span class="fx-muted fx-small">{{ e.get_kind_display }}{% if e.owner_id %} &middot; mine{% endif %}</span></span><button type="submit" name="action" value="add:{{ e.pk }}" class="btn btn-secondary btn-sm" aria-label="Add {{ e.name }}">Add</button></li>{% endfor %}
+            {% if create %}<li class="fx-row fx-ex-create"><input type="hidden" name="new_name" value="{{ create }}"><span class="fx-row__title">Not listed? Make “{{ create }}”</span>
+                <label class="visually-hidden" for="fx-new-kind">Kind</label><select name="new_kind" id="fx-new-kind" class="ledger-input fx-select fx-select--sm">{% for k, label in kinds %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select>
+                <button type="submit" name="action" value="create" class="btn btn-secondary btn-sm">Add mine</button></li>{% endif %}
+        </ul>
+        <ol class="fx-list fx-pe-list" id="fx-pe-list">
+        {% for r in rows %}{% with pe=r.pe %}
+            <li class="fx-pe">
+                <span class="fx-pe__name">{{ pe.exercise.name }}</span>
+                <span class="fx-pe__targets">{% if r.timed %}{% if pe.exercise.kind == "mobility" %}<label class="fx-mini"><span>Sets</span><input type="text" name="sets_{{ pe.pk }}" value="{{ pe.target_sets }}" inputmode="numeric" class="ledger-input"></label>{% endif %}
+                    <label class="fx-mini"><span>Minutes</span><input type="text" name="minutes_{{ pe.pk }}" value="{{ r.minutes }}" inputmode="decimal" class="ledger-input"></label>
+                    {% if pe.exercise.kind == "cardio" %}<label class="fx-mini"><span>Miles</span><input type="text" name="miles_{{ pe.pk }}" value="{{ pe.target_distance|default_if_none:''|floatformat:'-2' }}" inputmode="decimal" class="ledger-input"></label>{% endif %}
+                {% else %}<label class="fx-mini"><span>Sets</span><input type="text" name="sets_{{ pe.pk }}" value="{{ pe.target_sets }}" inputmode="numeric" class="ledger-input"></label>
+                    <label class="fx-mini"><span>Reps</span><input type="text" name="reps_{{ pe.pk }}" value="{{ pe.target_reps|default_if_none:'' }}" inputmode="numeric" class="ledger-input"></label>{% endif %}</span>
+                <span class="fx-pe__tools">
+                    <button type="submit" name="action" value="up:{{ pe.pk }}" class="fx-icon-btn" aria-label="Move {{ pe.exercise.name }} up"{% if forloop.first %} disabled{% endif %}>&uarr;</button>
+                    <button type="submit" name="action" value="down:{{ pe.pk }}" class="fx-icon-btn" aria-label="Move {{ pe.exercise.name }} down"{% if forloop.last %} disabled{% endif %}>&darr;</button>
+                    <button type="submit" name="action" value="remove:{{ pe.pk }}" class="fx-icon-btn" aria-label="Remove {{ pe.exercise.name }}">&times;</button>
+                </span>
+            </li>
+        {% endwith %}{% empty %}<li class="fx-empty">Nothing yet - search above and tap Add.</li>{% endfor %}
+        </ol>
+        <div class="fx-setup__bar">
+            <a href="{% url 'albright_fitness:program_setup' p.pk %}" class="btn btn-secondary">Back</a>
+            <button type="submit" name="action" value="next" class="btn btn-primary" id="fx-setup-next">{% if last %}Next: schedule{% else %}Next workout{% endif %}</button>
+        </div>
+        {% if not last %}<p class="fx-help fx-setup__skip"><button type="submit" name="action" value="schedule" class="fx-link-btn">Skip to schedule</button></p>{% endif %}
+    </form>
+</section>
+</div>
+{% endblock %}

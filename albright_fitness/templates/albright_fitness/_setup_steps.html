@@ -1,0 +1,3 @@
+{# The guided setup's steps (program_views._steps): 1 Days · 2 Exercises · 3 Schedule - links once the program exists. #}
+<ol class="fx-steps" aria-label="Steps">{% for s in steps %}<li class="fx-steps__item{% if s.current %} is-on{% endif %}">{% if s.url and not s.current %}<a href="{{ s.url }}">{% endif %}<span class="fx-steps__n">{{ s.n }}</span> {{ s.label }}{% if s.url and not s.current %}</a>{% endif %}{% if s.current %}<span class="visually-hidden"> (this step)</span>{% endif %}</li>{% endfor %}</ol>
+{% if errors %}<div class="fx-errors" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}

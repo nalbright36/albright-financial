@@ -1,0 +1,33 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}{% if p %}{{ p.name }}{% else %}New program{% endif %} · {% endblock %}
+{% block fitness %}
+{% comment %}Step 1 of the guided setup (program_views._setup_days): the name, then each workout and the days it's on. "Add another workout" keeps what's typed. Saving goes to step 2.{% endcomment %}
+<div class="fx-narrow fx-setup">
+<div class="fx-head"><div><h1 class="fx-head__title">{% if p and not p.is_draft %}Edit {{ p.name }}{% else %}New program{% endif %}</h1>
+    <p class="fx-head__sub">Name it and pick the days you'll train.</p></div></div>
+{% include "albright_fitness/_setup_steps.html" %}
+<form method="post" class="card fx-card" id="fx-setup-days">{% csrf_token %}
+    <input type="hidden" name="rows" value="{{ count }}">
+    <label class="fx-label" for="fx-program-name">Program name</label>
+    <input type="text" name="name" id="fx-program-name" class="ledger-input fx-input-wide" maxlength="100" value="{{ name }}" placeholder="e.g. Summer strength" required>
+    {% if not p or p.is_draft %}<p class="fx-help">Or <a href="{% url 'albright_fitness:program_templates' %}" id="fx-from-template">start from a template</a> - a ready-made program you can change.</p>{% endif %}
+    <h2 class="fx-card__title fx-setup__sub">Workouts</h2>
+    <p class="fx-help">One for each different session - for example “Upper” on Mon &amp; Thu and “Lower” on Tue &amp; Fri.</p>
+    {% for r in rows %}
+    <fieldset class="fx-setup-day">
+        <legend class="visually-hidden">Workout {{ forloop.counter }}</legend>
+        <input type="hidden" name="id_{{ r.i }}" value="{{ r.id }}">
+        <label class="visually-hidden" for="fx-day-name-{{ r.i }}">Workout {{ forloop.counter }} name</label>
+        <input type="text" name="name_{{ r.i }}" id="fx-day-name-{{ r.i }}" class="ledger-input fx-input-wide" maxlength="60" value="{{ r.name }}" placeholder="Workout name">
+        <div class="fx-weekdays" role="group" aria-label="Days for workout {{ forloop.counter }}">{% for n, short, long, on in r.days %}<label class="fx-weekday" title="{{ long }}"><input type="checkbox" name="weekdays_{{ r.i }}" value="{{ n }}"{% if on %} checked{% endif %}><span aria-hidden="true">{{ short }}</span><span class="visually-hidden">{{ long }}</span></label>{% endfor %}</div>
+        {% if r.id %}<label class="fx-check fx-small"><input type="checkbox" name="remove_{{ r.i }}" value="1"{% if r.remove %} checked{% endif %}> Remove this workout</label>{% endif %}
+    </fieldset>
+    {% endfor %}
+    {% if can_add %}<button type="submit" name="action" value="more" class="fx-link-btn" formnovalidate>+ Add another workout</button>{% endif %}
+    <div class="fx-setup__bar">
+        <a href="{% if p %}{% url 'albright_fitness:program' p.pk %}{% else %}{% url 'albright_fitness:programs' %}{% endif %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" name="action" value="next" class="btn btn-primary" id="fx-setup-next">Next: exercises</button>
+    </div>
+</form>
+</div>
+{% endblock %}
