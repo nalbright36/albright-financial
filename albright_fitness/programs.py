@@ -245,7 +245,9 @@ def set_active(program, active):
     puts them back when it was on the Planner."""
     program.active = active
     program.start_date = program.start_date or timezone.localtime(program.created_at).date()   # never a "draft" again
-    program.save(update_fields=["active", "start_date"])
+    if active:
+        program.archived_at = None                         # resuming an archived program brings it back too
+    program.save(update_fields=["active", "start_date", "archived_at"])
     if not active and program.scheduled_from:
         unschedule(program, forget=False)
     elif active and program.on_planner and any(d.weekdays for d in program.days.all()):
@@ -281,6 +283,69 @@ def set_planner(program, on):
         program.save(update_fields=["on_planner"])
         return 0
     return schedule(program)
+
+
+# ---------------------------------------------------------------------------
+# Archive and delete
+# ---------------------------------------------------------------------------
+
+def archive(program):
+    """Off the Programs list (the "Archived" filter shows it) - nothing deleted. An active one is paused first (its
+    Planner tasks end after today; the Planner choice is kept for when it's restored and resumed)."""
+    if program.active:
+        set_active(program, False)
+    program.archived_at = timezone.now()
+    program.save(update_fields=["archived_at"])
+
+
+def restore(program):
+    """Back on the Programs list - still paused (Resume turns it back on)."""
+    program.archived_at = None
+    program.save(update_fields=["archived_at"])
+
+
+@transaction.atomic
+def delete_program(program, remove_scheduled=True):
+    """Delete one of the owner's own programs (built-in templates aren't rows, so they can't be). Returns
+    {"workouts": kept, "planner_ended": n, "planner_kept": n}.
+      - Logged workouts are never deleted: their program day is cleared and its names saved on them (History shows
+        "Upper A (deleted program)").
+      - Its Planner tasks - the repeating "day-<pk>" ones and any older one-off "session-<pk>" ones - stop belonging
+        to it. remove_scheduled: they end (no more occurrences after today, or after yesterday when today's isn't
+        checked off) - past occurrences and check-offs stay as history; otherwise they carry on as ordinary tasks.
+      - Any shares are removed. (Programs aren't a shareable kind - albright_labs.sharing - so there are none today,
+        and with nobody else able to see it there's nothing for the activity feed.)"""
+    from django.contrib.contenttypes.models import ContentType
+    from django.db.models import Q
+
+    from albright_labs.models import ShareGrant
+    from albright_planner import services
+
+    from .models import ScheduledSession
+    owner = program.owner
+    days = list(program.days.all())
+    kept = 0
+    for day in days:
+        kept += Workout.objects.filter(program_day=day).update(program_day=None, program_name=program.name[:100],
+                                                               program_day_name=day.name[:60])
+    sessions = ScheduledSession.objects.filter(Q(program=program) | Q(program_day__program=program))
+    source_ids = [f"day-{d.pk}" for d in days] + [s.source_id for s in sessions if s.planner_item_id]
+    ended = 0
+    if remove_scheduled:
+        today = timezone.localdate()
+        for source_id in source_ids:
+            item = services.source_item(owner, SOURCE, source_id)
+            if item is None:
+                continue
+            last_day = today if services.is_done(item, today) else today - timedelta(days=1)
+            ended += services.end_source_items(owner, SOURCE, [source_id], last_day)
+    released = services.release_source_items(owner, SOURCE, source_ids)
+    # Its old one-off schedules go with it - but their tasks (now the owner's own) must stay, so unlink them first
+    # (schedule._session_deleted would delete them with every check-off).
+    sessions.update(planner_item=None)
+    ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(Program), object_id=program.pk).delete()
+    program.delete()
+    return {"workouts": kept, "planner_ended": ended, "planner_kept": 0 if remove_scheduled else released}
 
 
 # ---------------------------------------------------------------------------

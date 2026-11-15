@@ -1,18 +1,30 @@
 {% extends "albright_fitness/base.html" %}{% load fitness_extras %}
 {% block page_title %}Programs · {% endblock %}
 {% block fitness %}
-{% comment %}Programs (program_views.program_list): mine, with New program (the guided setup) and Start from a template.{% endcomment %}
+{% comment %}
+Programs (program_views.program_list): mine, with New program (the guided setup) and Start from a template. Each row's
+"…" menu: Archive / Restore and Delete program. ?show=archived lists the archived ones (each with Restore).
+{% endcomment %}
 <div class="fx-narrow">
 <div class="fx-head"><div><h1 class="fx-head__title">Programs</h1><p class="fx-head__sub">Your training week: which workouts, on which days.</p></div></div>
 <div class="fx-program-new">
     <a href="{% url 'albright_fitness:program_new' %}" class="btn btn-primary" id="fx-program-new">New program</a>
     <a href="{% url 'albright_fitness:program_templates' %}" class="btn btn-secondary">Start from a template</a>
 </div>
+{% if archived or archived_count %}<nav class="fx-tabs" aria-label="Which programs">
+    <a href="{% url 'albright_fitness:programs' %}" class="fx-tabs__item{% if not archived %} is-on{% endif %}"{% if not archived %} aria-current="page"{% endif %}>Yours</a>
+    <a href="{% url 'albright_fitness:programs' %}?show=archived" class="fx-tabs__item{% if archived %} is-on{% endif %}" id="fx-programs-archived"{% if archived %} aria-current="page"{% endif %}>Archived ({{ archived_count }})</a>
+</nav>{% endif %}
 <section class="card fx-card" aria-labelledby="fx-mine-h">
-    <h2 class="fx-card__title" id="fx-mine-h">Yours</h2>
-    {% for p, status in programs %}<a href="{% if p.is_draft %}{% url 'albright_fitness:program_setup' p.pk %}{% else %}{% url 'albright_fitness:program' p.pk %}{% endif %}" class="fx-row fx-row--link"><span class="fx-row__title">{{ p.name }}</span>
+    <h2 class="fx-card__title" id="fx-mine-h">{% if archived %}Archived{% else %}Yours{% endif %}</h2>
+    {% for p, status in programs %}<div class="fx-row fx-program-row" id="program-{{ p.pk }}">
+        <a href="{% if p.is_draft %}{% url 'albright_fitness:program_setup' p.pk %}{% else %}{% url 'albright_fitness:program' p.pk %}{% endif %}" class="fx-program-row__link"><span class="fx-row__title">{{ p.name }}</span>
         <span class="fx-row__ind">{% if status %}<span class="fx-pill fx-pill--off">{{ status }}</span> {% endif %}{% if p.scheduled_from %}<span class="fx-pill">On Planner</span> {% endif %}{{ p.days.all|length }} workout{{ p.days.all|length|pluralize }}</span></a>
-    {% empty %}<p class="fx-empty">None yet. Tap New program - it takes three short steps.</p>{% endfor %}
+        {% if archived %}<form method="post" action="{% url 'albright_fitness:program_archive' p.pk %}">{% csrf_token %}<input type="hidden" name="restore" value="1"><button type="submit" class="btn btn-secondary btn-sm" aria-label="Restore {{ p.name }}">Restore</button></form>{% endif %}
+        {% include "albright_fitness/_program_menu.html" %}
+    </div>
+    {% empty %}<p class="fx-empty">{% if archived %}Nothing archived.{% else %}None yet. Tap New program - it takes three short steps.{% endif %}</p>{% endfor %}
 </section>
+{% include "albright_fitness/_program_delete_dialog.html" %}
 </div>
 {% endblock %}

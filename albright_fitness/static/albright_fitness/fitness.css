@@ -435,6 +435,30 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-program-next__line { margin: 0 0 10px; }
 .fx-program-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .fx-program-controls .fx-help { flex-basis: 100%; margin: 0; }
+/* A program's "…" menu (_program_menu.html; js/menu.js floats the panel) - the program page's title row, each list row. */
+.fx-program-menu { position: relative; flex-shrink: 0; }
+.fx-program-menu > summary { list-style: none; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.fx-program-menu > summary::-webkit-details-marker { display: none; }
+.fx-program-menu__panel { position: absolute; right: 0; z-index: 20; margin-top: 4px; }   /* without JS: under the button */
+.fx-program-head { flex-wrap: nowrap; align-items: flex-start; }
+.fx-program-head > div:first-child { min-width: 0; }
+.fx-program-row { padding-right: 0; }
+.fx-program-row__link { display: flex; flex: 1 1 auto; align-items: center; gap: 10px; min-width: 0; min-height: 44px; color: inherit; }
+.fx-program-row__link:hover { text-decoration: none; color: var(--text-primary); }
+.fx-program-row form { margin: 0; }
+.fx-program-archived { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fx-program-archived p { margin: 0; }
+/* The delete confirmation: a dialog (_program_delete_dialog.html), or a card without JS (program_delete.html). */
+dialog.fx-confirm { width: min(440px, calc(100% - 32px)); max-width: none; padding: 20px; border: 1px solid var(--border);
+  border-radius: 16px; background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, .3)); }
+dialog.fx-confirm::backdrop { background: rgba(0, 0, 0, 0.5); }
+.fx-confirm form, form.fx-confirm { margin: 0; }
+.fx-confirm__title { margin: 0 0 8px; font-size: var(--text-lg); overflow-wrap: anywhere; }
+.fx-confirm p { margin: 0 0 12px; }
+.fx-confirm__check { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 10px 0 4px; font-weight: 600; cursor: pointer; }
+.fx-confirm__check input { flex-shrink: 0; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent); }
+.fx-confirm__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.fx-confirm__actions .btn { min-height: 44px; min-width: 96px; }
 .fx-switch-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; border: 0; background: none;
   color: var(--text-primary); font: inherit; cursor: pointer; }
 .fx-switch-btn__track { position: relative; width: 40px; height: 24px; border-radius: 12px; background: var(--border); transition: background .15s; }

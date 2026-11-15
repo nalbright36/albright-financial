@@ -19,7 +19,7 @@ from django.views.decorators.http import require_POST
 from albright_labs import sharing
 
 from . import body, glossary, insights, nutrition, programs, stats, training
-from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord, Program,
+from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord,
                      ProgramDay, ProgramExercise, ScheduledSession, Workout, WorkoutExercise, WorkoutSet)
 
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -493,16 +493,3 @@ def _program_post(request, p):
         get_object_or_404(ProgramExercise, pk=post.get("pe") or 0, day__program=p).delete()
     if action in ("add_day", "edit_day", "delete_day", "add_exercise", "remove_exercise") and p.scheduled_from and p.active:
         programs.schedule(p)                               # the Planner follows the changes
-
-
-@login_required
-@require_POST
-def program_delete(request, pk):
-    p = get_object_or_404(Program, pk=pk, owner=request.user)
-    if p.scheduled_from:
-        programs.unschedule(p)
-    name = p.name
-    p.delete()
-    messages.success(request, f"Deleted {name} - its past Planner tasks and your workouts stay.")
-    return redirect("albright_fitness:programs")
-

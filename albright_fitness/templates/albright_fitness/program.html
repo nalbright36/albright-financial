@@ -4,11 +4,14 @@
 {% comment %}
 One program (program_views.program), read-only: the next workout with Start, Edit (the guided setup's steps),
 Pause / Resume (Planner tasks end after today, and come back on Resume when it was on the Planner), the Planner
-switch, each workout's days and exercises, and Delete. One-off sessions are scheduled from an exercise's page.
+switch, each workout's days and exercises; the "…" menu: Archive / Restore and Delete program. One-off sessions are scheduled from an exercise's page.
 {% endcomment %}
 <div class="fx-narrow">
-<div class="fx-head"><div><h1 class="fx-head__title">{{ p.name }}</h1>
-    <p class="fx-head__sub" id="fx-program-status">{% if p.is_draft %}Draft - not set up yet{% elif not p.active %}Paused{% else %}{% if p.start_date and p.start_date > today %}Starts {{ p.start_date|date:"D M j" }}{% elif p.start_date %}Since {{ p.start_date|date:"M j" }}{% else %}On{% endif %}{% endif %}{% if ends %} &middot; until {{ ends|date:"M j" }}{% elif not p.is_draft %} &middot; no end{% endif %}</p></div></div>
+<div class="fx-head fx-program-head"><div><h1 class="fx-head__title">{{ p.name }}</h1>
+    <p class="fx-head__sub" id="fx-program-status">{% if p.is_draft %}Draft - not set up yet{% elif not p.active %}Paused{% else %}{% if p.start_date and p.start_date > today %}Starts {{ p.start_date|date:"D M j" }}{% elif p.start_date %}Since {{ p.start_date|date:"M j" }}{% else %}On{% endif %}{% endif %}{% if ends %} &middot; until {{ ends|date:"M j" }}{% elif not p.is_draft %} &middot; no end{% endif %}{% if p.archived_at %} &middot; Archived{% endif %}</p></div>
+    {% include "albright_fitness/_program_menu.html" %}</div>
+{% if p.archived_at %}<div class="card fx-card fx-program-archived" id="fx-program-archived"><p>Archived - it's off your Programs list and paused. Nothing was deleted.</p>
+    <form method="post" action="{% url 'albright_fitness:program_archive' p.pk %}">{% csrf_token %}<input type="hidden" name="restore" value="1"><button type="submit" class="btn btn-secondary btn-sm">Restore</button></form></div>{% endif %}
 
 {% if p.is_draft %}
 <div class="card fx-card"><p>This program isn't on yet. Finish the three steps to start it.</p>
@@ -40,8 +43,6 @@ switch, each workout's days and exercises, and Delete. One-off sessions are sche
 
 {% if scheduled %}{% include "albright_fitness/_scheduled.html" with show_name=True %}{% endif %}
 
-<details class="fx-fold"><summary>Delete this program</summary>
-    <form method="post" action="{% url 'albright_fitness:program_delete' p.pk %}" class="fx-delete" data-confirm="Delete {{ p.name }}? Your workouts stay.">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm fx-danger">Delete {{ p.name }}</button></form>
-    <p class="fx-help">Your logged workouts and past Planner check-offs stay.</p></details>
+{% include "albright_fitness/_program_delete_dialog.html" %}
 </div>
 {% endblock %}

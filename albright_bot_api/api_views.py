@@ -419,7 +419,7 @@ GET  fitness/summary?weeks=4                          scope: fitness:read
   "target_protein"}]}.
 
 GET  fitness/programs                                 scope: fitness:read
-  The owner's programs: {"programs": [{"id", "name", "status": "active"|"paused"|"draft", "start_date", "weeks"
+  The owner's programs: {"programs": [{"id", "name", "status": "active"|"paused"|"draft", "archived", "start_date", "weeks"
   (null = no end), "planner" (wants it on the Planner), "on_planner_now", "time" ("HH:MM" or null = all day),
   "days": [{"id", "name", "weekdays" (0 = Monday), "start_url", "exercises": [{"exercise", "target", "sets",
   "reps", "minutes", "miles"}]}], "url"}]}.
@@ -435,8 +435,15 @@ POST fitness/programs                                 scope: fitness:write
 
 POST fitness/programs/<id>/pause                      scope: fitness:write
 POST fitness/programs/<id>/resume                     scope: fitness:write
-  Pause: off Today and the Planner after today (history stays; the Planner choice is kept). Resume: back on, and
-  back on the Planner when it was. Returns the program. 404 if it isn't the owner's; 409 for an unfinished draft.
+  Pause: off Today and the Planner after today (history stays; the Planner choice is kept). Resume: back on (an archived
+  one is restored too), and back on the Planner when it was. Returns the program. 404 if it isn't the owner's; 409 for an unfinished draft.
+
+DELETE fitness/programs/<id>                         scope: fitness:write
+  Deletes one of the owner's programs (404 if it isn't theirs). Logged workouts are never deleted - they keep the
+  program's and day's names ("Upper A (deleted program)"). remove_scheduled (JSON body or query string, true/false,
+  default true): true ends its upcoming Planner tasks (past and checked-off ones stay); false keeps them as ordinary
+  tasks no longer linked to the program. Returns {"deleted": id, "name", "workouts_kept", "planner_ended",
+  "planner_kept"}.
 
 ACTIVITY (the owner's notifications - what others changed in things shared with them and in their circles)
 --------------------------------------------------------------------------------------------------------------

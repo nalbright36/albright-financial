@@ -1,0 +1,12 @@
+{% comment %}
+A program's "…" menu (js/menu.js), owner only - on the program page and each row of the Programs list: Archive (or
+Restore) and Delete program. Delete opens the confirmation dialog (_program_delete_dialog.html, fitness.js); without
+JS it's a link to the confirmation page.
+{% endcomment %}
+<details class="fx-program-menu" data-menu><summary class="fx-icon-btn" aria-label="Options for {{ p.name }}" title="Options for {{ p.name }}">&hellip;</summary>
+    <div class="fx-program-menu__panel menu-panel" data-menu-panel>
+        {% if p.archived_at %}<form method="post" action="{% url 'albright_fitness:program_archive' p.pk %}">{% csrf_token %}<input type="hidden" name="restore" value="1"><button type="submit" class="menu-item" data-program-restore>Restore</button></form>
+        {% else %}<form method="post" action="{% url 'albright_fitness:program_archive' p.pk %}">{% csrf_token %}<button type="submit" class="menu-item" data-program-archive>Archive</button></form>{% endif %}
+        <a href="{% url 'albright_fitness:program_delete' p.pk %}" class="menu-item menu-item--danger" data-program-delete data-name="{{ p.name }}">Delete program</a>
+    </div>
+</details>

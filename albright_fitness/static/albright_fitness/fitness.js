@@ -21,6 +21,8 @@
  *   schedule   the Schedule form shows only the repeat fields that apply
  *   terms      the "?" next to a term (fitness_extras.term) opens its note; a tap elsewhere or Escape closes it
  *   weeks      Insights' sets-per-muscle table starts scrolled to the latest weeks
+ *   delete     a program's "Delete program" (its "…" menu) opens the confirmation dialog with that program's name
+ *              (the checkbox checked again); without JS the link opens the confirmation page
  */
 (function () {
     "use strict";
@@ -530,6 +532,36 @@
     });
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeTerm(); });
     window.addEventListener("scroll", function () { if (window.innerWidth > 600) closeTerm(); }, { passive: true });
+
+    // ---------- Delete a program: the confirmation dialog ----------
+    var confirmBox = document.getElementById("fx-program-delete");
+    if (confirmBox && confirmBox.showModal) {
+        var confirmFrom = null;
+        document.addEventListener("click", function (event) {
+            var link = event.target.closest && event.target.closest("[data-program-delete]");
+            if (!link) return;
+            event.preventDefault();
+            // Focus goes back to the menu's "…" button - found through the panel (menu.js moves an open panel out of its
+            // <details>; the button's aria-controls names it).
+            var panel = link.closest("[data-menu-panel]");
+            confirmFrom = (panel && panel.id && document.querySelector('[aria-controls="' + panel.id + '"]')) || link;
+            confirmBox.querySelector("[data-program-delete-form]").action = link.getAttribute("href");
+            confirmBox.querySelector("[data-program-delete-name]").textContent = link.getAttribute("data-name") || "this program";
+            confirmBox.querySelector("input[name=remove_scheduled]").checked = true;
+            confirmBox.showModal();
+            var cancel = confirmBox.querySelector("[data-program-delete-cancel]");
+            if (cancel) cancel.focus();                    // the safe choice first
+        });
+        confirmBox.addEventListener("click", function (event) {
+            var r = confirmBox.getBoundingClientRect();
+            var outside = event.target === confirmBox && event.clientX !== 0 &&     // the backdrop, not the dialog's own padding
+                (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom);
+            if (outside || (event.target.closest && event.target.closest("[data-program-delete-cancel]"))) confirmBox.close();
+        });
+        confirmBox.addEventListener("close", function () {
+            if (confirmFrom && document.contains(confirmFrom)) confirmFrom.focus();
+        });
+    }
 
     // ---------- Insights' weeks table: start scrolled to the latest weeks (they're on the right) ----------
     document.querySelectorAll(".fx-heat-wrap").forEach(function (box) { box.scrollLeft = box.scrollWidth; });

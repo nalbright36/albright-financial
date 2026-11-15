@@ -426,7 +426,8 @@ DAY_NAMES = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 
 def _program_json(p):
     from albright_fitness import programs as fx_programs
     status = "draft" if p.is_draft else ("active" if p.active else "paused")
-    return {"id": p.pk, "name": p.name, "status": status, "start_date": p.start_date.isoformat() if p.start_date else None,
+    return {"id": p.pk, "name": p.name, "status": status, "archived": p.archived_at is not None,
+            "start_date": p.start_date.isoformat() if p.start_date else None,
             "weeks": p.weeks, "planner": p.on_planner, "on_planner_now": bool(p.scheduled_from),
             "time": p.planner_time.strftime("%H:%M") if p.planner_time else None,
             "days": [{"id": d.pk, "name": d.name, "weekdays": d.weekdays or [], "start_url": fx_programs.start_url(d),
@@ -562,3 +563,32 @@ def program_pause(request, token, item_id):
 @bot_endpoint("fitness:write", methods=("POST",))
 def program_resume(request, token, item_id):
     return _set_program(token, item_id, True)
+
+
+def _flag(request, data, key, default):
+    """A true/false option from the JSON body or the query string ("true"/"false"/"1"/"0")."""
+    value = data.get(key, request.GET.get(key))
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.lower() in ("true", "1", "false", "0"):
+        return value.lower() in ("true", "1")
+    raise ApiError(400, f'"{key}" must be true or false.', f"rejected: bad {key}")
+
+
+@bot_endpoint("fitness:write", methods=("DELETE",))
+def program_delete(request, token, item_id):
+    """Delete one of the owner's programs. Logged workouts stay (with the program's names saved on them);
+    remove_scheduled (default true) ends its upcoming Planner tasks, false keeps them as ordinary tasks."""
+    from albright_fitness import programs as fx_programs
+    from albright_fitness.models import Program
+    p = Program.objects.filter(owner=token.owner, pk=item_id).first()
+    if p is None:
+        raise ApiError(404, "No program with that id.", "rejected: program not found")
+    remove = _flag(request, json_body(request), "remove_scheduled", True)
+    pk, name = p.pk, p.name
+    done = fx_programs.delete_program(p, remove_scheduled=remove)
+    return ({"deleted": pk, "name": name, "workouts_kept": done["workouts"], "planner_ended": done["planner_ended"],
+             "planner_kept": done["planner_kept"]}, 200,
+            f"deleted program #{pk} ({done['workouts']} workouts kept, planner {'ended' if remove else 'kept'})")

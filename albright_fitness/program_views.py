@@ -8,6 +8,8 @@
       3. Schedule  start date, how many weeks, "Add to my Planner" and an optional time - Save turns it on
     A new program is an off draft until step 3 is saved (programs.finish_setup), so it never shows on Today half-built.
   - The program page: read-only - Start the next workout, Edit (the steps), Pause / Resume, the Planner switch.
+  - A "…" menu on the page and on each row of the list: Archive (off the list - the "Archived" filter shows it, with
+    Restore) and Delete (a confirmation dialog - programs.delete_program; a confirmation page without JS).
   - The exercise type-ahead (JSON) the setup's search box uses.
 Everything is the owner's own - anyone else's program or exercise is a 404."""
 from datetime import date, datetime, timedelta
@@ -91,6 +93,8 @@ def exercise_create(request):
 # ---------------------------------------------------------------------------
 
 def _status(p):
+    if p.archived_at:
+        return "Archived"
     if p.is_draft:
         return "Draft"
     return "Paused" if not p.active else ""
@@ -108,8 +112,48 @@ def program_list(request):
             return redirect("albright_fitness:programs")
         p = Program.objects.create(owner=request.user, name=name, active=False)
         return redirect("albright_fitness:program_setup", pk=p.pk)
-    mine = list(Program.objects.filter(owner=request.user).prefetch_related("days"))
-    return render(request, "albright_fitness/programs.html", {"programs": [(p, _status(p)) for p in mine]})
+    archived = request.GET.get("show") == "archived"
+    mine = Program.objects.filter(owner=request.user).prefetch_related("days")
+    shown = list(mine.filter(archived_at__isnull=not archived))
+    return render(request, "albright_fitness/programs.html", {
+        "programs": [(p, _status(p)) for p in shown], "archived": archived,
+        "archived_count": len(shown) if archived else mine.filter(archived_at__isnull=False).count()})
+
+
+@login_required
+@require_POST
+def program_archive(request, pk):
+    """Archive (off the list, paused - nothing deleted) or, with restore=1, back on the list (still paused)."""
+    p = get_object_or_404(Program, pk=pk, owner=request.user)
+    if request.POST.get("restore") == "1":
+        programs.restore(p)
+        messages.success(request, f"Restored {p.name}." + (" It's paused - open it and tap Resume to turn it back on."
+                                                           if not p.active and not p.is_draft else ""))
+    else:
+        programs.archive(p)
+        messages.success(request, f"Archived {p.name} - it's paused and off your list. Nothing was deleted; "
+                                  "find it under Archived.")
+    return redirect("albright_fitness:programs")
+
+
+@login_required
+def program_delete(request, pk):
+    """GET: the confirmation page (what the dialog shows, for when JS is off). POST: delete it -
+    remove_scheduled=1 (the checkbox, on by default) also ends its upcoming Planner tasks."""
+    p = get_object_or_404(Program, pk=pk, owner=request.user)
+    if request.method != "POST":
+        return render(request, "albright_fitness/program_delete.html", {"p": p})
+    name, remove = p.name, request.POST.get("remove_scheduled") == "1"
+    done = programs.delete_program(p, remove_scheduled=remove)
+    kept = done["workouts"]
+    message = f"Deleted {name}." + (f" Your {kept} logged workout{'s' if kept != 1 else ''} stay{'s' if kept == 1 else ''} in History."
+                                    if kept else "")
+    if done["planner_ended"]:
+        message += " Its upcoming Planner sessions are gone; past ones stay."
+    elif done["planner_kept"]:
+        message += " Its Planner tasks stay as ordinary tasks."
+    messages.success(request, message)
+    return redirect("albright_fitness:programs")
 
 
 def _next_day(p, today):

@@ -91,6 +91,9 @@ class Program(models.Model):
     start_date = models.DateField(null=True, blank=True)
     on_planner = models.BooleanField(default=False)
     planner_time = models.TimeField(null=True, blank=True)
+    # Archived: off the Programs list (its "Archived" filter shows it, with Restore) - nothing deleted. Archiving pauses
+    # it; Restore (or Resume) brings it back.
+    archived_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -206,6 +209,10 @@ class Workout(models.Model):
     planner_item = models.ForeignKey("albright_planner.ScheduleItem", on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="+")
     planner_date = models.DateField(null=True, blank=True)
+    # Saved when its program is deleted (programs.delete_program): program_day is cleared, these keep the names so
+    # History still says "Upper A (deleted program)".
+    program_name = models.CharField(max_length=100, blank=True)
+    program_day_name = models.CharField(max_length=60, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -219,8 +226,13 @@ class Workout(models.Model):
         return f"{self.date} {self.title}"
 
     @property
+    def from_deleted_program(self):
+        return not self.program_day_id and bool(self.program_day_name)
+
+    @property
     def title(self):
-        return self.name or (self.program_day.name if self.program_day_id else "Workout")
+        base = self.name or (self.program_day.name if self.program_day_id else self.program_day_name) or "Workout"
+        return f"{base} (deleted program)" if self.from_deleted_program else base
 
     @property
     def finished(self):

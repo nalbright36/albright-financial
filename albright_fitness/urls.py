@@ -47,7 +47,8 @@ urlpatterns = [
     path("programs/<int:pk>/setup/", program_views.setup_days, name="program_setup"),
     path("programs/<int:pk>/setup/exercises/", program_views.setup_exercises, name="program_setup_exercises"),
     path("programs/<int:pk>/setup/schedule/", program_views.setup_schedule, name="program_setup_schedule"),
-    path("programs/<int:pk>/delete/", views.program_delete, name="program_delete"),
+    path("programs/<int:pk>/delete/", program_views.program_delete, name="program_delete"),
+    path("programs/<int:pk>/archive/", program_views.program_archive, name="program_archive"),
     # Food (food_views): the diary, adding food, My foods, targets - each person's own.
     path("food/", food_views.diary, name="food"),
     path("food/day/<str:day>/", food_views.diary, name="food_day"),

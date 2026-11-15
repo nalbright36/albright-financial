@@ -1,0 +1,15 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Delete {{ p.name }} · {% endblock %}
+{% block fitness %}
+{% comment %}Delete a program (program_views.program_delete) - the confirmation dialog's page, for when JS is off.{% endcomment %}
+<div class="fx-narrow">
+<form method="post" class="card fx-card fx-confirm fx-confirm--page">{% csrf_token %}
+    <h1 class="fx-confirm__title">Delete {{ p.name }}?</h1>
+    {% include "albright_fitness/_program_delete_fields.html" %}
+    <div class="fx-confirm__actions">
+        <a href="{% url 'albright_fitness:program' p.pk %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-danger">Delete</button>
+    </div>
+</form>
+</div>
+{% endblock %}

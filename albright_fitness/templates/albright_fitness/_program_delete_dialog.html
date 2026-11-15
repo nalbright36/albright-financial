@@ -1,0 +1,14 @@
+{% comment %}
+"Delete <program>?" (fitness.js fills in the name and the form's address from the "Delete program" link that opened
+it). One per page; the checkbox starts checked each time.
+{% endcomment %}
+<dialog class="fx-confirm" id="fx-program-delete" aria-labelledby="fx-program-delete-h">
+    <form method="post" action="" data-program-delete-form>{% csrf_token %}
+        <h2 class="fx-confirm__title" id="fx-program-delete-h">Delete <span data-program-delete-name></span>?</h2>
+        {% include "albright_fitness/_program_delete_fields.html" %}
+        <div class="fx-confirm__actions">
+            <button type="button" class="btn btn-secondary" data-program-delete-cancel>Cancel</button>
+            <button type="submit" class="btn btn-danger">Delete</button>
+        </div>
+    </form>
+</dialog>

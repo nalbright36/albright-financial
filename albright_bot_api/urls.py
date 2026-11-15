@@ -46,6 +46,7 @@ api_urlpatterns = [
     path("fitness/today", fitness_api.today, name="fitness_today"),
     path("fitness/summary", fitness_api.summary, name="fitness_summary"),
     path("fitness/programs", fitness_api.programs, name="fitness_programs"),
+    path("fitness/programs/<int:item_id>", fitness_api.program_delete, name="fitness_program_delete"),
     path("fitness/programs/<int:item_id>/pause", fitness_api.program_pause, name="fitness_program_pause"),
     path("fitness/programs/<int:item_id>/resume", fitness_api.program_resume, name="fitness_program_resume"),
     # Meals (albright_bot_api.meals_api) - the Recipe Bot.

@@ -121,6 +121,14 @@ def end_source_items(user, source_app, source_ids, last_day):
     return ended
 
 
+def release_source_items(user, source_app, source_ids):
+    """Its record is gone but the user keeps these items: they become the user's own tasks - repeats, checklist,
+    check-offs and all - with no link back (no source, no source page). Returns how many."""
+    from django.utils import timezone
+    return ScheduleItem.objects.filter(owner=user, source_app=source_app, source_id__in=[str(i) for i in source_ids]) \
+        .update(source_app="", source_id="", source_url="", updated_at=timezone.now())
+
+
 def source_item(user, source_app, source_id):
     """The user's (unarchived) item for one record of another app, or None."""
     return ScheduleItem.objects.filter(owner=user, source_app=source_app, source_id=str(source_id), archived=False).first()
