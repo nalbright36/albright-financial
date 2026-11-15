@@ -382,11 +382,13 @@ class NutritionProfile(models.Model):
 
 
 class CustomFood(models.Model):
-    """One of "My foods": the person's own food with macros per serving. Theirs alone."""
+    """One of "My foods": the person's own food with macros per serving. Theirs alone. Its serving ("1 container")
+    can say what it weighs (serving_grams) and/or holds (serving_ml), so any amount works (amounts.for_custom)."""
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_foods")
     name = models.CharField(max_length=100)
     serving_label = models.CharField(max_length=40, default="1 serving")
     serving_grams = models.DecimalField(null=True, blank=True, max_digits=7, decimal_places=1, validators=[MinValueValidator(0)])
+    serving_ml = models.DecimalField(null=True, blank=True, max_digits=7, decimal_places=1, validators=[MinValueValidator(0)])
     calories = models.DecimalField(**AMOUNT)   # per serving
     protein = models.DecimalField(**AMOUNT)
     carbs = models.DecimalField(**AMOUNT)
@@ -423,6 +425,10 @@ class FoodLogEntry(models.Model):
     grams = models.DecimalField(null=True, blank=True, max_digits=8, decimal_places=1)
     portion_label = models.CharField(max_length=60, blank=True)      # "1 cup" when logged by a household portion
     servings = models.DecimalField(null=True, blank=True, max_digits=6, decimal_places=2)
+    # The amount as entered (amounts.py): 0.25 of "p:1 container (170 g)", 85 of "g", 1.5 of "serving" - so it
+    # can be changed later. Empty for a quick add (just the numbers).
+    quantity = models.DecimalField(null=True, blank=True, max_digits=9, decimal_places=3)
+    unit = models.CharField(max_length=64, blank=True)
     calories = models.DecimalField(**AMOUNT)   # this entry's total
     protein = models.DecimalField(**AMOUNT)
     carbs = models.DecimalField(**AMOUNT)

@@ -192,7 +192,7 @@ def usda_food(request, fdc_id):
     if request.method == "POST":
         portion = request.POST.get("portion", "g")
         amount = _number(request.POST.get("amount"), high=MAX_GRAMS)
-        grams, label = None, ""
+        grams, label, unit = None, "", "g"
         if amount is not None and portion == "g":
             grams = nutrition.dec(amount)
         elif amount is not None and portion.isdigit() and int(portion) < len(food.portions):
@@ -200,12 +200,13 @@ def usda_food(request, fdc_id):
             grams = nutrition.dec(amount * Decimal(str(p["grams"])))
             count = f"{amount.normalize():f}"
             label = p["label"] if amount == 1 else f"{count} × {p['label']}"
+            unit = f"p:{p['label']}"[:64]
         if not grams or grams > MAX_GRAMS:
             messages.error(request, "Enter an amount - grams, or how many of a portion.")
         else:
             FoodLogEntry.objects.create(owner=request.user, date=on, slot=slot, source=FoodLogEntry.USDA, food=food,
                                         label=str(food)[:200], grams=grams, portion_label=label[:60],
-                                        **nutrition.for_grams(food, grams))
+                                        quantity=amount, unit=unit, **nutrition.for_grams(food, grams))
             messages.success(request, f"Logged {food.name} to {SLOT_KEYS[slot].lower()}.")
             return redirect(_diary_url(on, slot))
     return render(request, "albright_fitness/food_usda.html", {
@@ -221,6 +222,7 @@ def _log_recipe(user, recipe, servings, on, slot, plan_entry=None):
     count = f"{servings.normalize():f}"
     return FoodLogEntry.objects.create(owner=user, date=on, slot=slot, source=FoodLogEntry.RECIPE, recipe=recipe,
                                        plan_entry=plan_entry, label=recipe.title[:200], servings=servings,
+                                       quantity=servings, unit="serving",
                                        portion_label=f"{count} serving{'s' if servings != 1 else ''}",
                                        **nutrition.scaled(amounts, servings))
 
@@ -251,7 +253,7 @@ def log(request):
             count = f"{servings.normalize():f}"
             entry = FoodLogEntry.objects.create(
                 owner=user, date=on, slot=slot, source=FoodLogEntry.CUSTOM, custom_food=mine, label=mine.name,
-                servings=servings, portion_label=(mine.serving_label if servings == 1 else f"{count} × {mine.serving_label}")[:60],
+                servings=servings, quantity=servings, unit="serving", portion_label=(mine.serving_label if servings == 1 else f"{count} × {mine.serving_label}")[:60],
                 grams=nutrition.dec(mine.serving_grams * servings) if mine.serving_grams else None,
                 **nutrition.scaled({n: getattr(mine, n) for n in MACROS}, servings))
     elif kind == "quick":

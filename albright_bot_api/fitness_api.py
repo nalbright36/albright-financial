@@ -227,6 +227,7 @@ def food(request, token):
         count = f"{servings.normalize():f}"
         entry = FoodLogEntry.objects.create(
             owner=user, date=on, slot=slot, source=FoodLogEntry.CUSTOM, custom_food=mine, label=mine.name, servings=servings,
+            quantity=servings, unit="serving",
             portion_label=(mine.serving_label if servings == 1 else f"{count} × {mine.serving_label}")[:60],
             **nutrition.scaled({n: getattr(mine, n) for n in MACROS}, servings))
     elif any(data.get(n) not in (None, "") for n in ("calories", "protein", "carbs", "fat")):
