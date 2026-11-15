@@ -442,43 +442,7 @@ def history(request):
 # Programs
 # ---------------------------------------------------------------------------
 
-@login_required
-def program_list(request):
-    if request.method == "POST":
-        key = request.POST.get("template", "")
-        if key in programs.TEMPLATES:
-            program = programs.copy_template(request.user, key)
-            messages.success(request, f"Copied “{program.name}” - change anything, then put it on your Planner.")
-            return redirect("albright_fitness:program", pk=program.pk)
-        name = request.POST.get("name", "").strip()[:100]
-        if not name:
-            messages.error(request, "Give the program a name.")
-            return redirect("albright_fitness:programs")
-        program = Program.objects.create(owner=request.user, name=name)
-        return redirect("albright_fitness:program", pk=program.pk)
-    return render(request, "albright_fitness/programs.html", {
-        "programs": Program.objects.filter(owner=request.user).prefetch_related("days"),
-        "templates": [(key, name, weeks, days) for key, (name, weeks, days) in programs.TEMPLATES.items()],
-        "weekday_names": WEEKDAY_NAMES})
-
-
-@login_required
-def program(request, pk):
-    p = get_object_or_404(Program, pk=pk, owner=request.user)
-    if request.method == "POST":
-        _program_post(request, p)
-        return redirect(reverse("albright_fitness:program", args=[p.pk]) + request.POST.get("anchor", ""))
-    days = list(p.days.prefetch_related("exercises__exercise"))
-    from albright_planner import services
-
-    from . import log_views, schedule
-    return render(request, "albright_fitness/program.html", {
-        "p": p, "days": days, "weekday_names": list(enumerate(WEEKDAY_NAMES)),
-        "library": Exercise.objects.visible_to(request.user), "kinds": Exercise.KINDS,
-        "on_planner": [d for d in days if services.source_item(request.user, programs.SOURCE, f"day-{d.pk}")],
-        "scheduled": log_views.scheduled_for(request.user, program=p),
-        "schedule_form": schedule.ScheduleForm(initial={"date": timezone.localdate(), "repeat": "none", "interval": 2})})
-
+# The list, the guided setup and the program page are in program_views; the older program-page actions are here.
 
 def _program_post(request, p):
     action, post = request.POST.get("action"), request.POST

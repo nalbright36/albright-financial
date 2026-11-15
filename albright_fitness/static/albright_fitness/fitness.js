@@ -534,3 +534,43 @@
     // ---------- Insights' weeks table: start scrolled to the latest weeks (they're on the right) ----------
     document.querySelectorAll(".fx-heat-wrap").forEach(function (box) { box.scrollLeft = box.scrollWidth; });
 })();
+
+// ---------- Programs' guided setup: the exercise type-ahead and the Planner time ----------
+(function () {
+    "use strict";
+    var box = document.querySelector("[data-ex-search]"), list = document.querySelector("[data-ex-results]");
+    if (box && list && window.fetch) {
+        var input = box.querySelector("input[type=search]"), wait = null, kinds = list.querySelector("select[name=new_kind]");
+        var kindOptions = kinds ? kinds.innerHTML : '<option value="strength">Strength</option><option value="cardio">Cardio</option>' +
+            '<option value="bodyweight">Bodyweight</option><option value="mobility">Mobility</option>';
+        var esc = function (t) { var d = document.createElement("div"); d.textContent = t; return d.innerHTML; };
+        var run = function () {
+            var q = input.value.trim();
+            if (!q) { list.innerHTML = ""; return; }
+            fetch(box.getAttribute("data-url") + "?q=" + encodeURIComponent(q), {credentials: "same-origin"})
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (!data || input.value.trim() !== q) return;
+                    var html = data.results.map(function (e) {
+                        return '<li class="fx-row"><span class="fx-row__title">' + esc(e.name) + ' <span class="fx-muted fx-small">' +
+                            esc(e.kind_label) + (e.mine ? " &middot; mine" : "") + '</span></span><button type="submit" name="action" value="add:' +
+                            e.id + '" class="btn btn-secondary btn-sm" aria-label="Add ' + esc(e.name) + '">Add</button></li>';
+                    }).join("");
+                    if (data.create) {
+                        html += '<li class="fx-row fx-ex-create"><input type="hidden" name="new_name" value="' + esc(data.create) +
+                            '"><span class="fx-row__title">Not listed? Make “' + esc(data.create) + '”</span><label class="visually-hidden" ' +
+                            'for="fx-new-kind">Kind</label><select name="new_kind" id="fx-new-kind" class="ledger-input fx-select fx-select--sm">' +
+                            kindOptions + '</select><button type="submit" name="action" value="create" class="btn btn-secondary btn-sm">Add mine</button></li>';
+                    }
+                    list.innerHTML = html;
+                })
+                .catch(function () {});
+        };
+        input.addEventListener("input", function () { clearTimeout(wait); wait = setTimeout(run, 250); });
+    }
+    document.addEventListener("change", function (event) {
+        if (!event.target.matches || !event.target.matches("[data-planner-toggle]")) return;
+        var time = event.target.closest("form").querySelector("[data-planner-time]");
+        if (time) time.hidden = !event.target.checked;
+    });
+})();

@@ -128,6 +128,11 @@ class GuidedSetupTests(Base):
         p.refresh_from_db()
         self.assertEqual((p.active, p.weeks, p.on_planner, p.planner_time), (True, 8, True, time(6, 30)))
         self.assertEqual(ScheduleItem.objects.filter(owner=self.me, source_app="fitness").count(), 2)
+        page = self.client.get(url("program", p.pk)).content.decode()
+        self.assertIn('id="fx-program-start"', page)
+        self.assertIn("6:30 AM", page)
+        self.assertNotIn("Schedule this day", page)                        # one system on the program page
+        self.assertNotIn("Schedule this program", page)
 
     def test_step_one_needs_a_name_and_days(self):
         r = self.client.post(url("program_new"), {"name": "", "rows": "1", "name_0": "Upper", "action": "next"})
@@ -157,3 +162,26 @@ class GuidedSetupTests(Base):
         self.assertRedirects(r, url("program_setup_exercises", p.pk))
         self.assertTrue(p.is_draft)
         self.assertEqual(stats.todays(self.me), [])
+
+    def test_program_page_pause_resume_and_planner_switch(self):
+        p = programs.copy_template(self.me, "full_body")
+        self.client.post(url("program", p.pk), {"action": "planner", "on": "1"})
+        self.assertTrue(Program.objects.get(pk=p.pk).on_planner)
+        self.client.post(url("program", p.pk), {"action": "pause"})
+        p.refresh_from_db()
+        self.assertEqual((p.active, p.on_planner, p.scheduled_from), (False, True, None))
+        self.assertContains(self.client.get(url("program", p.pk)), "Resume")
+        self.client.post(url("program", p.pk), {"action": "resume"})
+        self.assertIsNotNone(Program.objects.get(pk=p.pk).scheduled_from)
+        self.client.post(url("program", p.pk), {"action": "planner", "on": "0"})
+        self.assertFalse(Program.objects.get(pk=p.pk).on_planner)
+
+    def test_list_shows_drafts_and_someone_elses_program_is_a_404(self):
+        draft = programs.copy_template(self.me, "running", active=False)
+        page = self.client.get(url("programs")).content.decode()
+        self.assertIn("Draft", page)
+        self.assertIn(url("program_setup", draft.pk), page)
+        theirs = programs.copy_template(self.friend, "running")
+        for name in ("program", "program_setup", "program_setup_exercises", "program_setup_schedule"):
+            self.assertEqual(self.client.get(url(name, theirs.pk)).status_code, 404, name)
+        self.assertEqual(self.client.post(url("program", theirs.pk), {"action": "pause"}).status_code, 404)

@@ -40,10 +40,10 @@ urlpatterns = [
     path("sets/<int:pk>/delete/", views.delete_set, name="delete_set"),
     path("history/", views.history, name="history"),
     # Programs (program_views): the list, the guided 3-step setup (also how one is edited), templates, the program page.
-    path("programs/", views.program_list, name="programs"),
+    path("programs/", program_views.program_list, name="programs"),
     path("programs/new/", program_views.program_new, name="program_new"),
     path("programs/templates/", program_views.program_templates, name="program_templates"),
-    path("programs/<int:pk>/", views.program, name="program"),
+    path("programs/<int:pk>/", program_views.program, name="program"),
     path("programs/<int:pk>/setup/", program_views.setup_days, name="program_setup"),
     path("programs/<int:pk>/setup/exercises/", program_views.setup_exercises, name="program_setup_exercises"),
     path("programs/<int:pk>/setup/schedule/", program_views.setup_schedule, name="program_setup_schedule"),

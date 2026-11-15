@@ -29,12 +29,11 @@ class GlossaryTests(Base):
         programs.finish(w)
         self.assertNotIn('id="fx-guide"', self.client.get(url("workout", w.pk)).content.decode())
 
-    def test_program_add_row_spells_out_minutes_and_miles(self):
-        p = programs.copy_template(self.me, "full_body")
-        page = self.client.get(url("program", p.pk)).content.decode()
+    def test_program_setup_spells_out_minutes_and_miles(self):
+        p = programs.copy_template(self.me, "running")
+        page = self.client.get(url("program_setup_exercises", p.pk)).content.decode()
         self.assertIn("<span>Minutes</span>", page)
         self.assertIn("<span>Miles</span>", page)
-        self.assertIn("its days show on your Today page", page)
 
 
 class UnitsInOnePlaceTests(Base):
