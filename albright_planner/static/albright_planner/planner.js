@@ -381,7 +381,7 @@
         }).catch(function () { undo("Offline – not saved."); });
     });
     document.addEventListener("click", function (event) {                            // a menu closes on a click outside it
-        document.querySelectorAll(".pl-menu[open]").forEach(function (menu) {
+        document.querySelectorAll(".pl-menu[open]:not([data-menu])").forEach(function (menu) {   // data-menu ones: js/menu.js
             if (!menu.contains(event.target)) menu.open = false;
         });
     });

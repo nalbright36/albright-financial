@@ -25,10 +25,20 @@
 
     function summaryOf(details) { return details.querySelector(":scope > summary"); }
     function panelOf(details) { return details._menuPanel || details.querySelector(":scope > [data-menu-panel]"); }
-    function visible(el) { return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }
+    // Inside a closed <details> in the panel (the Planner's "Move…" form) - not an option, though browsers still give
+    // it a size there; its own summary is one.
+    function inClosedDetails(el, panel) {
+        for (var d = el.parentElement && el.parentElement.closest("details"); d && panel.contains(d);
+             d = d.parentElement && d.parentElement.closest("details")) {
+            if (!d.open && !(el.tagName === "SUMMARY" && el.parentElement === d)) return true;
+        }
+        return false;
+    }
     function options(panel) {
         return Array.prototype.filter.call(
-            panel.querySelectorAll("button:not([disabled]), a[href], summary, [role='menuitem']"), visible);
+            panel.querySelectorAll("button:not([disabled]), a[href], summary, [role='menuitem']"), function (el) {
+                return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) && !inClosedDetails(el, panel);
+            });
     }
     function isPlainMenu(panel) {
         return !panel.querySelector("input:not([type='hidden']), select, textarea");

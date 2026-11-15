@@ -18,13 +18,14 @@ removing people, making someone an owner, and deleting it. Nobody here ever sees
             <span class="circles-row__main"><strong>{{ row.name }}</strong>{% if row.m.user == request.user %} <span class="circles-muted">(you)</span>{% endif %}
                 <span class="circles-muted">{% if row.m.role == "owner" %}Owner{% else %}Member{% endif %} &middot; {% for a in row.apps %}{{ a.label }}{% if not forloop.last %}, {% endif %}{% empty %}no apps joined{% endfor %}</span></span>
             {% if owner and row.m.user != request.user %}
-            <details class="circles-menu"><summary class="btn btn-secondary btn-sm" aria-label="Manage {{ row.name }}">&hellip;</summary>
-                <div class="circles-menu__panel">
+            {# The member's options: a "…" menu (js/menu.js - floats above every card, kept on screen, keyboard and ARIA). #}
+            <details class="circles-menu" data-menu><summary class="btn btn-secondary btn-sm" aria-label="Options for {{ row.name }}" title="Options for {{ row.name }}">&hellip;</summary>
+                <div class="circles-menu__panel menu-panel" data-menu-panel>
                     {% if row.m.role != "owner" %}
-                    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make_owner"><input type="hidden" name="user" value="{{ row.m.user_id }}"><input type="hidden" name="keep" value="1"><button type="submit" class="btn btn-secondary btn-sm">Make an owner too</button></form>
-                    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make_owner"><input type="hidden" name="user" value="{{ row.m.user_id }}"><button type="submit" class="btn btn-secondary btn-sm">Hand over ownership</button></form>
+                    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make_owner"><input type="hidden" name="user" value="{{ row.m.user_id }}"><input type="hidden" name="keep" value="1"><button type="submit" class="menu-item">Make an owner too</button></form>
+                    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make_owner"><input type="hidden" name="user" value="{{ row.m.user_id }}"><button type="submit" class="menu-item">Hand over ownership</button></form>
                     {% endif %}
-                    <form method="post" data-confirm="Remove {{ row.name }} from {{ circle.name }}? They stop seeing what it shares at once. Their own data is untouched.">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ row.m.user_id }}"><button type="submit" class="btn btn-secondary btn-sm">Remove</button></form>
+                    <form method="post" data-confirm="Remove {{ row.name }} from {{ circle.name }}? They stop seeing what it shares at once. Their own data is untouched.">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ row.m.user_id }}"><button type="submit" class="menu-item menu-item--danger">Remove from circle</button></form>
                 </div>
             </details>
             {% endif %}

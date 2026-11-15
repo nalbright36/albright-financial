@@ -37,9 +37,9 @@ or removes it. Every action is a plain form, so it all works without JS.
                     <span class="meals-meal__slot">{{ slot_label }}</span>
                     <a class="meals-meal__title" href="{% if entry.recipe_id %}{% url 'albright_meals:recipe' entry.recipe_id %}{% else %}{% url 'albright_meals:plan_entry' entry.pk %}{% endif %}">{{ entry.display_title }}</a>
                     <span class="meals-meal__meta">{% if entry.status != "planned" %}<span class="badge {% if entry.status == 'cooked' %}gain{% else %}neutral{% endif %}">{{ entry.get_status_display }}</span>{% endif %}{% if entry.from_bot %} <span class="meals-by">Recipe Bot</span>{% endif %}</span>
-                    <details class="meals-actions">
+                    <details class="meals-actions" data-menu>
                         <summary class="meals-actions__toggle" aria-label="Actions for {{ entry.display_title }}">&hellip;</summary>
-                        <div class="meals-actions__panel">
+                        <div class="meals-actions__panel" data-menu-panel>
                             <div class="meals-actions__row">
                                 {% for value, label in entry.STATUSES %}{% if value != entry.status %}
                                 <form method="post" action="{% url 'albright_meals:plan_status' entry.pk %}">{% csrf_token %}<input type="hidden" name="status" value="{{ value }}">
