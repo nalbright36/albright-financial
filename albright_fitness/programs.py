@@ -7,7 +7,10 @@ Planner link - only through the Planner's service helpers (albright_planner.serv
     checklist, ending after the program's weeks (no weeks given: OPEN_WEEKS - schedule it again to go on).
   - Finishing a workout started from one of those tasks checks off that occurrence.
   - Turning a program off (or "Remove from Planner") ends its tasks after today: past ones and their check-offs
-    stay.
+    stay. Pausing remembers the Planner choice (Program.on_planner), so Resume puts the tasks back.
+
+The guided setup (program_views) makes a program as an off draft and finish_setup() turns it on with its start
+date, length, Planner choice and optional time - so a half-built program never shows on Today.
 """
 from datetime import timedelta
 
@@ -67,11 +70,11 @@ TEMPLATES = {
 
 
 @transaction.atomic
-def copy_template(user, key):
-    """The template as the user's own Program (on, not yet on the Planner)."""
+def copy_template(user, key, active=True):
+    """The template as the user's own Program (on, not yet on the Planner) - or, for the guided setup, an off draft."""
     name, weeks, days = TEMPLATES[key]
     builtin = {e.name: e for e in Exercise.objects.filter(owner__isnull=True)}
-    program = Program.objects.create(owner=user, name=name, weeks=weeks, template=key, active=True)
+    program = Program.objects.create(owner=user, name=name, weeks=weeks, template=key, active=active)
     for n, (day_name, weekdays, rows) in enumerate(days):
         day = ProgramDay.objects.create(program=program, order=n, name=day_name, weekdays=weekdays)
         ProgramExercise.objects.bulk_create([
@@ -197,9 +200,11 @@ def _record_finish(workout, records):
 
 @transaction.atomic
 def schedule(program, start=None):
-    """Put the program on the owner's Planner (or bring its tasks up to date). Returns how many days were placed."""
+    """Put the program on the owner's Planner (or bring its tasks up to date) - from its start date (today if that's
+    passed), at its time. Returns how many days were placed."""
     from albright_planner import services
-    start = start or timezone.localdate()
+    today = timezone.localdate()
+    start = start or (max(today, program.start_date) if program.start_date else today)
     weeks = program.weeks or OPEN_WEEKS
     until = start + timedelta(weeks=weeks) - timedelta(days=1)
     placed, keep = 0, []
@@ -208,7 +213,7 @@ def schedule(program, start=None):
             continue
         item, _created = services.upsert_weekly_source_item(
             program.owner, SOURCE, f"day-{day.pk}", f"{day.name} ({program.name})" if program.days.count() > 1 else day.name,
-            start, day.weekdays, until=until, checklist=day_checklist(day), url=start_url(day))
+            start, day.weekdays, until=until, checklist=day_checklist(day), url=start_url(day), start_time=program.planner_time)
         if item is not None:
             placed += 1
             keep.append(f"day-{day.pk}")
@@ -216,24 +221,98 @@ def schedule(program, start=None):
     if stale:
         services.end_source_items(program.owner, SOURCE, stale, start - timedelta(days=1))
     program.scheduled_from = program.scheduled_from or start
-    program.save(update_fields=["scheduled_from"])
+    program.on_planner = True
+    program.save(update_fields=["scheduled_from", "on_planner"])
     return placed
 
 
-def unschedule(program, last_day=None):
-    """Its Planner tasks end after `last_day` (today by default); history stays."""
+def unschedule(program, last_day=None, forget=True):
+    """Its Planner tasks end after `last_day` (today by default); history stays. forget=False (pausing) keeps the
+    Planner choice for Resume."""
     from albright_planner import services
     last_day = last_day or timezone.localdate()
     ended = services.end_source_items(program.owner, SOURCE, [f"day-{pk}" for pk in program.days.values_list("pk", flat=True)],
                                       last_day)
     program.scheduled_from = None
-    program.save(update_fields=["scheduled_from"])
+    if forget:
+        program.on_planner = False
+    program.save(update_fields=["scheduled_from", "on_planner"])
     return ended
 
 
 def set_active(program, active):
-    """Turning a program off ends its Planner tasks (keeps history)."""
+    """Pause / resume. Pausing ends its Planner tasks after today (keeps history and the Planner choice); resuming
+    puts them back when it was on the Planner."""
     program.active = active
-    program.save(update_fields=["active"])
+    program.start_date = program.start_date or timezone.localtime(program.created_at).date()   # never a "draft" again
+    program.save(update_fields=["active", "start_date"])
     if not active and program.scheduled_from:
+        unschedule(program, forget=False)
+    elif active and program.on_planner and any(d.weekdays for d in program.days.all()):
+        schedule(program)
+
+
+@transaction.atomic
+def finish_setup(program, start_date, weeks=None, on_planner=False, planner_time=None):
+    """The guided setup's last step: on, from start_date, for `weeks` (None: no end), on the Planner or not, at a
+    time or all day. Returns how many days were put on the Planner."""
+    program.start_date, program.weeks, program.planner_time, program.active = start_date, weeks, planner_time, True
+    program.save(update_fields=["start_date", "weeks", "planner_time", "active"])
+    if on_planner:
+        return schedule(program, start=max(timezone.localdate(), start_date))
+    if program.scheduled_from:
         unschedule(program)
+    elif program.on_planner:
+        program.on_planner = False
+        program.save(update_fields=["on_planner"])
+    return 0
+
+
+def set_planner(program, on):
+    """The program page's Planner switch. Off ends the tasks after today; on (while it's on) puts them back."""
+    if not on:
+        if program.scheduled_from:
+            return unschedule(program)
+        program.on_planner = False
+        program.save(update_fields=["on_planner"])
+        return 0
+    if not program.active:
+        program.on_planner = True
+        program.save(update_fields=["on_planner"])
+        return 0
+    return schedule(program)
+
+
+# ---------------------------------------------------------------------------
+# Editing a day's exercises (the guided setup's step 2)
+# ---------------------------------------------------------------------------
+
+DEFAULTS = {Exercise.CARDIO: {"target_sets": 1, "target_seconds": 20 * 60}, Exercise.MOBILITY: {"target_sets": 2, "target_seconds": 30}}
+
+
+def add_exercise(day, exercise):
+    """Added at the end with a sensible target: 3 × 10, cardio 20 min, mobility 2 × 30 s."""
+    target = DEFAULTS.get(exercise.kind, {"target_sets": 3, "target_reps": 10})
+    return ProgramExercise.objects.create(day=day, exercise=exercise, order=day.exercises.count(), **target)
+
+
+def set_target(pe, sets=None, reps=None, minutes=None, miles=None):
+    """New target for one exercise: sets (1-20), reps (1-100), minutes or miles - None leaves a field empty."""
+    pe.target_sets = min(max(int(sets), 1), 20) if sets else pe.target_sets
+    pe.target_reps = min(int(reps), 100) if reps else None
+    pe.target_seconds = int(minutes * 60) if minutes else None
+    pe.target_distance = miles if miles else None
+    pe.save(update_fields=["target_sets", "target_reps", "target_seconds", "target_distance"])
+
+
+def move_exercise(pe, step):
+    """Up (-1) or down (+1) one place in its day; orders are renumbered 0..n."""
+    rows = list(pe.day.exercises.all())
+    i = next(n for n, r in enumerate(rows) if r.pk == pe.pk)
+    j = i + step
+    if 0 <= j < len(rows):
+        rows[i], rows[j] = rows[j], rows[i]
+    for n, r in enumerate(rows):
+        if r.order != n:
+            r.order = n
+            r.save(update_fields=["order"])

@@ -63,10 +63,12 @@ def archive_source_items(user, source_app):
 # ---------------------------------------------------------------------------
 
 @transaction.atomic
-def upsert_weekly_source_item(user, source_app, source_id, title, start, weekdays, until=None, checklist=(), url=""):
+def upsert_weekly_source_item(user, source_app, source_id, title, start, weekdays, until=None, checklist=(), url="",
+                              start_time=None):
     """Create, or update in place, a private repeating task for one record of another app: every week on
     `weekdays` (0 = Monday) from the first of them on or after `start`, until `until` (None: no end), with
-    `checklist` as its subtasks. Returns (item, created) - (None, False) if the user deleted it (permanent)."""
+    `checklist` as its subtasks, at `start_time` (None: all day). Returns (item, created) - (None, False) if the
+    user deleted it (permanent)."""
     from . import checklist as checklists
     from .recurrence import WEEKDAYS
     days = sorted({int(d) for d in weekdays if 0 <= int(d) <= 6})
@@ -75,7 +77,7 @@ def upsert_weekly_source_item(user, source_app, source_id, title, start, weekday
     first = start
     while first.weekday() not in days:
         first += timedelta(days=1)
-    fields = {"title": (title or "").strip()[:SOURCE_TITLE_MAX] or "Untitled", "date": first, "start_time": None,
+    fields = {"title": (title or "").strip()[:SOURCE_TITLE_MAX] or "Untitled", "date": first, "start_time": start_time,
               "end_time": None, "recurrence": "FREQ=WEEKLY;BYDAY=" + ",".join(WEEKDAYS[d] for d in days),
               "recurrence_until": until, "recurrence_count": None, "checkable": True, "kind": ScheduleItem.TASK,
               "source_url": (url or "")[:1000], "archived": False}

@@ -1,7 +1,8 @@
 """The dashboard's numbers: today's planned workout, this week done vs planned, weekly volume by muscle group,
 the streak, and one exercise's history for its chart.
 
-Planned = the active programs' days on their weekdays (from the week the program was made). A week counts toward
+Planned = the active programs' days on their weekdays (from the week the program starts - start_date, else the
+week it was made). A week counts toward
 the streak when every planned workout that week was done (as many finished workouts as planned ones); the
 current week counts once it's complete, and doesn't break the streak while it's still under way.
 """
@@ -29,7 +30,8 @@ def active_days(user):
 def todays(user, today=None):
     """[(program day, finished workout or None)] planned for today."""
     today = today or timezone.localdate()
-    days = [d for d in active_days(user) if today.weekday() in (d.weekdays or [])]
+    days = [d for d in active_days(user) if today.weekday() in (d.weekdays or [])
+            and (d.program.start_date is None or d.program.start_date <= today)]
     done = {w.program_day_id: w for w in Workout.objects.filter(owner=user, date=today, finished_at__isnull=False,
                                                                    program_day__in=days)}
     return [(d, done.get(d.pk)) for d in days]
@@ -49,7 +51,8 @@ def status_line(user):
 def planned_in_week(user, monday, days=None):
     days = active_days(user) if days is None else days
     sunday = monday + timedelta(days=6)
-    return sum(len(d.weekdays or []) for d in days if timezone.localtime(d.program.created_at).date() <= sunday)
+    return sum(len(d.weekdays or []) for d in days
+               if (d.program.start_date or timezone.localtime(d.program.created_at).date()) <= sunday)
 
 
 def done_in_week(user, monday):

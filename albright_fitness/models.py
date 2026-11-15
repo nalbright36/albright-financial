@@ -85,6 +85,12 @@ class Program(models.Model):
     # Set while it's on the Planner ("Schedule this program") - the first day it was scheduled from.
     scheduled_from = models.DateField(null=True, blank=True)
     template = models.CharField(max_length=40, blank=True)          # the built-in template it was copied from
+    # The guided setup (program_views): a new program stays off - a draft, start_date empty - until its last step is
+    # saved. start_date: the first day it counts (Today, the week, the streak, the Planner). on_planner: the owner
+    # wants it on the Planner - kept while it's paused, so Resume puts the tasks back. planner_time: empty = all day.
+    start_date = models.DateField(null=True, blank=True)
+    on_planner = models.BooleanField(default=False)
+    planner_time = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -92,6 +98,11 @@ class Program(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_draft(self):
+        """Made with the guided setup and not finished yet."""
+        return not self.active and self.start_date is None
 
 
 class ProgramDay(models.Model):
