@@ -29,7 +29,7 @@ class OpportunitiesNavTests(TestCase):
 
     def nav_links(self, url):
         content = self.client.get(url).content.decode()
-        links = content.split('class="navbar__links"')[1].split("</div>")[0]
+        links = content.split('class="navbar__links"')[1].split('id="navbar-menu-extra"')[0].split("</div>")[0]   # not the phone-only theme/account links
         return re.findall(r'<a href="([^"]*)"[^>]*>([^<]+)</a>', links)
 
     def test_opportunities_button_in_every_app_links_directly_to_the_inbox(self, _outlook):
@@ -96,7 +96,7 @@ class OpportunitiesNavTests(TestCase):
 
     def test_brand_titles_and_theme(self, _outlook):
         content = self.client.get(reverse("albright_crypto_app:pipeline")).content.decode()
-        self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)      # the logo goes to the app picker
+        self.assertIn('<a href="/?picker=1" class="navbar__brand"', content)      # the logo goes to the app picker
         self.assertIn('<body data-app="opportunities">', content)
         self.assertIn("<title>Pipeline · Albright Opportunities</title>", content)
         for name, title in (("inbox", "Inbox"), ("hidden", "Hidden"), ("earnings", "Earnings"),

@@ -87,15 +87,15 @@ class HeaderTests(TestCase):
 
     def test_logo_mark_and_name(self, _outlook):
         content = self.page("albright_planner:day")
-        brand = content.split('class="navbar__brand">', 1)[1].split("</a>", 1)[0]
+        brand = content.split('class="navbar__brand" aria-label="Albright - Planner">', 1)[1].split("</a>", 1)[0]
         # The logo, then the app chip: the launcher's icon for the app and its name.
         self.assertTrue(brand.startswith('<img src="/static/icons/logo-mark-white.png" alt="Albright" width="121" height="60" '
                                          'class="navbar__logo navbar__logo--on-dark"><img src="/static/icons/logo-mark-dark.png" '
                                          'alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light">'
-                                         '<span class="navbar__chip"><svg '), brand)
+                                         '<span class="navbar__chip" title="Planner"><svg '), brand)
         self.assertIn('<rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/>', brand)     # the Planner icon
         self.assertTrue(brand.endswith('<span class="navbar__chip-name">Planner</span></span>'), brand)
-        self.assertIn('<a href="/?picker=1" class="navbar__brand">', content)
+        self.assertIn('<a href="/?picker=1" class="navbar__brand"', content)
         css = STYLE.read_text(encoding="utf-8")
         logo = css.split("\n.navbar__logo {", 1)[1].split("}", 1)[0]
         for rule in ("height: 36px;", "width: auto;", "flex-shrink: 0;"):
@@ -112,7 +112,7 @@ class HeaderTests(TestCase):
                      "padding: 4px 11px 4px 9px;", "gap: 6px;", "font-size: 13px;", "font-weight: 600;"):
             self.assertIn(rule, chip)
         self.assertIn(".navbar__chip svg { width: 16px; height: 16px; flex-shrink: 0; }", css)
-        self.assertIn("@media (max-width: 359px) {", css)                           # icon only on very narrow phones
+        self.assertIn(".navbar__chip { justify-content: center; gap: 0; width: 34px; height: 28px; padding: 0; }", css)   # icon only on phones (under 640px)
         self.assertIn('<span class="navbar__chip-name">Labs</span>', self.page("labs:hub"))
 
     def test_login_page_defaults_to_trading(self, _outlook):
@@ -120,7 +120,7 @@ class HeaderTests(TestCase):
         content = self.page("user_login")
         self.assertIn('<body data-app="trading">', content)
         self.assertIn('<span class="navbar__app-name">Trading</span></a>', content)
-        self.assertIn('<a href="/" class="navbar__brand">', content)              # signed out: plain Home
+        self.assertIn('<a href="/" class="navbar__brand"', content)              # signed out: plain Home
 
     def test_switch_buttons_all_three_current_highlighted(self, _outlook):
         for app, (url_name, _brand) in self.PAGES.items():

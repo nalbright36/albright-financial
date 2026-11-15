@@ -232,7 +232,7 @@ class HomeLinksTests(Base):
             with self.subTest(url=url):
                 self.assertEqual(launcher_links(self.page(url))["Home"], PICKER)
         picker = self.page()
-        self.assertIn(f'<a href="{PICKER}" class="navbar__brand">', picker)
+        self.assertIn(f'<a href="{PICKER}" class="navbar__brand"', picker)
         self.assertIn(f'<a href="{PICKER}">Home</a>', picker)
 
 
