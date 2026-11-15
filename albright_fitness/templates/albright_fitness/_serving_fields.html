@@ -1,0 +1,10 @@
+{# What one serving is, for My foods and "Enter it yourself": "1 container" = 170 g (and/or 150 ml) - so any amount works later. #}
+<fieldset class="fx-serving"><legend class="fx-label">One serving is</legend>
+    <div class="fx-serving__row">
+        <label class="fx-setup-field"><span class="visually-hidden">Serving</span><input type="text" name="serving_label" class="ledger-input" maxlength="40" placeholder="1 container" value="{{ post.serving_label|default:'' }}"></label>
+        <span aria-hidden="true">=</span>
+        <label class="fx-setup-field"><span class="visually-hidden">Grams (optional)</span><input type="text" name="serving_grams" class="ledger-input" inputmode="decimal" placeholder="170" value="{{ post.serving_grams|default:'' }}"></label><span>g</span>
+    </div>
+    <label class="fx-setup-field fx-serving__ml"><span class="fx-small fx-muted">or holds (ml, optional)</span><input type="text" name="serving_ml" class="ledger-input" inputmode="decimal" placeholder="250" value="{{ post.serving_ml|default:'' }}"></label>
+    <p class="fx-help">Add the weight (or volume) and you can log any amount later - ¼ container, 50 g, 3 oz.</p>
+</fieldset>

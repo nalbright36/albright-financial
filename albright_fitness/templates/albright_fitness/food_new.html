@@ -1,0 +1,25 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Enter a food · {% endblock %}
+{% block fitness %}
+{% comment %}"Not here? Enter it yourself" (food_find_views.new_food): name, what one serving is, its numbers, how much I had - saved to My foods and logged in one save (or just logged).{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">Enter it yourself</h1><p class="fx-head__sub">From the label - for one serving.</p></div></div>
+<form method="post" class="card fx-card fx-form" id="fx-food-new-form">{% csrf_token %}<input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}">
+    {% if errors %}<div class="fx-errors" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+    <label class="fx-setup-field"><span class="fx-label">Name</span><input type="text" name="name" class="ledger-input" maxlength="100" required value="{{ name }}" placeholder="Chobani vanilla"></label>
+    {% include "albright_fitness/_serving_fields.html" %}
+    <div class="fx-macro-inputs">
+        <label class="fx-setup-field"><span class="fx-label">Calories</span><input type="text" name="calories" class="ledger-input" inputmode="decimal" required value="{{ post.calories|default:'' }}"></label>
+        <label class="fx-setup-field"><span class="fx-label">Protein (g)</span><input type="text" name="protein" class="ledger-input" inputmode="decimal" value="{{ post.protein|default:'' }}"></label>
+        <label class="fx-setup-field"><span class="fx-label">Carbs (g)</span><input type="text" name="carbs" class="ledger-input" inputmode="decimal" value="{{ post.carbs|default:'' }}"></label>
+        <label class="fx-setup-field"><span class="fx-label">Fat (g)</span><input type="text" name="fat" class="ledger-input" inputmode="decimal" value="{{ post.fat|default:'' }}"></label>
+        <label class="fx-setup-field"><span class="fx-label">Fiber (g, optional)</span><input type="text" name="fiber" class="ledger-input" inputmode="decimal" value="{{ post.fiber|default:'' }}"></label>
+    </div>
+    <label class="fx-setup-field"><span class="fx-label">How many servings did you have?</span><input type="text" name="quantity" class="ledger-input" inputmode="decimal" value="{{ post.quantity|default:'1' }}" aria-describedby="fx-new-qty-help"></label>
+    <p class="fx-help" id="fx-new-qty-help">1, 1.5, .3 or 1/4.</p>
+    <fieldset class="fx-chips"><legend class="fx-label">Meal</legend>{% for key, label in slots %}<label class="fx-chip"><input type="radio" name="slot" value="{{ key }}"{% if key == slot %} checked{% endif %}> {{ label }}</label>{% endfor %}</fieldset>
+    <label class="fx-check"><input type="checkbox" name="save" value="1"{% if not post or post.save %} checked{% endif %}> Save to My foods for next time</label>
+    <div class="fx-setup__bar"><a href="{% url 'albright_fitness:food_find' %}?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}" class="btn btn-secondary">Back</a><button type="submit" class="btn btn-primary">Add</button></div>
+</form>
+</div>
+{% endblock %}

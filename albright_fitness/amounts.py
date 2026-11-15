@@ -214,6 +214,8 @@ def apply(entry, basis, quantity, key):
         entry.quantity, entry.unit = quantity, worked["unit"].key
     entry.grams = worked["grams"] if worked["grams"] else (None if basis.kind != "entry" else entry.grams)
     entry.servings = worked["servings"]
-    entry.portion_label = worked["portion_label"] if basis.kind != "entry" else (
-        worked["unit"].describe(quantity) if worked["unit"].key != "entry" else entry.portion_label)
+    if basis.kind != "entry" or worked["unit"].key != "entry":
+        entry.portion_label = worked["portion_label"]
+    elif Decimal(quantity) != 1:                              # "½ × 1 cup" of what was logged as "1 cup"
+        entry.portion_label = f"{show_quantity(quantity)} × {entry.portion_label or 'serving'}"[:60]
     return True

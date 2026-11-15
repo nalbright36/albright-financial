@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import body_views, challenge_views, food_views, log_views, program_views, views
+from . import body_views, challenge_views, food_find_views, food_views, log_views, program_views, views
 
 app_name = "albright_fitness"
 
@@ -51,6 +51,11 @@ urlpatterns = [
     # Food (food_views): the diary, adding food, My foods, targets - each person's own.
     path("food/", food_views.diary, name="food"),
     path("food/day/<str:day>/", food_views.diary, name="food_day"),
+    path("food/find/", food_find_views.find, name="food_find"),
+    path("food/pick/<str:kind>/<int:pk>/", food_find_views.pick, name="food_pick"),
+    path("food/new/", food_find_views.new_food, name="food_new"),
+    path("food/undo/", food_find_views.undo, name="food_undo"),
+    path("food/entries/<int:pk>/", food_find_views.edit_entry, name="food_edit"),
     path("food/add/", food_views.add, name="food_add"),
     path("food/usda/<int:fdc_id>/", food_views.usda_food, name="food_usda"),
     path("food/log/", food_views.log, name="food_log"),

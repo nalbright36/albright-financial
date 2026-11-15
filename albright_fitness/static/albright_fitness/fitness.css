@@ -448,3 +448,34 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 .fx-fold > summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-secondary); }
 @media (max-width: 420px) { .fx-setup__grid { grid-template-columns: 1fr; } .fx-weekday span { width: 36px; height: 36px; } }
 .fx-setup-field[hidden] { display: none; }
+
+/* ---------- Food: one search box, the amount panel, Undo (food_find_views) ---------- */
+.fx-find .fx-chips { margin: 8px 0 0; }
+.fx-find--diary .fx-card__title { display: block; }
+.fx-find__group .fx-list { margin: 0; padding: 0; list-style: none; }
+.fx-find__more { text-align: center; }
+.fx-find__more .btn { width: 100%; }
+.fx-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 var(--space-3); padding: 10px 12px;
+  border-radius: var(--radius-sm); background: var(--accent-soft); font-size: var(--text-sm); }
+.fx-amount__title { margin: 0 0 12px; font-size: var(--text-lg, 1.125rem); padding-right: 40px; }
+.fx-amount__row { display: grid; grid-template-columns: 6.5rem 1fr; gap: 10px; }
+.fx-amount__qty, .fx-amount__unit { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fx-amount__qty .ledger-input { font-size: 1.25rem; text-align: center; }
+.fx-amount__unit .fx-select { width: 100%; flex: none; height: 48px; }
+.fx-amount__chips { display: flex; gap: 6px; margin: 4px 0 12px; }
+.fx-amount__chips .fx-chip { min-height: 32px; background: var(--surface); cursor: pointer; font: inherit; }
+.fx-amount__live { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 12px; padding: 10px; border-radius: var(--radius-sm);
+  background: var(--surface-hover); text-align: center; }
+.fx-amount__live dt { font-size: var(--text-xs); color: var(--text-secondary); }
+.fx-amount__live dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-amount__meal .fx-chip input { margin: 0; }
+.fx-amount__quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 8px; }
+.fx-amount .fx-setup__bar { margin-top: 12px; }
+.fx-food-row__edit { color: inherit; text-decoration: none; }
+.fx-food-row__edit:hover { text-decoration: underline; }
+.fx-serving { margin: 0 0 12px; padding: 0; border: 0; }
+.fx-serving__row { display: flex; align-items: center; gap: 8px; }
+.fx-serving__row .fx-setup-field { margin: 0; }
+.fx-serving__row .fx-setup-field:first-child { flex: 1; }
+.fx-serving__row .fx-setup-field:nth-child(3) { width: 5.5rem; }
+.fx-serving__ml { max-width: 12rem; margin-top: 8px; }

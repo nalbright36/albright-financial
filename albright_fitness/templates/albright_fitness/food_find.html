@@ -1,0 +1,20 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Add food · {% endblock %}
+{% block fitness %}
+{% comment %}"What did you eat?" (food_find_views.find): one box over Recent, My foods, recipes and all foods (USDA). Tap a food for the amount panel (the bottom sheet; its own page without JS). Results update as you type (fitness.js).{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">What did you eat?</h1><p class="fx-head__sub">{{ on|date:"l, M j" }}</p></div></div>
+<form method="get" class="card fx-card fx-find" role="search" data-food-find data-url="{% url 'albright_fitness:food_find' %}">
+    <input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}">
+    <label class="visually-hidden" for="fx-food-q">Search foods</label>
+    <div class="fx-search"><input type="search" name="q" id="fx-food-q" value="{{ q }}" class="ledger-input" placeholder="Search - e.g. greek yogurt" autocomplete="off" autofocus>
+        <button type="submit" class="btn btn-secondary btn-sm">Search</button></div>
+    <fieldset class="fx-chips"><legend class="visually-hidden">Meal</legend>{% for key, name in slots %}<label class="fx-chip"><input type="radio" name="slot" value="{{ key }}"{% if key == slot %} checked{% endif %} data-find-slot> {{ name }}</label>{% endfor %}</fieldset>
+</form>
+<div data-find-results aria-live="polite">{% include "albright_fitness/_food_results.html" %}</div>
+<div class="card fx-card fx-find__more">
+    <a href="{% url 'albright_fitness:food_new' %}?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}&amp;q={{ q|urlencode }}" class="btn btn-secondary" id="fx-food-new" data-find-carry>Not here? Enter it yourself</a>
+    <p class="fx-help"><a href="{% url 'albright_fitness:food_add' %}?tab=quick&amp;date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}" data-find-carry>Just calories &amp; protein</a> &middot; <a href="{% url 'albright_fitness:food_day' on|date:'Y-m-d' %}">Back to the diary</a></p>
+</div>
+</div>
+{% endblock %}

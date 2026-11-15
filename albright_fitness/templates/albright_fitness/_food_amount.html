@@ -1,0 +1,30 @@
+{% comment %}
+The amount panel (food_find_views.pick / edit_entry) - in the bottom sheet, or on its own page without JS. Any
+quantity (1, 1.5, .3, 1/4, 1 1/2) of any unit the food has; the numbers update as you type (fitness.js, from the
+per-unit numbers in data-menu); the server works them out again on save. A quick add (just numbers) edits its numbers.
+{% endcomment %}
+<form method="post" action="{{ action }}" class="fx-amount" data-amount-panel>{% csrf_token %}
+    <input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}">
+    <h2 class="fx-amount__title">{{ label }}</h2>
+    {% if error %}<p class="fx-errors" role="alert">{{ error }}</p>{% endif %}
+    {% if quick %}
+    <div class="fx-amount__quick">{% for n, name, value in macros %}<label class="fx-setup-field"><span class="fx-label">{{ name }}</span><input type="text" name="{{ n }}" value="{{ value|default_if_none:''|floatformat:'-1' }}" inputmode="decimal" class="ledger-input"></label>{% endfor %}</div>
+    <input type="hidden" name="label" value="{{ label }}">
+    {% else %}
+    <script type="application/json" data-menu>{{ menu|safe }}</script>
+    <div class="fx-amount__row">
+        <label class="fx-amount__qty"><span class="fx-label">Amount</span>
+            <input type="text" name="quantity" value="{{ quantity }}" class="ledger-input fx-input" inputmode="decimal" autocomplete="off" required data-qty aria-describedby="fx-qty-help"></label>
+        <label class="fx-amount__unit"><span class="fx-label">Unit</span>
+            <select name="unit" class="ledger-input fx-select" data-unit>{% for u in basis.units %}<option value="{{ u.key }}"{% if u.key == unit %} selected{% endif %}>{{ u.label }}</option>{% endfor %}</select></label>
+    </div>
+    <p class="fx-help" id="fx-qty-help">Any amount: 2, 1.5, .3, 1/4 or 1 1/2.</p>
+    <div class="fx-amount__chips" aria-label="Shortcuts"><button type="button" class="fx-chip" data-qty-chip="1/4">¼</button><button type="button" class="fx-chip" data-qty-chip="1/2">½</button><button type="button" class="fx-chip" data-qty-chip="1">1</button><button type="button" class="fx-chip" data-qty-chip="1 1/2">1½</button><button type="button" class="fx-chip" data-qty-chip="2">2</button></div>
+    <dl class="fx-amount__live" aria-live="polite">{% for n, name, unit_of, value in preview %}<div><dt>{{ name }}</dt><dd><span data-live="{{ n }}">{% if value is not None %}{{ value|floatformat:0 }}{% else %}-{% endif %}</span> {{ unit_of }}</dd></div>{% endfor %}</dl>
+    {% endif %}
+    <fieldset class="fx-chips fx-amount__meal"><legend class="fx-label">Meal</legend>{% for key, name in slots %}<label class="fx-chip"><input type="radio" name="slot" value="{{ key }}"{% if key == slot %} checked{% endif %}> {{ name }}</label>{% endfor %}</fieldset>
+    <div class="fx-setup__bar">
+        {% if entry %}<button type="submit" name="action" value="remove" class="btn btn-secondary fx-danger" formnovalidate>Remove</button>{% endif %}
+        <button type="submit" name="action" value="save" class="btn btn-primary" data-amount-save>{% if entry %}Save{% else %}Add{% endif %}</button>
+    </div>
+</form>

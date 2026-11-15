@@ -1,0 +1,7 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}{{ label }} · {% endblock %}
+{% block fitness %}
+{% comment %}The amount panel on its own page (no JS, or a direct link) - food_find_views.pick / edit_entry.{% endcomment %}
+<div class="fx-narrow"><div class="card fx-card">{% include "albright_fitness/_food_amount.html" %}</div>
+<p class="fx-help"><a href="{% if entry %}{% url 'albright_fitness:food_day' on|date:'Y-m-d' %}{% else %}{% url 'albright_fitness:food_find' %}?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}{% endif %}">Back</a></p></div>
+{% endblock %}
