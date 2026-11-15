@@ -25,7 +25,7 @@ optional target (schedule.py) - Edit / Remove there.
     {% endif %}
     <form method="post" class="fx-toggle-form">{% csrf_token %}<input type="hidden" name="action" value="active"><input type="hidden" name="active" value="{{ p.active|yesno:'0,1' }}">
         <button type="submit" class="btn btn-secondary btn-sm" role="switch" aria-checked="{{ p.active|yesno:'true,false' }}">{% if p.active %}Turn off{% else %}Turn on{% endif %}</button>
-        <span class="fx-help">{% if p.active %}On: it plans your week here.{% else %}Off: not planned{% if p.scheduled_from %}{% endif %}.{% endif %}</span></form>
+        <span class="fx-help">{% if p.active %}On: its days show on your Today page and count toward your week.{% else %}Off: its days don't show on Today or count toward your week.{% endif %}</span></form>
 </div>
 
 {% url 'albright_fitness:schedule_new' 'program' p.pk as program_schedule_url %}
@@ -47,9 +47,9 @@ optional target (schedule.py) - Edit / Remove there.
         <select name="exercise" id="day-{{ day.pk }}-ex" class="ledger-input fx-select" required><option value="">Add an exercise&hellip;</option>{% regroup library|dictsort:"kind" by get_kind_display as groups %}{% for g in groups %}<optgroup label="{{ g.grouper }}">{% for e in g.list %}<option value="{{ e.pk }}">{{ e.name }}</option>{% endfor %}</optgroup>{% endfor %}</select>
         <label class="fx-mini"><span>Sets</span><input type="text" name="sets" inputmode="numeric" value="3" class="ledger-input"></label>
         <label class="fx-mini"><span>Reps</span><input type="text" name="reps" inputmode="numeric" placeholder="-" class="ledger-input"></label>
-        <label class="fx-mini"><span>Min</span><input type="text" name="minutes" inputmode="decimal" placeholder="-" class="ledger-input"></label>
-        <label class="fx-mini"><span>Mi</span><input type="text" name="miles" inputmode="decimal" placeholder="-" class="ledger-input"></label>
-        <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+        <label class="fx-mini"><span>Minutes</span><input type="text" name="minutes" inputmode="decimal" placeholder="-" class="ledger-input"></label>
+        <label class="fx-mini"><span>Miles</span><input type="text" name="miles" inputmode="decimal" placeholder="-" class="ledger-input"></label>
+        <button type="submit" class="btn btn-secondary btn-sm">Add</button>{% term "targets" %}
     </form>
     {% url 'albright_fitness:schedule_new' 'day' day.pk as day_schedule_url %}{% with day_pk=day.pk|stringformat:"s" %}{% with day_p="fx-sched-day-"|add:day_pk %}{% include "albright_fitness/_schedule_box.html" with url=day_schedule_url p=day_p label="Schedule this day" %}{% endwith %}{% endwith %}
     <form method="post" class="fx-delete" data-confirm="Delete the day {{ day.name }}?">{% csrf_token %}<input type="hidden" name="action" value="delete_day"><input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="fx-link-btn fx-danger">Delete this day</button></form>

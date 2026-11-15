@@ -11,6 +11,7 @@ Private to its owner.
     <div>
         <h1 class="fx-head__title">{% if on == today %}Today{% else %}{{ on|date:"l" }}{% endif %}</h1>
         <p class="fx-head__sub">{{ on|date:"F j, Y" }}</p>
+        <p class="fx-head__links" id="fx-food-top-links"><a href="{% url 'albright_fitness:my_foods' %}">My foods</a> &middot; <a href="{% url 'albright_fitness:targets' %}">Targets</a></p>
     </div>
     <nav class="fx-daynav" aria-label="Day">
         <a href="{% url 'albright_fitness:food_day' prev|date:'Y-m-d' %}" class="btn btn-secondary btn-sm" aria-label="Previous day">&lsaquo;</a>

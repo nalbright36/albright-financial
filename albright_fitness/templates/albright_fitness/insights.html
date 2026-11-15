@@ -1,4 +1,4 @@
-{% extends "albright_fitness/base.html" %}
+{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
 {% block page_title %}Insights · {% endblock %}
 {% block fitness %}
 {% comment %}
@@ -12,7 +12,7 @@ consistency (the streak, and a calendar of workout days). Plain numbers and neut
 <section class="card fx-card" id="fx-week-summary" aria-labelledby="fx-week-h">
     <h2 class="fx-card__title" id="fx-week-h">This week</h2>
     <div class="fx-row"><span class="fx-row__title">Workouts</span><span class="fx-row__ind fx-ind-strong">{{ this_week.done }}{% if this_week.planned %} of {{ this_week.planned }} planned{% endif %}</span></div>
-    <div class="fx-row fx-row--wrap"><span class="fx-row__title">Volume</span><span class="fx-row__ind fx-ind-strong">{{ this_week.volume }} lb{% if volume_text %} <span class="fx-muted">&middot; {{ volume_text }}</span>{% endif %}</span></div>
+    <div class="fx-row fx-row--wrap"><span class="fx-row__title">Volume{% term "volume" %}</span><span class="fx-row__ind fx-ind-strong">{{ this_week.volume }} lb{% if volume_text %} <span class="fx-muted">&middot; {{ volume_text }}</span>{% endif %}</span></div>
     <div class="fx-row"><span class="fx-row__title">New records</span><span class="fx-row__ind fx-ind-strong">{{ this_week.records|length }}</span></div>
     {% for r in this_week.records %}<div class="fx-row fx-row--wrap fx-row--sub"><span class="fx-row__title"><span aria-hidden="true">&#x1F3C6;</span> {{ r.exercise }}</span><span class="fx-row__ind">{{ r.text }}</span></div>{% endfor %}
     <div class="fx-row"><span class="fx-row__title">Food logged</span><span class="fx-row__ind fx-ind-strong">{{ this_week.days_logged }} day{{ this_week.days_logged|pluralize }}</span></div>
@@ -21,7 +21,7 @@ consistency (the streak, and a calendar of workout days). Plain numbers and neut
 </section>
 
 <section class="card fx-card" id="fx-muscle-weeks" aria-labelledby="fx-mw-h">
-    <h2 class="fx-card__title" id="fx-mw-h">Working sets per muscle, last 8 weeks</h2>
+    <h2 class="fx-card__title" id="fx-mw-h">Working sets per muscle, last 8 weeks{% term "working_sets" %}</h2>
     {% if muscles.rows %}
     <div class="fx-table-wrap fx-heat-wrap"><table class="fx-table fx-heat">
         <thead><tr><th scope="col">Muscle</th>{% for w in muscles.weeks %}<th scope="col" class="fx-heat__week">{{ w|date:"n/j" }}</th>{% endfor %}</tr></thead>
@@ -31,7 +31,7 @@ consistency (the streak, and a calendar of workout days). Plain numbers and neut
 </section>
 
 <section class="card fx-card" id="fx-lifts" aria-labelledby="fx-lifts-h">
-    <h2 class="fx-card__title" id="fx-lifts-h">Estimated 1-rep max, main lifts</h2>
+    <h2 class="fx-card__title" id="fx-lifts-h">Estimated 1-rep max, main lifts{% term "e1rm" %}</h2>
     {% for lift in lifts %}
     <div class="fx-measure">
         <div class="fx-measure__head"><span class="fx-measure__label">{{ lift.name }}</span><span class="fx-measure__value">{{ lift.last|floatformat:0 }} lb{% if lift.change %} <span class="fx-muted fx-small">({% if lift.change > 0 %}+{% endif %}{{ lift.change|floatformat:0 }} since {{ lift.points.0.date|date:"M j" }})</span>{% endif %}</span></div>

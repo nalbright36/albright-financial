@@ -7,7 +7,7 @@
     {% if circles %}<a href="{% url 'albright_fitness:challenge_new' %}" class="btn btn-primary">New challenge</a>{% endif %}
 </div>
 {% if not circles %}
-<p class="fx-empty">Join a circle and turn on Fitness there (My account &gt; Circles) to start or enter a challenge.</p>
+<p class="fx-empty">Challenges are played with a circle. <a href="{% url 'labs:circles' %}">Open Circles</a>, join or make one and turn on Fitness there, then come back to start or enter a challenge.</p>
 {% elif not challenges %}
 <p class="fx-empty">None yet. <a href="{% url 'albright_fitness:challenge_new' %}">Start one</a> for your circle.</p>
 {% endif %}

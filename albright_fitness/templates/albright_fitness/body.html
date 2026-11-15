@@ -59,13 +59,14 @@ weigh-in reminder on the Planner). Only you ever see this page.
     </details>
 </section>
 
-<details class="card fx-card" id="fx-body-settings">
+<details class="card fx-card" id="fx-body-settings"{% if request.GET.settings %} open{% endif %}>
     <summary class="fx-card__title">Settings</summary>
     <form method="post" action="{% url 'albright_fitness:body_settings' %}" class="fx-form">{% csrf_token %}
         <div class="fx-macro-inputs">
             <div class="field"><label for="fx-bs-wu">Weight in</label><select name="weight_unit" id="fx-bs-wu" class="ledger-input"><option value="lb"{% if unit == "lb" %} selected{% endif %}>lb</option><option value="kg"{% if unit == "kg" %} selected{% endif %}>kg</option></select></div>
             <div class="field"><label for="fx-bs-hu">Measurements in</label><select name="height_unit" id="fx-bs-hu" class="ledger-input"><option value="in"{% if length_unit == "in" %} selected{% endif %}>in</option><option value="cm"{% if length_unit == "cm" %} selected{% endif %}>cm</option></select></div>
         </div>
+        <p class="fx-help">Units apply everywhere in Fitness - Body, Targets, logging and charts.</p>
         <div class="field"><label for="fx-bs-goal">Goal weight ({{ unit }}, optional)</label><input type="number" name="goal" id="fx-bs-goal" class="ledger-input" step="0.1" value="{{ goal|default_if_none:'' }}" inputmode="decimal"></div>
         <label class="fx-check"><input type="checkbox" name="hide_weight" value="1"{% if profile.hide_weight %} checked{% endif %}> Hide weight from the Fitness dashboard</label>
         <div class="fx-row-form">

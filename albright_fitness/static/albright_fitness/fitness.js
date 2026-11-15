@@ -19,6 +19,8 @@
  *   quick log  the Today page's tabs (the last one used is remembered on this device), the workout text's
  *              preview as you type (with pickers for names it doesn't know), and the food list's search
  *   schedule   the Schedule form shows only the repeat fields that apply
+ *   terms      the "?" next to a term (fitness_extras.term) opens its note; a tap elsewhere or Escape closes it
+ *   weeks      Insights' sets-per-muscle table starts scrolled to the latest weeks
  */
 (function () {
     "use strict";
@@ -494,4 +496,41 @@
     document.addEventListener("change", function (event) {
         if (event.target.matches && event.target.matches("[data-repeat]")) syncRepeat(event.target.closest("[data-repeat-form]"));
     });
+
+    // ---------- Plain-words help: the "?" next to a term ----------
+    // One shared note on <body> (a card can be a containing block that would trap or clip it): under the "?" on a
+    // wide screen, a card at the bottom on a phone (fitness.css).
+    var termPop = null, termBtn = null;
+    function closeTerm() {
+        if (termBtn) termBtn.setAttribute("aria-expanded", "false");
+        if (termPop) termPop.hidden = true;
+        termBtn = null;
+    }
+    document.addEventListener("click", function (event) {
+        var btn = event.target.closest && event.target.closest("[data-term]");
+        if (!btn) { if (!(termPop && termPop.contains(event.target))) closeTerm(); return; }
+        event.preventDefault();
+        if (btn === termBtn) { closeTerm(); return; }
+        closeTerm();
+        if (!termPop) {
+            termPop = document.createElement("div");
+            termPop.className = "fx-term__body fx-term__pop";
+            termPop.setAttribute("role", "note");
+            termPop.id = "fx-term-pop";
+            document.body.appendChild(termPop);
+        }
+        termPop.innerHTML = btn.nextElementSibling.innerHTML;
+        termPop.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        btn.setAttribute("aria-controls", "fx-term-pop");
+        termBtn = btn;
+        var r = btn.getBoundingClientRect();
+        termPop.style.top = (r.bottom + 6) + "px";
+        termPop.style.left = Math.max(12, Math.min(r.left - 8, window.innerWidth - termPop.offsetWidth - 12)) + "px";
+    });
+    document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeTerm(); });
+    window.addEventListener("scroll", function () { if (window.innerWidth > 600) closeTerm(); }, { passive: true });
+
+    // ---------- Insights' weeks table: start scrolled to the latest weeks (they're on the right) ----------
+    document.querySelectorAll(".fx-heat-wrap").forEach(function (box) { box.scrollLeft = box.scrollWidth; });
 })();

@@ -1,6 +1,6 @@
-{# The exercise page's Progress card (views.exercise; re-rendered after the Log card saves - log_views._refreshed). #}
+{% load fitness_extras %}{# The exercise page's Progress card (views.exercise; re-rendered after the Log card saves - log_views._refreshed). #}
 <section class="card fx-card" aria-labelledby="fx-chart-h">
-    <h2 class="fx-card__title" id="fx-chart-h">Progress <span class="fx-muted fx-small">({{ unit }})</span></h2>
+    <h2 class="fx-card__title" id="fx-chart-h">Progress <span class="fx-muted fx-small">({{ unit }})</span>{% if unit == "lb, estimated 1-rep max" %}{% term "e1rm" %}{% endif %}</h2>
     {% if chart %}
     <div class="fx-chart" data-chart role="img" aria-labelledby="fx-chart-h fx-chart-desc">
         <p class="visually-hidden" id="fx-chart-desc">{{ history|length }} sessions from {{ chart.first|date:"M j, Y" }} ({{ history.0.label }}) to {{ chart.last|date:"M j, Y" }} ({{ chart.last_label }}).</p>

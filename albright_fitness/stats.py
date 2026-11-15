@@ -112,7 +112,7 @@ def exercise_history(user, exercise, limit=40, include_today=False):
         shown |= Q(workout__date=timezone.localdate())
     sessions = WorkoutExercise.objects.filter(shown, workout__owner=user, exercise=exercise) \
         .select_related("workout").prefetch_related("sets").order_by("-workout__date", "-pk")[:limit]
-    unit = "lb (est. 1RM)"
+    unit = "lb, estimated 1-rep max"
     for we in reversed(list(sessions)):
         done = [s for s in we.sets.all() if s.done and s.set_type != WorkoutSet.WARMUP]
         if not done:
@@ -127,7 +127,7 @@ def exercise_history(user, exercise, limit=40, include_today=False):
         else:
             best = max((training.epley(s.weight_lb, s.reps) or 0 for s in done), default=0)
             if best:
-                value, label = best, f"{training.fmt_weight(best)} lb"
+                value, label = best, f"{training.fmt_weight(training.one_decimal(best))} lb"
             else:
                 unit = "reps"
                 value = max((s.reps or 0 for s in done), default=0)

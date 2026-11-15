@@ -15,6 +15,11 @@ vibrates where the phone can). Someone it's shared with sees it read-only.
     {% if editable and w.finished %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="btn btn-secondary btn-sm">Summary</a>{% endif %}
 </div>
 
+{% if editable and not w.finished %}
+<details class="fx-guide" id="fx-guide"><summary>How to log sets</summary>
+    <ul>{% for label, text in guide %}<li><strong>{{ label }}:</strong> {{ text }}</li>{% endfor %}</ul>
+</details>
+{% endif %}
 {% for b in blocks %}
 <section class="card fx-ex" id="ex-{{ b.we.pk }}" aria-labelledby="ex-{{ b.we.pk }}-h">
     <div class="fx-ex__head">

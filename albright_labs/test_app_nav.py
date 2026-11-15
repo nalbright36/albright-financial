@@ -163,7 +163,7 @@ class ReturnChipTests(Base):
 
     def test_switching_apps_on_purpose_shows_no_chip(self):
         page = self.page(reverse("albright_planner:day"))
-        self.assertIn('class="navbar__brand">', page)
+        self.assertIn('class="navbar__brand" aria-label="Albright - Planner">', page)
         self.assertIn('link.closest("[data-no-return], .navbar__brand")', static("js/app_nav.js"))   # the logo
         tiles = re.findall(r'<a [^>]*class="app-launcher__tile[^"]*"[^>]*>', page)
         self.assertTrue(tiles)

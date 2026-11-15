@@ -10,14 +10,7 @@ which macros to track (calories can be hidden). Private: only you see this page.
 <h1 class="fx-head__title">Targets</h1>
 <p class="fx-head__sub">Only you see your targets and body info.</p>
 
-<form method="post" class="card fx-card fx-row-form" id="fx-units">{% csrf_token %}<input type="hidden" name="action" value="units">
-    <span class="fx-label">Units</span>
-    <label class="visually-hidden" for="fx-wu">Weight unit</label>
-    <select name="weight_unit" id="fx-wu" class="ledger-input fx-unit-select" data-autosubmit><option value="lb"{% if profile.weight_unit == "lb" %} selected{% endif %}>lb</option><option value="kg"{% if profile.weight_unit == "kg" %} selected{% endif %}>kg</option></select>
-    <label class="visually-hidden" for="fx-hu">Height unit</label>
-    <select name="height_unit" id="fx-hu" class="ledger-input fx-unit-select" data-autosubmit><option value="in"{% if profile.height_unit == "in" %} selected{% endif %}>in</option><option value="cm"{% if profile.height_unit == "cm" %} selected{% endif %}>cm</option></select>
-    <noscript><button type="submit" class="btn btn-secondary btn-sm">Save</button></noscript>
-</form>
+<div class="card fx-card" id="fx-units"><p class="fx-help fx-units-note">Units: {{ profile.weight_unit }} &middot; {{ profile.height_unit }}. <a href="{% url 'albright_fitness:body' %}?settings=1#fx-body-settings">Change units in Body &rsaquo; Settings</a> - they apply everywhere in Fitness.</p></div>
 
 <details class="card fx-card" id="fx-calculator"{% if suggestion or not profile.target_calories and not profile.target_protein %} open{% endif %}>
     <summary class="fx-card__title">Calculator</summary>

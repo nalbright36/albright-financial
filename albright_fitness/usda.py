@@ -29,7 +29,8 @@ RETRIES = 2
 MAX_WAIT = 8                        # longest Retry-After we honour (seconds)
 SEARCH_CACHE_SECONDS = 24 * 3600
 PAGE_SIZE = 20
-NOT_SET = "USDA key not set - ask the site admin to add USDA_API_KEY. You can still use My foods, Recent and Quick add."
+NOT_SET = ("Food search isn't set up on this site yet (USDA key not set - the site admin adds it). Meanwhile, use Recent, "
+           "My foods, Quick add or Recipes.")
 
 # FoodData Central nutrient ids -> our names. Energy: kcal (1008), else the Atwater figures Foundation foods use.
 NUTRIENT_IDS = {1008: "calories", 2047: "calories_atwater", 2048: "calories_specific", 1003: "protein", 1005: "carbs",

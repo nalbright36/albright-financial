@@ -32,6 +32,7 @@ streak (weeks with every planned workout done), this week's working sets by musc
 <section class="card fx-card" id="fx-food-today" aria-labelledby="fx-food-today-h">
     <h2 class="fx-card__title" id="fx-food-today-h"><a href="{% url 'albright_fitness:food' %}" class="fx-title-link">Today's food &rarr;</a></h2>
     {% include "albright_fitness/_macro_bars.html" %}
+    <p class="fx-help" id="fx-food-links"><a href="{% url 'albright_fitness:my_foods' %}">My foods</a> &middot; <a href="{% url 'albright_fitness:targets' %}">Targets</a></p>
     {% if food_average %}<p class="fx-help" id="fx-food-average">7-day average{% if food_average.days < 7 %} ({{ food_average.days }} day{{ food_average.days|pluralize }} logged){% endif %}: {% if "calories" in tracked %}{{ food_average.calories }} kcal &middot; {% endif %}{{ food_average.protein }} g protein</p>{% endif %}
 </section>
 </div>
@@ -39,7 +40,7 @@ streak (weeks with every planned workout done), this week's working sets by musc
 <div class="fx-grid fx-grid--today">
 <section class="card fx-card" id="fx-week-card" aria-labelledby="fx-week-card-h">
     <h2 class="fx-card__title" id="fx-week-card-h"><a href="{% url 'albright_fitness:insights' %}" class="fx-title-link">This week &rarr;</a></h2>
-    <p class="fx-week-line">{{ week_summary.done }}{% if week_summary.planned %} of {{ week_summary.planned }}{% endif %} workout{{ week_summary.done|pluralize }}{% if week_summary.volume %} &middot; {{ week_summary.volume }} lb lifted{% endif %}{% if week_summary.records %} &middot; {{ week_summary.records|length }} new record{{ week_summary.records|length|pluralize }}{% endif %}</p>
+    <p class="fx-week-line">{{ week_summary.done }}{% if week_summary.planned %} of {{ week_summary.planned }}{% endif %} workout{{ week_summary.planned|default:week_summary.done|pluralize }}{% if week_summary.volume %} &middot; {{ week_summary.volume }} lb lifted{% term "volume" %}{% endif %}{% if week_summary.records %} &middot; {{ week_summary.records|length }} new record{{ week_summary.records|length|pluralize }}{% endif %}</p>
     {% if week_summary.days_logged %}<p class="fx-help">Food logged {{ week_summary.days_logged }} day{{ week_summary.days_logged|pluralize }}{% if week_summary.avg_protein is not None %} &middot; {{ week_summary.avg_protein }} g protein a day on average{% endif %}</p>{% endif %}
 </section>
 {% if weight %}
@@ -61,7 +62,7 @@ streak (weeks with every planned workout done), this week's working sets by musc
 </section>
 
 <section class="card fx-card" aria-labelledby="fx-volume-h">
-    <h2 class="fx-card__title" id="fx-volume-h">Working sets this week, by muscle group</h2>
+    <h2 class="fx-card__title" id="fx-volume-h">Working sets this week, by muscle group{% term "working_sets" %}</h2>
     {% if volume %}
     <ul class="fx-bars" role="list">{% for r in volume %}
         <li class="fx-bars__row" title="{{ r.label }}: {{ r.sets }} working set{{ r.sets|pluralize }}{% if r.pounds %}, {{ r.pounds|floatformat:0 }} lb moved{% endif %}">

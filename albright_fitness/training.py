@@ -12,7 +12,7 @@ the baseline - records start from the second.
 """
 import re
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.db.models import Max
 
@@ -76,6 +76,11 @@ def suggest(user, exercise, before=None, target_reps=None, target_sets=None):
         out.weight = top.weight
         out.text = f"{out.sets} × {goal} @ {fmt_weight(out.weight)} {top.unit} - repeat"
     return out
+
+
+def one_decimal(value):
+    """234.333 -> 234.3, 262.50 -> 262.5 (an estimate never needs two decimals)."""
+    return Decimal(value).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
 
 
 def fmt_weight(value):
@@ -353,7 +358,9 @@ def record_text(record):
     def show(kind, v):
         if v is None:
             return ""
-        if kind in ("weight", "e1rm"):
+        if kind == "e1rm":                       # an estimate: one decimal at most ("234.3 lb", not "234.33 lb")
+            return f"{fmt_weight(one_decimal(v))} lb"
+        if kind == "weight":
             return f"{fmt_weight(v)} lb"
         if kind == "reps":
             return f"{int(v)} reps"
