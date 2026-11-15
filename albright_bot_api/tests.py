@@ -18,6 +18,7 @@ from django.utils import timezone
 from albright_bot_api.auth import RATE_LIMIT
 from albright_bot_api.models import (BotRequestLog, BotToken, InventorySuggestion, LotNote, OpportunityNote,
                                      TradingNote, hash_token)
+from albright_labs.templatetags.nav_icons import nav_icon
 
 ALL = ["trading:notes", "reseller:read", "reseller:suggest", "opportunities:read", "opportunities:suggest"]
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -487,5 +488,5 @@ class ActivityLogTests(BotApiTestCase):
         page = self.client.get(url)
         self.assertContains(page, '<body data-app="admin">')
         # In the Admin nav's Bot group, marked as the open page.
-        self.assertContains(page, f'<a href="{url}" class="active" aria-current="page"><span>Bot API</span></a>')
+        self.assertContains(page, f'<a href="{url}" class="active" aria-current="page">{nav_icon("bot")}<span>Bot API</span></a>')
         self.assertContains(page, 'class="navbar__dropdown is-active" data-nav-group="bot"')

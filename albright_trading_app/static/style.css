@@ -1845,10 +1845,8 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .navbar__menu-theme .icon-moon, .navbar__menu-theme-dark { display: none; }
 :root[data-theme="light"] .navbar__menu-theme .icon-moon, :root[data-theme="light"] .navbar__menu-theme-dark { display: inline; }
 :root[data-theme="light"] .navbar__menu-theme .icon-sun, :root[data-theme="light"] .navbar__menu-theme-light { display: none; }
-.navbar__menu-who {
-  margin: var(--space-2) 0 0; padding-top: var(--space-2); border-top: 1px solid var(--border);
-  font-size: 0.75rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+/* Phone-menu-only parts: the app pill and each row's icon (nav_icons) - never shown on wider screens. */
+.navbar__menu-app, .navbar__icon { display: none; }
 
 /* Phones (under 640px), every app: ONE row that never wraps - logo (28px), the app chip as just its icon, then at
    the right the notification bell, the app launcher and the hamburger. The theme toggle and the account menu move
@@ -1869,9 +1867,70 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   .navbar__toggle { order: 3; margin-left: 0; }
   .navbar--collapsed .navbar__tools .theme-toggle,
   .navbar--collapsed .navbar__account { display: none; }
-  .navbar--collapsed .navbar__menu-extra { display: block; margin-top: var(--space-2); border-top: 1px solid var(--border); }
-  .navbar--collapsed .navbar__menu-extra > .navbar__menu-theme { border-bottom: none; }
+  .navbar--collapsed .navbar__menu-extra { display: block; margin-top: auto; padding: 8px 0 max(10px, env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--menu-line); background: var(--menu-account-bg); }
+
+  /* The hamburger panel, two sections (index.html): the app's pages in its accent on top, then the account section -
+     darker, muted, no accent - pinned to the bottom when there's room (margin-top: auto in a panel that fills the
+     screen below the header; index.html sets --navbar-bottom when it opens), else just after the pages. A long
+     menu scrolls inside the panel; the header stays put. */
+  .navbar--collapsed .navbar__links {
+    height: calc(100vh - var(--navbar-bottom, 56px)); height: calc(100dvh - var(--navbar-bottom, 56px)); max-height: none;
+    padding: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--menu-bg); border-bottom: 0;
+  }
+  .navbar--collapsed .navbar__menu-app { display: block; margin: 0; padding: 14px 18px 8px; }
+  .navbar__menu-app-pill {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px 0 9px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; line-height: 1;
+  }
+  .navbar__menu-app-pill svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .navbar--collapsed .navbar__icon { display: block; width: 18px; height: 18px; flex-shrink: 0; color: var(--menu-icon); }
+  /* The app's pages: icon + label rows, no dividers. */
+  .navbar--collapsed .navbar__links > a,
+  .navbar--collapsed .navbar__links .navbar__dropdown-trigger,
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu a {
+    display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 11px 18px; border: 0;
+    border-radius: 0; box-shadow: none; background: none; color: var(--menu-row); font-size: 15px; font-weight: 500;
+    line-height: 1.3; white-space: normal;
+  }
+  .navbar--collapsed .navbar__links .navbar__dropdown { border-bottom: 0; }
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu { padding: 0 0 4px; }
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu a { padding: 9px 18px 9px 48px; font-size: 14px; }
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu a > span:not(.badge) { flex: 1 1 auto; }
+  .navbar--collapsed .navbar__links > a:hover,
+  .navbar--collapsed .navbar__links .navbar__dropdown-trigger:hover,
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu a:hover { background: var(--surface-hover); color: var(--text-primary); }
+  /* The current page (and Admin's current group): accent text and icon, tinted, a 3px accent bar at the left. */
+  .navbar--collapsed .navbar__links > a.active,
+  .navbar--collapsed .navbar__dropdown.is-active > .navbar__dropdown-trigger,
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu a.active {
+    padding-left: 18px; background: var(--accent-soft); color: var(--accent); box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .navbar--collapsed .navbar__links .navbar__dropdown-menu a.active { padding-left: 48px; }
+  .navbar--collapsed .navbar__links a.active .navbar__icon,
+  .navbar--collapsed .navbar__dropdown.is-active > .navbar__dropdown-trigger .navbar__icon { color: var(--accent); }
+  /* The account section: smaller, muted rows. */
+  .navbar__menu-label {
+    margin: 0; padding: 8px 18px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--menu-muted); font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  }
+  .navbar__menu-user { text-transform: none; letter-spacing: .02em; }
+  .navbar--collapsed .navbar__menu-extra .navbar__menu-item {
+    gap: 12px; padding: 9px 18px; border: 0; color: var(--menu-muted); font-size: 14px; font-weight: 500;
+  }
+  .navbar--collapsed .navbar__menu-extra .navbar__menu-item:hover { background: var(--menu-account-hover); color: var(--text-primary); }
+  .navbar--collapsed .navbar__menu-extra .navbar__menu-item:focus-visible { outline: 2px solid var(--menu-muted); outline-offset: -2px; border-radius: 0; }
+  .navbar--collapsed .navbar__menu-extra .navbar__icon { color: currentColor; }
+  .navbar--collapsed .navbar__menu-extra .navbar__menu-theme .icon-moon { display: none; }
+  :root[data-theme="light"] .navbar--collapsed .navbar__menu-extra .navbar__menu-theme .icon-moon { display: block; }
+  :root[data-theme="light"] .navbar--collapsed .navbar__menu-extra .navbar__menu-theme .icon-sun { display: none; }
+  .navbar--collapsed .navbar__menu-extra .navbar__badge { margin-left: auto; }
 }
+/* The phone menu's colors: dark by default, light below. */
+:root { --menu-bg: #171C24; --menu-account-bg: #11151B; --menu-account-hover: #1A2029; --menu-line: #262D38;
+  --menu-row: #CFD4DC; --menu-icon: #8B93A1; --menu-muted: #8B93A1; }
+:root[data-theme="light"] { --menu-bg: #FFFFFF; --menu-account-bg: #F1F3F6; --menu-account-hover: #E6E9EE; --menu-line: #E2E5EA;
+  --menu-row: #2B313B; --menu-icon: #6B7280; --menu-muted: #5B6472; }
 @media (max-width: 370px) {
   .navbar__main-row {
     padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));

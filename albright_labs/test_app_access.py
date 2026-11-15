@@ -19,6 +19,7 @@ from albright_trading_proj.middleware import LAST_APP_COOKIE
 from . import apps_registry
 from .testing import current_tiles, home_tiles, launcher_tiles, with_apps
 from .models import UserPreference
+from .templatetags.nav_icons import nav_icon
 from .tests import OUTLOOK, resume_site
 
 PASSWORD = "pw-not-real-12345"
@@ -331,7 +332,7 @@ class AdminUsersTests(Base):
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Superuser - every app")
-        self.assertIn(f'<a href="{url}" class="active" aria-current="page"><span>Users</span></a>',
+        self.assertIn(f'<a href="{url}" class="active" aria-current="page">{nav_icon("users")}<span>Users</span></a>',
                       page.content.decode())                                         # in the Admin nav's Site group
 
     def test_changing_access(self):

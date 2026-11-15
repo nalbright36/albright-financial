@@ -41,6 +41,16 @@ GROUPS = (
     )),
 )
 
+# Optional: each item's (and group's) icon in the phone menu - a name from albright_labs.templatetags.nav_icons. One
+# left out shows no icon (its label stays aligned).
+ICONS = {
+    "overview": "dashboard", "bot": "bot", "system": "activity", "site": "layout",
+    "albright_control:overview": "dashboard", "albright_control:bot_api": "bot", "albright_control:suggestions": "message",
+    "albright_control:ideas": "lightbulb", "albright_control:health": "activity", "albright_control:integrations": "plug",
+    "albright_control:ai_usage": "cpu", "albright_control:data": "database", "albright_control:audit": "scroll",
+    "albright_resume_admin:overview": "file-text", "labs_admin:settings": "layout", "albright_control:users": "users",
+}
+
 # Late/failing jobs come from every job's history - recounted at most once a minute.
 HEALTH_CACHE_KEY, HEALTH_CACHE_SECONDS = "admin_nav_job_problems", 60
 
@@ -85,9 +95,9 @@ def groups(resolver_match):
         for item_label, url_name, patterns in items:
             count, tone = badges.get(url_name, (0, ""))
             rows.append({"label": item_label, "url": reverse(url_name), "active": _matches(page, patterns),
-                         "badge": count, "tone": tone})
+                         "badge": count, "tone": tone, "icon": ICONS.get(url_name, "")})
         total = sum(r["badge"] for r in rows)
-        out.append({"key": key, "label": label, "items": rows, "dropdown": len(rows) > 1,
+        out.append({"key": key, "label": label, "icon": ICONS.get(key, ""), "items": rows, "dropdown": len(rows) > 1,
                     "active": any(r["active"] for r in rows), "badge": total,
                     "tone": "loss" if any(r["tone"] == "loss" for r in rows if r["badge"]) else "warn"})
     return out

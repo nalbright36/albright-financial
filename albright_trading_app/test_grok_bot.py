@@ -24,6 +24,7 @@ from albright_trading_app.grok_bot import (ReadOnlyAlpaca, closed_trades, descri
                                            order_ids_to_client_ids, parse_occ, trade_stats)
 from albright_trading_app.models import AlpacaCredentials, BotStrategy
 from albright_labs.testing import with_apps
+from albright_labs.templatetags.nav_icons import nav_icon
 
 TRADING_CLIENT = "alpaca.trading.client.TradingClient"
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
@@ -355,7 +356,7 @@ class GrokBotPageTests(TestCase):
         self.assertEqual(self.client.get(reverse("grok_bot_strategy", args=["unattributed"])).status_code, 302)
 
     def test_nav_item_in_the_trading_app_only(self, _outlook):
-        link = f'<a href="{reverse("grok_bot")}">Grok Bot</a>'
+        link = f'<a href="{reverse("grok_bot")}">{nav_icon("bot")}Grok Bot</a>'
         self.assertContains(self.client.get(reverse("trading_home")), link)
         self.assertContains(self.get(), link)
         self.assertNotContains(self.client.get(reverse("albright_reselling_app:dashboard")), link)

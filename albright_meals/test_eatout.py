@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from albright_labs.testing import kitchen, with_apps
 from albright_planner.models import PlannerSettings
+from albright_labs.templatetags.nav_icons import nav_icon
 from albright_planner.weather import LookupDown
 
 from . import eatout
@@ -288,7 +289,7 @@ class PageTests(Base):
         self.assertIn("openstreetmap.org", html)
         self.assertIn("google.com/maps/dir", html)
         self.assertIn("Places from OpenStreetMap", html)
-        self.assertIn('aria-current="page">Eat out</a>', html)
+        self.assertIn(f'aria-current="page">{nav_icon("store")}Eat out</a>', html)
         # Honest: no star ratings, no invented prices on place cards.
         self.assertNotIn("★", html)
         self.assertNotIn("&#9733;", html)

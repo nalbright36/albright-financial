@@ -15,6 +15,7 @@ from django.urls import resolve, reverse
 from albright_labs.models import UserPreference
 from albright_trading_proj.middleware import LAST_APP_COOKIE, LastAppMiddleware
 from albright_labs.testing import with_apps
+from albright_labs.templatetags.nav_icons import nav_icon
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 
@@ -250,7 +251,7 @@ class AppSwitchTests(TestCase):
             with self.subTest(page=url):
                 self.assertNotIn('href="/"', self.nav(self.client.get(url)))
         trading_nav = self.nav(self.client.get(reverse("trading_home")))
-        self.assertIn(f'<a href="{reverse("trading_home")}">Home</a>', trading_nav)
+        self.assertIn(f'<a href="{reverse("trading_home")}">{nav_icon("home")}Home</a>', trading_nav)
 
     @mock.patch(HOME_OUTLOOK, return_value=None)
     def test_root_follows_the_remembered_app_with_last_used_app(self, mock_outlook):

@@ -17,6 +17,7 @@ from . import views
 from .models import UserPreference
 from .testing import favorite_tiles, home_tiles, launcher_links, with_apps
 from .tests import OUTLOOK
+from albright_labs.templatetags.nav_icons import nav_icon
 
 PASSWORD = "pw-not-real-12345"
 PICKER = "/?picker=1"
@@ -233,7 +234,7 @@ class HomeLinksTests(Base):
                 self.assertEqual(launcher_links(self.page(url))["Home"], PICKER)
         picker = self.page()
         self.assertIn(f'<a href="{PICKER}" class="navbar__brand"', picker)
-        self.assertIn(f'<a href="{PICKER}">Home</a>', picker)
+        self.assertIn(f'<a href="{PICKER}">{nav_icon("home")}Home</a>', picker)
 
 
 class SingleAppTests(Base):

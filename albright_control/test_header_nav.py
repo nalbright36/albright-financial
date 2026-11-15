@@ -17,6 +17,7 @@ from django.utils import timezone
 from albright_bot_api.models import BotToken, SiteSuggestion
 from albright_control import nav
 from albright_control.models import Idea, JobRun
+from albright_labs.templatetags import nav_icons
 from albright_labs.testing import with_apps
 
 PASSWORD = "pw-not-real-12345"
@@ -37,8 +38,12 @@ def group_html(content, key):
     return content.split(f'data-nav-group="{key}"', 1)[1].split("</div>\n                        </div>", 1)[0]
 
 
+ICON = re.compile(r'<svg class="navbar__icon[^"]*".*?</svg>|<span class="navbar__icon" aria-hidden="true"></span>', re.S)
+
+
 def hrefs(html):
-    return [(href, label) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(?:<span>)?([^<]+)<', html)]
+    """(href, label) of each link - its phone-menu icon (nav_icons) left out."""
+    return [(href, label) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(?:<span>)?([^<]+)<', ICON.sub("", html))]
 
 
 def account_menu(content):
@@ -55,6 +60,10 @@ class Base(TestCase):
         self.client.force_login(self.admin)
 
     def page(self, url):
+        """The page without the phone menu's icons (nav_icons) - they sit in front of every label."""
+        return ICON.sub("", self.raw(url))
+
+    def raw(self, url):
         return self.client.get(url).content.decode()
 
 
@@ -223,8 +232,8 @@ class PhoneHeaderTests(Base):
                 self.assertIn('id="theme-toggle-menu"', extra)
                 self.assertEqual(hrefs(extra), [(reverse("labs:account"), "My account"),
                                                 (reverse("labs:circles"), "Circles"),
-                                                (reverse("labs:activity"), "Notifications"),
                                                 (reverse("labs:people"), "People"),
+                                                (reverse("labs:activity"), "Notifications"),
                                                 (reverse("user_logout"), "Logout")])
                 # Inside the hamburger panel, after the app's own links; the desktop tools keep theirs.
                 links_start = content.index('id="navbar-links"')
@@ -232,6 +241,47 @@ class PhoneHeaderTests(Base):
                 self.assertLess(content.index('id="navbar-menu-extra"'), content.index('<div class="navbar__tools">'))
                 self.assertIn('id="theme-toggle"', content.split('<div class="navbar__tools">', 1)[1])
                 self.assertIn('id="account-menu"', content)
+
+    def test_the_phone_menu_has_an_app_section_then_a_separate_account_section(self):
+        cases = ((reverse("albright_fitness:programs"), "fitness", "Fitness", "Programs", "clipboard"),
+                 (reverse("albright_planner:week"), "planner", "Planner", "Week", "calendar-week"),
+                 (reverse("albright_money:budget"), "money", "Money", "Budget", "pie-chart"))
+        for url, accent, label, page, icon in cases:
+            with self.subTest(url=url):
+                content = self.raw(url)
+                self.assertIn(f'<body data-app="{accent}">', content)
+                links = links_html(content)
+                # The app section: its pill first, then its pages - the open one marked, with its icon.
+                pill = links.split('<p class="navbar__menu-app"><span class="navbar__menu-app-pill">', 1)[1].split("</p>", 1)[0]
+                self.assertIn(f"<span>{label}</span>", pill)
+                current = re.findall(r'<a href="[^"]+" class="active" aria-current="page">(.*?)</a>', links, re.S)
+                self.assertEqual(len(current), 1)
+                self.assertEqual(ICON.sub("", current[0]), page)
+                self.assertIn(nav_icons.PATHS[icon], current[0])
+                self.assertNotIn("My account", links)
+                self.assertNotIn("Logout", links)
+                # The account section: labelled with the username, My account first and Logout last, no page marked.
+                extra = menu_extra(content)
+                self.assertIn('<p class="navbar__menu-label">Account &middot; <span class="navbar__menu-user">boss</span></p>', extra)
+                labels = [label for _href, label in hrefs(extra)]
+                self.assertEqual((labels[0], labels[-1]), ("My account", "Logout"))
+                self.assertNotIn('aria-current="page"', extra)
+                self.assertNotIn("Signed in as", extra)
+                self.assertIn(nav_icons.PATHS["log-out"], extra)
+
+    def test_phone_menu_css_sections_accent_and_scrolling(self):
+        css = self.phone_css()
+        for rule in (".navbar--collapsed .navbar__menu-extra { display: block; margin-top: auto;",
+                     "background: var(--menu-account-bg);", "overflow-y: auto; overscroll-behavior: contain;",
+                     "height: calc(100dvh - var(--navbar-bottom, 56px));",
+                     "background: var(--accent-soft); color: var(--accent); box-shadow: inset 3px 0 0 var(--accent);",
+                     "font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;"):
+            self.assertIn(rule, css)
+        account = css.split(".navbar__menu-label {", 1)[1]
+        self.assertNotIn("accent", account)                       # the account section never wears the app's color
+        full = STYLE.read_text(encoding="utf-8")
+        self.assertIn(":root { --menu-bg: #171C24; --menu-account-bg: #11151B;", full)
+        self.assertIn(".navbar__menu-app, .navbar__icon { display: none; }", full)   # wider screens: unchanged
 
     def test_visitors_menu_has_only_the_theme_toggle(self):
         self.client.logout()
