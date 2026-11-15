@@ -40,6 +40,8 @@ api_urlpatterns = [
     # Fitness (albright_bot_api.fitness_api) - the owner's own workouts, food and weigh-ins.
     path("fitness/workouts", fitness_api.workouts, name="fitness_workouts"),
     path("fitness/food", fitness_api.food, name="fitness_food"),
+    path("fitness/food/entries", fitness_api.food_entries, name="fitness_food_entries"),
+    path("fitness/foods/search", fitness_api.food_search, name="fitness_food_search"),
     path("fitness/weight", fitness_api.weight, name="fitness_weight"),
     path("fitness/today", fitness_api.today, name="fitness_today"),
     path("fitness/summary", fitness_api.summary, name="fitness_summary"),

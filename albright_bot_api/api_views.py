@@ -378,16 +378,30 @@ POST fitness/workouts                                 scope: fitness:write
   "kind", "text"}] (new personal records), "program_day", "planner_completed", "url"}. 422 (with "unknown")
   if nothing could be logged.
 
+GET  fitness/foods/search?q=greek yogurt               scope: fitness:read
+  The site's one search box: {"q", "groups": [{"group": "recent"|"mine"|"recipes"|"usda", "title", "items":
+  [{"kind", "label", "detail", "fdc_id" | "my_food" | "recipe_id", "units": [{"unit", "label"}], "log": a ready
+  POST fitness/food body for 1 of the first unit}]}], "note" (why all-foods search is missing, or null)}. A USDA
+  food's units are its household portions plus "g" and "oz" (always), and ml / fl oz / cup / tbsp / tsp when known.
+
 POST fitness/food                                     scope: fitness:write
-  One diary entry, by ONE of: {"recipe_id": 12} or {"recipe": "Turkey chili"} (a Meals recipe the owner can see,
+  One diary entry, by ONE of: {"fdc_id": 2259793, "quantity": "1/4", "unit": "p:1 container (170 g)"} (a USDA
+  food picked from foods/search - "quantity" is a number or a fraction like "1/4" or "1 1/2"; "unit" one of its
+  units, by "unit" or "label"; "g" and "oz" always work); {"my_food": "Protein shake", "quantity": 0.5, "unit":
+  "serving" or "g"} (any of that food's units); {"recipe_id": 12} or {"recipe": "Turkey chili"} (a Meals recipe the owner can see,
   with nutrition) x "servings"; {"my_food": "Protein shake"} (one of the owner's foods) x "servings"; or quick
   macros {"label": "Latte", "calories": 190, "protein": 10, "carbs": 18, "fat": 7} (any of them). Optional
   "slot": "breakfast"|"lunch"|"dinner"|"snack" (default snack), "date", "servings" (default 1, up to 50).
-  Names match exactly (any case). NEVER GUESSED: an unmatched name logs nothing and returns 422 {"error",
+  Names match exactly (any case). NEVER GUESSED: an unmatched name (or a USDA food by name) logs nothing and returns 422 {"error",
   "suggestions": {"recipes": [{"id", "title"}], "my_foods": [names], "usda": [{"fdc_id", "name"}]}} - USDA foods
   are only suggestions for the owner to pick on the site. Example: {"recipe": "Turkey chili", "servings": 1.5,
-  "slot": "dinner"}. Returns 201 {"id", "date", "slot", "label", "source", "servings", "calories", "protein",
-  "carbs", "fat", "fiber"}.
+  "slot": "dinner"}. An unknown unit logs nothing: 422 {"error", "units": [{"unit", "label"}]}. Returns 201
+  {"id", "date", "slot", "label", "source", "servings", "quantity", "unit", "amount" ("¼ container (170 g)"),
+  "grams", "fdc_id", "calories", "protein", "carbs", "fat", "fiber"}.
+
+GET  fitness/food/entries?date=YYYY-MM-DD               scope: fitness:read
+  One day's diary (default today, up to a year back): {"date", "entries": [as POST fitness/food returns], by
+  meal, "totals": {"calories", "protein", "carbs", "fat", "fiber"}}.
 
 POST fitness/weight                                   scope: fitness:write
   Body: {"weight": 182.4 (required), "unit": "lb"|"kg" (default the owner's), "date", "note"}. One weigh-in a

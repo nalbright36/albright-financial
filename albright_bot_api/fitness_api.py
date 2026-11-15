@@ -8,8 +8,9 @@ Programs: fitness:read lists them; fitness:write creates one (the same steps as 
 call) and pauses / resumes one. Exercise names are never guessed either: an unknown name creates nothing and the
 answer lists close names from the owner's library.
 
-Food is never guessed: a recipe or "my food" name must match exactly (any case) - otherwise nothing is logged and
-the answer lists suggestions (close recipe / my food names, and USDA foods to pick from on the site).
+Food is never guessed: a recipe or "my food" name must match exactly (any case), a USDA food comes by its fdc_id
+(from foods/search) and a unit must be one the food has - otherwise nothing is logged and the answer lists
+suggestions (close recipe / my food names, USDA foods, or the food's units).
 """
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -196,7 +197,19 @@ def food(request, token):
         raise ApiError(400, '"slot" must be breakfast, lunch, dinner or snack.', "rejected: bad slot")
     servings = _number(data, "servings", Decimal("0.01"), MAX_SERVINGS) or Decimal(1)
     entry = None
-    if data.get("recipe_id") not in (None, "") or data.get("recipe"):
+    if data.get("fdc_id") not in (None, ""):
+        entry = _log_usda(user, data, on, slot)
+    elif data.get("my_food") and data.get("unit") not in (None, ""):
+        name = _str(data, "my_food", 100, required=True)
+        mine = CustomFood.objects.filter(owner=user, name__iexact=name).first()
+        if mine is None:
+            raise ApiError(422, f"None of your foods is called “{name}” - nothing was logged.", "rejected: my food not matched",
+                           extra={"suggestions": {"my_foods": list(CustomFood.objects.filter(owner=user, name__icontains=name.split()[0])
+                                                                   .values_list("name", flat=True)[:5]) if name.split() else []}})
+        from albright_fitness import amounts
+        entry = _log_amount(FoodLogEntry(owner=user, date=on, slot=slot, source=FoodLogEntry.CUSTOM, custom_food=mine, label=mine.name),
+                            amounts.for_custom(mine), data)
+    elif data.get("recipe_id") not in (None, "") or data.get("recipe"):
         from albright_meals import scope
         readable = scope.readable(user).select_related("nutrition")
         if data.get("recipe_id") not in (None, ""):
@@ -237,14 +250,113 @@ def food(request, token):
                                                 n: v.quantize(Decimal("0.01")) if v is not None else None for n, v in values.items()})
     elif data.get("food") or data.get("name"):
         name = _str(data, "food" if data.get("food") else "name", 100)
-        raise ApiError(422, "Foods from USDA aren't logged automatically - pick one on the site, or send its macros.",
+        raise ApiError(422, "USDA foods aren't picked by name - find it with GET fitness/foods/search and send its "
+                            "fdc_id, quantity and unit (or send its macros).",
                        "rejected: usda food not guessed", extra={"suggestions": {"usda": _usda_suggestions(name)}})
     else:
         raise ApiError(400, 'Send {"recipe_id" or "recipe", "servings"}, {"my_food", "servings"} or {"label", "calories", '
                             '"protein", "carbs", "fat"}.', "rejected: nothing to log")
-    return ({"id": entry.pk, "date": entry.date.isoformat(), "slot": entry.slot, "label": entry.label, "source": entry.source,
-             "servings": f"{entry.servings:f}" if entry.servings is not None else None, **_amounts(entry)},
-            201, f"logged food #{entry.pk} ({entry.source})")
+    return _entry_json(entry), 201, f"logged food #{entry.pk} ({entry.source})"
+
+
+def _entry_json(entry):
+    return {"id": entry.pk, "date": entry.date.isoformat(), "slot": entry.slot, "label": entry.label, "source": entry.source,
+            "servings": f"{entry.servings:f}" if entry.servings is not None else None,
+            "quantity": f"{entry.quantity.normalize():f}" if entry.quantity is not None else None, "unit": entry.unit or None,
+            "amount": entry.portion_label or None, "grams": f"{entry.grams:f}" if entry.grams is not None else None,
+            "fdc_id": entry.food.fdc_id if entry.food_id else None, **_amounts(entry)}
+
+
+def _units_json(basis):
+    return [{"unit": u.key, "label": u.label} for u in basis.units]
+
+
+def _log_amount(entry, basis, data):
+    """quantity ("1/4", 0.5, "1 1/2") of unit (a key or label from the food's units) - never a guessed unit."""
+    from albright_fitness import amounts
+    raw = data.get("quantity", 1)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+        raise ApiError(400, '"quantity" must be a number or a fraction like "1/4".', "rejected: bad quantity")
+    quantity = amounts.parse_quantity(raw)
+    if quantity is None:
+        raise ApiError(400, '"quantity" must be above 0 and at most 5000: 2, 1.5, 0.3, "1/4" or "1 1/2".', "rejected: bad quantity")
+    unit = data.get("unit")
+    if not isinstance(unit, str) or basis.unit(unit) is None:
+        raise ApiError(422, "Pick one of this food's units - nothing was logged.", "rejected: unit not matched",
+                       extra={"units": _units_json(basis)})
+    if not amounts.apply(entry, basis, quantity, unit):
+        raise ApiError(400, "That's more than 5 kg - check the amount.", "rejected: too much")
+    entry.save()
+    return entry
+
+
+def _log_usda(user, data, on, slot):
+    """A USDA food the bot picked by its fdc_id (from foods/search) - an explicit pick, never a guess."""
+    from albright_fitness import amounts, usda
+    from albright_fitness.models import Food, FoodLogEntry
+    fdc_id = data.get("fdc_id")
+    if isinstance(fdc_id, bool) or not isinstance(fdc_id, int) or fdc_id <= 0:
+        raise ApiError(400, '"fdc_id" must be a number (from GET fitness/foods/search).', "rejected: bad fdc_id")
+    try:
+        food = usda.food(fdc_id)
+    except usda.UsdaError:
+        food = Food.objects.filter(fdc_id=fdc_id).first()
+    if food is None:
+        raise ApiError(422, "Couldn't look up that food right now - nothing was logged. Use one from GET "
+                            "fitness/foods/search, or send its macros.", "rejected: usda food unavailable")
+    if data.get("unit") in (None, ""):
+        raise ApiError(422, 'Send "quantity" and "unit" (one of this food\'s units) - nothing was logged.',
+                       "rejected: no unit", extra={"units": _units_json(amounts.for_food(food))})
+    return _log_amount(FoodLogEntry(owner=user, date=on, slot=slot, source=FoodLogEntry.USDA, food=food, label=str(food)[:200]),
+                       amounts.for_food(food), data)
+
+
+@bot_endpoint("fitness:read")
+def food_search(request, token):
+    """The site's one search box: Recent, My foods, recipes, all foods (USDA when the site has a key)."""
+    from albright_fitness import amounts, food_find_views
+    from albright_fitness.models import CustomFood, Food
+    q = (request.GET.get("q") or "").strip()
+    if not q or len(q) > 100:
+        raise ApiError(400, '"q" is required (up to 100 characters).', "rejected: bad q")
+    groups, note = food_find_views.search(token.owner, q)
+    cached = {f.fdc_id: f for f in Food.objects.filter(fdc_id__in=[i["id"] for g in groups for i in g["items"] if i["kind"] == "usda"])}
+    mine = {f.pk: f for f in CustomFood.objects.filter(owner=token.owner)}
+    out = []
+    for g in groups:
+        items = []
+        for i in g["items"]:
+            row = {"kind": i["kind"], "label": i["label"], "detail": i["detail"]}
+            if i["kind"] == "usda":
+                food = cached.get(i["id"])
+                row.update(fdc_id=i["id"], units=_units_json(amounts.for_food(food)) if food else [{"unit": "g", "label": "g"}])
+                row["log"] = {"fdc_id": i["id"], "quantity": 1, "unit": row["units"][0]["unit"]}
+            elif i["kind"] == "custom" and i["id"] in mine:
+                row.update(my_food=mine[i["id"]].name, units=_units_json(amounts.for_custom(mine[i["id"]])))
+                row["log"] = {"my_food": mine[i["id"]].name, "quantity": 1, "unit": "serving"}
+            elif i["kind"] == "recipe":
+                row.update(recipe_id=i["id"], log={"recipe_id": i["id"], "servings": 1})
+            else:
+                continue                                       # a quick add from before: nothing to log by id
+            items.append(row)
+        if items:
+            out.append({"group": g["key"], "title": g["title"], "items": items})
+    return {"q": q, "groups": out, "note": note or None}, 200, f"searched foods ({sum(len(g['items']) for g in out)} found)"
+
+
+@bot_endpoint("fitness:read")
+def food_entries(request, token):
+    """One day's diary, entry by entry, with each one's amount."""
+    from albright_fitness import nutrition
+    from albright_fitness.models import FoodLogEntry
+    on = _date(request.GET, days_back=365)
+    rows = FoodLogEntry.objects.filter(owner=token.owner, date=on).select_related("food").order_by("pk")
+    order = {key: i for i, (key, _label) in enumerate(FoodLogEntry.SLOTS)}
+    entries = sorted(rows, key=lambda e: (order.get(e.slot, 9), e.pk))
+    totals = nutrition.totals(entries)
+    return ({"date": on.isoformat(), "entries": [_entry_json(e) for e in entries],
+             "totals": {n: f"{v:.1f}" for n, v in totals.items() if n in ("calories", "protein", "carbs", "fat", "fiber")}},
+            200, f"read food diary for {on}")
 
 
 # ---------------------------------------------------------------------------
