@@ -404,6 +404,26 @@ GET  fitness/summary?weeks=4                          scope: fitness:read
   "text"}], "days_food_logged", "avg_calories", "avg_protein" (over days with food logged), "target_calories",
   "target_protein"}]}.
 
+GET  fitness/programs                                 scope: fitness:read
+  The owner's programs: {"programs": [{"id", "name", "status": "active"|"paused"|"draft", "start_date", "weeks"
+  (null = no end), "planner" (wants it on the Planner), "on_planner_now", "time" ("HH:MM" or null = all day),
+  "days": [{"id", "name", "weekdays" (0 = Monday), "start_url", "exercises": [{"exercise", "target", "sets",
+  "reps", "minutes", "miles"}]}], "url"}]}.
+
+POST fitness/programs                                 scope: fitness:write
+  Creates and turns on a program in one call: {"name", "days": [{"name": "Upper", "weekdays": [0, 3] or ["mon",
+  "thu"], "exercises": [{"exercise": "Barbell Bench Press", "sets": 4, "reps": 6} or {"exercise": "Running",
+  "minutes": 30} or {"miles": 3}]}], "start_date" (default today), "weeks" (1-104, default no end), "planner":
+  true|false (default false), "time": "06:30" (optional, with planner)}. Exercise names must match the owner's
+  library exactly (any case) - NEVER GUESSED: any unknown name creates nothing and returns 422 {"error",
+  "unknown": [{"exercise", "suggestions"}]}. A target left out gets the site's default (3 x 10, cardio 20 min).
+  Returns 201 with the program (as in GET) plus "planner_tasks" (how many went on the Planner).
+
+POST fitness/programs/<id>/pause                      scope: fitness:write
+POST fitness/programs/<id>/resume                     scope: fitness:write
+  Pause: off Today and the Planner after today (history stays; the Planner choice is kept). Resume: back on, and
+  back on the Planner when it was. Returns the program. 404 if it isn't the owner's; 409 for an unfinished draft.
+
 ACTIVITY (the owner's notifications - what others changed in things shared with them and in their circles)
 --------------------------------------------------------------------------------------------------------------
 Never the owner's own actions. Each event is checked when you ask: something unshared, or a circle the owner left

@@ -4,6 +4,10 @@ Always the token owner's own Fitness data - their workouts, food diary and weigh
 someone in the same circle). fitness:read reads (today, the weekly summary); fitness:write logs a workout, food or a
 weigh-in. The owner needs Fitness access and API keys allowed (auth.bot_endpoint checks on every call, and logs it).
 
+Programs: fitness:read lists them; fitness:write creates one (the same steps as the site's guided setup, in one
+call) and pauses / resumes one. Exercise names are never guessed either: an unknown name creates nothing and the
+answer lists close names from the owner's library.
+
 Food is never guessed: a recipe or "my food" name must match exactly (any case) - otherwise nothing is logged and
 the answer lists suggestions (close recipe / my food names, and USDA foods to pick from on the site).
 """
@@ -12,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from .auth import ApiError, bot_endpoint, json_body
 
@@ -295,3 +300,152 @@ def summary(request, token):
             "days_food_logged": w["days_logged"], "avg_calories": w["avg_calories"], "avg_protein": w["avg_protein"],
             "target_calories": w["target_calories"], "target_protein": w["target_protein"]} for w in rows]
     return {"weeks": out}, 200, f"read fitness summary ({raw} weeks)"
+
+
+# ---------------------------------------------------------------------------
+# Programs
+# ---------------------------------------------------------------------------
+
+MAX_PROGRAM_DAYS = 7
+DAY_NAMES = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def _program_json(p):
+    from albright_fitness import programs as fx_programs
+    status = "draft" if p.is_draft else ("active" if p.active else "paused")
+    return {"id": p.pk, "name": p.name, "status": status, "start_date": p.start_date.isoformat() if p.start_date else None,
+            "weeks": p.weeks, "planner": p.on_planner, "on_planner_now": bool(p.scheduled_from),
+            "time": p.planner_time.strftime("%H:%M") if p.planner_time else None,
+            "days": [{"id": d.pk, "name": d.name, "weekdays": d.weekdays or [], "start_url": fx_programs.start_url(d),
+                      "exercises": [{"exercise": pe.exercise.name, "target": pe.target_text, "sets": pe.target_sets,
+                                     "reps": pe.target_reps, "minutes": float(pe.target_seconds / 60) if pe.target_seconds else None,
+                                     "miles": f"{pe.target_distance:f}" if pe.target_distance is not None else None}
+                                    for pe in d.exercises.all()]} for d in p.days.all()],
+            "url": reverse("albright_fitness:program", args=[p.pk])}
+
+
+def _weekdays(value):
+    if not isinstance(value, list) or not value:
+        raise ApiError(400, '"weekdays" must be a list like [0, 3] (0 = Monday) or ["mon", "thu"].', "rejected: bad weekdays")
+    out = set()
+    for d in value:
+        n = DAY_NAMES.get(d.lower()[:3]) if isinstance(d, str) else (d if isinstance(d, int) and not isinstance(d, bool) else None)
+        if n is None or not 0 <= n <= 6:
+            raise ApiError(400, '"weekdays" must be 0-6 (0 = Monday) or day names.', "rejected: bad weekdays")
+        out.add(n)
+    return sorted(out)
+
+
+def _program_days(user, days):
+    """[{"name", "weekdays", "exercises": [{"exercise", "sets", "reps", "minutes", "miles"}]}] -> checked rows, and the
+    exercise names that matched nothing (nothing is created then)."""
+    from albright_fitness.models import Exercise
+    if not isinstance(days, list) or not 1 <= len(days) <= MAX_PROGRAM_DAYS:
+        raise ApiError(400, f'"days" must be a list of 1-{MAX_PROGRAM_DAYS} workouts.', "rejected: bad days")
+    rows, unknown = [], []
+    for d in days:
+        if not isinstance(d, dict):
+            raise ApiError(400, 'Each day must be {"name", "weekdays", "exercises"}.', "rejected: bad day")
+        exercises = d.get("exercises") or []
+        if not isinstance(exercises, list) or len(exercises) > MAX_EXERCISES:
+            raise ApiError(400, f'"exercises" must be a list of up to {MAX_EXERCISES}.', "rejected: bad exercises")
+        row = {"name": _str(d, "name", 60, required=True), "weekdays": _weekdays(d.get("weekdays")), "exercises": []}
+        for e in exercises:
+            if not isinstance(e, dict):
+                raise ApiError(400, 'Each exercise must be {"exercise": name, "sets", "reps"}.', "rejected: bad exercise")
+            name = _str(e, "exercise", 100, required=True)
+            found = Exercise.objects.visible_to(user).filter(name__iexact=name).first()
+            if found is None:
+                unknown.append({"exercise": name, "suggestions": _suggest_exercises(user, name)})
+                continue
+            row["exercises"].append({"exercise": found, "sets": _number(e, "sets", 1, 20), "reps": _number(e, "reps", 1, 100),
+                                     "minutes": _number(e, "minutes", Decimal("0.1"), 1440), "miles": _number(e, "miles", Decimal("0.01"), 500)})
+        rows.append(row)
+    return rows, unknown
+
+
+@bot_endpoint("fitness:read")
+def _programs_get(request, token):
+    from albright_fitness.models import Program
+    found = Program.objects.filter(owner=token.owner).prefetch_related("days__exercises__exercise")
+    return {"programs": [_program_json(p) for p in found]}, 200, f"read {len(found)} programs"
+
+
+@bot_endpoint("fitness:write", methods=("POST",))
+def _programs_post(request, token):
+    from datetime import datetime
+
+    from django.db import transaction
+
+    from albright_fitness import programs as fx_programs
+    from albright_fitness.models import Program, ProgramDay, ProgramExercise
+    user, data = token.owner, json_body(request)
+    name = _str(data, "name", 100, required=True)
+    rows, unknown = _program_days(user, data.get("days"))
+    if unknown:
+        raise ApiError(422, "Some exercises aren't in the library - nothing was created. Use the exact names (see "
+                            "suggestions), or create them on the site first.", "rejected: unknown exercises",
+                       extra={"unknown": unknown})
+    today = timezone.localdate()
+    start = today
+    if data.get("start_date") not in (None, ""):
+        try:
+            start = date.fromisoformat(data["start_date"]) if isinstance(data["start_date"], str) else None
+        except ValueError:
+            start = None
+        if start is None or not today - timedelta(days=365) <= start <= today + timedelta(days=365):
+            raise ApiError(400, '"start_date" must be YYYY-MM-DD within a year of today.', "rejected: bad start_date")
+    weeks = _number(data, "weeks", 1, 104)
+    planner = data.get("planner", False)
+    if not isinstance(planner, bool):
+        raise ApiError(400, '"planner" must be true or false.', "rejected: bad planner")
+    at = None
+    if data.get("time") not in (None, ""):
+        try:
+            at = datetime.strptime(data["time"], "%H:%M").time() if isinstance(data["time"], str) else None
+        except ValueError:
+            at = None
+        if at is None:
+            raise ApiError(400, '"time" must be HH:MM (24-hour), or leave it out for all day.', "rejected: bad time")
+    with transaction.atomic():
+        p = Program.objects.create(owner=user, name=name, active=False)
+        for n, row in enumerate(rows):
+            day = ProgramDay.objects.create(program=p, name=row["name"], weekdays=row["weekdays"], order=n)
+            for i, e in enumerate(row["exercises"]):
+                pe = fx_programs.add_exercise(day, e["exercise"])
+                if any(e[k] is not None for k in ("sets", "reps", "minutes", "miles")):
+                    fx_programs.set_target(pe, sets=e["sets"], reps=e["reps"], minutes=e["minutes"], miles=e["miles"])
+                ProgramExercise.objects.filter(pk=pe.pk).update(order=i)
+        placed = fx_programs.finish_setup(p, start, weeks=int(weeks) if weeks else None, on_planner=planner, planner_time=at)
+    p = Program.objects.prefetch_related("days__exercises__exercise").get(pk=p.pk)
+    return ({**_program_json(p), "planner_tasks": placed}, 201, f"created program #{p.pk} ({len(rows)} days)")
+
+
+@csrf_exempt
+def programs(request):
+    """GET (fitness:read) lists the owner's programs; POST (fitness:write) creates one."""
+    return _programs_post(request) if request.method == "POST" else _programs_get(request)
+
+
+def _set_program(token, pk, active):
+    from albright_fitness import programs as fx_programs
+    from albright_fitness.models import Program
+    p = Program.objects.filter(owner=token.owner, pk=pk).first()
+    if p is None:
+        raise ApiError(404, "No program with that id.", "rejected: program not found")
+    if p.is_draft:
+        raise ApiError(409, "That program isn't set up yet - finish it on the site first.", "rejected: draft program")
+    fx_programs.set_active(p, active)
+    p = Program.objects.prefetch_related("days__exercises__exercise").get(pk=p.pk)
+    return _program_json(p), 200, f"{'resumed' if active else 'paused'} program #{p.pk}"
+
+
+@bot_endpoint("fitness:write", methods=("POST",))
+def program_pause(request, token, item_id):
+    """Off Today and the Planner after today; the Planner choice is kept for resume."""
+    return _set_program(token, item_id, False)
+
+
+@bot_endpoint("fitness:write", methods=("POST",))
+def program_resume(request, token, item_id):
+    return _set_program(token, item_id, True)
