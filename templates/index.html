@@ -440,6 +440,8 @@
         <script src="{% static_version 'labs/push.js' %}"></script>
         {% if user.is_authenticated %}<script src="{% static_version 'labs/notifications.js' %}"></script>{% endif %}
         {% if user.is_authenticated %}<script src="{% static_version 'labs/share.js' %}" defer></script>{% endif %}
+        {# What may be kept as each app's last page (albright_labs.resume_nav) - read by js/app_nav.js. #}
+        {% if user.is_authenticated %}{{ nav_resume_rules|json_script:"nav-resume-rules" }}{% endif %}
         <script src="{% static_version 'js/app_nav.js' %}"></script>
         {# The shared Markdown editor (templates/_md_editor.html; Notes' notes.js uses it too) - before the app's script. #}
         <script src="{% static_version 'js/md_editor.js' %}"></script>
