@@ -49,6 +49,9 @@ class FindTests(Base):
         e = FoodLogEntry.objects.get(owner=self.me)
         self.assertEqual((e.quantity, e.grams, e.calories, e.portion_label, e.slot),
                          (D("0.25"), D("42.5"), D("25.08"), "¼ container (170 g)", "breakfast"))
+        diary = self.client.get(url("food")).content.decode()
+        self.assertIn('id="fx-undo"', diary)
+        self.assertNotIn('id="fx-undo"', self.client.get(url("food")).content.decode())   # once
         again = self.client.get(url("food_pick", "usda", food.fdc_id)).content.decode()
         self.assertIn('value="1/4"', again)                              # starts at what I had last time
         self.client.post(url("food_pick", "usda", food.fdc_id), {"quantity": "2", "unit": "oz", "slot": "lunch"})
@@ -67,6 +70,7 @@ class FindTests(Base):
         food = Food.objects.create(**YOGURT)
         self.client.post(url("food_pick", "usda", food.fdc_id), {"quantity": "1", "unit": "p:1 container (170 g)", "slot": "breakfast"})
         e = FoodLogEntry.objects.get()
+        self.assertIn(url("food_edit", e.pk), self.client.get(url("food")).content.decode())
         self.client.post(url("food_edit", e.pk), {"quantity": "100", "unit": "g", "slot": "dinner"})
         e.refresh_from_db()
         self.assertEqual((e.quantity, e.unit, e.grams, e.calories, e.slot), (D(100), "g", D("100.0"), D("59.00"), "dinner"))
@@ -93,6 +97,11 @@ class FindTests(Base):
         self.assertEqual((cake.source, cake.calories, CustomFood.objects.count()), ("quick", D("600.00"), 1))
         r = self.client.post(url("food_new"), {"name": "", "quantity": "x"})
         self.assertContains(r, "Give it a name.")
+
+    def test_my_foods_can_say_what_a_serving_weighs_or_holds(self):
+        self.client.post(url("my_foods"), {"name": "Oat milk", "serving_label": "1 cup", "serving_ml": "240", "calories": "120"})
+        self.assertEqual(CustomFood.objects.get(name="Oat milk").serving_ml, D("240.0"))
+        self.assertContains(self.client.get(url("my_foods")), "1 cup = 240 ml")
 
     def test_private(self):
         theirs = CustomFood.objects.create(owner=self.friend, name="Theirs", calories=D(1))

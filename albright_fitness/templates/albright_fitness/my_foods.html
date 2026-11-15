@@ -9,7 +9,7 @@
 <section class="card fx-card" id="fx-my-foods">
     {% for f in foods %}
     <div class="fx-row">
-        <span class="fx-row__title">{{ f.name }} <span class="fx-muted fx-small">{{ f.serving_label }}</span></span>
+        <span class="fx-row__title">{{ f.name }} <span class="fx-muted fx-small">{{ f.serving_label }}{% if f.serving_grams %} = {{ f.serving_grams|floatformat:"-1" }} g{% endif %}{% if f.serving_ml %}{% if f.serving_grams %},{% else %} ={% endif %} {{ f.serving_ml|floatformat:"-1" }} ml{% endif %}</span></span>
         <span class="fx-row__ind">{{ f.calories|floatformat:0 }} kcal{% if f.protein is not None %} &middot; {{ f.protein|floatformat:0 }} g P{% endif %}</span>
         <form method="post" action="{% url 'albright_fitness:my_food_delete' f.pk %}" data-confirm="Remove {{ f.name }} from My foods? Your diary keeps what you logged.">{% csrf_token %}<button type="submit" class="fx-icon-btn" aria-label="Remove {{ f.name }}" title="Remove">&times;</button></form>
     </div>
@@ -19,9 +19,9 @@
 <form method="post" class="card fx-card fx-form" id="fx-my-food-form">{% csrf_token %}
     <h2 class="fx-card__title">Add one</h2>
     <div class="field"><label for="fx-mf-name">Name</label><input type="text" name="name" id="fx-mf-name" class="ledger-input" maxlength="100" required placeholder="Protein shake"></div>
+    {% include "albright_fitness/_serving_fields.html" %}
+    <p class="fx-help">Numbers for one serving:</p>
     <div class="fx-macro-inputs">
-        <div class="field"><label for="fx-mf-serving">Serving</label><input type="text" name="serving_label" id="fx-mf-serving" class="ledger-input" maxlength="40" placeholder="1 scoop"></div>
-        <div class="field"><label for="fx-mf-grams">Serving grams (optional)</label><input type="number" name="serving_grams" id="fx-mf-grams" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
         <div class="field"><label for="fx-mf-calories">Calories</label><input type="number" name="calories" id="fx-mf-calories" class="ledger-input" min="0" max="10000" step="1" required inputmode="numeric"></div>
         <div class="field"><label for="fx-mf-protein">Protein (g)</label><input type="number" name="protein" id="fx-mf-protein" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>
         <div class="field"><label for="fx-mf-carbs">Carbs (g)</label><input type="number" name="carbs" id="fx-mf-carbs" class="ledger-input" min="0" step="0.1" inputmode="decimal"></div>

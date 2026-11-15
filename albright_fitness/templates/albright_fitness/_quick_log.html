@@ -57,7 +57,7 @@ The Today page's Quick log (views._quick_log), three tabs - the last one used is
                 {% for r in quick.recipes %}<li data-food-name="{{ r.title|lower }}"><button type="submit" name="pick" value="recipe:{{ r.pk }}" class="fx-row fx-row--link fx-food-pick"><span class="fx-row__title">{{ r.title }}</span><span class="fx-row__ind">Recipe &middot; per serving</span></button></li>{% endfor %}
             </ul>
             {% if not quick.recent_foods and not quick.my_foods and not quick.recipes %}<p class="fx-empty">Foods you log, <a href="{% url 'albright_fitness:my_foods' %}">My foods</a> and recipes with nutrition show here.</p>{% endif %}
-            <p class="fx-empty" data-food-none hidden>Nothing matches - <a href="{% url 'albright_fitness:food_add' %}">search all foods</a>.</p>
+            <p class="fx-empty" data-food-none hidden>Nothing matches - <a href="{% url 'albright_fitness:food_find' %}">search all foods</a>.</p>
         </form>
         <details class="fx-quicklog__qa" id="fx-quick-add">
             <summary class="fx-label">Quick add</summary>

@@ -118,7 +118,9 @@ def diary(request, day=None):
         raise Http404
     profile = NutritionProfile.load(request.user)
     data = nutrition.day(request.user, on)
+    from .food_find_views import pop_undo, slot_now
     return render(request, "albright_fitness/food_diary.html", {
+        "undo": pop_undo(request), "slot_now": slot_now(),
         **data, "on": on, "today": timezone.localdate(), "prev": on - timedelta(days=1), "next": on + timedelta(days=1),
         "profile": profile, "progress": nutrition.progress(profile, data["totals"]), "plan": _plan_today(request.user, on),
         "has_targets": any(profile.target(n) for n in MACROS), "tracked": profile.tracked or []})
@@ -304,7 +306,8 @@ def my_foods(request):
         else:
             CustomFood.objects.create(owner=request.user, name=name,
                                       serving_label=" ".join(request.POST.get("serving_label", "").split())[:40] or "1 serving",
-                                      serving_grams=_number(request.POST.get("serving_grams") or "", high=MAX_GRAMS), **values)
+                                      serving_grams=_number(request.POST.get("serving_grams") or "", high=MAX_GRAMS),
+                                      serving_ml=_number(request.POST.get("serving_ml") or "", high=MAX_GRAMS), **values)
             messages.success(request, f"Added {name} to My foods.")
             return redirect("albright_fitness:my_foods")
     return render(request, "albright_fitness/my_foods.html", {"foods": CustomFood.objects.filter(owner=request.user)})

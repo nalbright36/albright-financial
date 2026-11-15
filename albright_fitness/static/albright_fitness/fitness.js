@@ -574,3 +574,85 @@
         if (time) time.hidden = !event.target.checked;
     });
 })();
+
+// ---------- Food: the one search box (live), and the amount panel's numbers as you type ----------
+(function () {
+    "use strict";
+    var FRACTIONS = {"½": " 1/2", "¼": " 1/4", "¾": " 3/4", "⅓": " 1/3", "⅔": " 2/3", "⅛": " 1/8"};
+    // The same rules as amounts.parse_quantity: 2, 1.5, .3, 1/4, 1 1/2, 1½ -> a number, else null.
+    function parseQuantity(text) {
+        text = String(text || "").trim().toLowerCase();
+        Object.keys(FRACTIONS).forEach(function (c) { text = text.split(c).join(FRACTIONS[c]); });
+        text = text.replace(/,/g, ".").replace(/\s+/g, " ").trim();
+        var m = text.match(/^(?:(\d+)(?:\s+|-))?(\d+)\s*\/\s*(\d+)$/), value = null;
+        if (m) { if (+m[3]) value = (+(m[1] || 0)) + (+m[2]) / (+m[3]); }
+        else if (/^(\d+(\.\d*)?|\.\d+)$/.test(text)) value = parseFloat(text);
+        return value && value > 0 && value <= 5000 ? value : null;
+    }
+    function updatePanel(panel) {
+        var menuEl = panel.querySelector("[data-menu]"), qty = panel.querySelector("[data-qty]"), unit = panel.querySelector("[data-unit]");
+        if (!menuEl || !qty || !unit) return;
+        var menu = JSON.parse(menuEl.textContent), q = parseQuantity(qty.value), row = null;
+        menu.forEach(function (u) { if (u.key === unit.value) row = u; });
+        panel.querySelectorAll("[data-live]").forEach(function (el) {
+            var per = row ? row.per[el.getAttribute("data-live")] : null;
+            el.textContent = q && per !== null && per !== undefined ? Math.round(per * q) : "-";
+        });
+        qty.setAttribute("aria-invalid", q ? "false" : "true");
+        var save = panel.querySelector("[data-amount-save]");
+        if (save) save.disabled = !q;
+    }
+    document.addEventListener("input", function (e) {
+        var panel = e.target.closest && e.target.closest("[data-amount-panel]");
+        if (panel && e.target.matches("[data-qty]")) updatePanel(panel);
+    });
+    document.addEventListener("change", function (e) {
+        var panel = e.target.closest && e.target.closest("[data-amount-panel]");
+        if (panel && e.target.matches("[data-unit]")) updatePanel(panel);
+    });
+    document.addEventListener("click", function (e) {
+        var chip = e.target.closest && e.target.closest("[data-qty-chip]");
+        if (!chip) return;
+        var panel = chip.closest("[data-amount-panel]"), qty = panel.querySelector("[data-qty]");
+        qty.value = chip.getAttribute("data-qty-chip");
+        updatePanel(panel);
+    });
+
+    var find = document.querySelector("[data-food-find]"), results = document.querySelector("[data-find-results]");
+    if (!find || !results || !window.fetch) return;
+    var input = find.querySelector("input[type=search]"), wait = null;
+    var esc = function (t) { var d = document.createElement("div"); d.textContent = t == null ? "" : t; return d.innerHTML; };
+    var slot = function () { var c = find.querySelector("[data-find-slot]:checked"); return c ? c.value : ""; };
+    var extra = function () { return "?date=" + encodeURIComponent(find.elements.date.value) + "&slot=" + encodeURIComponent(slot()); };
+    var run = function () {
+        var q = input.value.trim();
+        fetch(find.getAttribute("data-url") + extra() + "&format=json&q=" + encodeURIComponent(q), {credentials: "same-origin"})
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || input.value.trim() !== q) return;
+                var html = data.groups.map(function (g) {
+                    return '<section class="card fx-card fx-find__group"><h2 class="fx-card__title">' + esc(g.title) + '</h2><ul class="fx-list">' +
+                        g.items.map(function (i) {
+                            var href = esc(i.url + extra());
+                            return '<li><a href="' + href + '" class="fx-row fx-row--link" data-sheet-url="' + href + '" data-find-item>' +
+                                '<span class="fx-row__title">' + esc(i.label) + '</span><span class="fx-row__ind">' + esc(i.detail) + '</span></a></li>';
+                        }).join("") + "</ul></section>";
+                }).join("");
+                if (!data.groups.length && q) html = '<p class="fx-empty">Nothing called “' + esc(q) + '” yet.</p>';
+                if (data.note) html += '<p class="fx-help" id="fx-find-note">' + esc(data.note) + "</p>";
+                results.innerHTML = html;
+            })
+            .catch(function () {});
+    };
+    input.addEventListener("input", function () { clearTimeout(wait); wait = setTimeout(run, 300); });
+    // The meal chips: the links already listed (and "Enter it yourself") follow the chosen meal.
+    find.addEventListener("change", function (e) {
+        if (!e.target.matches("[data-find-slot]")) return;
+        document.querySelectorAll("[data-find-item], [data-find-carry]").forEach(function (a) {
+            ["href", "data-sheet-url"].forEach(function (attr) {
+                var v = a.getAttribute(attr);
+                if (v) a.setAttribute(attr, v.replace(/([?&]slot=)[^&]*/, "$1" + slot()));
+            });
+        });
+    });
+})();
