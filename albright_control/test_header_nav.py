@@ -79,7 +79,7 @@ class AdminGroupTests(Base):
                     ("albright_control:ideas", "Ideas")],
             "system": [("albright_control:health", "System health"), ("albright_control:integrations", "Integrations"),
                        ("albright_control:ai_usage", "AI usage"), ("albright_control:data", "Data"),
-                       ("albright_control:audit", "Audit log")],
+                       ("albright_control:storage", "Storage"), ("albright_control:audit", "Audit log")],
             "site": [("albright_resume_admin:overview", "Resume"), ("labs_admin:settings", "Home page"),
                      ("albright_control:users", "Users")],
         }

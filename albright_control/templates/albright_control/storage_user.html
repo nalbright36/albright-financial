@@ -1,0 +1,27 @@
+{% extends "index.html" %}
+{% load storage_tags %}
+{% block page_title %}{{ person.username }} · Storage · {% endblock %}
+{% block content %}
+{% comment %}Admin > Storage > one user (storage_views.storage_user): their biggest 20 attachments by name, size, task
+or note and date. Names only - no links to the files: an admin opens a file only where normal sharing would let them.{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 900px;">
+    <p style="margin: 0 0 8px;"><a href="{% url 'albright_control:storage' %}">&larr; Storage</a></p>
+    <h1 style="margin: 0 0 6px;">{{ person.username }}</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);"><strong>{{ usage.tier_name }}</strong>{% if not explicit %} (default){% endif %} &middot; {{ usage.label }} &middot; {{ usage.percent }}% &middot; {{ count }} file{{ count|pluralize }} ({{ files_bytes|filesize }} files + {{ thumb_bytes|filesize }} thumbnails)</p>
+    <p style="margin: 0 0 20px; max-width: 420px;">{% include "albright_labs/_storage_bar.html" with u=usage %}</p>
+
+    <section class="card" style="padding: 0;" id="biggest">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Biggest attachments</span></div>
+        {% if rows %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead><tr><th>Name</th><th class="num">Size</th><th>On</th><th>Added</th></tr></thead>
+            <tbody>
+            {% for r in rows %}<tr><td>{{ r.a.original_name }}</td><td class="num">{{ r.a.size_bytes|filesize }}</td><td>{{ r.parent }}</td><td style="white-space: nowrap;">{{ r.a.created_at|date:"M j, Y" }}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No attachments.</p>{% endif %}
+    </section>
+</div>
+{% endblock %}

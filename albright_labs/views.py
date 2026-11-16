@@ -162,13 +162,13 @@ def account(request):
     keys for someone allowed them."""
     from albright_bot_api.scopes import keys_allowed
 
-    from . import attachments
-    files, used = attachments.storage_used(request.user)
+    from . import attachments, storage
+    files, _ = attachments.storage_used(request.user)
     return render(request, "albright_labs/account.html", {**_settings_context(request),
                                                           "api_keys": keys_allowed(request.user),
                                                           "attachment_files": files,
-                                                          "attachment_storage": attachments.size_label(used),
-                                                          "attachment_max": attachments.size_label(attachments.max_bytes())})
+                                                          "usage": storage.get_storage_usage(request.user),
+                                                          "attachment_max": attachments.size_limit_label(attachments.max_bytes())})
 
 
 @login_required

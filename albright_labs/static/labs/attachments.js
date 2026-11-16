@@ -9,6 +9,8 @@
  *   viewer        a thumbnail opens a full-screen viewer: arrows / swipe between the section's images, X or Esc
  *                 closes
  *   remove        the trash button asks "Remove?" in place; Remove deletes it, Cancel (or Esc) puts it back
+ *   storage       "312 MB of 1 GB used" under Add files follows each upload and remove (the JSON's storage) -
+ *                 amber at 80%, red at 100%, where Add files turns off until something is removed
  *
  * window.Attachments.upload(section, file, onDone) is the same upload for other scripts - Notes uses it to put
  * a pasted or dropped image in the note (notes.js).
@@ -40,6 +42,26 @@
         if (p.count) p.count.textContent = n ? String(n) : "";
         if (p.grid) p.grid.hidden = !p.grid.children.length;
         if (p.files) p.files.hidden = !p.files.children.length;
+    }
+
+    // ---------- Storage line: it's the person's, so every section on the page shows the same ----------
+    var FULL_TITLE = "Your storage is full - delete some attachments to add more.";
+
+    function setStorage(storage) {
+        if (!storage) return;
+        document.querySelectorAll("[data-att-storage]").forEach(function (line) {
+            var label = line.querySelector("[data-att-storage-label]");
+            var full = line.querySelector("[data-att-storage-full]");
+            if (label) label.textContent = storage.label;
+            if (full) full.hidden = !storage.full;
+            line.className = "att__storage att__storage--" + storage.status;
+        });
+        document.querySelectorAll("[data-att-btn]").forEach(function (btn) {
+            var input = btn.querySelector("[data-att-input]");
+            btn.classList.toggle("is-disabled", !!storage.full);
+            if (storage.full) btn.title = FULL_TITLE; else btn.removeAttribute("title");
+            if (input) input.disabled = !!storage.full;
+        });
     }
 
     function showError(section, text) {
@@ -98,6 +120,7 @@
         xhr.addEventListener("load", function () {
             var res = {};
             try { res = JSON.parse(xhr.responseText); } catch (e) { res = {}; }
+            setStorage(res.storage);
             if (xhr.status === 201 && res.attachments) {
                 addRows(section, res.attachments);
                 setCount(section, res.count);
@@ -124,6 +147,8 @@
 
     function uploadAll(section, fileList) {
         showError(section, "");
+        var input = section.querySelector("[data-att-input]");
+        if (input && input.disabled) { showError(section, FULL_TITLE); return; }
         Array.prototype.slice.call(fileList || []).forEach(function (f) { upload(section, f); });
     }
 
@@ -204,6 +229,7 @@
         xhr.addEventListener("load", function () {
             var res = {};
             try { res = JSON.parse(xhr.responseText); } catch (e) { res = {}; }
+            setStorage(res.storage);
             if (xhr.status === 200 && res.ok) {
                 item.remove();
                 setCount(section, res.count);

@@ -1,0 +1,109 @@
+{% extends "index.html" %}
+{% load storage_tags %}
+{% block page_title %}Storage · {% endblock %}
+{% block content %}
+{% comment %}Admin > System > Storage (storage_views.storage_page): totals, a row per user with their usage bar, Change
+tier / Recalculate, and the tiers. File names only on the per-user page - nothing here opens a file.{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 6px;">Storage</h1>
+    <p style="margin: 0 0 16px; color: var(--text-secondary);">Attachments on Planner tasks and notes, counted against the person who uploaded them (file and thumbnail). Someone without a tier is on the default{% if default_tier %} &ndash; <strong>{{ default_tier.name }}</strong>, {{ default_tier.limit_bytes|filesize_limit }}{% endif %}.</p>
+
+    <div class="grid grid-3" style="margin-bottom: 20px;" id="storage-totals">
+        <div class="card"><div class="card__header"><span class="card__label">Total used</span></div><span class="ledger-stat__value num" style="font-size: 1.4rem;">{{ total_used|filesize }}</span></div>
+        <div class="card"><div class="card__header"><span class="card__label">Users</span></div><span class="ledger-stat__value num" style="font-size: 1.4rem;">{{ user_count }}</span></div>
+        <div class="card"><div class="card__header"><span class="card__label">At {{ warn_percent }}% or more</span></div><span class="ledger-stat__value num" style="font-size: 1.4rem;{% if over_count %} color: var(--warn);{% endif %}">{{ over_count }}</span></div>
+    </div>
+
+    <section class="card" style="margin-bottom: 20px; padding: 0;" id="storage-users">
+        <div class="card__header storage-admin__head">
+            <span class="card__label">Users</span>
+            <form method="get" class="storage-admin__search" role="search">
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <label for="storage-q" class="visually-hidden">Search by username</label>
+                <input type="search" name="q" id="storage-q" value="{{ q }}" placeholder="Search usernames" class="input">
+                <button type="submit" class="btn btn-secondary">Search</button>
+            </form>
+        </div>
+        <div class="table-scroll">
+        <table class="holdings storage-admin__table">
+            <thead><tr>
+                <th><a href="?sort=username{% if q %}&amp;q={{ q|urlencode }}{% endif %}"{% if sort == "username" %} aria-current="true" class="is-sorted"{% endif %}>Username{% if sort == "username" %} &uarr;{% endif %}</a></th>
+                <th>Tier</th>
+                <th class="num">Files</th>
+                <th class="num"><a href="?sort=used{% if q %}&amp;q={{ q|urlencode }}{% endif %}"{% if sort == "used" %} aria-current="true" class="is-sorted"{% endif %}>Used{% if sort == "used" %} &darr;{% endif %}</a></th>
+                <th class="num">Limit</th>
+                <th><a href="?sort=percent{% if q %}&amp;q={{ q|urlencode }}{% endif %}"{% if sort == "percent" %} aria-current="true" class="is-sorted"{% endif %}>Usage{% if sort == "percent" %} &darr;{% endif %}</a></th>
+                <th>Actions</th>
+            </tr></thead>
+            <tbody>
+            {% for r in rows %}
+            <tr id="storage-user-{{ r.user.pk }}">
+                <td><a href="{% url 'albright_control:storage_user' r.user.pk %}">{{ r.user.username }}</a></td>
+                <td>{{ r.tier.name|default:"—" }}{% if not r.explicit_tier %} <span class="storage-admin__muted">(default)</span>{% endif %}</td>
+                <td class="num">{{ r.count }}</td>
+                <td class="num">{{ r.usage.used_label }}</td>
+                <td class="num">{{ r.usage.limit_label }}</td>
+                <td class="storage-admin__usage">{% include "albright_labs/_storage_bar.html" with u=r.usage %} <span class="num storage-admin__pct storage-admin__pct--{{ r.usage.status }}">{{ r.usage.percent }}%</span></td>
+                <td class="storage-admin__actions">
+                    <form method="post" class="storage-admin__inline">{% csrf_token %}
+                        <input type="hidden" name="action" value="set_tier"><input type="hidden" name="user" value="{{ r.user.pk }}">
+                        <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="q" value="{{ q }}">
+                        <label for="tier-{{ r.user.pk }}" class="visually-hidden">Change tier for {{ r.user.username }}</label>
+                        <select name="tier" id="tier-{{ r.user.pk }}" class="input storage-admin__select">
+                            <option value=""{% if not r.explicit_tier %} selected{% endif %}>Default</option>
+                            {% for t in tier_choices %}<option value="{{ t.pk }}"{% if r.explicit_tier == t.pk %} selected{% endif %}>{{ t.name }} ({{ t.limit_bytes|filesize_limit }})</option>{% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-secondary">Change tier</button>
+                    </form>
+                    <form method="post" class="storage-admin__inline">{% csrf_token %}
+                        <input type="hidden" name="action" value="recalc"><input type="hidden" name="user" value="{{ r.user.pk }}">
+                        <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="q" value="{{ q }}">
+                        <button type="submit" class="btn btn-secondary">Recalculate</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" style="color: var(--text-secondary);">{% if q %}No usernames match &ldquo;{{ q }}&rdquo;.{% else %}No users.{% endif %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+
+    <section class="card" style="padding: 0;" id="tiers">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Tiers</span></div>
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead><tr><th>Name</th><th>Slug</th><th class="num">Limit</th><th class="num">Users</th><th>Default</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for t in tiers %}
+            <tr id="tier-row-{{ t.tier.pk }}">
+                <td>{{ t.tier.name }}</td><td><code>{{ t.tier.slug }}</code></td>
+                <td class="num">{{ t.tier.limit_bytes|filesize_limit }}</td><td class="num">{{ t.users }}</td>
+                <td>{% if t.tier.is_default %}<strong>Default</strong>{% endif %}</td>
+                <td class="storage-admin__actions">
+                    <a href="?edit_tier={{ t.tier.pk }}#tiers" class="btn btn-secondary">Edit</a>
+                    {% if not t.tier.is_default %}<form method="post" class="storage-admin__inline">{% csrf_token %}<input type="hidden" name="action" value="tier_default"><input type="hidden" name="tier_id" value="{{ t.tier.pk }}"><button type="submit" class="btn btn-secondary">Make default</button></form>{% endif %}
+                    {% if t.can_delete %}<form method="post" class="storage-admin__inline" onsubmit="return confirm('Delete the {{ t.tier.name|escapejs }} tier?');">{% csrf_token %}<input type="hidden" name="action" value="tier_delete"><input type="hidden" name="tier_id" value="{{ t.tier.pk }}"><button type="submit" class="btn btn-secondary">Delete</button></form>
+                    {% else %}<span class="storage-admin__muted">{% if t.tier.is_default %}Can't delete the default{% else %}In use{% endif %}</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <form method="post" class="storage-admin__tier-form" id="tier-form">{% csrf_token %}
+            <h2 class="storage-admin__h2">{% if edit_tier %}Edit {{ edit_tier.name }}{% else %}Add a tier{% endif %}</h2>
+            <input type="hidden" name="action" value="tier_save">{% if edit_tier %}<input type="hidden" name="tier_id" value="{{ edit_tier.pk }}">{% endif %}
+            {% if tier_form.non_field_errors %}<p class="storage-admin__error">{{ tier_form.non_field_errors|join:" " }}</p>{% endif %}
+            <div class="storage-admin__fields">
+                {% for field in tier_form %}
+                <label class="storage-admin__field">{{ field.label }}{{ field }}{% for e in field.errors %}<span class="storage-admin__error">{{ e }}</span>{% endfor %}</label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">{% if edit_tier %}Save tier{% else %}Add tier{% endif %}</button>
+            {% if edit_tier %}<a href="?#tiers" class="btn btn-secondary">Cancel</a>{% endif %}
+        </form>
+    </section>
+</div>
+{% endblock %}

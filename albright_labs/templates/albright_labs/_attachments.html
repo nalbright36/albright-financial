@@ -4,7 +4,8 @@ att). Images are a thumbnail grid (tap: the full-screen viewer, swipe or arrows 
 other files are rows. Someone who can edit the task or note gets "Add files" (on a phone: camera, photo library
 or Files - the accept list), drag-and-drop on desktop, a progress bar, and a trash button per file - all in
 albright_labs/static/labs/attachments.js (event delegation, so it works in the Planner's dialog too). Without
-JavaScript the form posts and comes back. Left out entirely for a view-only reader when there's nothing attached.
+JavaScript the form posts and comes back. Under it: the uploader's storage ("312 MB of 1 GB used" - amber at 80%,
+red at 100%); at 100% Add files is turned off with a note (att.storage, albright_labs.storage). Left out entirely for a view-only reader when there's nothing attached.
 {% endcomment %}
 {% if att.count or att.can_edit %}
 <section class="att" id="attachments" data-att data-count="{{ att.count }}" data-max="{{ att.max }}" data-max-bytes="{{ att.max_bytes }}" aria-labelledby="att-h-{{ att.app }}-{{ att.parent_id }}">
@@ -15,13 +16,14 @@ JavaScript the form posts and comes back. Left out entirely for a view-only read
     <form method="post" action="{{ att.upload_url }}" enctype="multipart/form-data" class="att__add" data-att-form>{% csrf_token %}
         <input type="hidden" name="parent" value="{{ att.app }}"><input type="hidden" name="id" value="{{ att.parent_id }}">
         <input type="hidden" name="next" value="{{ att.next|default:request.get_full_path }}">
-        <label class="att__btn">
-            <input type="file" name="file" multiple accept="{{ att.accept }}" class="att__input" data-att-input>
+        <label class="att__btn{% if att.storage.full %} is-disabled{% endif %}" data-att-btn{% if att.storage.full %} title="Your storage is full - delete some attachments to add more."{% endif %}>
+            <input type="file" name="file" multiple accept="{{ att.accept }}" class="att__input" data-att-input{% if att.storage.full %} disabled{% endif %}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.4 11.1l-9.2 9.2a6 6 0 01-8.5-8.5l9.2-9.2a4 4 0 015.7 5.7l-9.2 9.2a2 2 0 01-2.8-2.8l8.5-8.5"/></svg>
             Add files
         </label>
         <noscript><button type="submit" class="att__btn att__btn--submit">Upload</button></noscript>
         <span class="att__hint">Photos, PDFs, text and Office files &middot; up to {{ att.max_label }} each<span class="att__hint-drop"> &middot; or drop them here</span></span>
+        <p class="att__storage att__storage--{{ att.storage.status }}" data-att-storage><span data-att-storage-label>{{ att.storage.label }}</span><span class="att__storage-full" data-att-storage-full{% if not att.storage.full %} hidden{% endif %}> &middot; Storage full: delete some attachments to add more.</span></p>
         <div class="att__progress" data-att-progress hidden><progress max="100" value="0"></progress> <span data-att-progress-text></span></div>
         <p class="att__error" data-att-error role="alert"></p>
     </form>

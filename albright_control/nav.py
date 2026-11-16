@@ -32,6 +32,7 @@ GROUPS = (
                                                            "albright_control:test_integration")),
         ("AI usage", "albright_control:ai_usage", ("albright_control:ai_usage",)),
         ("Data", "albright_control:data", ("albright_control:data", "albright_control:backup")),
+        ("Storage", "albright_control:storage", ("albright_control:storage", "albright_control:storage_user")),
         ("Audit log", "albright_control:audit", ("albright_control:audit",)),
     )),
     ("site", "Site", (
@@ -47,7 +48,8 @@ ICONS = {
     "overview": "dashboard", "bot": "bot", "system": "activity", "site": "layout",
     "albright_control:overview": "dashboard", "albright_control:bot_api": "bot", "albright_control:suggestions": "message",
     "albright_control:ideas": "lightbulb", "albright_control:health": "activity", "albright_control:integrations": "plug",
-    "albright_control:ai_usage": "cpu", "albright_control:data": "database", "albright_control:audit": "scroll",
+    "albright_control:ai_usage": "cpu", "albright_control:data": "database",
+    "albright_control:storage": "archive", "albright_control:audit": "scroll",
     "albright_resume_admin:overview": "file-text", "labs_admin:settings": "layout", "albright_control:users": "users",
 }
 

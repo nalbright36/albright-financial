@@ -86,6 +86,11 @@ ENDPOINTS
 GET  docs
   This text. Any valid token.
 
+GET  me/storage
+  The token owner's attachment storage (files on Planner tasks and notes, counted against whoever uploaded them).
+  Any valid token. Returns {"used_bytes": int, "limit_bytes": int, "percent": float (one decimal; over 100 when
+  above a lowered limit), "remaining_bytes": int, "tier": name of their storage plan, e.g. "Standard"}.
+
 POST trading/notes                                   scope: trading:notes
   Body: {"date": "YYYY-MM-DD" (optional, default today), "title": str (required, <=200), "text": str (required),
   "strategy": str (optional - one of the owner's strategies, by name or by one of its prefixes, any capitalization)}
@@ -491,6 +496,14 @@ def docs(request, token):
     usable = [key for key in token.scopes if scope_rules.allowed(token.owner, key)]
     return (docs_for(token) + f"\nYOUR TOKEN'S SCOPES: {', '.join(usable) or 'none'}\n"
             "(Only the endpoints those scopes allow are listed above.)\n", 200, "read docs")
+
+
+@bot_endpoint()
+def my_storage(request, token):
+    from albright_labs import storage
+    u = storage.get_storage_usage(token.owner)
+    return ({"used_bytes": u["used_bytes"], "limit_bytes": u["limit_bytes"], "percent": u["percent"],
+             "remaining_bytes": u["remaining_bytes"], "tier": u["tier_name"]}, 200, "read storage")
 
 
 # ---------------------------------------------------------------------------

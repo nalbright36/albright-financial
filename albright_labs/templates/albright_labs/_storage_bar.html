@@ -1,0 +1,4 @@
+{% comment %}A storage usage bar (u = albright_labs.storage.describe / get_storage_usage): the app's accent under 80%,
+amber 80-99%, red at 100% or more; never wider than the track (bar_css is capped at 100%). Styles: style.css
+.storage-bar.{% endcomment %}
+<span class="storage-bar storage-bar--{{ u.status }}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ u.bar|floatformat:0 }}" aria-label="Storage used: {{ u.percent }}%"><span class="storage-bar__fill" style="width: {{ u.bar_css }};"></span></span>

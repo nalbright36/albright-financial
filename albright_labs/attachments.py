@@ -13,6 +13,11 @@ Images: turned upright (EXIF orientation), EXIF/GPS and other metadata stripped 
 MAX_SIDE on the long side, and given a ~THUMB_SIDE px WebP thumbnail. iPhone HEIC/HEIF becomes JPEG so every
 browser shows it (pillow-heif). An animated GIF is kept as it is (GIFs carry no EXIF).
 
+Storage: each attachment (file + thumbnail) counts against its owner's tier (albright_labs.storage) - add()
+reserves the bytes in the same transaction as the row, under a lock on the person's storage row, and refuses an
+upload that would take them over; a deleted attachment gives its bytes back (post_delete - also when its task or
+note goes).
+
 Deleting a task or note deletes its attachments (connect_signals: post_delete); a fork of a repeating task or a
 duplicate doesn't copy them (albright_planner.planner)."""
 import hashlib
@@ -25,13 +30,13 @@ import zipfile
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.db.models import Count, Exists, IntegerField, OuterRef, Subquery, Sum, Value
+from django.db.models import Count, Exists, F, IntegerField, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.db.models.signals import post_delete
 from django.urls import reverse
 from django.utils import timezone
 
-from . import attachment_storage
+from . import attachment_storage, storage
 from .models import Attachment
 
 try:
@@ -82,14 +87,11 @@ def max_per_parent():
 
 
 def size_label(n):
-    n = n or 0
-    if n < 1024:
-        return f"{n} B"
-    if n < 1024 * 1024:
-        return f"{n / 1024:.0f} KB"
-    if n < 1024 ** 3:
-        return f"{n / 1024 / 1024:.1f} MB"
-    return f"{n / 1024 ** 3:.2f} GB"
+    return storage.format_bytes(n)
+
+
+def size_limit_label(n):
+    return storage.format_limit(n)
 
 
 # ---------------------------------------------------------------------------
@@ -270,10 +272,10 @@ def check_upload(upload):
         raise AttachmentError("That kind of file can't be attached - photos, PDFs, text, CSV and Office files can.")
     limit = max_bytes()
     if (upload.size or 0) > limit:
-        raise AttachmentError(f"“{clean_name(name)}” is over the {size_label(limit)} limit.")
+        raise AttachmentError(f"“{clean_name(name)}” is over the {size_limit_label(limit)} limit.")
     raw = upload.read(limit + 1)
     if len(raw) > limit:
-        raise AttachmentError(f"“{clean_name(name)}” is over the {size_label(limit)} limit.")
+        raise AttachmentError(f"“{clean_name(name)}” is over the {size_limit_label(limit)} limit.")
     if not raw:
         raise AttachmentError(f"“{clean_name(name)}” is empty.")
     return raw, ext
@@ -290,6 +292,9 @@ def add(user, parent, upload):
     if for_parent(parent).count() >= max_per_parent():
         raise AttachmentError(f"A {'note' if parent._meta.label == PARENTS['notes'] else 'task'} can have at most "
                               f"{max_per_parent()} attachments.")
+    usage = storage.get_storage_usage(user)
+    if usage["full"]:                                   # already full: say so before any processing
+        raise AttachmentError(storage.full_message(usage["used_bytes"], usage["limit_bytes"]))
     raw, ext = check_upload(upload)
     width = height = None
     thumb = None
@@ -305,12 +310,17 @@ def add(user, parent, upload):
     else:
         data, mime = raw, _check_text(raw, ext)
     name = clean_name(upload.name, out_ext if out_ext != ext and ext in ("heic", "heif") else None)
-    with transaction.atomic():
-        attachment = Attachment.objects.create(
-            owner=user, content_type=_ct(parent), object_id=parent.pk, key=_key(user, out_ext), original_name=name,
-            mime_type=mime, size_bytes=len(data), width=width, height=height, has_thumb=thumb is not None,
-            sha256=hashlib.sha256(data).hexdigest())
-        attachment_storage.save_attachment_bytes(attachment, data, thumb)
+    try:
+        with transaction.atomic():
+            # The size after downscaling, plus the thumbnail - checked and added under the lock on their row.
+            storage.reserve(user, len(data) + len(thumb or b""))
+            attachment = Attachment.objects.create(
+                owner=user, content_type=_ct(parent), object_id=parent.pk, key=_key(user, out_ext),
+                original_name=name, mime_type=mime, size_bytes=len(data), width=width, height=height, has_thumb=thumb is not None,
+                thumb_size_bytes=len(thumb or b""), sha256=hashlib.sha256(data).hexdigest())
+            attachment_storage.save_attachment_bytes(attachment, data, thumb)
+    except storage.StorageFull as e:
+        raise AttachmentError(str(e)) from None
     return attachment
 
 
@@ -347,7 +357,8 @@ def section(user, parent, app, editable=None, next_url=""):
     return {"app": app, "parent_id": parent.pk, "images": [r for r in rows if r["is_image"]],
             "files": [r for r in rows if not r["is_image"]], "count": len(rows), "can_edit": editable,
             "upload_url": reverse("labs:attachment_upload"), "accept": ACCEPT, "max": max_per_parent(),
-            "max_bytes": max_bytes(), "max_label": size_label(max_bytes()), "next": next_url}
+            "max_bytes": max_bytes(), "max_label": size_limit_label(max_bytes()), "next": next_url,
+            "storage": storage.get_storage_usage(user)}
 
 
 def api_list(parent, request=None):
@@ -374,8 +385,9 @@ def with_counts(queryset):
 
 
 def storage_used(user):
-    """(count, total bytes) of the attachments this person added."""
-    totals = Attachment.objects.filter(owner=user).aggregate(n=Count("pk"), total=Sum("size_bytes"))
+    """(count, total bytes - files and thumbnails) of the attachments this person added."""
+    totals = Attachment.objects.filter(owner=user).aggregate(n=Count("pk"),
+                                                             total=Sum(F("size_bytes") + F("thumb_size_bytes")))
     return totals["n"] or 0, totals["total"] or 0
 
 
@@ -389,6 +401,7 @@ def _delete_for_parent(sender, instance, **kwargs):
 
 def _delete_bytes(sender, instance, **kwargs):
     attachment_storage.delete_attachment_bytes(instance)
+    storage.release(instance.owner_id, instance.stored_bytes)   # same transaction as the delete
 
 
 def orphans():

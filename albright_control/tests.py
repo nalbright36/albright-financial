@@ -25,7 +25,7 @@ from albright_labs.testing import with_apps
 
 HOME_OUTLOOK = "albright_trading_app.views.get_market_outlook"
 PASSWORD = "pw-not-real-12345"
-PAGES = ["overview", "bot_api", "bot_activity", "suggestions", "health", "integrations", "ai_usage", "data", "audit"]
+PAGES = ["overview", "bot_api", "bot_activity", "suggestions", "health", "integrations", "ai_usage", "data", "storage", "audit"]
 SECRETS = {"OPENAI_API_KEY": "sk-OPENAISECRET123", "TELEGRAM_BOT_TOKEN": "123:TELEGRAMSECRET", "TELEGRAM_CHAT_ID": "999",
            "GOLDAPI_KEY": "goldapi-SECRET", "GITHUB_TOKEN": "ghp_GITHUBSECRET", "EBAY_CLIENT_ID": "EBAYIDSECRET",
            "EBAY_CLIENT_SECRET": "EBAYSECRET"}
@@ -44,7 +44,7 @@ class AdminTestCase(TestCase):
 
 class AccessTests(AdminTestCase):
     def all_urls(self):
-        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "suggestion_status": [1], "suggestion_notes": [1], "suggestion_delete": [1], "idea_status": [1], "idea_notes": [1], "test_integration": ["telegram"], "backup": ["ledger"], "error_preview": ["404"]}
+        args = {"revoke_token": [1], "edit_token_scopes": [1], "rotate_token": [1], "idea": [1], "suggestion_to_idea": [1], "suggestion_status": [1], "suggestion_notes": [1], "suggestion_delete": [1], "idea_status": [1], "idea_notes": [1], "test_integration": ["telegram"], "backup": ["ledger"], "error_preview": ["404"], "storage_user": [1]}
         return [(p.name, reverse(f"albright_control:{p.name}", args=args.get(p.name, []))) for p in control_urls]
 
     def test_every_admin_page_is_404_for_non_superusers(self):
@@ -74,8 +74,8 @@ class AccessTests(AdminTestCase):
         content = self.client.get(reverse("albright_control:overview")).content.decode()
         nav = content.split('id="navbar-links"', 1)[1].split('class="navbar__dropdown navbar__account"', 1)[0]
         labels = [label for label in ("Overview", "Bot API", "Bot suggestions", "System health", "Integrations",
-                                      "AI usage", "Data", "Audit log") if f">{label}</" in nav]
-        self.assertEqual(len(labels), 8)
+                                      "AI usage", "Data", "Storage", "Audit log") if f">{label}</" in nav]
+        self.assertEqual(len(labels), 9)
 
 
 @mock.patch(HOME_OUTLOOK, return_value=None)

@@ -16,7 +16,7 @@ from django.template.loader import render_to_string
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
-from . import attachment_storage, attachments
+from . import attachment_storage, attachments, storage
 
 INLINE = ("image/", "application/pdf")
 
@@ -32,6 +32,12 @@ def _back(request):
                                                   require_https=request.is_secure()):
         return target
     return "/"
+
+
+def _storage_json(user):
+    """The uploader's storage line after the change (attachments.js updates "X of Y used" and Add files)."""
+    u = storage.get_storage_usage(user)
+    return {k: u[k] for k in ("used_bytes", "limit_bytes", "percent", "remaining_bytes", "status", "full", "label")}
 
 
 @require_POST
@@ -58,7 +64,8 @@ def upload(request):
             rows.append(row)
         status = 201 if added else 400
         return JsonResponse({"ok": bool(added), "attachments": rows, "errors": errors,
-                             "count": attachments.for_parent(parent).count()}, status=status)
+                             "count": attachments.for_parent(parent).count(),
+                             "storage": _storage_json(request.user)}, status=status)
     for a in added:
         messages.success(request, f"Attached “{a.original_name}”.")
     for e in errors:
@@ -110,6 +117,7 @@ def delete(request, pk):
     name = attachment.original_name
     attachments.remove(attachment)
     if _wants_json(request):
-        return JsonResponse({"ok": True, "count": attachments.for_parent(parent).count()})
+        return JsonResponse({"ok": True, "count": attachments.for_parent(parent).count(),
+                             "storage": _storage_json(request.user)})
     messages.success(request, f"Removed “{name}”.")
     return redirect(_back(request))

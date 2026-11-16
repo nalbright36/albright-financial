@@ -523,6 +523,7 @@ class Attachment(models.Model):
     width = models.PositiveIntegerField(null=True, blank=True)
     height = models.PositiveIntegerField(null=True, blank=True)
     has_thumb = models.BooleanField(default=False)
+    thumb_size_bytes = models.PositiveIntegerField(default=0)  # counts toward the owner's storage with size_bytes
     sha256 = models.CharField(max_length=64)                  # the ETag
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -538,6 +539,11 @@ class Attachment(models.Model):
         return self.mime_type.startswith("image/")
 
     @property
+    def stored_bytes(self):
+        """What it counts against the owner's storage: the file plus its thumbnail."""
+        return self.size_bytes + self.thumb_size_bytes
+
+    @property
     def parent(self):
         model = self.content_type.model_class()
         return model.objects.filter(pk=self.object_id).first() if model else None
@@ -549,3 +555,37 @@ class AttachmentBlob(models.Model):
     attachment = models.OneToOneField(Attachment, on_delete=models.CASCADE, primary_key=True, related_name="blob")
     data = models.BinaryField()
     thumb_data = models.BinaryField(null=True, blank=True)
+
+
+class StorageTier(models.Model):
+    """A storage plan: how much attachment storage someone on it gets (albright_labs.storage). Exactly one is the
+    default - the tier of everyone without one of their own (UserStorage.tier null). Admin > Storage manages them;
+    one anyone is on can't be deleted (PROTECT)."""
+    name = models.CharField(max_length=60)
+    slug = models.SlugField(max_length=60, unique=True)
+    limit_bytes = models.BigIntegerField()
+    is_default = models.BooleanField(default=False)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "limit_bytes", "pk"]
+        constraints = [models.UniqueConstraint(fields=["is_default"], condition=models.Q(is_default=True),
+                                               name="labs_storagetier_one_default")]
+
+    def __str__(self):
+        return self.name
+
+
+class UserStorage(models.Model):
+    """A person's storage: their tier (null: the default tier) and used_bytes - the cached total of every
+    attachment they own (file + thumbnail), kept right by albright_labs.storage in the same transaction as each
+    upload and delete. manage.py recalc_storage_usage recounts it."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, primary_key=True,
+                                related_name="storage")
+    tier = models.ForeignKey(StorageTier, on_delete=models.PROTECT, null=True, blank=True, related_name="users")
+    used_bytes = models.BigIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user} storage"

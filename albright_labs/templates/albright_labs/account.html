@@ -17,9 +17,12 @@
         <a href="{% url 'labs:activity' %}" class="btn btn-secondary">Activity</a>
         <a href="{% url 'labs:notification_settings' %}" class="btn btn-secondary">Notifications</a>
     </section>
-    <section class="card" id="attachment-storage" style="margin-top: var(--space-5, 20px);">
-        <div class="card__header"><span class="card__label">Attachments</span></div>
-        <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">{% if attachment_files %}<strong style="color: var(--text-primary);">{{ attachment_storage }}</strong> in {{ attachment_files }} file{{ attachment_files|pluralize }} you've attached to Planner tasks and notes.{% else %}You haven't attached any files to Planner tasks or notes yet.{% endif %} Each file can be up to {{ attachment_max }}.</p>
+    <section class="card" id="storage" style="margin-top: var(--space-5, 20px);">
+        <div class="card__header"><span class="card__label">Storage</span></div>
+        <p style="margin: 0 0 4px; font-weight: 600;">{{ usage.tier_name }} plan</p>
+        <p style="margin: 0 0 8px; font-size: 0.875rem;" class="storage-line storage-line--{{ usage.status }}">{{ usage.label }}</p>
+        {% include "albright_labs/_storage_bar.html" with u=usage %}
+        <p style="margin: 10px 0 0; font-size: 0.875rem; color: var(--text-secondary);">{% if attachment_files %}{{ attachment_files }} attachment{{ attachment_files|pluralize }} on Planner tasks and notes.{% else %}You haven't attached any files to Planner tasks or notes yet.{% endif %} Each file can be up to {{ attachment_max }}.{% if usage.full %} You're out of space: delete some attachments to add more.{% endif %}</p>
     </section>
     {% if api_keys %}
     <section class="card" id="api-keys-link" style="margin-top: var(--space-5, 20px);">

@@ -166,7 +166,7 @@ class PlannerAttachmentTests(Helpers, PlannerBase):
         a = Attachment.objects.get()
         self.assertEqual(a.owner, self.wife)
         res = wife.post(reverse("labs:attachment_delete", args=[a.pk]), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertEqual(res.json(), {"ok": True, "count": 0})
+        self.assertEqual((res.json()["ok"], res.json()["count"]), (True, 0))
         self.assertFalse(Attachment.objects.exists())
         self.assertFalse(AttachmentBlob.objects.exists())
 
@@ -393,7 +393,9 @@ class CleanupAndAccountTests(Helpers, TestCase):
         note = Note.objects.create(owner=self.me, title="N")
         a = self.attach(self.me, note, "plan.docx", docx())
         page = self.client.get(reverse("labs:account")).content.decode()
-        self.assertIn(f"{attachments.size_label(a.size_bytes)}</strong> in 1 file", page)
+        self.assertIn(f"{attachments.size_label(a.stored_bytes)} of 1 GB used", page)
+        self.assertIn("Standard plan", page)
+        self.assertIn("1 attachment on Planner", page)
 
     def test_admin_lists_them(self):
         admin = User.objects.create_superuser("boss", "boss@example.com", PASSWORD)

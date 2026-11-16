@@ -22,6 +22,7 @@ urlpatterns = [
 # The API itself (/api/bot/v1/) - token-authenticated JSON; included under the "bot_api_v1" namespace.
 api_urlpatterns = [
     path("docs", api_views.docs, name="docs"),
+    path("me/storage", api_views.my_storage, name="me_storage"),
     path("trading/notes", api_views.trading_notes, name="trading_notes"),
     path("trading/strategies", api_views.trading_strategies, name="trading_strategies"),
     path("reseller/lots", api_views.reseller_lots, name="reseller_lots"),
