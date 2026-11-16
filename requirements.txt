@@ -34,6 +34,8 @@ nh3==0.3.7
 numpy==2.4.0
 openai==2.14.0
 pandas==2.3.3
+pillow-heif==1.8.1
+Pillow==13.0.0
 praw==8.0.3
 prawcore==4.0.0
 propcache==0.5.4

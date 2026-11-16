@@ -2,8 +2,11 @@
 
 render() turns Markdown into HTML on the server (Python-Markdown), then
 sanitizes it with an allowlist (nh3): only plain formatting, lists, tables,
-code and links survive - no scripts, styles, iframes, images, forms, inline
-event handlers or javascript:/data: URLs. Links open in a new tab with
+code, links and the note's own attachment images survive - no scripts, styles,
+iframes, forms, inline event handlers or javascript:/data: URLs. An <img> is
+kept only when its src is one of this site's attachments (/attachments/<id>/ or
+/attachments/<id>/thumb/ - served only to people who may see them), with alt,
+width and height; any other src is dropped and so is the image. Links open in a new tab with
 rel="noopener noreferrer", and every external one goes through the site's
 link check (outbound_href: a verified domain links directly, anything else
 via the "not on your verified list" page).
@@ -21,8 +24,12 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 TAGS = {"p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "b", "i", "del", "s", "code", "pre",
-        "blockquote", "ul", "ol", "li", "a", "table", "thead", "tbody", "tr", "th", "td"}
-ATTRIBUTES = {"a": {"href", "title"}, "th": {"align"}, "td": {"align"}, "ol": {"start"}}
+        "blockquote", "ul", "ol", "li", "a", "table", "thead", "tbody", "tr", "th", "td", "img"}
+ATTRIBUTES = {"a": {"href", "title"}, "th": {"align"}, "td": {"align"}, "ol": {"start"},
+              "img": {"src", "alt", "width", "height"}}
+ATTACHMENT_SRC = re.compile(r"^/attachments/\d+/(?:thumb/)?$")
+SIZE = re.compile(r"^\d{1,4}$")
+IMG_WITHOUT_SRC = re.compile(r"<img(?![^>]*\ssrc=)[^>]*>")
 EXTENSIONS = ["fenced_code", "tables", "sane_lists", "nl2br"]
 
 # "- [ ] item", "* [x] item", also inside a blockquote ("> - [ ] item").
@@ -31,6 +38,7 @@ FENCE = re.compile(r"^[ \t]*(```|~~~)")
 # The same item once rendered and sanitized: "<li>[ ] ..." or, in a loose list, "<li>\n<p>[ ] ...".
 CHECK_HTML = re.compile(r"<li>(\s*<p>)?\[([ xX])\][ \t]?")
 LIST_LINE = re.compile(r"^(?:[-*+]|\d{1,9}[.)])[ \t]+\S")
+MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
 PREVIEW_STRIP = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)*")
 
 
@@ -45,6 +53,13 @@ def outbound_href(url):
 
 
 def _href(tag, attribute, value):
+    if tag == "img":
+        value = (value or "").strip()
+        if attribute == "src":
+            return value if ATTACHMENT_SRC.match(value) else None        # only this site's attachments
+        if attribute in ("width", "height"):
+            return value if SIZE.match(value) else None
+        return value
     if tag != "a" or attribute != "href":
         return value
     value = (value or "").strip()
@@ -56,9 +71,10 @@ def _href(tag, attribute, value):
 
 
 def sanitize(html):
-    return nh3.clean(html, tags=TAGS, attributes=ATTRIBUTES, url_schemes={"http", "https", "mailto"},
-                     attribute_filter=_href, link_rel="noopener noreferrer",
-                     set_tag_attribute_values={"a": {"target": "_blank"}})
+    clean = nh3.clean(html, tags=TAGS, attributes=ATTRIBUTES, url_schemes={"http", "https", "mailto"},
+                      attribute_filter=_href, link_rel="noopener noreferrer",
+                      set_tag_attribute_values={"a": {"target": "_blank"}})
+    return IMG_WITHOUT_SRC.sub("", clean)              # an image whose src was dropped goes too
 
 
 def checklist_lines(body):
@@ -122,7 +138,7 @@ def render(body, editable=False):
 def preview(body, limit=140):
     """A one-line plain-text preview: the body's first non-empty line without its Markdown markers."""
     for line in (body or "").split("\n"):
-        text = PREVIEW_STRIP.sub("", line).replace("**", "").replace("`", "").strip()
+        text = PREVIEW_STRIP.sub("", MD_IMAGE.sub("", line)).replace("**", "").replace("`", "").strip()
         if text and not FENCE.match(line):
             return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
     return ""

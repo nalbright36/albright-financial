@@ -501,3 +501,51 @@ class PushSubscription(models.Model):
         from . import push
         return push.device_name(self.user_agent)
 
+
+
+# ---------------------------------------------------------------------------
+# Attachments - files and photos on Planner tasks and notes (albright_labs.attachments does every check)
+# ---------------------------------------------------------------------------
+
+class Attachment(models.Model):
+    """One file on a task or a note (parent: content_type + object_id). Only metadata lives here: the bytes are in
+    AttachmentBlob (attachment_storage), so listing attachments never loads a file. `key` is the storage path,
+    attachments/<user id>/<yyyy>/<mm>/<uuid>.<ext> - never the original filename. mime_type is what the server
+    found in the content (not what the browser said). An image's width/height are after processing (turned
+    upright, downscaled, metadata stripped); has_thumb: a ~400px WebP thumbnail is stored too."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="attachments")
+    content_type = models.ForeignKey("contenttypes.ContentType", on_delete=models.CASCADE, related_name="+")
+    object_id = models.PositiveBigIntegerField()
+    key = models.CharField(max_length=200, unique=True)
+    original_name = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=100)
+    size_bytes = models.PositiveBigIntegerField()
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
+    has_thumb = models.BooleanField(default=False)
+    sha256 = models.CharField(max_length=64)                  # the ETag
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        indexes = [models.Index(fields=["content_type", "object_id"], name="labs_attachment_parent")]
+
+    def __str__(self):
+        return self.original_name
+
+    @property
+    def is_image(self):
+        return self.mime_type.startswith("image/")
+
+    @property
+    def parent(self):
+        model = self.content_type.model_class()
+        return model.objects.filter(pk=self.object_id).first() if model else None
+
+
+class AttachmentBlob(models.Model):
+    """An attachment's bytes (and its thumbnail's), kept apart so no Attachment query ever pulls them. Deleting
+    the Attachment deletes this. Read and written only through albright_labs.attachment_storage."""
+    attachment = models.OneToOneField(Attachment, on_delete=models.CASCADE, primary_key=True, related_name="blob")
+    data = models.BinaryField()
+    thumb_data = models.BinaryField(null=True, blank=True)

@@ -1,0 +1,4 @@
+<form method="post" action="{{ a.delete_url }}" class="att__delete" data-att-delete>{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button type="submit" class="att__trash" aria-label="Remove {{ a.name }}" title="Remove"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6"/></svg></button>
+    <span class="att__confirm" hidden><span class="att__confirm-text">Remove?</span> <button type="submit" class="att__confirm-yes" data-att-confirm>Remove</button> <button type="button" class="att__confirm-no" data-att-cancel>Cancel</button></span>
+</form>

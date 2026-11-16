@@ -1,0 +1,20 @@
+{% comment %}One attachment (a = attachments.describe): an image is a thumbnail tile that opens the full-screen viewer
+(attachments.js; without JavaScript it opens the image); any other file is a row - type icon, name, size,
+download. can_edit: a trash button whose first press asks "Remove?" (attachments.js; a plain form post without
+JavaScript). Rendered for the section and for each upload's JSON.{% endcomment %}
+{% if a.is_image %}
+<li class="att__tile" data-att-item="{{ a.id }}">
+    <a href="{{ a.url }}" class="att__thumb" data-att-view data-full="{{ a.url }}" data-name="{{ a.name }}" title="{{ a.name }} &middot; {{ a.size_label }}">
+        <img src="{{ a.thumb_url }}" alt="{{ a.name }}" loading="lazy" decoding="async">
+    </a>
+    {% if can_edit %}{% include "albright_labs/_attachment_delete.html" %}{% endif %}
+</li>
+{% else %}
+<li class="att__file" data-att-item="{{ a.id }}">
+    <span class="att__icon att__icon--{{ a.kind }}" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><span class="att__ext">{% if a.kind == "pdf" %}PDF{% elif a.kind == "doc" %}DOC{% elif a.kind == "sheet" %}{% if a.type == "text/csv" %}CSV{% else %}XLS{% endif %}{% elif a.kind == "slides" %}PPT{% else %}TXT{% endif %}</span></span>
+    <a href="{{ a.url }}" class="att__name"{% if a.type == "application/pdf" %} target="_blank" rel="noopener"{% endif %}>{{ a.name }}</a>
+    <span class="att__size">{{ a.size_label }}</span>
+    <a href="{{ a.download_url }}" class="att__download" aria-label="Download {{ a.name }}" title="Download"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></a>
+    {% if can_edit %}{% include "albright_labs/_attachment_delete.html" %}{% endif %}
+</li>
+{% endif %}

@@ -94,6 +94,8 @@ tick right here (saved to the note) for someone who can edit it.
         <a href="{{ linked_note.url }}" class="pl-view__open-note">Open in Notes &rarr;</a>
     </section>
     {% endif %}
+
+    {% include "albright_labs/_attachments.html" %}
     </div>
 
     {% if share %}{% include "albright_labs/_share.html" %}{% endif %}

@@ -218,6 +218,12 @@ STATIC_URL = 'static/'
 
 MEDIA_URL ='/images/'
 
+# Attachments on Planner tasks and notes (albright_labs.attachments). Their bytes are in Postgres
+# (AttachmentBlob, via albright_labs.attachment_storage) and only ever served through a view that checks access:
+# there is no public media mapping for them.
+ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024        # per file
+ATTACHMENT_MAX_PER_PARENT = 20                 # per task or note
+
 STATICFILES_DIRS = [
     BASE_DIR / "albright_trading_app" / "static",
 ]

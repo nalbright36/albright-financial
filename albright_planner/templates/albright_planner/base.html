@@ -12,6 +12,8 @@ data-planner-wx-auto: while weather follows the device, a second script asks for
 the header forecast updates. A denial is remembered in localStorage. Off, or a denial, uses the
 typed Home location.
 {% endcomment %}
+{% load cache_bust %}{% block app_head %}<link rel="stylesheet" href="{% static_version 'labs/attachments.css' %}">{% endblock %}
+{% block app_scripts %}<script src="{% static_version 'labs/attachments.js' %}" defer></script>{% endblock %}
 {% block content %}{% load planner_extras %}{% planner_zone as planner_tz %}{% planner_wx as planner_wx %}
 <div class="container pl" id="planner" data-view-url="{% url 'albright_planner:item' 0 %}"
      data-planner-tz="{{ planner_tz.name }}" data-planner-tz-auto="{{ planner_tz.auto|yesno:'1,0' }}"

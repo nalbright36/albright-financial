@@ -13,6 +13,8 @@
  *                  and the warning offers "Load their version" or "Keep mine (overwrite)"
  *   checklist      ticking a box in the rendered note rewrites that "- [ ]" line on the server
  *   word count     the footer's count follows the text
+ *   images         Insert image, or paste / drop one on the note: it's attached to the note and goes in the
+ *                  Markdown at the cursor as ![name](/attachments/<id>/) (labs/attachments.js uploads it)
  * On a phone the panes stack; opening a note scrolls to it.
  */
 (function () {
@@ -147,6 +149,84 @@
         button.addEventListener("mousedown", function (event) { event.preventDefault(); });   // keep the selection
         button.addEventListener("click", function () { format(button.dataset.fmt); });
     });
+
+    // ---------- Images in the note (albright_labs/static/labs/attachments.js does the upload) ----------
+    // "Insert image", pasting an image, or dropping files on the note uploads each as an attachment of this note;
+    // an image then goes in the Markdown at the cursor as ![name](/attachments/<id>/) (the sanitizer only lets
+    // through <img> whose src is an attachment). Other dropped files are attached without going in the text.
+    // The note always exists already ("+ New note" creates it), so there's always a parent.
+    var attSection = root.querySelector("[data-att]");
+    var savedCaret = null;          // where the cursor was when "Insert image" was pressed (the picker blurs it)
+    function rememberCaret() {
+        savedCaret = doc.dataset.mode === "write" && fields.body ?
+            [fields.body.selectionStart, fields.body.selectionEnd] : null;
+    }
+    function insertImage(row) {
+        if (!row || !row.is_image || !fields.body) return;
+        var ta = fields.body, wasWriting = doc.dataset.mode === "write";
+        var caret = savedCaret || (wasWriting ? [ta.selectionStart, ta.selectionEnd] : null);
+        savedCaret = null;
+        if (!wasWriting) setMode("write");
+        var start = caret ? caret[0] : ta.value.length, end = caret ? caret[1] : ta.value.length;
+        var text = "![" + row.name.replace(/[\[\]\n]/g, "") + "](" + row.url + ")";
+        if (!caret && start > 0 && ta.value.charAt(start - 1) !== "\n") text = "\n\n" + text;
+        ta.focus();
+        ta.setRangeText(text, start, end, "end");
+        ta.dispatchEvent(new Event("input", {bubbles: true}));
+    }
+    function attachFiles(files, insert) {
+        if (!attSection || !window.Attachments) return;
+        Array.prototype.slice.call(files || []).forEach(function (file) {
+            var isImage = /^image\//.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+            showSaved("Uploading " + (isImage ? "image" : "file") + "…");
+            window.Attachments.upload(attSection, file, function (row) {
+                showSaved(row ? "Saved ✓" : "Couldn't upload " + file.name, !row);
+                if (row && insert && isImage) insertImage(row);
+            });
+        });
+    }
+    if (canEdit && attSection) {
+        var imageButton = byId("nt-insert-image"), imageInput = byId("nt-image-input");
+        if (imageButton && imageInput) {
+            imageButton.addEventListener("mousedown", function (event) { event.preventDefault(); });   // keep the caret
+            imageButton.addEventListener("click", function () { rememberCaret(); imageInput.click(); });
+            imageInput.addEventListener("change", function () {
+                attachFiles(imageInput.files, true);
+                imageInput.value = "";
+            });
+        }
+        if (fields.body) fields.body.addEventListener("paste", function (event) {
+            var items = (event.clipboardData && event.clipboardData.items) || [];
+            var files = [];
+            Array.prototype.forEach.call(items, function (item) {
+                if (item.kind === "file" && /^image\//.test(item.type)) {
+                    var f = item.getAsFile();
+                    if (f) files.push(f);
+                }
+            });
+            if (!files.length) return;
+            event.preventDefault();
+            attachFiles(files, true);
+        });
+        doc.addEventListener("dragover", function (event) {
+            var types = event.dataTransfer && event.dataTransfer.types;
+            if (!types || Array.prototype.indexOf.call(types, "Files") === -1) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            doc.classList.add("is-dropping");
+        });
+        doc.addEventListener("dragleave", function (event) {
+            if (!doc.contains(event.relatedTarget)) doc.classList.remove("is-dropping");
+        });
+        doc.addEventListener("drop", function (event) {
+            var files = event.dataTransfer && event.dataTransfer.files;
+            doc.classList.remove("is-dropping");
+            if (!files || !files.length) return;
+            event.preventDefault();
+            if (doc.dataset.mode !== "write") setMode("write");
+            attachFiles(files, true);
+        });
+    }
 
     // ---------- Checklist items edited in place (the rendered note) ----------
     // Click an item's text to edit it right there. Enter adds a new unchecked item below (splitting at the cursor)

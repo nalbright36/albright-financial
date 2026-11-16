@@ -1,0 +1,102 @@
+/* Attachments on Planner tasks and notes (albright_labs/_attachments.html, attachments.js). The site's theme
+   variables throughout, so light and dark both follow; the app's --accent marks the drop target and focus. */
+.att { margin-top: 18px; position: relative; border-radius: var(--radius-md, 10px); }
+.att__label { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: var(--text-xs, 0.75rem);
+    font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.att__count:not(:empty) { display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: var(--radius-full, 999px);
+    background: var(--surface-raised, var(--surface)); color: var(--text-primary); font-size: 0.6875rem; text-align: center;
+    letter-spacing: 0; }
+
+.att__grid { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+.att__tile { position: relative; aspect-ratio: 1; border-radius: var(--radius-sm, 8px); overflow: hidden;
+    background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); }
+.att__thumb { display: block; width: 100%; height: 100%; }
+.att__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.15s ease; }
+.att__thumb:hover img { transform: scale(1.03); }
+.att__thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.att__tile .att__delete { position: absolute; top: 4px; right: 4px; }
+.att__tile .att__trash { background: rgba(0, 0, 0, 0.55); color: #fff; border-color: transparent; }
+.att__tile .att__confirm { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; gap: 4px;
+    padding: 6px; border-radius: var(--radius-sm, 8px); background: var(--bg-elevated, var(--surface)); box-shadow: var(--shadow-md);
+    border: 1px solid var(--border); white-space: nowrap; }
+.att__tile .att__confirm[hidden] { display: none; }
+
+.att__files { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.att__file { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 8px); background: var(--surface); min-width: 0; }
+.att__icon { position: relative; flex: none; width: 32px; height: 32px; display: grid; place-items: center;
+    color: var(--text-secondary); }
+.att__icon svg { width: 28px; height: 28px; }
+.att__ext { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); font-size: 0.5rem; font-weight: 700;
+    letter-spacing: 0.02em; padding: 0 2px; border-radius: 2px; color: #fff; background: var(--text-tertiary, #6b7280); }
+.att__icon--pdf .att__ext { background: #d93025; }
+.att__icon--doc .att__ext { background: #2b6cd4; }
+.att__icon--sheet .att__ext { background: #1e8e3e; }
+.att__icon--slides .att__ext { background: #d9631e; }
+.att__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary);
+    font-size: var(--text-sm, 0.875rem); text-decoration: none; }
+.att__name:hover { text-decoration: underline; }
+.att__size { flex: none; color: var(--text-tertiary, var(--text-secondary)); font-size: var(--text-xs, 0.75rem);
+    font-variant-numeric: tabular-nums; }
+.att__download { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-sm, 8px);
+    color: var(--text-secondary); }
+.att__download:hover { background: var(--surface-hover); color: var(--text-primary); }
+.att__file .att__delete { flex: none; display: flex; align-items: center; gap: 6px; }
+
+.att__delete { margin: 0; }
+.att__trash { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: var(--radius-sm, 8px);
+    border: 1px solid transparent; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.att__trash:hover { color: var(--loss, #e5484d); background: var(--loss-bg, rgba(229, 72, 77, 0.12)); }
+.att__trash[hidden] { display: none; }
+.att__confirm { font-size: var(--text-xs, 0.75rem); color: var(--text-secondary); }
+.att__confirm-yes, .att__confirm-no { padding: 4px 10px; border-radius: var(--radius-sm, 8px); font-size: var(--text-xs, 0.75rem);
+    font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); }
+.att__confirm-yes { background: var(--loss, #e5484d); border-color: var(--loss, #e5484d); color: #fff; }
+
+.att__add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; }
+.att__btn { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; min-height: 36px;
+    border-radius: var(--radius-sm, 8px); border: 1px solid var(--border-strong, var(--border)); background: var(--surface);
+    color: var(--text-primary); font-size: var(--text-sm, 0.875rem); font-weight: 600; cursor: pointer; }
+.att__btn:hover { background: var(--surface-hover); }
+.att__btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The real input covers the button invisibly: a tap opens the phone's picker (camera / library / Files). */
+.att__input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 0; }
+.att__hint { color: var(--text-tertiary, var(--text-secondary)); font-size: var(--text-xs, 0.75rem); }
+@media (hover: none), (max-width: 639.98px) { .att__hint-drop { display: none; } }
+.att__progress { flex-basis: 100%; display: flex; align-items: center; gap: 10px; font-size: var(--text-xs, 0.75rem);
+    color: var(--text-secondary); }
+.att__progress[hidden] { display: none; }
+.att__progress progress { flex: 1; max-width: 260px; height: 6px; appearance: none; border: 0; border-radius: 3px;
+    background: var(--surface-raised, var(--border)); overflow: hidden; }
+.att__progress progress::-webkit-progress-bar { background: var(--surface-raised, var(--border)); }
+.att__progress progress::-webkit-progress-value { background: var(--accent); border-radius: 3px; }
+.att__progress progress::-moz-progress-bar { background: var(--accent); }
+.att__error { flex-basis: 100%; margin: 0; color: var(--loss, #e5484d); font-size: var(--text-xs, 0.75rem); }
+.att__error:empty { display: none; }
+
+.att.is-dropping { outline: 2px dashed var(--accent); outline-offset: 6px; background: var(--accent-soft); }
+
+/* The viewer: black, full screen, the image fitted; the bar and arrows over it. */
+.att-viewer { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
+    background: rgba(0, 0, 0, 0.94); color: #fff; overflow: hidden; }
+.att-viewer::backdrop { background: rgba(0, 0, 0, 0.94); }
+.att-viewer[open] { display: block; }
+.att-viewer__bar { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 12px;
+    padding: max(10px, env(safe-area-inset-top)) 12px 10px 16px;
+    background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0)); }
+.att-viewer__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; }
+.att-viewer__pos { font-size: 0.8125rem; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.att-viewer__btn { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%;
+    background: transparent; color: #fff; cursor: pointer; }
+.att-viewer__btn:hover, .att-viewer__btn:focus-visible { background: rgba(255, 255, 255, 0.15); outline: none; }
+.att-viewer__stage { position: absolute; inset: 0; display: grid; place-items: center; padding: 56px 8px 16px; }
+.att-viewer__img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+.att-viewer__nav { position: absolute; top: 50%; z-index: 2; transform: translateY(-50%); display: grid; place-items: center;
+    width: 48px; height: 48px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; }
+.att-viewer__nav:hover, .att-viewer__nav:focus-visible { background: rgba(255, 255, 255, 0.25); outline: none; }
+.att-viewer__nav[hidden] { display: none; }
+.att-viewer__nav--prev { left: 12px; }
+.att-viewer__nav--next { right: 12px; }
+@media (hover: none) { .att-viewer__nav { display: none; } }
+

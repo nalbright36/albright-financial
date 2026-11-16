@@ -25,7 +25,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import sharing
+from albright_labs import attachments, sharing
 
 from . import checklist, planner, quickadd, recurrence, sources, weather
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
@@ -460,6 +460,8 @@ def view_item(request, pk):
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
         "subtasks": list(ScheduleItem.objects.visible_to(request.user).filter(parent=item, archived=False)
                          .order_by("date", "pk")),
+        "att": attachments.section(request.user, item, "planner", editable=can_edit,
+                                   next_url=_view_url(item, occurrence, back)),
     })
 
 
@@ -528,6 +530,7 @@ def edit_item(request, pk):
         "done": completion is not None, "done_by": planner.person(completion.completed_by) if completion else "",
         "owner_name": planner.person(item.owner), "next": _next(request), **_then(request, item, occurrence),
         "shared_with": shared_with, "share": sharing.control(request.user, item),
+        "att": attachments.section(request.user, item, "planner", editable=can_edit),
     })
 
 

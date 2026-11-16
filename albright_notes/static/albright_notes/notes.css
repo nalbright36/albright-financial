@@ -184,3 +184,8 @@ html.js .nt .nt-nojs { display: none; }
 /* "Shared with me", grouped by circle and by person (views._groups). */
 .nt-group { margin: 12px 4px 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-secondary); }
 .nt-pop .share-box { margin: 0; border: 0; padding: 0; background: none; }
+
+/* Dropping files on the note (notes.js: images go in the text, every file is attached) and its Attachments. */
+.nt-doc.is-dropping { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
+.nt-editor .att { margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+.nt-att-mark { margin-left: 2px; }

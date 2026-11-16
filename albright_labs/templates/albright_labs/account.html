@@ -17,6 +17,10 @@
         <a href="{% url 'labs:activity' %}" class="btn btn-secondary">Activity</a>
         <a href="{% url 'labs:notification_settings' %}" class="btn btn-secondary">Notifications</a>
     </section>
+    <section class="card" id="attachment-storage" style="margin-top: var(--space-5, 20px);">
+        <div class="card__header"><span class="card__label">Attachments</span></div>
+        <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">{% if attachment_files %}<strong style="color: var(--text-primary);">{{ attachment_storage }}</strong> in {{ attachment_files }} file{{ attachment_files|pluralize }} you've attached to Planner tasks and notes.{% else %}You haven't attached any files to Planner tasks or notes yet.{% endif %} Each file can be up to {{ attachment_max }}.</p>
+    </section>
     {% if api_keys %}
     <section class="card" id="api-keys-link" style="margin-top: var(--space-5, 20px);">
         <div class="card__header"><span class="card__label">API keys</span></div>

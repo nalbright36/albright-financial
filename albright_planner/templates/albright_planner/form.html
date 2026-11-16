@@ -60,6 +60,8 @@ repeating item asks which occurrences the change applies to.
     </section>
     {% endif %}
 
+    {% if item and att.count or item and att.can_edit %}<div class="pl-section" id="pl-attachments">{% include "albright_labs/_attachments.html" %}</div>{% endif %}
+
     {% if item and can_remove %}
     <section class="pl-section" id="delete">
         <h2 class="pl-section__title">{% if item.repeats %}Remove{% else %}Delete{% endif %}</h2>

@@ -2892,3 +2892,12 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
 .menu-item:hover, .menu-item:focus-visible { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .menu-item:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .menu-item--danger, .menu-item--danger:hover, .menu-item--danger:focus-visible { color: var(--red); }
+
+/* The paperclip + count on Planner rows and note cards (albright_labs.attachments). Here, not in
+   labs/attachments.css: Home's Today panel shows Planner rows too. */
+.att-mark { display: inline-flex; align-items: center; gap: 2px; color: var(--text-tertiary, var(--text-secondary));
+    font-size: 0.6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.att-mark svg { flex: none; }
+/* An attachment image inside a note (![name](/attachments/<id>/) - albright_notes.render), also where the Planner
+   shows a linked note: never wider than the text. */
+.md-body img { display: block; max-width: 100%; height: auto; margin: 8px 0; border-radius: 8px; }

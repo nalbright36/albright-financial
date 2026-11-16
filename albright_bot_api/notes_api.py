@@ -10,6 +10,8 @@ Every call is in the Activity log (auth.bot_endpoint)."""
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 
+from albright_labs import attachments
+
 from .auth import ApiError, bot_endpoint, json_body
 
 LIST_LIMIT = 200
@@ -73,10 +75,12 @@ def _link(request, token, value):
     return found
 
 
-def _note_json(note):
+def _note_json(note, request=None, files=None):
+    """files: {note id: [...]} from attachments.api_lists (a list); without it this note's own are looked up."""
     return {"id": note.id, "title": note.title, "tags": note.tags, "pinned": note.pinned, "archived": note.archived,
             "created_by": note.created_by, "created_at": note.created_at.isoformat(),
-            "updated_at": note.updated_at.isoformat()}
+            "updated_at": note.updated_at.isoformat(),
+            "attachments": files.get(note.pk, []) if files is not None else attachments.api_list(note, request)}
 
 
 @bot_endpoint("notes:read")
@@ -89,7 +93,9 @@ def notes_list(request, token):
         qs = qs.filter(tags__contains=[tag])
     q = request.GET.get("q", "").strip()[:200]
     qs = notes.search(qs, q) if q else qs.order_by("-pinned", "-updated_at", "-pk")
-    rows = [_note_json(n) for n in qs[:LIST_LIMIT]]
+    page = list(qs[:LIST_LIMIT])
+    files = attachments.api_lists(_models().Note, [n.pk for n in page], request)
+    rows = [_note_json(n, request, files) for n in page]
     return {"notes": rows}, 200, f"listed {len(rows)} notes" + (f" q={q[:40]}" if q else "") + (f" tag={tag}" if tag else "")
 
 
@@ -111,7 +117,7 @@ def notes_create(request, token):
     shared = share_field.apply(token, note, data)
     if found:
         links.add(note, *found)
-    return ({**_note_json(note), "url": request.build_absolute_uri(reverse("albright_notes:note", args=[note.pk])),
+    return ({**_note_json(note, request), "url": request.build_absolute_uri(reverse("albright_notes:note", args=[note.pk])),
              "linked": found[0].title(found[1]) if found else None, "shared_with": shared}, 201, f"note #{note.pk}: {note.title[:80]}")
 
 
@@ -145,7 +151,7 @@ def note_update(request, token, note_id):
         fields["tags"] = list(note.tags or []) + _tags(data)
         changed.append("added tags")
     note = notes.save(note, token.name, **fields)
-    return _note_json(note), 200, f"updated note #{note.pk}: {', '.join(changed)}"
+    return _note_json(note, request), 200, f"updated note #{note.pk}: {', '.join(changed)}"
 
 
 @csrf_exempt

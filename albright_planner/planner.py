@@ -101,13 +101,15 @@ def _candidates(user, start, end):
 
 
 def _with_sharing(qs):
-    """has_shares: shared with anyone (albright_labs.sharing) - the "shared" mark on your own items."""
+    """has_shares: shared with anyone (albright_labs.sharing) - the "shared" mark on your own items; and
+    attachment_count - the paperclip on its row (albright_labs.attachments)."""
     from django.contrib.contenttypes.models import ContentType
     from django.db.models import Exists, OuterRef
 
+    from albright_labs import attachments
     from albright_labs.models import ShareGrant
     grants = ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(ScheduleItem), object_id=OuterRef("pk"))
-    return qs.annotate(has_shares=Exists(grants))
+    return attachments.with_counts(qs.annotate(has_shares=Exists(grants)))
 
 
 def _has_shares(item):
@@ -273,6 +275,7 @@ def duplicate(item, user):
     copy.owner, copy.created_by = user, user.get_username()
     copy.source_app = copy.source_id = copy.source_url = ""
     copy.from_bot, copy.bot_token, copy.archived = False, None, False
+    # Attachments aren't copied: they stay on the original (albright_labs.attachments).
     if copy.note_id is not None:
         from albright_notes.models import Note
         if not Note.objects.visible_to(user).filter(pk=copy.note_id).exists():
@@ -542,6 +545,8 @@ def _change(item, occurrence_date, scope, changes):
         new.save()
         from albright_labs import sharing
         sharing.copy_grants(item, new)
+        # Attachments stay with the original item: the new series (this occurrence on) starts without them, and
+        # nothing copies them to later occurrences either - an attachment belongs to one item, never a series.
         for row in list(item.completions.filter(occurrence_date__gte=occurrence_date)) + \
                 list(item.exceptions.filter(occurrence_date__gte=occurrence_date)):
             row.item, row.occurrence_date = new, row.occurrence_date + delta

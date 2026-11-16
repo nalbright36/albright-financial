@@ -12,6 +12,8 @@ from dateutil.rrule import rrulestr
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 
+from albright_labs import attachments
+
 from .auth import ApiError, bot_endpoint, json_body
 
 MAX_RANGE_DAYS = 366
@@ -155,7 +157,7 @@ def _repeat(data, start):
     return rule, until, count
 
 
-def _occurrence_json(o):
+def _occurrence_json(o, files=None):
     return {"item_id": o.item.pk, "title": o.title, "date": o.date.isoformat(),
             "occurrence_date": o.occurrence_date.isoformat(), "start_time": o.start_time.strftime("%H:%M") if o.start_time else None,
             "end_time": o.end_time.strftime("%H:%M") if o.end_time else None, "kind": o.item.kind,
@@ -165,7 +167,8 @@ def _occurrence_json(o):
             "done_by": _person(o.done_by) if getattr(o, "done_by", None) else None,
             "checklist": [{"id": r.pk, "text": r.text, "done": r.checked,
                            "done_by": _person(r.done_by) if r.checked and r.done_by else None}
-                          for r in getattr(o, "checklist", [])]}
+                          for r in getattr(o, "checklist", [])],
+            "attachments": (files or {}).get(o.item.pk, [])}
 
 
 def _person(user):
@@ -185,6 +188,7 @@ def _item_json(request, item):
             "one_at_a_time": item.one_at_a_time, "repeat_from_completion": item.repeat_from_completion,
             "created_by": item.created_by,
             "checklist": [{"id": r.pk, "text": r.text} for r in item.checklist.all()],
+            "attachments": attachments.api_list(item, request),
             "url": request.build_absolute_uri(reverse("albright_planner:item", args=[item.pk]))}
 
 
@@ -203,7 +207,9 @@ def schedule_list(request, token):
         raise ApiError(400, '"expand" must be "all" (or left out).', "rejected: bad expand")
     from albright_planner import checklist
     occs = checklist.attach(planner.occurrences(token.owner, start, end, expand=expand == "all", localize=False))
-    rows = [_occurrence_json(o) for o in occs]
+    from albright_planner.models import ScheduleItem
+    files = attachments.api_lists(ScheduleItem, {o.item.pk for o in occs}, request)
+    rows = [_occurrence_json(o, files) for o in occs]
     return ({"start": start.isoformat(), "end": end.isoformat(), "occurrences": rows}, 200,
             f"listed {len(rows)} occurrences {start}..{end}" + (" (expand=all)" if expand else ""))
 

@@ -293,7 +293,9 @@ GET  notes?q=<words>&tag=<tag>&archived=1             scope: notes:read
   The owner's own notes (never notes others shared with them), pinned first then most recently changed, or
   best matches first with q (full-text over title, tags and body; each word also matches as a prefix).
   Up to 200. Returns {"notes": [{"id", "title", "tags", "pinned", "archived", "created_by", "created_at",
-  "updated_at"}]}.
+  "updated_at", "attachments"}]}. "attachments" (every note answer has it): [{"id", "name", "type" (MIME),
+  "size" (bytes), "url"}] - read-only; the url opens with the owner's signed-in session, not with this key, and
+  there's no upload through the API.
 
 POST notes                                            scope: notes:write
   Body: {"title": str (required, <=200), "body": Markdown str (optional, <=100000), "tags": [str] (optional),
@@ -323,7 +325,9 @@ GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD&expand=all  scope: schedule:read
   to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
   "created_by", "owner" (whose item - first name), "mine" (false for an item someone shared with the owner),
   "done_by" (who checked it off - either person, for a shared item - or null), "one_at_a_time", "checklist":
-  [{"id", "text", "done", "done_by"}] (that occurrence's subtasks - each occurrence starts with all open)}]}.
+  [{"id", "text", "done", "done_by"}] (that occurrence's subtasks - each occurrence starts with all open),
+  "attachments": [{"id", "name", "type" (MIME), "size" (bytes), "url"}] (the item's files and photos -
+  read-only; no upload through the API)}]}.
 
 POST schedule                                          scope: schedule:write
   Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
@@ -344,7 +348,8 @@ POST schedule                                          scope: schedule:write
   The item belongs to the owner and shows "by <your token's name>"; it's shared the way the owner shares new
   items by default (Planner "Share with" > "Remember as my default"). Returns 201 {"id", "title", "kind",
   "date", "start_time", "end_time", "checkable", "notes", "rrule", "until", "count", "repeats" (plain
-  English), "one_at_a_time", "repeat_from_completion", "created_by", "checklist": [{"id", "text"}], "url"}.
+  English), "one_at_a_time", "repeat_from_completion", "created_by", "checklist": [{"id", "text"}],
+  "attachments": [], "url"}.
 
 POST schedule/<id>/complete                            scope: schedule:write
 POST schedule/<id>/uncomplete                          scope: schedule:write

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import activity_views, circle_views, invite_views, push_views, share_views, views
+from . import activity_views, attachment_views, circle_views, invite_views, push_views, share_views, views
 
 app_name = "labs"
 
@@ -18,6 +18,11 @@ urlpatterns = [
     path("circles/join/<str:token>/", circle_views.invite_link, name="circle_join"),
     # Sharing (share_views; the rules: albright_labs.sharing) and People (albright_labs.connections).
     path("share/<str:label>/<int:pk>/", share_views.share, name="share"),
+    # Attachments on Planner tasks and notes (attachment_views; the rules: albright_labs.attachments).
+    path("attachments/upload/", attachment_views.upload, name="attachment_upload"),
+    path("attachments/<int:pk>/", attachment_views.serve, name="attachment"),
+    path("attachments/<int:pk>/thumb/", attachment_views.serve_thumb, name="attachment_thumb"),
+    path("attachments/<int:pk>/delete/", attachment_views.delete, name="attachment_delete"),
     path("home/account/people/", share_views.people_page, name="people"),
     path("home/account/people/search/", share_views.people_search, name="people_search"),
     path("home/account/people/<int:pk>/remove/", share_views.people_remove, name="people_remove"),

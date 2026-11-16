@@ -29,7 +29,7 @@ from django.views.decorators.http import require_GET, require_POST
 from albright_control.review_list import ago
 from albright_labs.links import is_web_url, link_status
 
-from albright_labs import sharing
+from albright_labs import attachments, sharing
 
 from . import links, notes, render as md
 from .models import Note, NoteLink
@@ -155,7 +155,7 @@ def workspace(request, pk=None):
     if tag:
         qs = qs.filter(tags__contains=[tag])
     qs = notes.search(qs, q) if q else qs.order_by("-pinned", "-updated_at", "-pk")
-    rows = list(qs.select_related("owner").prefetch_related("links")[:LIST_LIMIT])
+    rows = list(attachments.with_counts(qs).select_related("owner").prefetch_related("links")[:LIST_LIMIT])
     shared_out = _shared_out([n for n in rows if n.owner_id == user.pk])
     groups = _groups(user, [n for n in rows if n.owner_id != user.pk]) if view == "shared" else {}
     if view == "shared":                              # by circle and by person
@@ -197,6 +197,8 @@ def _editor(note, user, now, allowed):
         "chips": links.chips(user, list(note.links.all()), allowed), "words": word_count(note.body),
         "share": sharing.control(user, note), "updated": ago(note.updated_at, now),
         "my_permission": None if is_owner else sharing.permission_for(user, note),
+        "att": attachments.section(user, note, "notes", editable=can_edit,
+                                   next_url=reverse("albright_notes:note", args=[note.pk])),
     }
 
 
