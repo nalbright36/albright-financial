@@ -15,7 +15,8 @@ from .models import SCOPE_KEYS, SCOPES
 
 # Scope -> the app (apps_registry key) its owner must be able to open.
 APP_SCOPES = {"schedule:read": "planner", "schedule:write": "planner", "meals:read": "meals", "meals:write": "meals",
-              "notes:read": "notes", "notes:write": "notes", "fitness:read": "fitness", "fitness:write": "fitness"}
+              "notes:read": "notes", "notes:write": "notes", "fitness:read": "fitness", "fitness:write": "fitness",
+              "fitness:food:read": "fitness", "fitness:food:write": "fitness"}
 # What each app scope does, in plain words - "My API keys" (non-admins).
 PLAIN = {
     "schedule:read": "See my Planner - my items and ones shared with me",
@@ -26,6 +27,8 @@ PLAIN = {
     "notes:write": "Save notes for me, and add to notes I can edit",
     "fitness:read": "See my Fitness day and weekly summary (workouts, food vs targets)",
     "fitness:write": "Log workouts, food and weigh-ins for me",
+    "fitness:food:read": "Read your food log",
+    "fitness:food:write": "Add and edit food entries",
     "activity:read": "See my notifications - what others changed in things shared with me and in my circles",
 }
 # Scopes anyone allowed API keys can use (not tied to one app).
@@ -54,6 +57,19 @@ def allowed(user, scope):
         return True
     app = APP_SCOPES.get(scope)
     return app is not None and app_access.can_use(user, _pref(user), app)
+
+
+GROUP_ORDER = ["planner", "meals", "notes", "fitness"]
+
+
+def grouped_choices(user):
+    """[(group label, [(scope, description)])] - the key forms group them by app ("Fitness", ...); the rest last."""
+    groups = {}
+    for key, label in choices(user):
+        app = APP_SCOPES.get(key)
+        name = apps_registry.BY_KEY[app].label if app in apps_registry.BY_KEY else ("Notifications" if key in OPEN_SCOPES else "Admin")
+        groups.setdefault((GROUP_ORDER.index(app) if app in GROUP_ORDER else 99, name), []).append((key, label))
+    return [(name, rows) for (_order, name), rows in sorted(groups.items(), key=lambda kv: kv[0])]
 
 
 def available(user):

@@ -380,11 +380,11 @@ class HardLimitTests(BotApiTestCase):
                 self.assertEqual(pattern.callback.__module__, fitness_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 42)   # incl. me/storage, POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
+        self.assertEqual(len(api_urlpatterns), 46)   # incl. me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
         self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 8)
         self.assertEqual(sum(str(p.pattern).startswith("notes") for p in api_urlpatterns), 2)
         self.assertEqual(sum(str(p.pattern).startswith("schedule") for p in api_urlpatterns), 5)   # + checklist tick / untick
-        self.assertEqual(sum(str(p.pattern).startswith("fitness/") for p in api_urlpatterns), 10)   # + programs, pause, resume, food entries, foods search
+        self.assertEqual(sum(str(p.pattern).startswith("fitness/") for p in api_urlpatterns), 15)   # + food-entries (+ recent, <id>), openapi.json, programs, pause, resume, food entries, foods search
 
     def test_no_forbidden_side_effects(self):
         from albright_reselling_app.models import LedgerEntry, LedgerSale

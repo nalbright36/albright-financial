@@ -66,7 +66,9 @@ def _log(request, token, status, summary):
 
 
 def bot_endpoint(scope=None, methods=("GET",)):
-    """Wraps an API view: fn(request, token, **kwargs) -> (data, status, summary)."""
+    """Wraps an API view: fn(request, token, **kwargs) -> (data, status, summary). scope: one scope, or a tuple of
+    scopes any one of which will do (the 403 names the first)."""
+    wanted = tuple(scope) if isinstance(scope, (tuple, list)) else ((scope,) if scope else ())
     def decorate(view):
         @csrf_exempt
         @functools.wraps(view)
@@ -90,12 +92,14 @@ def bot_endpoint(scope=None, methods=("GET",)):
                 if not scopes.keys_allowed(token.owner):
                     raise ApiError(403, "API keys are turned off for this token's account.",
                                    "rejected: owner not allowed API keys")
-                if scope and scope not in token.scopes:
-                    raise ApiError(403, f"This token doesn't have the {scope} scope.", f"rejected: needs {scope}")
-                if scope and not scopes.allowed(token.owner, scope):
+                held = [s for s in wanted if s in token.scopes]
+                if wanted and not held:
+                    raise ApiError(403, f"This token doesn't have the {wanted[0]} scope.", f"rejected: needs {wanted[0]}",
+                                   extra={"required": wanted[0]})
+                if wanted and not any(scopes.allowed(token.owner, s) for s in held):
                     # The owner lost the app (or isn't an admin): the key stops working for it at once.
-                    raise ApiError(403, scopes.denial(token.owner, scope), f"rejected: owner can't use {scope}",
-                                   extra={"required": scope})
+                    raise ApiError(403, scopes.denial(token.owner, held[0]), f"rejected: owner can't use {held[0]}",
+                                   extra={"required": held[0]})
                 recent = BotRequestLog.objects.filter(token=token, created_at__gte=timezone.now() - RATE_WINDOW) \
                     .exclude(status=429).count()
                 if recent >= RATE_LIMIT:

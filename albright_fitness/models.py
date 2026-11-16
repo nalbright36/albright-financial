@@ -419,15 +419,23 @@ class FoodLogEntry(models.Model):
     """One line in a person's food diary - theirs alone. The amounts are worked out when it's logged and kept
     (editing a food or recipe later doesn't rewrite the diary). Where it came from: a USDA food (grams, maybe a
     household portion), one of My foods (servings), a quick add (just the numbers), or a Meals recipe (servings -
-    from the meal plan when plan_entry is set)."""
+    from the meal plan when plan_entry is set), an AI's estimate sent through the Bot API (fitness_api food-entries:
+    its numbers as given, with confidence, the person's own words in source_text and the key that sent it), or a
+    barcode.
+
+    edited: an AI estimate the person changed on the site (the badge reads "AI · edited"). idempotency_key: what
+    the bot sent with the POST - the same key from the same person within 24 hours returns those entries again."""
     BREAKFAST, LUNCH, DINNER, SNACK = "breakfast", "lunch", "dinner", "snack"
     SLOTS = [(BREAKFAST, "Breakfast"), (LUNCH, "Lunch"), (DINNER, "Dinner"), (SNACK, "Snacks")]
-    USDA, CUSTOM, QUICK, RECIPE = "usda", "custom", "quick", "recipe"
-    SOURCES = [(USDA, "USDA food"), (CUSTOM, "My food"), (QUICK, "Quick add"), (RECIPE, "Recipe")]
+    USDA, CUSTOM, QUICK, RECIPE, AI, BARCODE = "usda", "custom", "quick", "recipe", "ai", "barcode"
+    SOURCES = [(USDA, "USDA food"), (CUSTOM, "My food"), (QUICK, "Quick add"), (RECIPE, "Recipe"), (AI, "AI estimate"),
+               (BARCODE, "Barcode")]
+    HIGH, MEDIUM, LOW = "high", "medium", "low"
+    CONFIDENCES = [(HIGH, "High"), (MEDIUM, "Medium"), (LOW, "Low")]
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_food_log")
     date = models.DateField()
     slot = models.CharField(max_length=9, choices=SLOTS, default=SNACK)
-    source = models.CharField(max_length=6, choices=SOURCES)
+    source = models.CharField(max_length=10, choices=SOURCES, default=QUICK)
     label = models.CharField(max_length=200)
     food = models.ForeignKey(Food, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     custom_food = models.ForeignKey(CustomFood, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
@@ -446,11 +454,24 @@ class FoodLogEntry(models.Model):
     carbs = models.DecimalField(**AMOUNT)
     fat = models.DecimalField(**AMOUNT)
     fiber = models.DecimalField(**AMOUNT)
+    sugar = models.DecimalField(**AMOUNT)
+    sodium_mg = models.DecimalField(**AMOUNT)
+    confidence = models.CharField(max_length=6, choices=CONFIDENCES, null=True, blank=True)
+    notes = models.TextField(blank=True)
+    source_text = models.TextField(blank=True)
+    bot_key = models.ForeignKey("albright_bot_api.BotToken", on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="+")
+    idempotency_key = models.CharField(max_length=100, blank=True, db_index=True)
+    edited = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["date", "pk"]
         indexes = [models.Index(fields=["owner", "date"])]
+
+    @property
+    def is_ai(self):
+        return self.source == self.AI
 
     def __str__(self):
         return f"{self.date} {self.slot}: {self.label}"

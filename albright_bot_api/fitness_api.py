@@ -311,9 +311,33 @@ def _log_usda(user, data, on, slot):
                        amounts.for_food(food), data)
 
 
-@bot_endpoint("fitness:read")
+def _per_serving(basis):
+    """The numbers for one of the food's first unit: {"serving", "calories", "protein_g", "carbs_g", "fat_g", "fiber_g"}."""
+    if basis is None or not basis.units:
+        return None
+    unit = basis.unit(basis.default) or basis.units[0]
+    got = basis.amount(1, unit.key)
+    if got is None:
+        return None
+    t = got["totals"]
+    names = {"calories": "calories", "protein": "protein_g", "carbs": "carbs_g", "fat": "fat_g", "fiber": "fiber_g"}
+    return {"serving": unit.label, "grams": float(got["grams"]) if got["grams"] is not None else None,
+            **{out: float(t[n]) if t.get(n) is not None else None for n, out in names.items()}}
+
+
+def _recipe_serving(recipe_id):
+    from albright_fitness import amounts
+    from albright_meals.models import Recipe
+    from albright_meals.recipe_nutrition import per_serving
+    recipe = Recipe.objects.filter(pk=recipe_id).select_related("nutrition").first()
+    values = per_serving(getattr(recipe, "nutrition", None)) if recipe else None
+    return _per_serving(amounts.for_recipe(values)) if values else None
+
+
+@bot_endpoint(("fitness:read", "fitness:food:read"))
 def food_search(request, token):
-    """The site's one search box: Recent, My foods, recipes, all foods (USDA when the site has a key)."""
+    """The site's one search box: Recent, My foods, recipes, all foods (USDA when the site has a key) - with each
+    one's numbers per serving, so an AI can use real numbers before estimating."""
     from albright_fitness import amounts, food_find_views
     from albright_fitness.models import CustomFood, Food
     q = (request.GET.get("q") or "").strip()
@@ -329,13 +353,16 @@ def food_search(request, token):
             row = {"kind": i["kind"], "label": i["label"], "detail": i["detail"]}
             if i["kind"] == "usda":
                 food = cached.get(i["id"])
-                row.update(fdc_id=i["id"], units=_units_json(amounts.for_food(food)) if food else [{"unit": "g", "label": "g"}])
+                row.update(fdc_id=i["id"], units=_units_json(amounts.for_food(food)) if food else [{"unit": "g", "label": "g"}],
+                           per_serving=_per_serving(amounts.for_food(food)) if food else None)
                 row["log"] = {"fdc_id": i["id"], "quantity": 1, "unit": row["units"][0]["unit"]}
             elif i["kind"] == "custom" and i["id"] in mine:
-                row.update(my_food=mine[i["id"]].name, units=_units_json(amounts.for_custom(mine[i["id"]])))
+                row.update(my_food=mine[i["id"]].name, units=_units_json(amounts.for_custom(mine[i["id"]])),
+                           per_serving=_per_serving(amounts.for_custom(mine[i["id"]])))
                 row["log"] = {"my_food": mine[i["id"]].name, "quantity": 1, "unit": "serving"}
             elif i["kind"] == "recipe":
-                row.update(recipe_id=i["id"], log={"recipe_id": i["id"], "servings": 1})
+                row.update(recipe_id=i["id"], log={"recipe_id": i["id"], "servings": 1},
+                           per_serving=_recipe_serving(i["id"]))
             else:
                 continue                                       # a quick add from before: nothing to log by id
             items.append(row)
@@ -592,3 +619,383 @@ def program_delete(request, token, item_id):
     return ({"deleted": pk, "name": name, "workouts_kept": done["workouts"], "planner_ended": done["planner_ended"],
              "planner_kept": done["planner_kept"]}, 200,
             f"deleted program #{pk} ({done['workouts']} workouts kept, planner {'ended' if remove else 'kept'})")
+
+
+# ---------------------------------------------------------------------------
+# Food log for a person's AI (fitness:food:read / fitness:food:write)
+#
+# Unlike POST fitness/food (which never guesses), these take the AI's own estimate: name, amount and macros per item,
+# saved as source "ai" with its confidence, notes and the person's words. Several items in one POST, all or nothing;
+# the same idempotency_key within 24 hours returns those entries again. The person's day and "now" are in their own
+# time zone (their Planner setting). Writes are limited per key (FOOD_WRITES_PER_HOUR) and every one is in the key's
+# activity log with the entry ids.
+# ---------------------------------------------------------------------------
+
+FOOD_ITEMS_MAX = 20
+FOOD_WRITES_PER_HOUR = 60
+IDEMPOTENCY_HOURS = 24
+# field -> (low, high, required): the numbers an item can carry
+ITEM_NUMBERS = {
+    "calories": (0, 5000, True), "protein_g": (0, 1000, True), "carbs_g": (0, 1000, True), "fat_g": (0, 1000, True),
+    "fiber_g": (0, 300, False), "sugar_g": (0, 1000, False), "sodium_mg": (0, 50000, False),
+    "quantity": (0, 5000, False), "grams": (0, 5000, False),
+}
+# API name -> FoodLogEntry field
+ITEM_FIELDS = {"calories": "calories", "protein_g": "protein", "carbs_g": "carbs", "fat_g": "fat", "fiber_g": "fiber",
+               "sugar_g": "sugar", "sodium_mg": "sodium_mg"}
+ITEM_KEYS = set(ITEM_NUMBERS) | {"name", "unit", "confidence", "notes"}
+MEALS = ("breakfast", "lunch", "dinner", "snack")
+
+
+def _user_now(user):
+    from albright_planner import planner
+    return timezone.localtime(timezone=planner.user_zone(user))
+
+
+def meal_for(local_dt):
+    """The meal it probably is, by the person's local time: breakfast before 10:30, lunch before 15:00, dinner
+    before 21:00, else a snack."""
+    from datetime import time
+    t = local_dt.time()
+    if t < time(10, 30):
+        return "breakfast"
+    if t < time(15, 0):
+        return "lunch"
+    return "dinner" if t < time(21, 0) else "snack"
+
+
+def _user_date(user, value, field="date", days_back=60):
+    """YYYY-MM-DD, not after the person's today (in their zone) nor more than days_back before; default today."""
+    today = _user_now(user).date()
+    if value in (None, ""):
+        return today
+    try:
+        day = date.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        day = None
+    if day is None or day > today or day < today - timedelta(days=days_back):
+        message = f"must be YYYY-MM-DD, your today ({today}) or up to {days_back} days back"
+        raise ApiError(400, f'"{field}" {message}.', f"rejected: bad {field}",
+                       extra={"errors": [{"field": field, "message": message}]})
+    return day
+
+
+def _num(value, low, high):
+    """(Decimal, None) or (None, why)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None, "must be a number"
+    try:
+        number = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None, "must be a number"
+    if not number.is_finite():
+        return None, "must be a number"
+    if number < low:
+        return None, "can't be negative" if low == 0 else f"must be at least {low}"
+    if number > high:
+        return None, f"must be at most {high}"
+    return number, None
+
+
+def _text(value, limit):
+    """(text, None) or (None, why)."""
+    if value in (None, ""):
+        return "", None
+    if not isinstance(value, str):
+        return None, "must be a string"
+    value = value.strip()
+    return (value, None) if len(value) <= limit else (None, f"must be at most {limit} characters")
+
+
+def _clean_item(item, where, partial=False):
+    """(fields for _apply_item, [{"field", "message"}]). partial: a PATCH - only what's sent, nothing required."""
+    errors, out = [], {}
+    if not isinstance(item, dict):
+        return {}, [{"field": where or "item", "message": "must be an object"}]
+
+    def err(name, message):
+        errors.append({"field": f"{where}.{name}" if where else name, "message": message})
+
+    if "name" in item or not partial:
+        name, why = _text(item.get("name"), 200)
+        if why or not name:
+            err("name", why or "is required")
+        else:
+            out["label"] = " ".join(name.split())
+    for key, (low, high, required) in ITEM_NUMBERS.items():
+        if key not in item and partial:
+            continue
+        value = item.get(key)
+        if value in (None, ""):
+            if required:
+                err(key, "is required" if not partial else "can't be empty")
+            elif key in item:
+                out[key] = None
+            continue
+        number, why = _num(value, low, high)
+        if why:
+            err(key, why)
+        elif key == "quantity" and number == 0:
+            err(key, "must be more than 0")
+        else:
+            out[key] = number
+    if "unit" in item:
+        unit, why = _text(item.get("unit"), 40)
+        if why:
+            err("unit", why)
+        else:
+            out["unit"] = unit
+    if "confidence" in item:
+        value = item.get("confidence")
+        if value in (None, ""):
+            out["confidence"] = None
+        elif value not in ("high", "medium", "low"):
+            err("confidence", 'must be "high", "medium" or "low"')
+        else:
+            out["confidence"] = value
+    if "notes" in item:
+        notes, why = _text(item.get("notes"), 1000)
+        if why:
+            err("notes", why)
+        else:
+            out["notes"] = notes
+    return out, errors
+
+
+def _apply_item(entry, fields):
+    """Put cleaned item fields on an entry (the amount: quantity + free-text unit, shown as "1 bowl")."""
+    for key, attr in ITEM_FIELDS.items():
+        if key in fields:
+            value = fields[key]
+            setattr(entry, attr, value.quantize(Decimal("0.01")) if value is not None else None)
+    for attr in ("label", "confidence", "notes"):
+        if attr in fields:
+            setattr(entry, attr, fields[attr])
+    if "grams" in fields:
+        entry.grams = fields["grams"].quantize(Decimal("0.1")) if fields["grams"] is not None else None
+    if "quantity" in fields:
+        entry.quantity = fields["quantity"].quantize(Decimal("0.001")) if fields["quantity"] is not None else None
+    if "unit" in fields:
+        entry.unit = fields["unit"] or ""
+    if {"quantity", "unit"} & set(fields):
+        quantity = f"{entry.quantity.normalize():f}" if entry.quantity is not None else ""
+        entry.portion_label = " ".join(p for p in (quantity, entry.unit) if p)[:60]
+
+
+def _macro_warning(label, calories, protein, carbs, fat):
+    """A note when the calories differ from 4×protein + 4×carbs + 9×fat by more than 25% and more than 50 kcal."""
+    if calories is None:
+        return None
+    expected = 4 * (protein or 0) + 4 * (carbs or 0) + 9 * (fat or 0)
+    gap = abs(calories - expected)
+    if gap > 50 and (expected == 0 or gap > expected * Decimal("0.25")):
+        return (f"{label}: {calories:.0f} kcal doesn't match its macros (4×protein + 4×carbs + 9×fat ≈ {expected:.0f} "
+                "kcal). Saved as sent - PATCH it if it's wrong.")
+    return None
+
+
+def _num_out(value, places=1):
+    return float(round(value, places)) if value is not None else None
+
+
+def _ai_entry_json(entry):
+    return {"id": entry.pk, "date": entry.date.isoformat(), "meal": entry.slot, "name": entry.label,
+            "quantity": _num_out(entry.quantity, 3), "unit": entry.unit or None, "grams": _num_out(entry.grams),
+            "calories": _num_out(entry.calories), "protein_g": _num_out(entry.protein), "carbs_g": _num_out(entry.carbs),
+            "fat_g": _num_out(entry.fat), "fiber_g": _num_out(entry.fiber), "sugar_g": _num_out(entry.sugar),
+            "sodium_mg": _num_out(entry.sodium_mg, 0), "source": entry.source, "confidence": entry.confidence,
+            "notes": entry.notes or None, "edited": entry.edited}
+
+
+def _day_summary(user, on):
+    """{"totals", "targets"} for the person's day - targets null when none are set."""
+    from albright_fitness import nutrition
+    from albright_fitness.models import FoodLogEntry, NutritionProfile
+    totals = nutrition.totals(FoodLogEntry.objects.filter(owner=user, date=on))
+    profile = NutritionProfile.objects.filter(user=user).first()
+    targets = None
+    if profile is not None:
+        values = {n: profile.target(n) for n in ("calories", "protein", "carbs", "fat")}
+        if any(values.values()):
+            targets = {"calories": values["calories"], "protein_g": values["protein"], "carbs_g": values["carbs"],
+                       "fat_g": values["fat"]}
+    return {"totals": {"calories": _num_out(totals["calories"], 0), "protein_g": _num_out(totals["protein"]),
+                       "carbs_g": _num_out(totals["carbs"]), "fat_g": _num_out(totals["fat"])},
+            "targets": targets}
+
+
+def _food_write_limit(token):
+    """At most FOOD_WRITES_PER_HOUR food log changes an hour for one key (on top of the per-minute limit)."""
+    from .models import BotRequestLog
+    recent = BotRequestLog.objects.filter(
+        token=token, created_at__gte=timezone.now() - timedelta(hours=1), method__in=("POST", "PATCH", "DELETE"),
+        endpoint__startswith=reverse("bot_api_v1:fitness_food_entries_v2")).exclude(status=429).count()
+    if recent >= FOOD_WRITES_PER_HOUR:
+        raise ApiError(429, f"Rate limit: {FOOD_WRITES_PER_HOUR} food log changes per hour per key.",
+                       "rate limited: food writes")
+
+
+def _day_response(user, on, entries, warnings=None, replayed=False):
+    order = {key: i for i, key in enumerate(MEALS)}
+    entries = sorted(entries, key=lambda e: (order.get(e.slot, 9), e.pk))
+    data = {"date": on.isoformat(), "entries": [_ai_entry_json(e) for e in entries], **_day_summary(user, on)}
+    if warnings is not None:
+        data["warnings"] = warnings
+    if replayed:
+        data["replayed"] = True
+    return data
+
+
+def _ids(entries):
+    return ", ".join(f"#{e.pk}" for e in entries)
+
+
+@bot_endpoint("fitness:food:write", methods=("POST",))
+def _food_entries_post(request, token):
+    from django.db import transaction
+
+    from albright_fitness.models import FoodLogEntry
+    user = token.owner
+    _food_write_limit(token)
+    data = json_body(request)
+    key, why = _text(data.get("idempotency_key"), 100)
+    if why:
+        raise ApiError(400, f'"idempotency_key" {why}.', "rejected: bad idempotency_key",
+                       extra={"errors": [{"field": "idempotency_key", "message": why}]})
+    if key:
+        earlier = list(FoodLogEntry.objects.filter(owner=user, idempotency_key=key,
+                                                   created_at__gte=timezone.now() - timedelta(hours=IDEMPOTENCY_HOURS)))
+        if earlier:
+            return (_day_response(user, earlier[0].date, earlier, warnings=[], replayed=True), 200,
+                    f"replayed food {_ids(earlier)} (same idempotency key)")
+    errors, on = [], None
+    try:
+        on = _user_date(user, data.get("date"))
+    except ApiError as exc:
+        errors += exc.extra.get("errors", [])
+    meal = data.get("meal")
+    if meal in (None, ""):
+        meal = meal_for(_user_now(user))
+    elif meal not in MEALS:
+        errors.append({"field": "meal", "message": 'must be "breakfast", "lunch", "dinner" or "snack"'})
+    source_text, why = _text(data.get("source_text"), 4000)
+    if why:
+        errors.append({"field": "source_text", "message": why})
+    items, cleaned = data.get("items"), []
+    if not isinstance(items, list) or not items:
+        errors.append({"field": "items", "message": f"send a list of 1 to {FOOD_ITEMS_MAX} items"})
+    elif len(items) > FOOD_ITEMS_MAX:
+        errors.append({"field": "items", "message": f"at most {FOOD_ITEMS_MAX} items in one call"})
+    else:
+        for i, item in enumerate(items):
+            fields, item_errors = _clean_item(item, f"items[{i}]")
+            cleaned.append(fields)
+            errors += item_errors
+    if errors:
+        raise ApiError(400, "Nothing was logged - fix these and send it again.", f"rejected: {len(errors)} field errors",
+                       extra={"errors": errors})
+    warnings, created = [], []
+    with transaction.atomic():                         # all the items, or none
+        for fields in cleaned:
+            entry = FoodLogEntry(owner=user, date=on, slot=meal, source=FoodLogEntry.AI, source_text=source_text,
+                                 bot_key=token, idempotency_key=key)
+            _apply_item(entry, fields)
+            entry.save()
+            created.append(entry)
+            note = _macro_warning(entry.label, entry.calories, entry.protein, entry.carbs, entry.fat)
+            if note:
+                warnings.append(note)
+    return (_day_response(user, on, created, warnings=warnings), 201,
+            f"logged food {_ids(created)} (ai, {meal} {on})")
+
+
+@bot_endpoint("fitness:food:read")
+def _food_entries_get(request, token):
+    from albright_fitness.models import FoodLogEntry
+    on = _user_date(token.owner, request.GET.get("date"), days_back=365)
+    entries = list(FoodLogEntry.objects.filter(owner=token.owner, date=on))
+    return _day_response(token.owner, on, entries), 200, f"read food log for {on}"
+
+
+@csrf_exempt
+def food_entries_v2(request):
+    """GET (fitness:food:read) a day's entries, totals and targets; POST (fitness:food:write) logs an AI's items."""
+    return _food_entries_post(request) if request.method == "POST" else _food_entries_get(request)
+
+
+def _own_entry(token, entry_id):
+    from albright_fitness.models import FoodLogEntry
+    entry = FoodLogEntry.objects.filter(pk=entry_id, owner=token.owner).first()
+    if entry is None:
+        raise ApiError(404, "No food entry with that id in your log.", "rejected: entry not found")
+    return entry
+
+
+@bot_endpoint("fitness:food:write", methods=("PATCH",))
+def _food_entry_patch(request, token, entry_id):
+    _food_write_limit(token)
+    entry = _own_entry(token, entry_id)
+    data = json_body(request)
+    fields, errors = _clean_item(data, "", partial=True)
+    if "meal" in data:
+        if data["meal"] not in MEALS:
+            errors.append({"field": "meal", "message": 'must be "breakfast", "lunch", "dinner" or "snack"'})
+        else:
+            entry.slot = data["meal"]
+    if "date" in data:
+        try:
+            entry.date = _user_date(token.owner, data["date"])
+        except ApiError as exc:
+            errors += exc.extra.get("errors", [])
+    errors += [{"field": k, "message": "isn't a field you can change"} for k in sorted(set(data) - ITEM_KEYS - {"meal", "date"})]
+    if errors:
+        raise ApiError(400, "Nothing was changed - fix these and send it again.", f"rejected: {len(errors)} field errors",
+                       extra={"errors": errors})
+    _apply_item(entry, fields)
+    entry.save()
+    warning = _macro_warning(entry.label, entry.calories, entry.protein, entry.carbs, entry.fat)
+    return ({"entry": _ai_entry_json(entry), **_day_summary(token.owner, entry.date), "warnings": [warning] if warning else []},
+            200, f"changed food #{entry.pk}")
+
+
+@bot_endpoint("fitness:food:write", methods=("DELETE",))
+def _food_entry_delete(request, token, entry_id):
+    _food_write_limit(token)
+    entry = _own_entry(token, entry_id)
+    on, pk = entry.date, entry.pk
+    entry.delete()
+    return {"deleted": pk, "date": on.isoformat(), **_day_summary(token.owner, on)}, 200, f"removed food #{pk}"
+
+
+@csrf_exempt
+def food_entry(request, entry_id):
+    """PATCH fixes an entry, DELETE removes it (fitness:food:write; only the key owner's own entries)."""
+    if request.method == "DELETE":
+        return _food_entry_delete(request, entry_id=entry_id)
+    return _food_entry_patch(request, entry_id=entry_id)
+
+
+@bot_endpoint("fitness:food:read")
+def food_recent(request, token):
+    """The person's most-logged foods (last 60 days) with their numbers - send one back as an item to repeat it."""
+    from albright_fitness import nutrition
+    raw = request.GET.get("limit") or "20"
+    limit = int(raw) if raw.isdigit() else 0
+    if not 1 <= limit <= 50:
+        raise ApiError(400, '"limit" must be 1 to 50.', "rejected: bad limit")
+    out = []
+    for e, times in nutrition.recent_foods(token.owner, limit=limit):
+        item = {"name": e.label, "quantity": _num_out(e.quantity, 3), "unit": e.unit or None, "grams": _num_out(e.grams),
+                "calories": _num_out(e.calories), "protein_g": _num_out(e.protein), "carbs_g": _num_out(e.carbs),
+                "fat_g": _num_out(e.fat), "fiber_g": _num_out(e.fiber)}
+        out.append({"times_logged": times, "last_logged": e.date.isoformat(), "meal": e.slot, "source": e.source,
+                    "item": {k: v for k, v in item.items() if v is not None}})
+    return {"foods": out}, 200, f"read recent foods ({len(out)})"
+
+
+def openapi(request):
+    """The machine-readable spec for the food log endpoints - no key needed to read it (it holds no data)."""
+    from django.http import JsonResponse
+
+    from . import food_ai
+    return JsonResponse(food_ai.openapi_spec(food_ai.api_base(request)), json_dumps_params={"indent": 2})

@@ -37,6 +37,9 @@ SCOPES = [   # (scope, one-line description of what it allows)
                        "back on."),
     ("fitness:read", "Read the owner's Fitness day (planned workout, workouts done, macros vs targets) and weekly summary."),
     ("fitness:write", "Log workouts, food and weigh-ins for the owner (their own diary and records only)."),
+    ("fitness:food:read", "Read the owner's food log: a day's entries, totals and targets, their most-logged foods, "
+                          "and food search."),
+    ("fitness:food:write", "Add, fix and remove entries in the owner's food log - an AI's estimates (fitness/food-entries)."),
     ("activity:read", "Read the owner's notifications - what others changed in things shared with them and in their "
                       "circles - e.g. to summarize what changed today."),
 ]

@@ -5,7 +5,9 @@
 {% comment %}
 My account > My API keys (albright_bot_api.key_views): keys that act as this person, with only the permissions
 for apps they can open. A new or rotated key is shown once (only its hash is kept). Password to create, change
-permissions or rotate.
+permissions or rotate. The permissions are grouped by app (scopes.grouped_choices - "Fitness" has "Read your food
+log" / "Add and edit food entries"). Someone with Fitness also gets "Log food with your AI": the instructions to paste
+into their AI (food_ai.instructions - never the key itself).
 {% endcomment %}
 <div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
     <a href="{% url 'labs:account' %}" style="font-size: 0.875rem;">&larr; My account</a>
@@ -34,7 +36,8 @@ permissions or rotate.
             </div>
             <fieldset class="field" style="border: 0; padding: 0; margin-left: 0; margin-right: 0;">
                 <legend style="font-weight: 600; margin-bottom: 6px;">{{ form.scopes.label }}</legend>
-                {% for choice in form.scopes %}<label style="display: flex; gap: 8px; align-items: flex-start; font-weight: 400; min-height: 32px;">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>{% endfor %}
+                {% for group, rows in groups %}<p class="scope-group" style="margin: 10px 0 2px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary);">{{ group }}</p>
+                {% for key, label in rows %}<label style="display: flex; gap: 8px; align-items: flex-start; font-weight: 400; min-height: 32px;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in picked %} checked{% endif %}> <span>{{ label }}</span></label>{% endfor %}{% endfor %}
                 {% for e in form.scopes.errors %}<span style="color: var(--loss); font-size: 0.8125rem;">{{ e }}</span>{% endfor %}
             </fieldset>
             <div class="field">
@@ -56,6 +59,14 @@ permissions or rotate.
         </section>
     </div>
 
+    {% if food_instructions %}
+    <details class="card" style="margin-top: 20px;" id="food-ai">
+        <summary style="cursor: pointer; font-weight: 600;">Log food with your AI <span style="font-weight: 400; font-size: 0.8125rem; color: var(--text-secondary);">- instructions to paste into your AI</span></summary>
+        <p style="margin: 10px 0; font-size: 0.875rem; color: var(--text-secondary);">Make a key with <strong>Read your food log</strong> and <strong>Add and edit food entries</strong>, put it in your AI's secret settings, then give it these instructions.</p>
+        {% include "albright_fitness/_food_ai_instructions.html" with instructions=food_instructions ai_id="food-ai-instructions" %}
+    </details>
+    {% endif %}
+
     <section class="card" style="margin-top: 20px; padding: 0;" id="my-keys">
         <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Your keys</span></div>
         {% if tokens %}
@@ -74,7 +85,8 @@ permissions or rotate.
                         <details id="edit-key-{{ t.pk }}">
                             <summary class="btn btn-secondary btn-sm" style="list-style: none;">Edit permissions</summary>
                             <form method="post" action="{% url 'albright_bot_api:my_key_scopes' t.pk %}" style="margin: 8px 0 0;">{% csrf_token %}
-                                {% for key, label in choices %}<label style="display: flex; gap: 6px; align-items: flex-start; font-size: 0.8125rem; font-weight: 400; min-height: 28px;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in t.scopes %} checked{% endif %}> <span>{{ label }}</span></label>{% endfor %}
+                                {% for group, rows in groups %}<p style="margin: 8px 0 2px; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary);">{{ group }}</p>
+                                {% for key, label in rows %}<label style="display: flex; gap: 6px; align-items: flex-start; font-size: 0.8125rem; font-weight: 400; min-height: 28px;"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in t.scopes %} checked{% endif %}> <span>{{ label }}</span></label>{% endfor %}{% endfor %}
                                 <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to change {{ t.name }}'s permissions" autocomplete="current-password" required style="margin-top: 6px;">
                                 <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 6px;">Save permissions</button>
                             </form>

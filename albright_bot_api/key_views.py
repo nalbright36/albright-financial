@@ -61,8 +61,16 @@ def _page(request, form=None, new_key=None, new_key_note=""):
     for t in tokens:
         t.scope_rows = [{"key": key, "label": labels.get(key, key), "usable": scopes.allowed(request.user, key)}
                         for key in t.scopes]
+    form = form or KeyForm(user=request.user)
+    picked = [str(v) for v in (form["scopes"].value() or [])]
+    food_ai_context = {}
+    if scopes.allowed(request.user, "fitness:food:write"):
+        from . import food_ai
+        base = food_ai.api_base(request)
+        food_ai_context = {"food_instructions": food_ai.instructions(base), "openapi_url": base + "/fitness/openapi.json"}
     return render(request, "albright_bot_api/my_keys.html", {
-        "form": form or KeyForm(user=request.user), "tokens": tokens, "choices": scopes.choices(request.user),
+        **food_ai_context, "picked": picked, "groups": scopes.grouped_choices(request.user),
+        "form": form, "tokens": tokens, "choices": scopes.choices(request.user),
         "new_key": new_key, "new_key_note": new_key_note, "api_address": API_ADDRESS,
         "docs_address": API_ADDRESS + "docs",
         "logs": BotRequestLog.objects.filter(token__owner=request.user).select_related("token")[:ACTIVITY_LIMIT],

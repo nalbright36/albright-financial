@@ -503,3 +503,18 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 .fx-serving__row .fx-setup-field:first-child { flex: 1; }
 .fx-serving__row .fx-setup-field:nth-child(3) { width: 5.5rem; }
 .fx-serving__ml { max-width: 12rem; margin-top: 8px; }
+
+/* An entry an AI logged (food_diary.html): "AI estimate" / "AI · edited", "low confidence" in amber. */
+.fx-ai-badge { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: var(--radius-full, 999px);
+    background: var(--accent-soft); color: var(--accent); font-size: 0.6875rem; font-weight: 600; line-height: 1.6;
+    vertical-align: 1px; white-space: nowrap; }
+.fx-ai-badge--low { background: var(--warn-bg); color: var(--warn); }
+/* The tap-to-edit panel of an AI entry: its notes and what the person said. */
+.fx-ai-said { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--radius-sm, 8px); background: var(--surface-hover);
+    font-size: 0.8125rem; color: var(--text-secondary); }
+.fx-ai-said dt { font-weight: 600; color: var(--text-primary); }
+.fx-ai-said dd { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fx-ai-said dd:last-child { margin-bottom: 0; }
+/* "Log food with your AI" - the instructions to copy. */
+.fx-ai-instructions { width: 100%; min-height: 360px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.75rem;
+    line-height: 1.5; white-space: pre; overflow: auto; resize: vertical; }

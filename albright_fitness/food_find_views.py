@@ -210,7 +210,8 @@ def _tracked(user):
 @login_required
 @never_cache
 def edit_entry(request, pk):
-    """Tap a logged entry: change its amount, unit or meal, or remove it."""
+    """Tap a logged entry: change its amount, unit or meal, or remove it. A quick add or an AI's estimate changes its
+    numbers (and name) instead; an AI entry stays source "ai" but is marked edited ("AI · edited")."""
     entry = get_object_or_404(FoodLogEntry.objects.select_related("food", "custom_food", "recipe"), pk=pk, owner=request.user)
     basis = amounts.basis_for_entry(entry)
     error = ""
@@ -220,10 +221,12 @@ def edit_entry(request, pk):
             messages.success(request, f"Removed {entry.label}.")
             return redirect(_diary_url(entry.date, entry.slot))
         entry.slot = _slot(request.POST.get("slot"))
-        if entry.source == FoodLogEntry.QUICK:
+        if entry.source in (FoodLogEntry.QUICK, FoodLogEntry.AI):
             for n in MACROS:
                 setattr(entry, n, _macro(request.POST.get(n)))
             entry.label = " ".join(request.POST.get("label", "").split())[:200] or entry.label
+            if entry.source == FoodLogEntry.AI:
+                entry.edited = True
             entry.save()
             return redirect(_diary_url(entry.date, entry.slot))
         quantity = amounts.parse_quantity(request.POST.get("quantity"))
@@ -242,7 +245,7 @@ def edit_entry(request, pk):
     return _panel(request, "albright_fitness/food_pick.html", {
         "label": entry.label, "entry": entry, "basis": basis, "menu": _menu(basis), "quantity": quantity,
         "unit": unit, "on": entry.date, "slot": entry.slot, "slots": FoodLogEntry.SLOTS, "error": error,
-        "tracked": _tracked(request.user), "quick": entry.source == FoodLogEntry.QUICK, "macros": [
+        "tracked": _tracked(request.user), "quick": entry.source in (FoodLogEntry.QUICK, FoodLogEntry.AI), "macros": [
             (n, nutrition.LABELS[n], getattr(entry, n)) for n in MACROS],
         "action": reverse("albright_fitness:food_edit", args=[entry.pk])})
 

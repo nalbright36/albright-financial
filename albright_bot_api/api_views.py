@@ -388,10 +388,11 @@ POST fitness/workouts                                 scope: fitness:write
   "kind", "text"}] (new personal records), "program_day", "planner_completed", "url"}. 422 (with "unknown")
   if nothing could be logged.
 
-GET  fitness/foods/search?q=greek yogurt               scope: fitness:read
+GET  fitness/foods/search?q=greek yogurt               scope: fitness:read or fitness:food:read
   The site's one search box: {"q", "groups": [{"group": "recent"|"mine"|"recipes"|"usda", "title", "items":
   [{"kind", "label", "detail", "fdc_id" | "my_food" | "recipe_id", "units": [{"unit", "label"}], "log": a ready
-  POST fitness/food body for 1 of the first unit}]}], "note" (why all-foods search is missing, or null)}. A USDA
+  POST fitness/food body for 1 of the first unit, "per_serving": {"serving", "grams", "calories", "protein_g",
+  "carbs_g", "fat_g", "fiber_g"} for one of its first unit, or null}]}], "note" (why all-foods search is missing, or null)}. A USDA
   food's units are its household portions plus "g" and "oz" (always), and ml / fl oz / cup / tbsp / tsp when known.
 
 POST fitness/food                                     scope: fitness:write
@@ -412,6 +413,37 @@ POST fitness/food                                     scope: fitness:write
 GET  fitness/food/entries?date=YYYY-MM-DD               scope: fitness:read
   One day's diary (default today, up to a year back): {"date", "entries": [as POST fitness/food returns], by
   meal, "totals": {"calories", "protein", "carbs", "fat", "fiber"}}.
+
+POST fitness/food-entries                              scope: fitness:food:write
+  An AI's estimate of what the owner ate - 1 to 20 items, all saved or none: {"date": "YYYY-MM-DD" (optional:
+  the owner's today in their time zone, up to 60 days back), "meal": "breakfast"|"lunch"|"dinner"|"snack"
+  (optional: by the owner's local time - before 10:30 breakfast, before 15:00 lunch, before 21:00 dinner, else
+  snack), "items": [{"name" (required), "quantity", "unit" (free text, e.g. "bowl"), "grams" (<= 5000),
+  "calories" (required, <= 5000), "protein_g", "carbs_g", "fat_g" (required), "fiber_g", "sugar_g", "sodium_mg",
+  "confidence": "high"|"medium"|"low", "notes"}], "source_text": the person's words, "idempotency_key": any
+  string}. No negatives. A 400 lists {"errors": [{"field": "items[0].calories", "message"}]} and saves nothing.
+  Returns 201 {"date", "entries": [{"id", "meal", "name", ..., "source": "ai", "confidence", "edited"}],
+  "totals": {"calories", "protein_g", "carbs_g", "fat_g"} for the day, "targets": the same or null, "warnings":
+  [calories that differ from 4×protein + 4×carbs + 9×fat by more than 25% and 50 kcal - saved anyway]}. The
+  same idempotency_key within 24 hours returns those entries again (200, "replayed": true). At most 60 food log
+  changes an hour per key.
+
+GET  fitness/food-entries?date=YYYY-MM-DD              scope: fitness:food:read
+  A day's entries (default the owner's today), "totals" and "targets", as POST returns them.
+
+PATCH fitness/food-entries/<id>                        scope: fitness:food:write
+  Fix any field of one of the owner's entries (the item fields, "meal", "date"). Returns {"entry", "totals",
+  "targets", "warnings"}. Someone else's id is a 404.
+
+DELETE fitness/food-entries/<id>                       scope: fitness:food:write
+  Remove one of the owner's entries. Returns {"deleted": id, "date", "totals", "targets"}.
+
+GET  fitness/food-entries/recent?limit=20              scope: fitness:food:read
+  The owner's most-logged foods over 60 days (1-50): {"foods": [{"times_logged", "last_logged", "meal",
+  "source", "item": a ready item for POST fitness/food-entries}]} - for "the usual breakfast".
+
+GET  fitness/openapi.json
+  The OpenAPI spec of the food log endpoints, for AIs that import custom actions or tools. No key needed.
 
 POST fitness/weight                                   scope: fitness:write
   Body: {"weight": 182.4 (required), "unit": "lb"|"kg" (default the owner's), "date", "note"}. One weigh-in a
@@ -470,7 +502,7 @@ GET  activity?since=<ISO date or datetime>&limit=50    scope: activity:read
 
 
 ENDPOINT_LINE = re.compile(r"^(GET|POST|PATCH|DELETE)\s")
-SCOPE_NAMES = re.compile(r"\b([a-z]+:[a-z]+)\b")
+SCOPE_NAMES = re.compile(r"\b([a-z]+(?::[a-z]+)+)\b")
 
 
 def docs_for(token):

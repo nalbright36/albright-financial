@@ -1,0 +1,27 @@
+{% extends "albright_fitness/base.html" %}{% load cache_bust %}
+{% block page_title %}Log food with your AI · {% endblock %}
+{% block fitness %}
+{% comment %}Food > Log food with your AI (food_ai_views.connect): how to let the person's own AI log food for them -
+a key with "Read your food log" / "Add and edit food entries", and the instructions to paste. Its entries show
+"AI estimate" in the diary.{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div>
+    <h1 class="fx-head__title">Log food with your AI</h1>
+    <p class="fx-head__sub">Tell your AI what you ate - it estimates the macros and logs them here.</p>
+</div></div>
+<section class="card fx-card" id="fx-ai-steps">
+    <h2 class="fx-card__title">1. Make a key</h2>
+    {% if keys_allowed %}
+    <p class="fx-small" style="margin: 0;">On <a href="{{ keys_url }}">My API keys</a>, make a key with <strong>Read your food log</strong> and <strong>Add and edit food entries</strong> (under Fitness). Put it in your AI's secret / connection settings.</p>
+    {% else %}
+    <p class="fx-small" style="margin: 0;">API keys aren't turned on for your account yet - ask the site admin to allow them, then make one on My API keys.</p>
+    {% endif %}
+</section>
+<section class="card fx-card" id="fx-ai-copy">
+    <h2 class="fx-card__title">2. Give your AI these instructions</h2>
+    {% include "albright_fitness/_food_ai_instructions.html" %}
+</section>
+<p class="fx-help">Entries your AI logs show <span class="fx-ai-badge" style="margin-left: 0;">AI estimate</span> in your diary - tap one to see what you told it and fix the numbers. <a href="{% url 'albright_fitness:food' %}">Back to Food</a></p>
+</div>
+<script src="{% static_version 'js/crypto.js' %}" defer></script>
+{% endblock %}
