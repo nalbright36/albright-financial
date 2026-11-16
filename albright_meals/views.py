@@ -859,7 +859,8 @@ def _eatout_json(request):
 @scope.space_required
 def eat_out(request):
     """Guided questions and a ranked shortlist of nearby places (F1). A GET
-    form; a down Overpass or geocode API never fails the page."""
+    form; a down Overpass or geocode API never fails the page - it shows
+    "unavailable" (with the cause for admins), never a fake "no matches"."""
     filters = eatout.filters_from_get(request.GET)
     loc, loc_error, home, current, redirect_to = eatout.resolve_location(request.user, request.GET)
     if redirect_to:
@@ -873,6 +874,7 @@ def eat_out(request):
     next_pick = (pick % len(result.places) + 1) if result.places else 0
     return render(request, "albright_meals/eatout.html", {
         "filters": filters,
+        "field_errors": eatout.filter_errors(request.GET),
         "loc": loc,
         "loc_error": loc_error,
         "loc_caption": eatout.source_caption(loc.source) if loc else "",

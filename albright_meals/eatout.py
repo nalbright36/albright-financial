@@ -8,35 +8,49 @@ browser geolocation post lands on the same weather_auto_* fields the Planner
 already uses, through this app's own endpoint so a Meals-only account can
 reach it.
 
-Places come from overpass-api.de (allowlisted, no key). The raw nearby set is
-cached for a few hours per rounded lat/lon; filters and ranking run in Python
-so changing a chip does not refetch. A down, slow, or empty API never fails
-the page. Hours and prices are shown only when they are tagged; there are no
-star ratings (OpenStreetMap has none).
+Places come from the public Overpass servers (no API key; every host in
+OVERPASS_URLS is on PythonAnywhere's free-plan allowlist). The main server,
+overpass-api.de, is often "at capacity" (an instant 502) or takes 40+ seconds,
+so each search asks every host at once, takes the first good answer, and asks only for
+the chosen distance (1, 5 or 12 miles) and named places. The raw nearby set is
+cached for a few hours per rounded lat/lon and radius - a wider cached set also
+serves a narrower search - and filters and ranking run in Python, so changing a
+chip does not refetch. A failure is logged and shown as "unavailable", never as
+"no results". Hours and prices are shown only when they are tagged; there are
+no star ratings (OpenStreetMap has none).
 """
 from __future__ import annotations
 
+import logging
 import math
 import re
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
 from datetime import datetime
 from decimal import Decimal
 from urllib.parse import urlencode
 
 import requests
+from django.conf import settings
 from django.core.cache import cache
 
 from albright_planner import weather as wx
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+logger = logging.getLogger(__name__)
+
+# Asked in parallel; settings.EAT_OUT_OVERPASS_URLS overrides. overpass.openstreetmap.fr
+# answered in seconds when overpass-api.de was at capacity (2026-11-16).
+OVERPASS_URLS = (
+    "https://overpass.openstreetmap.fr/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
 USER_AGENT = "AlbrightMeals/1.0 (https://natealbright36.pythonanywhere.com)"
-TIMEOUT = 15
+TIMEOUT = 25            # seconds per host (also the server-side [timeout:]); hosts are asked in parallel
 CACHE_SECONDS = 4 * 3600
-EMPTY_CACHE_SECONDS = 10 * 60
-# Always fetch the 30-minute radius and filter in Python, so tightening
-# "how far" doesn't need a new Overpass call.
-FETCH_MILES = 12
-FETCH_METERS = 19312
+STALE_SECONDS = 7 * 86400   # last-good copy, used only when every host fails
+METERS_PER_MILE = 1609.344
 COORD_PLACES = 2
 SHORTLIST = 5
 # Amenities that are actually places to eat.
@@ -54,6 +68,8 @@ DISTANCES = (("walk", "Walking"), ("15", "15 minutes"), ("30", "30 minutes"))
 MODES = (("dinein", "Dine-in"), ("takeout", "Takeout"), ("either", "Either"))
 # Walking: 1 mile. 15 minutes: 5 miles (about 20 mph). 30 minutes: 12 miles.
 RADIUS_MILES = {"walk": 1.0, "15": 5.0, "30": 12.0}
+UNAVAILABLE = "Restaurant search is unavailable right now. Try again in a few minutes."
+NO_MATCHES = "No restaurants matched — try a wider distance or fewer filters."
 # Cuisine tags (and name words) that count as a match for each chip.
 CRAVING_TAGS = {
     "tacos": frozenset({"taco", "tacos", "mexican", "tex-mex", "texmex"}),
@@ -138,6 +154,24 @@ def filters_from_get(get):
     else:
         open_now = True
     return Filters(tuple(cravings), other, budget, far, mode, open_now)
+
+
+def filter_errors(get):
+    """{field: message} for values that were sent but aren't a choice. The search
+    still runs on the defaults; the message sits next to that question."""
+    errors = {}
+    known = {key for key, _label in CRAVINGS}
+    if any(value not in known for value in get.getlist("craving")):
+        errors["craving"] = "Pick a craving from the list."
+    if get.get("budget") not in (None, "", "1", "2", "3"):
+        errors["budget"] = "Pick $, $$ or $$$."
+    if get.get("far") not in (None, "") and get.get("far") not in RADIUS_MILES:
+        errors["far"] = "Pick a distance from the list - showing 15 minutes."
+    if get.get("mode") not in (None, "", "dinein", "takeout", "either"):
+        errors["mode"] = "Pick dine-in, takeout or either."
+    if len((get.get("other") or "").strip()) > 80:
+        errors["other"] = "Keep the cuisine under 80 characters."
+    return errors
 
 
 def steps_done(filters):
@@ -547,63 +581,132 @@ def distance_label(miles, far):
 # Overpass
 # ---------------------------------------------------------------------------
 
-def _cache_key(lat, lon):
-    return f"meals.eatout:{round(float(lat), COORD_PLACES):.2f}:{round(float(lon), COORD_PLACES):.2f}"
+def fetch_meters(far):
+    """The Overpass search radius, in meters, for a 'how far' choice."""
+    return int(round(RADIUS_MILES.get(far, RADIUS_MILES["30"]) * METERS_PER_MILE))
 
 
-def _query(lat, lon):
+def _cache_key(lat, lon, far):
+    return f"meals.eatout:{round(float(lat), COORD_PLACES):.2f}:{round(float(lon), COORD_PLACES):.2f}:{far}"
+
+
+def _query(lat, lon, far="30"):
+    meters = fetch_meters(far)
     return (
         f"[out:json][timeout:{TIMEOUT}];\n"
-        f"(\n"
-        f'  node["amenity"~"^(restaurant|fast_food|cafe|food_court)$"]'
-        f"(around:{FETCH_METERS},{float(lat):.5f},{float(lon):.5f});\n"
-        f'  way["amenity"~"^(restaurant|fast_food|cafe|food_court)$"]'
-        f"(around:{FETCH_METERS},{float(lat):.5f},{float(lon):.5f});\n"
-        f'  relation["amenity"~"^(restaurant|fast_food|cafe|food_court)$"]'
-        f"(around:{FETCH_METERS},{float(lat):.5f},{float(lon):.5f});\n"
-        f");\n"
+        f'nwr["amenity"~"^(restaurant|fast_food|cafe|food_court)$"]["name"]'
+        f"(around:{meters},{float(lat):.5f},{float(lon):.5f});\n"
         f"out center tags;"
     )
 
 
-def fetch_places(lat, lon):
-    """Raw Overpass elements around (lat, lon), or None if the API is down.
+def overpass_urls():
+    return tuple(getattr(settings, "EAT_OUT_OVERPASS_URLS", None) or OVERPASS_URLS)
 
-    An empty list means a successful empty result (nothing tagged nearby).
-    None means a network/HTTP/parse failure — the page should say so.
-    Never raises.
-    """
-    key = _cache_key(lat, lon)
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
+
+def _host(url):
+    return url.split("//", 1)[-1].split("/", 1)[0]
+
+
+def _provider_message(response):
+    """The first readable line of an Overpass error page (markdown or HTML)."""
+    text = re.sub(r"<[^>]+>", " ", getattr(response, "text", "") or "")
+    for line in text.splitlines():
+        line = line.strip(" #\t")
+        if line:
+            return line[:200]
+    return ""
+
+
+Fetch = namedtuple("Fetch", "elements errors status host")
+# elements: a list (possibly empty) on success, None when every host failed.
+# errors: ["host: what went wrong", ...]; status: the last HTTP status seen, or None.
+# host: the Overpass host that answered, "cache", or "stale" (a last-good copy).
+
+
+def _ask(url, query):
+    """One Overpass host: (elements or None, error text, HTTP status or None). Never raises."""
+    host = _host(url)
     try:
         response = requests.post(
-            OVERPASS_URL,
-            data={"data": _query(lat, lon)},
+            url,
+            data={"data": query},
             headers={"Accept": "application/json", "User-Agent": USER_AGENT},
             timeout=TIMEOUT,
         )
-    except requests.RequestException:
-        cache.set(key, None, EMPTY_CACHE_SECONDS)
-        return None
-    if response.status_code >= 400:
-        cache.set(key, None, EMPTY_CACHE_SECONDS)
-        return None
+    except requests.RequestException as exc:
+        return None, f"{host}: {type(exc).__name__}", None
+    status = response.status_code
+    if status >= 400:
+        message = _provider_message(response)
+        return None, f"{host}: HTTP {status}" + (f" ({message})" if message else ""), status
     try:
         payload = response.json()
     except ValueError:
-        cache.set(key, None, EMPTY_CACHE_SECONDS)
-        return None
-    if not isinstance(payload, dict):
-        cache.set(key, None, EMPTY_CACHE_SECONDS)
-        return None
-    elements = payload.get("elements")
+        payload = None
+    elements = payload.get("elements") if isinstance(payload, dict) else None
     if not isinstance(elements, list):
-        cache.set(key, None, EMPTY_CACHE_SECONDS)
-        return None
-    cache.set(key, elements, CACHE_SECONDS)
-    return elements
+        return None, f"{host}: HTTP {status}, unreadable response", status
+    remark = str(payload.get("remark") or "")
+    if not elements and "error" in remark.lower():
+        # Overpass reports a server-side timeout as 200 + an empty list + a remark.
+        return None, f"{host}: {remark[:160]}", status
+    return elements, "", status
+
+
+def fetch(lat, lon, far="30", use_cache=True):
+    """Overpass elements around (lat, lon) within the 'far' radius. Never raises.
+
+    A cached set for the same or a wider radius is reused. Otherwise every host
+    is asked at once and the first good answer wins (their speed swings from
+    3 s to a timeout minute to minute). Each failure is logged with its HTTP
+    status and the provider's message - there is no key to leak. When all fail,
+    a last-good copy (STALE_SECONDS) is used if there is one.
+    """
+    order = list(RADIUS_MILES)                       # walk, 15, 30: narrow to wide
+    wanted = order.index(far) if far in order else len(order) - 1
+    radius = order[wanted]
+    if use_cache:
+        for wider in order[wanted:]:
+            cached = cache.get(_cache_key(lat, lon, wider))
+            if cached is not None:
+                return Fetch(cached, [], 200, "cache")
+    urls = overpass_urls()
+    query = _query(lat, lon, radius)
+    errors, status = {}, None
+    if urls:
+        pool = ThreadPoolExecutor(max_workers=len(urls))
+        futures = {pool.submit(_ask, url, query): url for url in urls}
+        try:
+            for future in as_completed(futures, timeout=TIMEOUT + 3):
+                elements, error, code = future.result()
+                status = code if code is not None else status
+                if elements is not None:
+                    cache.set(_cache_key(lat, lon, radius), elements, CACHE_SECONDS)
+                    cache.set(_cache_key(lat, lon, radius) + ":stale", elements, STALE_SECONDS)
+                    return Fetch(elements, [errors[u] for u in urls if u in errors], code, _host(futures[future]))
+                errors[futures[future]] = error
+                logger.warning("Eat out: Overpass %s", error)
+        except FuturesTimeout:
+            for future, url in futures.items():
+                if url not in errors:
+                    errors[url] = f"{_host(url)}: no answer in {TIMEOUT + 3}s"
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+    ordered = [errors[u] for u in urls if u in errors]
+    logger.error("Eat out: every Overpass host failed near %.2f, %.2f (%s): %s",
+                 float(lat), float(lon), radius, "; ".join(ordered) or "no hosts configured")
+    if use_cache:
+        for wider in order[wanted:]:
+            stale = cache.get(_cache_key(lat, lon, wider) + ":stale")
+            if stale is not None:
+                return Fetch(stale, ordered, status, "stale")
+    return Fetch(None, ordered, status, "")
+
+
+def fetch_places(lat, lon, far="30"):
+    """Raw Overpass elements, or None if every host failed."""
+    return fetch(lat, lon, far).elements
 
 
 def _element_point(element):
@@ -856,38 +959,33 @@ def rank_places(elements, loc, filters, now, limit=SHORTLIST):
 
 
 def search(loc, filters, user=None):
-    """Fetch and rank. Never raises. offline is True when Overpass failed."""
+    """Fetch and rank. Never raises. offline is True when no place list could be
+    fetched (or ranking broke) - never dressed up as "no matches". Admins also
+    see what went wrong."""
     if loc is None:
         return Search([], False, "", "", _attribution())
     now = wx.local_now(user) if user is not None else None
     if now is None:
         now = datetime.now()
+    is_admin = bool(getattr(user, "is_superuser", False))
     try:
-        elements = fetch_places(loc.lat, loc.lon)
-    except Exception:
-        elements = None
-    if elements is None:
-        return Search(
-            [],
-            True,
-            "We couldn't reach the places list just now. Try again in a moment.",
-            "",
-            _attribution(),
-        )
+        result = fetch(loc.lat, loc.lon, filters.far)
+    except Exception:                                # fetch never raises; belt and braces
+        logger.exception("Eat out: fetch crashed")
+        result = Fetch(None, ["unexpected error (see the error log)"], None, "")
+    if result.elements is None:
+        message = UNAVAILABLE
+        if is_admin:
+            detail = "; ".join(result.errors) or "no Overpass hosts configured"
+            message += f" Admin detail: {detail}. Run manage.py check_eat_out to test."
+        return Search([], True, message, "", _attribution())
     try:
-        places = rank_places(elements, loc, filters, now)
+        places = rank_places(result.elements, loc, filters, now)
     except Exception:
-        return Search(
-            [],
-            True,
-            "We couldn't rank places just now. Try again in a moment.",
-            "",
-            _attribution(),
-        )
-    empty = ""
-    if not places:
-        empty = "No places matched. Try a wider area or a different craving."
-    return Search(places, False, "", empty, _attribution())
+        logger.exception("Eat out: ranking %s places failed", len(result.elements))
+        message = UNAVAILABLE + (" Admin detail: ranking failed (see the error log)." if is_admin else "")
+        return Search([], True, message, "", _attribution())
+    return Search(places, False, "", "" if places else NO_MATCHES, _attribution())
 
 
 def _attribution():

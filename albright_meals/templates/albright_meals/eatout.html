@@ -71,6 +71,8 @@ weather does. Save to try is deferred (idea #21).
         </div>
         <label for="eo-other" class="visually-hidden">Or type a cuisine</label>
         <input type="text" name="other" id="eo-other" class="ledger-input eo-other" value="{{ filters.other }}" placeholder="Or type a cuisine" maxlength="80" autocomplete="off">
+        {% if field_errors.craving %}<p class="field-error" id="eo-craving-error">{{ field_errors.craving }}</p>{% endif %}
+        {% if field_errors.other %}<p class="field-error" id="eo-other-error">{{ field_errors.other }}</p>{% endif %}
       </div>
       <div class="eo-q">
         <span class="eo-q__label" id="eo-budget-label">Budget</span>
@@ -79,6 +81,7 @@ weather does. Save to try is deferred (idea #21).
           <label class="eo-chip"><input type="radio" name="budget" value="{{ key }}"{% if filters.budget == key %} checked{% endif %}> {{ label }}</label>
           {% endfor %}
         </div>
+        {% if field_errors.budget %}<p class="field-error" id="eo-budget-error">{{ field_errors.budget }}</p>{% endif %}
       </div>
       <div class="eo-q">
         <span class="eo-q__label" id="eo-far-label">How far?</span>
@@ -87,6 +90,7 @@ weather does. Save to try is deferred (idea #21).
           <label class="eo-chip"><input type="radio" name="far" value="{{ key }}"{% if filters.far == key %} checked{% endif %}> {{ label }}</label>
           {% endfor %}
         </div>
+        {% if field_errors.far %}<p class="field-error" id="eo-far-error">{{ field_errors.far }}</p>{% endif %}
       </div>
       <div class="eo-q">
         <span class="eo-q__label" id="eo-mode-label">Dine-in or takeout?</span>
@@ -95,6 +99,7 @@ weather does. Save to try is deferred (idea #21).
           <label class="eo-chip"><input type="radio" name="mode" value="{{ key }}"{% if filters.mode == key %} checked{% endif %}> {{ label }}</label>
           {% endfor %}
         </div>
+        {% if field_errors.mode %}<p class="field-error" id="eo-mode-error">{{ field_errors.mode }}</p>{% endif %}
       </div>
       <div class="eo-q">
         <input type="hidden" name="open" value="0">

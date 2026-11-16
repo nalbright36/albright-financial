@@ -8,11 +8,14 @@ from decimal import Decimal
 from unittest import mock
 from zoneinfo import ZoneInfo
 
+from io import StringIO
+
 import requests
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.http import QueryDict
-from django.test import TestCase
+from django.core.management import call_command
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from albright_labs.testing import kitchen, with_apps
@@ -23,6 +26,8 @@ from albright_planner.weather import LookupDown
 from . import eatout
 
 PASSWORD = "pw-not-real-12345"
+MAIN = "https://overpass-api.de/api/interpreter"
+FR = "https://overpass.openstreetmap.fr/api/interpreter"
 TZ = ZoneInfo("America/Denver")
 # Thursday, November 12, 2026, 5:40 PM MST — the same story as the mockups.
 NOW = datetime(2026, 11, 12, 17, 40, tzinfo=TZ)
@@ -81,10 +86,10 @@ def lone_tree_elements():
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code=200):
+    def __init__(self, payload, status_code=200, text=""):
         self._payload = payload
         self.status_code = status_code
-        self.text = ""
+        self.text = text
 
     def json(self):
         if isinstance(self._payload, Exception):
@@ -92,16 +97,16 @@ class FakeResponse:
         return self._payload
 
 
-def overpass_get(payload=None, error=None, status_code=200):
+def overpass_get(payload=None, error=None, status_code=200, text=""):
     payload = {"elements": lone_tree_elements()} if payload is None else payload
 
     def post(url, data=None, headers=None, timeout=None, **kwargs):
         if error is not None:
             raise error
-        if "overpass-api.de" not in (url or ""):
+        if url not in eatout.OVERPASS_URLS:
             raise AssertionError(f"unexpected HTTP: {url}")
         post.calls.append({"url": url, "data": data, "headers": headers, "timeout": timeout})
-        return FakeResponse(payload, status_code)
+        return FakeResponse(payload, status_code, text)
 
     post.calls = []
     return post
@@ -232,6 +237,7 @@ class RankTests(TestCase):
         self.assertEqual(names[0], "Far Pizza")
 
 
+@override_settings(EAT_OUT_OVERPASS_URLS=[MAIN])
 class Base(TestCase):
     def setUp(self):
         cache.clear()
@@ -388,7 +394,8 @@ class PageTests(Base):
         self.http.stop()
         with mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get(error=requests.Timeout())):
             html = self.html()
-        self.assertIn("reach the places list", html)
+        self.assertIn("Restaurant search is unavailable right now", html)
+        self.assertNotIn("No restaurants matched", html)
         self.assertNotIn("Hacienda Colorado", html)
         self.assertIn("Eat out", html)
 
@@ -396,7 +403,7 @@ class PageTests(Base):
         self.http.stop()
         with mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get(status_code=504)):
             html = self.html()
-        self.assertIn("reach the places list", html)
+        self.assertIn("Restaurant search is unavailable right now", html)
 
     def test_filter_query_changes_the_list(self):
         html = self.html("craving=burgers&far=15&mode=either&open=1")
@@ -426,11 +433,15 @@ class PageTests(Base):
         self.assertIn("Pick again", html)
 
     def test_cached_overpass_is_not_refetched(self):
-        self.html()
+        self.html("far=30")
         first = self.http_obj.call_count
-        self.assertGreaterEqual(first, 1)
-        self.html("craving=pizza&far=30")  # still the same cache key (max radius)
+        self.assertEqual(first, 1)
+        self.html("craving=pizza&far=walk&mode=takeout&open=0")  # a narrower search reuses the wider set
         self.assertEqual(self.http_obj.call_count, first)
+        cache.clear()
+        self.html("far=walk")
+        self.html("far=30")                                        # a wider search does fetch
+        self.assertEqual(self.http_obj.call_count, 3)
 
     def test_overpass_request_shape(self):
         self.html()
@@ -438,7 +449,7 @@ class PageTests(Base):
         url = _url[0] if _url else kwargs.get("url")
         # side_effect is overpass_get(); inspect via the mock call
         args, kw = self.http_obj.call_args
-        self.assertIn("overpass-api.de", args[0])
+        self.assertEqual(args[0], MAIN)
         self.assertEqual(kw["timeout"], eatout.TIMEOUT)
         self.assertEqual(kw["headers"]["User-Agent"], eatout.USER_AGENT)
         self.assertIn("data", kw["data"])
@@ -557,3 +568,171 @@ class FiltersHelperTests(TestCase):
         self.assertEqual(eatout.pick_index(places, "4"), 1)
         self.assertEqual(eatout.pick_index(places, ""), 0)
         self.assertEqual(eatout.pick_index([], "1"), 0)
+
+
+class SearchResultTests(Base):
+    """Results vs "no matches" vs "unavailable" - a failure is never shown as no results."""
+
+    def use(self, **kwargs):
+        self.http.stop()
+        patcher = mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get(**kwargs))
+        self.http_obj = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.http = mock.MagicMock()                     # Base's cleanup calls stop() again
+
+    def test_results_render(self):
+        html = self.html("craving=mexican")
+        self.assertIn("places, ranked", html)
+        self.assertIn("Hacienda Colorado", html)
+        self.assertNotIn("unavailable", html)
+
+    def test_empty_result_says_no_matches(self):
+        self.use(payload={"elements": []})
+        html = self.html()
+        self.assertIn("No restaurants matched — try a wider distance or fewer filters.", html)
+        self.assertNotIn("unavailable", html)
+
+    def test_filters_that_match_nothing_say_no_matches(self):
+        self.use(payload={"elements": [node(10, "Far Pizza", 8.0, cuisine="pizza")]})
+        html = self.html("far=walk&craving=pizza")       # the only pizza place is 8 miles away
+        self.assertIn("No restaurants matched", html)
+        self.assertNotIn("unavailable", html)
+
+    def test_api_error_says_unavailable_and_logs_status_and_message(self):
+        self.use(status_code=502, text="# 502 Gateway Timeout\n\nThis Overpass API server is currently at capacity.")
+        with self.assertLogs("albright_meals.eatout", level="WARNING") as logs:
+            html = self.html()
+        self.assertIn("Restaurant search is unavailable right now", html)
+        self.assertNotIn("No restaurants matched", html)
+        self.assertNotIn("Admin detail", html)            # normal users get the plain message
+        joined = "\n".join(logs.output)
+        self.assertIn("overpass-api.de: HTTP 502 (502 Gateway Timeout)", joined)
+        self.assertIn("ERROR:albright_meals.eatout:Eat out: every Overpass host failed", joined)
+
+    def test_admins_see_what_went_wrong(self):
+        self.user.is_superuser = True
+        self.user.save()
+        self.use(status_code=429, text="<html><body><h1>429 Too Many Requests</h1></body></html>")
+        with self.assertLogs("albright_meals.eatout", level="WARNING"):
+            html = self.html()
+        self.assertIn("Restaurant search is unavailable right now", html)
+        self.assertIn("Admin detail: overpass-api.de: HTTP 429 (429 Too Many Requests)", html)
+        self.assertIn("check_eat_out", html)
+
+    def test_server_side_timeout_remark_is_a_failure_not_an_empty_list(self):
+        self.use(payload={"elements": [], "remark": "runtime error: Query timed out in \"query\" at line 2"})
+        with self.assertLogs("albright_meals.eatout", level="WARNING"):
+            html = self.html()
+        self.assertIn("Restaurant search is unavailable right now", html)
+
+    def test_failures_are_not_cached(self):
+        self.use(error=requests.Timeout())
+        with self.assertLogs("albright_meals.eatout", level="WARNING"):
+            self.html()
+        self.use()
+        self.assertIn("Hacienda Colorado", self.html())
+
+
+class FilterUnitTests(Base):
+    """What reaches Overpass: the chosen distance in meters around the place, named
+    eateries only. Cuisine, budget, dine-in/takeout and open-now are applied to the
+    returned set in Python (OpenStreetMap has no price levels), in the viewer's zone."""
+
+    def query(self, qs):
+        cache.clear()
+        self.http_obj.reset_mock()
+        self.html(qs)
+        return self.http_obj.call_args[1]["data"]["data"]
+
+    def test_distance_is_sent_in_meters(self):
+        self.assertIn("(around:1609,39.52440,-104.88220)", self.query("far=walk"))
+        self.assertIn("(around:8047,39.52440,-104.88220)", self.query("far=15"))
+        self.assertIn("(around:19312,39.52440,-104.88220)", self.query("far=30"))
+        self.assertIn("(around:8047,", self.query(""))                    # default: 15 minutes
+
+    def test_query_asks_for_named_eateries_as_json(self):
+        query = self.query("craving=pizza&budget=2&mode=takeout&open=0")
+        self.assertTrue(query.startswith(f"[out:json][timeout:{eatout.TIMEOUT}];"))
+        self.assertIn('nwr["amenity"~"^(restaurant|fast_food|cafe|food_court)$"]["name"]', query)
+        self.assertTrue(query.endswith("out center tags;"))
+
+    def test_typed_place_coordinates_are_sent(self):
+        self.assertIn("(around:8047,39.51860,-104.76120)", self.query("lat=39.51860&lon=-104.76120&label=Parker"))
+
+    def test_open_now_uses_the_viewers_zone(self):
+        # 5:40 PM in Denver: Closed Cantina (11-15) is closed, Hacienda (11-22) open.
+        # In UTC it would be 00:40 the next day and both would look closed.
+        html = self.html("craving=mexican&open=1")
+        self.assertIn("Hacienda Colorado", html)
+        self.assertNotIn("Closed Cantina", html)
+
+    def test_cuisine_is_case_insensitive_and_cravings_are_or(self):
+        self.assertIn("Shake Shack", self.html("other=BURGER"))
+        html = self.html("craving=burgers&craving=pizza&far=30")
+        self.assertIn("Shake Shack", html)
+        self.assertIn("Far Pizza", html)
+
+    def test_bad_values_show_errors_next_to_the_fields(self):
+        html = self.html("far=50&budget=9&mode=drive&craving=sushi")
+        self.assertIn('id="eo-far-error">Pick a distance from the list - showing 15 minutes.</p>', html)
+        self.assertIn('id="eo-budget-error">', html)
+        self.assertIn('id="eo-mode-error">', html)
+        self.assertIn('id="eo-craving-error">', html)
+        self.assertIn("Hacienda Colorado", html)                          # still searched, on the defaults
+        self.assertNotIn("field-error", self.html("far=30&budget=2&mode=takeout"))
+
+
+@override_settings(EAT_OUT_OVERPASS_URLS=[MAIN, FR])
+class HostTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_falls_back_to_the_next_host(self):
+        def post(url, **kwargs):
+            if url == MAIN:
+                return FakeResponse(None, 502, "# 502 Gateway Timeout")
+            return FakeResponse({"elements": lone_tree_elements()})
+        with mock.patch("albright_meals.eatout.requests.post", side_effect=post), \
+                self.assertLogs("albright_meals.eatout", level="WARNING"):
+            result = eatout.fetch(*LONE_TREE, "15")
+        self.assertEqual((len(result.elements), result.host), (10, "overpass.openstreetmap.fr"))
+
+    def test_uses_the_last_good_copy_when_every_host_fails(self):
+        with mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get()):
+            eatout.fetch(*LONE_TREE, "30")
+        cache.delete(eatout._cache_key(*LONE_TREE, "30"))                  # fresh copy expired
+        with mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get(error=requests.ConnectionError())), \
+                self.assertLogs("albright_meals.eatout", level="ERROR"):
+            result = eatout.fetch(*LONE_TREE, "15")
+        self.assertEqual((len(result.elements), result.host), (10, "stale"))
+
+    def test_every_host_failing_returns_none_with_each_error(self):
+        with mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get(error=requests.Timeout())), \
+                self.assertLogs("albright_meals.eatout", level="ERROR"):
+            result = eatout.fetch(*LONE_TREE, "15")
+        self.assertIsNone(result.elements)
+        self.assertEqual(result.errors, ["overpass-api.de: Timeout", "overpass.openstreetmap.fr: Timeout"])
+
+
+@override_settings(EAT_OUT_OVERPASS_URLS=[MAIN])
+class CheckCommandTests(TestCase):
+    def run_command(self, **kwargs):
+        out = StringIO()
+        with mock.patch("albright_meals.eatout.requests.post", side_effect=overpass_get(**kwargs)):
+            call_command("check_eat_out", "--far", "30", stdout=out)
+        return out.getvalue()
+
+    def test_prints_key_status_count_and_first_result(self):
+        out = self.run_command()
+        self.assertIn("API key present: not needed", out)
+        self.assertIn("overpass-api.de: HTTP status 200", out)
+        self.assertIn("results: 10, first: Hacienda Colorado", out)
+        self.assertIn("radius 12 mi (19312 m)", out)
+        self.assertIn("OK:", out)
+
+    def test_prints_the_exact_error(self):
+        out = self.run_command(status_code=502, text="# 502 Gateway Timeout\n\nAt capacity.")
+        self.assertIn("HTTP status 502", out)
+        self.assertIn("error: 502 Gateway Timeout", out)
+        self.assertIn("FAILED:", out)
+        self.assertIn("Restaurant search is unavailable right now", out)
