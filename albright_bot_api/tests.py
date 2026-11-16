@@ -138,13 +138,15 @@ class TokenTests(BotApiTestCase):
 
 class AuthTests(BotApiTestCase):
     def test_missing_wrong_and_revoked_tokens_are_401(self):
-        self.assertEqual(self.call("GET", url("docs"), raw="").status_code, 401)
-        self.assertEqual(self.call("GET", url("docs"), raw="abt_wrong").status_code, 401)
-        response = self.api.get(url("docs"), HTTP_AUTHORIZATION=f"Token {self.raw}")
+        # (docs is public now - a request with no key gets the guide; me always needs a valid key.)
+        self.assertEqual(self.call("GET", url("docs"), raw="").status_code, 200)
+        self.assertEqual(self.call("GET", url("me"), raw="").status_code, 401)
+        self.assertEqual(self.call("GET", url("me"), raw="abt_wrong").status_code, 401)
+        response = self.api.get(url("me"), HTTP_AUTHORIZATION=f"Token {self.raw}")
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response["WWW-Authenticate"], 'Bearer realm="albright-bot-api"')
         self.token.revoke()
-        self.assertEqual(self.call("GET", url("docs")).status_code, 401)
+        self.assertEqual(self.call("GET", url("me")).status_code, 401)
         self.assertEqual(BotRequestLog.objects.filter(token=self.token, status=401).count(), 1)
 
     def test_missing_scope_is_403(self):
@@ -364,10 +366,13 @@ class HardLimitTests(BotApiTestCase):
         return [(method, path, self.call(method, path, body)) for method, path, body in calls]
 
     def test_api_routes_are_only_these_get_and_post_views(self):
-        from albright_bot_api import api_views, fitness_api, meals_api, notes_api, schedule_api
+        from albright_bot_api import api_views, fitness_api, mcp, meals_api, notes_api, schedule_api
         from albright_bot_api.urls import api_urlpatterns
         for pattern in api_urlpatterns:
             self.assertIsInstance(pattern, URLPattern)
+            if str(pattern.pattern) == "mcp":                       # the MCP server (runs the views below as tools)
+                self.assertEqual(pattern.callback.__module__, mcp.__name__)
+                continue
             # Meals', Notes', the Planner's and Fitness's endpoints (they do write, to those apps' own tables) live in
             # their own modules, under meals/, notes, schedule and fitness/; everything else is in api_views.
             if str(pattern.pattern).startswith("meals/"):
@@ -380,7 +385,7 @@ class HardLimitTests(BotApiTestCase):
                 self.assertEqual(pattern.callback.__module__, fitness_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 46)   # incl. me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
+        self.assertEqual(len(api_urlpatterns), 49)   # incl. me, openapi.json, mcp, me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
         self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 8)
         self.assertEqual(sum(str(p.pattern).startswith("notes") for p in api_urlpatterns), 2)
         self.assertEqual(sum(str(p.pattern).startswith("schedule") for p in api_urlpatterns), 5)   # + checklist tick / untick

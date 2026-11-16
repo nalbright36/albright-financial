@@ -1,6 +1,9 @@
 from django.urls import path
 
-from . import activity_views, attachment_views, circle_views, invite_views, push_views, share_views, views
+from albright_bot_api import oauth_views
+
+from . import (activity_views, api_key_views, attachment_views, circle_views, invite_views, push_views, share_views,
+               views)
 
 app_name = "labs"
 
@@ -11,6 +14,14 @@ urlpatterns = [
     path("home/launcher/", views.launcher_lines, name="launcher_lines"),
     path("home/landing/", views.save_landing, name="save_landing"),
     path("home/account/", views.account, name="account"),
+    # API keys / Connect your AI (api_key_views; the keys and the API: albright_bot_api). The approval page for an
+    # AI connecting over MCP + OAuth (albright_bot_api.oauth_views) lives here so it looks like My account too.
+    path("account/api-keys/", api_key_views.api_keys, name="api_keys"),
+    path("account/api-keys/<int:pk>/access/", api_key_views.api_key_scopes, name="api_key_scopes"),
+    path("account/api-keys/<int:pk>/rename/", api_key_views.api_key_rename, name="api_key_rename"),
+    path("account/api-keys/<int:pk>/rotate/", api_key_views.api_key_rotate, name="api_key_rotate"),
+    path("account/api-keys/<int:pk>/revoke/", api_key_views.api_key_revoke, name="api_key_revoke"),
+    path("account/api-keys/authorize/", oauth_views.authorize, name="api_key_authorize"),
     # Circles (circle_views; the rules: albright_labs.circles). The old Household page goes to Circles.
     path("home/account/circles/", circle_views.circles_page, name="circles"),
     path("home/account/circles/<int:pk>/", circle_views.circle_page, name="circle"),

@@ -2,19 +2,19 @@
 {% block page_title %}Log food with your AI · {% endblock %}
 {% block fitness %}
 {% comment %}Food > Log food with your AI (food_ai_views.connect): how to let the person's own AI log food for them -
-a key with "Read your food log" / "Add and edit food entries", and the instructions to paste. Its entries show
-"AI estimate" in the diary.{% endcomment %}
+the step-by-step directions per AI (My account > API keys > Connect your AI) and the instructions to paste. Its
+entries show "AI estimate" in the diary.{% endcomment %}
 <div class="fx-narrow">
 <div class="fx-head"><div>
     <h1 class="fx-head__title">Log food with your AI</h1>
     <p class="fx-head__sub">Tell your AI what you ate - it estimates the macros and logs them here.</p>
 </div></div>
 <section class="card fx-card" id="fx-ai-steps">
-    <h2 class="fx-card__title">1. Make a key</h2>
+    <h2 class="fx-card__title">1. Connect your AI</h2>
     {% if keys_allowed %}
-    <p class="fx-small" style="margin: 0;">On <a href="{{ keys_url }}">My API keys</a>, make a key with <strong>Read your food log</strong> and <strong>Add and edit food entries</strong> (under Fitness). Put it in your AI's secret / connection settings.</p>
+    <p class="fx-small" style="margin: 0;">Follow the steps for your AI (ChatGPT, Claude, Grok, Gemini or any other) on <a href="{{ keys_url }}">API keys &rsaquo; Connect your AI</a>. Give it access that includes Fitness.</p>
     {% else %}
-    <p class="fx-small" style="margin: 0;">API keys aren't turned on for your account yet - ask the site admin to allow them, then make one on My API keys.</p>
+    <p class="fx-small" style="margin: 0;">API access isn't turned on for your account. Ask Nathan to enable it.</p>
     {% endif %}
 </section>
 <section class="card fx-card" id="fx-ai-copy">

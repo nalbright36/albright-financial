@@ -3,7 +3,6 @@ suggestions - nothing here bids, changes a max bid, touches the watchlist,
 creates/deletes ledger entries, changes a price, submits an application,
 trades, or reads credentials, keys, tokens or my profile. Every write goes
 to this app's own tables (models.py)."""
-import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -48,486 +47,48 @@ def _iso(value):
 # Docs
 # ---------------------------------------------------------------------------
 
-DOCS = """ALBRIGHT BOT API v1 - read data, leave suggestions. You can never take actions - except in Meals,
-whose meals:write endpoints add to a Meals space's plan, grocery list, ideas and recipes directly (labeled
-"Recipe Bot" on the site), in Notes, whose notes:write endpoints save the owner's notes (labeled with
-your token's name), in the Planner, whose schedule:write endpoints add items to the owner's schedule and
-check occurrences off (labeled with your token's name), and in Fitness, whose fitness:write endpoints log the
-owner's own workouts, food and weigh-ins.
+# The guide, the OpenAPI spec and /me are all built from catalog.py (one description of every endpoint).
 
-BASE URL: <site>/api/bot/v1/
-AUTH: send "Authorization: Bearer <token>" on every request, over HTTPS.
-  401 = missing, wrong or revoked token.  403 = the token lacks the endpoint's scope (or the request wasn't HTTPS).
-  429 = more than 60 requests in a minute for this token - wait and retry.  405 = wrong HTTP method.
-  400 = invalid input; the JSON body {"error": "..."} says what's wrong.
-REQUESTS: POST bodies are JSON objects (Content-Type: application/json). Responses are JSON.
-TEXT LIMITS: every text field is at most 5000 characters (titles 200). Text is stored and shown as PLAIN TEXT -
-  HTML or Markdown is displayed literally, not rendered.
-MONEY: decimal strings in US dollars, e.g. "12.50". TIMES: ISO 8601 (UTC). DATES: YYYY-MM-DD.
+def _base(request):
+    from .connect import api_base
+    return api_base(request)
 
-WHAT YOU CANNOT DO (no endpoint exists for it, by design): place, change or cancel bids or trades; change a
-max bid; add or remove watchlist items; create, delete or edit ledger entries; change any price; submit or send
-applications or proposals; read credentials, API keys, tokens or the owner's personal profile.
-Your suggestions are stored for the owner to review; a price suggestion changes nothing until the owner accepts it.
 
-SHARING (Planner items, notes, recipes, workouts): you always act as the token's owner - you see what they can see
-(their own things, and things a person or one of their circles shared with them, while they're active in the circle
-and have opted in to that app) and change only what they may edit. Things you CREATE are shared the way the owner
-shares new things in that app (their Sharing defaults). Create endpoints (POST schedule, POST notes, POST
-meals/recipes, POST meals/recipes/import, POST fitness/workouts) also take an optional
-"share": {"circle": <one of the owner's circle ids>, "permission": "view"|"edit"} or
-"share": {"user": "<exact username or email>", "permission": "view"|"edit"} - checked before anything is made (400
-if the owner can't share with them); the answer's "shared_with" lists who it's shared with. Example: POST schedule
-{"title": "Take out recycling", "date": "2026-11-06", "share": {"circle": 3, "permission": "edit"}}.
-Only the owner can change who something is shared with - there's no endpoint for that.
+@csrf_exempt
+def docs(request):
+    """The guide for an AI, as markdown. No key needed. With a key, only what that key can call (a bad key: 401)."""
+    from django.http import HttpResponse
 
-ENDPOINTS
----------
-GET  docs
-  This text. Any valid token.
-
-GET  me/storage
-  The token owner's attachment storage (files on Planner tasks and notes, counted against whoever uploaded them).
-  Any valid token. Returns {"used_bytes": int, "limit_bytes": int, "percent": float (one decimal; over 100 when
-  above a lowered limit), "remaining_bytes": int, "tier": name of their storage plan, e.g. "Standard"}.
-
-POST trading/notes                                   scope: trading:notes
-  Body: {"date": "YYYY-MM-DD" (optional, default today), "title": str (required, <=200), "text": str (required),
-  "strategy": str (optional - one of the owner's strategies, by name or by one of its prefixes, any capitalization)}
-  Shown on the owner's Grok Bot page under "Bot notes", newest first, and on that strategy's page when tagged.
-  Example: {"title": "Closed SPY spread", "text": "Took profit at 50%.", "strategy": "eng"}
-  Returns 201 {"id": int, "strategy": name or null}. An unknown strategy is a 400 listing the valid ones.
-
-GET  trading/strategies                               scope: trading:notes
-  The owner's bot strategies, so a bot can confirm its prefix: {"strategies": [{"name": str, "prefixes": [str],
-  "status": "active"|"paused"|"retired"}]}, in the owner's display order. An order counts toward a strategy when
-  its client_order_id starts with one of its prefixes (any capitalization; the longest matching prefix wins).
-
-GET  reseller/lots                                    scope: reseller:read
-  Today's live auction lots worth a look: scanner candidates and "Check by hand" lots (low-confidence parses that
-  still fit under the max bid). Returns {"lots": [...]}, soonest-ending first. Each lot:
-    id, list ("candidate" | "check_by_hand"), title, url, source, category, current_bid, max_bid (the scanner's
-    computed max), headroom (max_bid - current_bid), ends_at, image_url, confidence ("high"|"medium"|"low"),
-    flags (scanner notes, e.g. "weight_mismatch", "key_date_verify"), matched_keyword.
-
-POST reseller/lots/<id>/notes                         scope: reseller:suggest
-  Body: {"text": str}. A second-opinion note shown in that lot's expandable row, labeled "Grok". Returns 201 {"id"}.
-
-GET  reseller/inventory                               scope: reseller:read
-  The owner's unsold ledger items. Returns {"items": [...]}. Each item:
-    id, item, ledger_type ("resale"|"personal"), status, cost, list_price, platform, listed_at, days_listed
-    (null if not listed), next_markdown {label, step_days, due (bool), due_date} or null.
-
-POST reseller/inventory/<id>/suggestions              scope: reseller:suggest
-  Body: {"suggested_price": "12.50" (optional), "listing_draft": str (optional), "reason": str (optional)} -
-  at least one of suggested_price / listing_draft. Saved as PENDING on the item's page; the owner accepts or
-  dismisses it. Returns 201 {"id": int, "status": "pending"}.
-
-GET  opportunities/new                                scope: opportunities:read
-  Opportunities found in the last 7 days that aren't blocked by the safety check or excluded (spending above
-  budget). Jobs from job boards whose terms forbid passing listings on (Remotive, Remote OK, Himalayas, Jobicy,
-  Arbeitnow) are never included. Returns {"opportunities": [...]}. Each:
-    id, type ("crypto"|"income"), title, url, discovered_at, reward_usd, reward_type, pay_type, pay_rate_usd,
-    hours_estimate, ev_mid, ev_per_hour, confidence, risk_score, safety_verdict ("ok"|"warn"), safety_reasons,
-    deadline, application_deadline, skills_required, skill_match, location_requirement, status,
-    text (the posting text, up to 3000 characters).
-
-POST opportunities                                   scope: opportunities:write
-  Add a job or freelance opening to the owner's Opps inbox (only they see it; it's checked for safety and skill
-  fit, never sent to the AI). Body: {"title" (required), "url" (required, http(s)), "company", "work_type",
-  "pay_type" ("hourly"|"fixed"|"prize"|"bonus"), "pay_rate_usd", "location_requirement",
-  "skills_required": [str], "posted_at", "application_deadline" (ISO date-times), "text" (the posting)}
-  -> 201 {"id", "created": true, "safety_verdict"}; the same url again -> 200 {"id", "created": false}.
-
-POST opportunities/<id>/notes                         scope: opportunities:suggest
-  Body: {"text": str}. Shown on the opportunity's page labeled "Grok". Returns 201 {"id": int}.
-
-POST opportunities/<id>/proposal-draft                scope: opportunities:suggest
-  Body: {"text": str}. A proposal draft shown on the opportunity's page labeled "Grok". It is never sent
-  anywhere - the owner decides. Returns 201 {"id": int}.
-
-POST site-suggestions                                 scope: site:suggest
-  A website improvement idea for the owner's Admin inbox.
-  Body: {"app": "trade" | "resell" | "opps" | "all" (required), "area": str (optional, <=100, e.g. "Watchlist page"),
-         "title": str (required, <=200), "description": str (required - what to change and why),
-         "priority": "low" | "medium" | "high" (optional, default "medium")}
-  It lands in the owner's inbox as new; the owner either declines it or promotes it to one of their Ideas
-  (status promoted). Nothing changes on the site by itself. Returns 201 {"id": int, "status": "new"}.
-
-GET  site-suggestions                                  scope: suggestions:read (or site:suggest - own only)
-  Bot suggestions and where they stand. With suggestions:read: every bot suggestion. With only site:suggest:
-  just the ones THIS token sent. Without either: 403 {"error": "missing scope", "required": "suggestions:read"}.
-  Query (all optional):
-    status=new,promoted   one or more of new, declined, promoted
-    app=trade,opps        one or more of trade, resell, opps, all
-    priority=high         one or more of low, medium, high
-    created_since / updated_since    YYYY-MM-DD or an ISO date-time
-    q=calendar            words in the title
-    include=description   add each suggestion's description (left out by default to keep responses small)
-    sort=created_at (default) | status_changed_at   - newest first either way
-    page=N, page_size=1-100 (default 25)
-  Returns {"suggestions": [{"id", "title", "app", "priority", "status", "source" (the name of the bot token that
-  sent it, or null), "created_at", "status_changed_at", "description" (only with include=description)}],
-  "page", "page_size", "pages", "total", "next_page" (null on the last page), "own_only"}.
-  The owner's private notes on a suggestion are never included.
-  Examples:
-    GET site-suggestions?status=new                         what hasn't been looked at yet
-    GET site-suggestions?status=promoted&include=description   the ones the owner turned into Ideas
-    GET site-suggestions?sort=status_changed_at&updated_since=2026-11-01&page_size=10
-
-GET  site-suggestions/counts                           scope: suggestions:read
-  How many bot suggestions are in each status. Returns {"counts": {"new": 6, "declined": 9, "promoted": 3},
-  "total": 18} - every status is listed, 0 when empty.
-
-POST ideas                                            scope: ideas:write
-  Save an idea the owner told you, for them to review on Admin > Ideas.
-  Body: {"original_message": str (REQUIRED - exactly what the owner told you, word for word),
-         "title": str (required, <=200), "description": str (optional - your cleaned-up summary),
-         "app": "trade" | "resell" | "opps" | "admin" | "all",
-         "category": "feature" | "improvement" | "bug" | "business_idea" | "research",
-         "priority": "low" | "medium" | "high" | "urgent", "impact": "low" | "medium" | "high",
-         "effort": "small" | "medium" | "large", "tags": [str, ...] (<=20, each <=50 chars),
-         "links": [url, ...] (http/https only, <=20), "target_date": "YYYY-MM-DD" (optional)}
-  Unknown choice values fall back to the defaults (app "all", category "feature", priority/impact/effort
-  "medium") and are listed in "defaults_applied". Status is always "new"; you can't set status or notes.
-  If the title closely matches an open idea it's still saved, marked as a possible duplicate.
-  Returns 201 {"id": int, "status": "new", "possible_duplicate_of": int | null, "defaults_applied": [str]}.
-
-GET  ideas?page=N                                     scope: ideas:read
-  Existing ideas, newest first, 50 per page - check before sending one. Returns
-  {"ideas": [{"id", "title", "app", "status", "created_at"}], "page", "pages", "total", "next_page" (int | null)}.
-
-MEALS (meal planning in a space - you are the "Recipe Bot")
-------------------------------------------------------------
-Everything here happens in a SPACE the token owner sees: their Personal space, or a circle's they've joined and opted
-in to Meals (My account > Circles). By default the one they last picked in Meals (Personal at first); send "space":
-<id> - in the query string for GET, or in the JSON body - for another of theirs (ids from GET meals/spaces). A space
-they don't see is a 404; leaving a circle or turning Meals off for it takes effect at once.
-
-GET  meals/spaces                                     scope: meals:read
-  The owner's Meals spaces. Returns {"spaces": [{"id", "name" ("Personal" or the circle's name), "personal": bool,
-  "current": bool (used when "space" isn't sent)}]}. Example: GET meals/plan?space=12
-
-Slots: "breakfast" | "lunch" | "dinner" | "snack" - one meal per day per slot. Aisles: "produce" | "meat" |
-"dairy" | "bakery" | "pantry" | "frozen" | "household" | "other". Quantities: a number (2, 0.5) or a string
-("1 1/2"), up to 100000. "added_by" is "Recipe Bot" for what you created, else the person's name.
-
-GET  meals/plan?start=YYYY-MM-DD&end=YYYY-MM-DD       scope: meals:read
-  The plan between two dates (default: this week, Monday to Sunday; at most 62 days). Returns
-  {"start", "end", "entries": [{"id", "date", "slot", "title", "recipe_id" (int | null), "status"
-  ("planned"|"cooked"|"skipped"), "notes", "added_by"}]}.
-
-POST meals/plan                                       scope: meals:write
-  Set a day's slot - replaces whatever is planned there. Body: {"date": "YYYY-MM-DD" (required), "slot" (required),
-  "recipe_id": int (optional), "title": str (<=200; required without recipe_id), "notes": str (optional)}.
-  Returns 201 (new) or 200 (replaced) {"id", "created": bool, ...the entry}. 404 if recipe_id doesn't exist.
-
-DELETE meals/plan/<id>                                scope: meals:write
-  Remove a plan entry the Recipe Bot created, in any space the owner sees (403 for anyone else's). Returns
-  {"deleted": id}.
-
-GET  meals/groceries                                  scope: meals:read
-  The space's grocery list. Returns {"items": [{"id", "name", "quantity" (str | null), "unit", "aisle", "note",
-  "checked", "added_by"}]}.
-
-POST meals/groceries                                  scope: meals:write
-  Add one item {"name": str (required, <=120), "quantity", "unit" (<=20), "aisle" (optional - guessed from the
-  name), "note" (<=200)} or many: {"items": [ ...up to 100 of those ]}. An item merges into an UNCHECKED line
-  with the same name and unit (quantities added). Returns 201 {"items": [{"id", "merged": bool, ...}]}.
-
-PATCH meals/groceries/<id>                            scope: meals:write
-  Body: any of {"quantity", "note", "checked": true|false}. Any line in a space the owner sees. Returns the item.
-
-GET  meals/ideas                                      scope: meals:read
-  Meal ideas, newest first (up to 200). Returns {"ideas": [{"id", "title", "notes", "link", "status"
-  ("new"|"planned"|"declined"), "added_by", "created_at"}]}.
-
-POST meals/ideas                                      scope: meals:write
-  Body: {"title": str (required, <=200), "notes": str (optional), "link": http(s) URL (optional)}.
-  Returns 201 {"id", ...}.
-
-GET  meals/recipes?scope=space&q=<words>&rated_by=me&rating=5&rating=6&love=1    scope: meals:read
-  Recipes, most recently changed first (up to 200). scope: "space" (default - the space's; "household" still works),
-  "shared" (recipes from other spaces shared with the owner - read-only) or "library" (the shared recipe library -
-  read-only). q filters by title. Rating filters (the Recipes page's), judged by the stamps of the people who see the
-  space: rated_by = "me" (default) | "anyone" (anyone in the space) | <the user id of someone in it>; rating = 1-6
-  (Won't eat again, Not for me, Needs tweaks, Will eat again, Favorite, Staple) or "none" (not rated) - repeat it
-  for several; love=1: at least two people in the space rated it and all Favorite or Staple. Each recipe:
-  {"id", "title", "description", "ingredients": [{"name", "quantity", "unit", "note"}], "steps": [str],
-  "prep_minutes", "cook_minutes", "servings", "tags", "source_url", "image_url", "notes", "added_by", "updated_at",
-  "ours": bool, "space": its space id, "visibility": "household" (this space only) | "library", "ratings": [{"by",
-  "level", "label"}] (stamps from the people who see the recipe's space - for a recipe from a space the owner doesn't
-  see, only their own)}. Returns {"scope", "recipes"}. Ratings are read-only here.
-
-POST meals/recipes                                    scope: meals:write
-  Create a recipe in the space, or update the space's one with the same title (case-insensitive) -
-  only the fields you send change.
-  Body: {"title": str (required, <=200), "description", "notes" (<=5000), "ingredients": [{"name" (required,
-  <=120), "quantity" (<=20), "unit" (<=20), "note" (<=200)} or "2 lb chicken thighs", ...] (<=100),
-  "steps": [str (<=2000)] (<=100), "prep_minutes" / "cook_minutes" (0-2880), "servings" (1-100),
-  "tags": [str (<=50)] (<=20), "source_url" / "image_url" (http(s), <=500)}.
-  Returns 201 (created) or 200 (updated) {"id": int, "created": bool}.
-
-POST meals/recipes/import                             scope: meals:write
-  Import a recipe from a link. Only that one page is read (never anything it links to): its recipe data
-  (schema.org JSON-LD or microdata), or - if it has none - the AI reads the page's visible text, keeping only
-  what is on the page; those recipes are marked "needs review". A link that's already saved (tracking
-  parameters like utm_* and #fragments ignored) returns the saved recipe instead of a copy.
-  To hand a link to a person to check first instead, send them to Meals > Add a recipe with ?url=<link>
-  (/meals/recipes/new/?url=...): the page fills in the link and starts the same import there.
-  Body: {"url": http(s) URL (required, <=2000), "add_to_plan": {"date": "YYYY-MM-DD", "slot":
-  "breakfast"|"lunch"|"dinner"|"snack"} (optional), "add_to_groceries": bool (optional - adds the ingredients
-  not already on the list from this recipe, merged with unchecked items of the same name and unit)}.
-  Example: {"url": "https://www.example.com/recipes/chili", "add_to_plan": {"date": "2026-11-02",
-  "slot": "dinner"}, "add_to_groceries": true}
-  Returns 201 (new) or 200 (already saved) {"id": int, "title": str, "status": "created"|"already_saved"|
-  "needs_review", "url": the recipe's page, "plan": {...} (with add_to_plan), "groceries": {"added", "merged",
-  "already_listed"} (with add_to_groceries)}.
-  Errors ({"error": "..."}): 400 not a public http(s) page; 422 "No recipe found on that page." (or the page is
-  over 3 MB); 502 the page couldn't be loaded; 504 it took over 10 seconds; 503 no recipe data and the AI
-  reader is unavailable or over its daily limit.
-
-NOTES (the owner's private notes - Markdown; site feature ideas go to POST ideas instead)
-------------------------------------------------------------------------------------------
-Every call is a 403 if the owner can't open Notes. Tags are lowercased, "#" dropped, <=20 of <=50 chars.
-Links point a note at a record the owner can open: {"app": "meals", "type": "recipe", "id": 12} - kinds:
-meals/recipe, resell/ledger, resell/lot, opps/opportunity, trade/strategy, trade/option_strategy - or
-{"url": "<a record's page on this site>"}.
-
-GET  notes?q=<words>&tag=<tag>&archived=1             scope: notes:read
-  The owner's own notes (never notes others shared with them), pinned first then most recently changed, or
-  best matches first with q (full-text over title, tags and body; each word also matches as a prefix).
-  Up to 200. Returns {"notes": [{"id", "title", "tags", "pinned", "archived", "created_by", "created_at",
-  "updated_at", "attachments"}]}. "attachments" (every note answer has it): [{"id", "name", "type" (MIME),
-  "size" (bytes), "url"}] - read-only; the url opens with the owner's signed-in session, not with this key, and
-  there's no upload through the API.
-
-POST notes                                            scope: notes:write
-  Body: {"title": str (required, <=200), "body": Markdown str (optional, <=100000), "tags": [str] (optional),
-  "pinned": bool (optional), "link": {"app", "type", "id"} or {"url"} (optional)}.
-  The note belongs to the owner and shows "by <your token's name>". Returns 201 {"id", ..., "url", "linked"}.
-
-PATCH notes/<id>                                      scope: notes:write
-  Only notes this token created, or that are shared with the owner to edit (anything else is a 404).
-  Body: {"append": str} (added after a blank line) or {"body": str} (replaces it), and/or {"tags": [str]}
-  (added to the note's tags). Returns the note.
-
-SCHEDULE (the owner's Planner - tasks and events, one-off or repeating)
------------------------------------------------------------------------
-Every call is a 403 if the owner can't open the Planner. Dates are YYYY-MM-DD, times HH:MM (24-hour, the
-owner's local time). A repeating item is one item; each date it happens is an "occurrence".
-ONE AT A TIME: a repeating TASK with no end ("one_at_a_time": true) has only one current occurrence - the
-earliest not done or skipped. Completing it makes the next one appear: on schedule, the first scheduled date
-after the later of its date and today (missed ones are skipped, not stacked up); with
-"repeat_from_completion", today plus the repeat interval. Un-completing it puts it back.
-
-GET  schedule?start=YYYY-MM-DD&end=YYYY-MM-DD&expand=all  scope: schedule:read
-  Occurrences between start and end, inclusive (default: the 7 days from today; at most 366 days), by day
-  and time. Includes items shared with the owner. A one-at-a-time task lists only its current occurrence
-  (on its date - which may be in the past if it's overdue) and the ones already done; expand=all (optional)
-  lists every scheduled occurrence in the range instead. Returns {"start", "end", "occurrences": [{"item_id",
-  "title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
-  to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
-  "created_by", "owner" (whose item - first name), "mine" (false for an item someone shared with the owner),
-  "done_by" (who checked it off - either person, for a shared item - or null), "one_at_a_time", "checklist":
-  [{"id", "text", "done", "done_by"}] (that occurrence's subtasks - each occurrence starts with all open),
-  "attachments": [{"id", "name", "type" (MIME), "size" (bytes), "url"}] (the item's files and photos -
-  read-only; no upload through the API)}]}.
-
-POST schedule                                          scope: schedule:write
-  Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
-  (optional; none = all day), "end_time": HH:MM (optional), "kind": "task"|"event" (default "task"),
-  "checkable": bool (events only; tasks always can be checked off), "notes": Markdown str (optional, <=50000),
-  and optionally a repeat - EITHER the Planner's simple choices:
-    "repeat": "daily"|"every_n_days"|"weekdays"|"weekly"|"every_n_weeks"|"monthly_day"|"monthly_nth"|"yearly",
-    "days": ["MO","WE","FR"] (weekly / every_n_weeks; default the date's weekday), "interval": 1-52
-    (every_n_days, every_n_weeks), "month_day": 1-31 (monthly_day), "nth": 1|2|3|4|-1 and "nth_weekday": "TU"
-    (monthly_nth - e.g. the 2nd Tuesday)
-  OR "rrule": an RFC 5545 rule using FREQ (DAILY|WEEKLY|MONTHLY|YEARLY), INTERVAL, BYDAY, BYMONTHDAY,
-    BYMONTH, BYSETPOS, WKST, UNTIL, COUNT - e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR".
-  End a repeat with "until": YYYY-MM-DD or "count": 1-1000 (or UNTIL/COUNT in the rrule) - not both.
-  "repeat_from_completion": bool (optional, a repeating task with no end only) - see ONE AT A TIME.
-  "checklist": ["item", ...] (optional, tasks only - at most 100 items of <=200 characters): its subtasks.
-  Example: {"title": "Gym", "date": "2026-11-02", "start_time": "06:00", "repeat": "weekly",
-  "days": ["MO", "WE", "FR"]}
-  The item belongs to the owner and shows "by <your token's name>"; it's shared the way the owner shares new
-  items by default (Planner "Share with" > "Remember as my default"). Returns 201 {"id", "title", "kind",
-  "date", "start_time", "end_time", "checkable", "notes", "rrule", "until", "count", "repeats" (plain
-  English), "one_at_a_time", "repeat_from_completion", "created_by", "checklist": [{"id", "text"}],
-  "attachments": [], "url"}.
-
-POST schedule/<id>/complete                            scope: schedule:write
-POST schedule/<id>/uncomplete                          scope: schedule:write
-  Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item; a one-off item's own date otherwise).
-  Checks off (or un-checks) THAT occurrence only. Only items the owner may edit and that can be checked off
-  (anything else is a 404 or 400). For a one-at-a-time task, completing its current occurrence makes the next
-  one appear (see ONE AT A TIME) and un-completing puts it back. Returns {"item_id", "occurrence_date",
-  "done"}.
-
-POST schedule/<id>/checklist/<item_id>/complete        scope: schedule:write
-POST schedule/<id>/checklist/<item_id>/uncomplete      scope: schedule:write
-  Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item). Ticks (or unticks) one subtask
-  ("checklist" ids from GET schedule) on THAT occurrence only. When every subtask of the occurrence is ticked
-  the task checks itself off (and unticking one reopens it), if the owner has "Complete task when all items
-  are checked" on. A grocery-list subtask checks the line on the Meals grocery list (the owner needs Meals).
-  Returns {"item_id", "checklist_item_id", "occurrence_date", "done", "progress" ("2/5"), "task_done"}.
-
-FITNESS (the owner's own workouts, food diary and weigh-ins - private to them, even within a circle)
-------------------------------------------------------------------------------------------------------
-Every call is a 403 if the owner can't open Fitness. Dates are YYYY-MM-DD (default today, never in the future).
-
-POST fitness/workouts                                 scope: fitness:write
-  Logs a finished workout for today. EITHER {"text": "squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30"} (the
-  site's quick log: weight x reps x sets, or reps per set "8,8,7"; cardio a distance and/or a time; "kg" after a
-  weight for kilograms) OR {"exercises": [{"exercise": "Bench press", "sets": [{"reps": 8, "weight": 185,
-  "unit": "lb"}]}, {"exercise": "Running", "sets": [{"distance": 3.1, "distance_unit": "mi", "duration_seconds":
-  1710}]}]}; optional "name". Exercise names match the owner's library (aliases like "bench", "squat", "ohp").
-  When it matches today's planned program day it counts as that workout and checks off its Planner task.
-  Returns 201 {"id", "date", "name", "exercises": [{"exercise", "sets"}], "unknown": [{"text", "problem",
-  "suggestions": [exercise names]}] (NOT logged - confirm the name and send again), "records": [{"exercise",
-  "kind", "text"}] (new personal records), "program_day", "planner_completed", "url"}. 422 (with "unknown")
-  if nothing could be logged.
-
-GET  fitness/foods/search?q=greek yogurt               scope: fitness:read or fitness:food:read
-  The site's one search box: {"q", "groups": [{"group": "recent"|"mine"|"recipes"|"usda", "title", "items":
-  [{"kind", "label", "detail", "fdc_id" | "my_food" | "recipe_id", "units": [{"unit", "label"}], "log": a ready
-  POST fitness/food body for 1 of the first unit, "per_serving": {"serving", "grams", "calories", "protein_g",
-  "carbs_g", "fat_g", "fiber_g"} for one of its first unit, or null}]}], "note" (why all-foods search is missing, or null)}. A USDA
-  food's units are its household portions plus "g" and "oz" (always), and ml / fl oz / cup / tbsp / tsp when known.
-
-POST fitness/food                                     scope: fitness:write
-  One diary entry, by ONE of: {"fdc_id": 2259793, "quantity": "1/4", "unit": "p:1 container (170 g)"} (a USDA
-  food picked from foods/search - "quantity" is a number or a fraction like "1/4" or "1 1/2"; "unit" one of its
-  units, by "unit" or "label"; "g" and "oz" always work); {"my_food": "Protein shake", "quantity": 0.5, "unit":
-  "serving" or "g"} (any of that food's units); {"recipe_id": 12} or {"recipe": "Turkey chili"} (a Meals recipe the owner can see,
-  with nutrition) x "servings"; {"my_food": "Protein shake"} (one of the owner's foods) x "servings"; or quick
-  macros {"label": "Latte", "calories": 190, "protein": 10, "carbs": 18, "fat": 7} (any of them). Optional
-  "slot": "breakfast"|"lunch"|"dinner"|"snack" (default snack), "date", "servings" (default 1, up to 50).
-  Names match exactly (any case). NEVER GUESSED: an unmatched name (or a USDA food by name) logs nothing and returns 422 {"error",
-  "suggestions": {"recipes": [{"id", "title"}], "my_foods": [names], "usda": [{"fdc_id", "name"}]}} - USDA foods
-  are only suggestions for the owner to pick on the site. Example: {"recipe": "Turkey chili", "servings": 1.5,
-  "slot": "dinner"}. An unknown unit logs nothing: 422 {"error", "units": [{"unit", "label"}]}. Returns 201
-  {"id", "date", "slot", "label", "source", "servings", "quantity", "unit", "amount" ("¼ container (170 g)"),
-  "grams", "fdc_id", "calories", "protein", "carbs", "fat", "fiber"}.
-
-GET  fitness/food/entries?date=YYYY-MM-DD               scope: fitness:read
-  One day's diary (default today, up to a year back): {"date", "entries": [as POST fitness/food returns], by
-  meal, "totals": {"calories", "protein", "carbs", "fat", "fiber"}}.
-
-POST fitness/food-entries                              scope: fitness:food:write
-  An AI's estimate of what the owner ate - 1 to 20 items, all saved or none: {"date": "YYYY-MM-DD" (optional:
-  the owner's today in their time zone, up to 60 days back), "meal": "breakfast"|"lunch"|"dinner"|"snack"
-  (optional: by the owner's local time - before 10:30 breakfast, before 15:00 lunch, before 21:00 dinner, else
-  snack), "items": [{"name" (required), "quantity", "unit" (free text, e.g. "bowl"), "grams" (<= 5000),
-  "calories" (required, <= 5000), "protein_g", "carbs_g", "fat_g" (required), "fiber_g", "sugar_g", "sodium_mg",
-  "confidence": "high"|"medium"|"low", "notes"}], "source_text": the person's words, "idempotency_key": any
-  string}. No negatives. A 400 lists {"errors": [{"field": "items[0].calories", "message"}]} and saves nothing.
-  Returns 201 {"date", "entries": [{"id", "meal", "name", ..., "source": "ai", "confidence", "edited"}],
-  "totals": {"calories", "protein_g", "carbs_g", "fat_g"} for the day, "targets": the same or null, "warnings":
-  [calories that differ from 4×protein + 4×carbs + 9×fat by more than 25% and 50 kcal - saved anyway]}. The
-  same idempotency_key within 24 hours returns those entries again (200, "replayed": true). At most 60 food log
-  changes an hour per key.
-
-GET  fitness/food-entries?date=YYYY-MM-DD              scope: fitness:food:read
-  A day's entries (default the owner's today), "totals" and "targets", as POST returns them.
-
-PATCH fitness/food-entries/<id>                        scope: fitness:food:write
-  Fix any field of one of the owner's entries (the item fields, "meal", "date"). Returns {"entry", "totals",
-  "targets", "warnings"}. Someone else's id is a 404.
-
-DELETE fitness/food-entries/<id>                       scope: fitness:food:write
-  Remove one of the owner's entries. Returns {"deleted": id, "date", "totals", "targets"}.
-
-GET  fitness/food-entries/recent?limit=20              scope: fitness:food:read
-  The owner's most-logged foods over 60 days (1-50): {"foods": [{"times_logged", "last_logged", "meal",
-  "source", "item": a ready item for POST fitness/food-entries}]} - for "the usual breakfast".
-
-GET  fitness/openapi.json
-  The OpenAPI spec of the food log endpoints, for AIs that import custom actions or tools. No key needed.
-
-POST fitness/weight                                   scope: fitness:write
-  Body: {"weight": 182.4 (required), "unit": "lb"|"kg" (default the owner's), "date", "note"}. One weigh-in a
-  day - a second one that day replaces it (200 instead of 201). Example: {"weight": 182.4, "unit": "lb"}.
-  Returns {"id", "date", "weight", "unit", "replaced"}.
-
-GET  fitness/today                                    scope: fitness:read
-  Returns {"date", "planned": [{"name", "program", "done"}], "workouts_done": [{"id", "name"}], "macros":
-  {"calories"|"protein"|"carbs"|"fat"|"fiber": {"eaten", "target", "remaining" (negative = over), "tracked"}}}.
-
-GET  fitness/summary?weeks=4                          scope: fitness:read
-  The last 1-12 weeks (default 4), this week first: {"weeks": [{"week_of" (Monday), "workouts_done",
-  "workouts_planned", "volume_lb", "volume_change_pct" (vs the week before, or null), "new_records": [{"exercise",
-  "text"}], "days_food_logged", "avg_calories", "avg_protein" (over days with food logged), "target_calories",
-  "target_protein"}]}.
-
-GET  fitness/programs                                 scope: fitness:read
-  The owner's programs: {"programs": [{"id", "name", "status": "active"|"paused"|"draft", "archived", "start_date", "weeks"
-  (null = no end), "planner" (wants it on the Planner), "on_planner_now", "time" ("HH:MM" or null = all day),
-  "days": [{"id", "name", "weekdays" (0 = Monday), "start_url", "exercises": [{"exercise", "target", "sets",
-  "reps", "minutes", "miles"}]}], "url"}]}.
-
-POST fitness/programs                                 scope: fitness:write
-  Creates and turns on a program in one call: {"name", "days": [{"name": "Upper", "weekdays": [0, 3] or ["mon",
-  "thu"], "exercises": [{"exercise": "Barbell Bench Press", "sets": 4, "reps": 6} or {"exercise": "Running",
-  "minutes": 30} or {"miles": 3}]}], "start_date" (default today), "weeks" (1-104, default no end), "planner":
-  true|false (default false), "time": "06:30" (optional, with planner)}. Exercise names must match the owner's
-  library exactly (any case) - NEVER GUESSED: any unknown name creates nothing and returns 422 {"error",
-  "unknown": [{"exercise", "suggestions"}]}. A target left out gets the site's default (3 x 10, cardio 20 min).
-  Returns 201 with the program (as in GET) plus "planner_tasks" (how many went on the Planner).
-
-POST fitness/programs/<id>/pause                      scope: fitness:write
-POST fitness/programs/<id>/resume                     scope: fitness:write
-  Pause: off Today and the Planner after today (history stays; the Planner choice is kept). Resume: back on (an archived
-  one is restored too), and back on the Planner when it was. Returns the program. 404 if it isn't the owner's; 409 for an unfinished draft.
-
-DELETE fitness/programs/<id>                         scope: fitness:write
-  Deletes one of the owner's programs (404 if it isn't theirs). Logged workouts are never deleted - they keep the
-  program's and day's names ("Upper A (deleted program)"). remove_scheduled (JSON body or query string, true/false,
-  default true): true ends its upcoming Planner tasks (past and checked-off ones stay); false keeps them as ordinary
-  tasks no longer linked to the program. Returns {"deleted": id, "name", "workouts_kept", "planner_ended",
-  "planner_kept"}.
-
-ACTIVITY (the owner's notifications - what others changed in things shared with them and in their circles)
---------------------------------------------------------------------------------------------------------------
-Never the owner's own actions. Each event is checked when you ask: something unshared, or a circle the owner left
-or opted out of, disappears at once. The owner's notification settings apply (an app or circle turned Off, or
-"Only things that involve me"). Kept 90 days.
-
-GET  activity?since=<ISO date or datetime>&limit=50    scope: activity:read
-  Newest first, changed after `since` (default: the last 24 hours), up to `limit` (1-200, default 50).
-  Returns {"since", "events": [{"id", "app", "verb", "text" ("Kate added 5 items to the grocery list"),
-  "actor", "via" (a bot's name, or null), "summary", "count" (merged repeats), "circle": {"id", "name"} or null,
-  "url" (a path on the site), "created_at", "updated_at", "unread"}]}.
-"""
-
-
-ENDPOINT_LINE = re.compile(r"^(GET|POST|PATCH|DELETE)\s")
-SCOPE_NAMES = re.compile(r"\b([a-z]+(?::[a-z]+)+)\b")
-
-
-def docs_for(token):
-    """DOCS with only the endpoints this token can call (its scopes its owner can still use). An app's heading
-    shows only when one of its endpoints does."""
-    intro, body = DOCS.split("ENDPOINTS\n---------\n", 1)
-    kept, pending = [], []
-    for para in body.split("\n\n"):
-        lines = [line for line in para.splitlines() if ENDPOINT_LINE.match(line)]
-        if not lines:
-            pending.append(para)                      # a heading: shown with its first visible endpoint
-            continue
-        needed = {name for line in lines for name in SCOPE_NAMES.findall(line.split("scope:", 1)[1])} \
-            if "scope:" in lines[0] else set()
-        if not needed or any(scope_rules.usable(token, name) for name in needed):
-            kept.extend(pending + [para])
-        pending = []
-    return intro + "ENDPOINTS\n---------\n" + "\n\n".join(kept).rstrip("\n") + "\n"
+    from . import catalog
+    if request.META.get("HTTP_AUTHORIZATION"):
+        return _docs_for_key(request)
+    return HttpResponse(catalog.markdown(_base(request)), content_type="text/markdown; charset=utf-8")
 
 
 @bot_endpoint()
-def docs(request, token):
+def _docs_for_key(request, token):
+    from . import catalog
+    return catalog.markdown(_base(request), token), 200, "read docs"
+
+
+def openapi(request):
+    """GET openapi.json - every endpoint, OpenAPI 3.1. No key needed (no user data in it)."""
+    from django.http import JsonResponse
+
+    from . import catalog
+    return JsonResponse(catalog.openapi(_base(request)), json_dumps_params={"indent": 2})
+
+
+@bot_endpoint()
+def me(request, token):
+    """Who this key acts as, and what it may call - so an AI can check before it acts."""
+    from . import catalog
     usable = [key for key in token.scopes if scope_rules.allowed(token.owner, key)]
-    return (docs_for(token) + f"\nYOUR TOKEN'S SCOPES: {', '.join(usable) or 'none'}\n"
-            "(Only the endpoints those scopes allow are listed above.)\n", 200, "read docs")
+    endpoints = [{"method": op.method, "path": op.path, "operation_id": op.op_id, "summary": op.summary}
+                 for op in catalog.for_token(token) if not op.public]
+    return ({"username": token.owner.get_username(), "key_name": token.name, "scopes": usable,
+             "apps": [{"app": name, "access": kind} for name, kind in scope_rules.by_app(usable)],
+             "endpoints": endpoints, "expires_at": _iso(token.expires_at)}, 200, "read me")
 
 
 @bot_endpoint()

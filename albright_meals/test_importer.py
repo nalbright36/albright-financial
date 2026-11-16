@@ -765,5 +765,5 @@ class BotImportTests(Base):
     def test_documented(self):
         docs = self.client.get(API + "docs", HTTP_AUTHORIZATION=f"Bearer {self.raw}").content.decode()
         self.assertIn("POST meals/recipes/import", docs)
-        self.assertIn('Example: {"url": "https://www.example.com/recipes/chili"', docs)
+        self.assertIn('"url": "https://www.example.com/recipes/chili"', docs)       # the example request
         self.assertIn('"status": "created"|"already_saved"|', docs)

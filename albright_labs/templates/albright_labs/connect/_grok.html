@@ -1,0 +1,15 @@
+{% comment %}Grok tab. Checked 2026-11-16 against xAI's docs: docs.x.ai/grok/connectors (grok.com/connectors > New Connector >
+Custom > the MCP server URL > "complete any required authentication"; Grok Business/Enterprise: an admin provisions it
+first; the server must be reachable on the public internet). The docs don't name the sign-in methods for custom
+connectors or mention the mobile apps, so this only promises the web. TODO (in the commit message): confirm Grok's
+custom connector completes this site's OAuth sign-in.{% endcomment %}
+<p class="ak-muted" style="margin: 0 0 12px;">Grok connects through a custom connector on grok.com.</p>
+<ol>
+    <li>On a computer, open Grok on the web and go to <strong>grok.com/connectors</strong>.</li>
+    <li>Click <strong>New Connector</strong>, then <strong>Custom</strong>.</li>
+    <li>Paste this as the MCP server URL:
+        {% include "albright_labs/connect/_copy.html" with value=links.mcp id="grok-mcp" %}</li>
+    <li>Finish the sign-in: Grok opens a page on this site - choose <strong>Full access</strong> or <strong>Read only</strong> and click <strong>Approve</strong>.</li>
+    <li>Start a chat, paste the instructions below, and ask Grok to use Albright Labs.</li>
+</ol>
+<p class="ak-note">On Grok Business or Enterprise, a team admin has to add the connector first. If the connector won't sign in, use the <strong>Other / any AI</strong> tab instead.</p>

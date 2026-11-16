@@ -1,0 +1,21 @@
+{% comment %}ChatGPT tab. Checked 2026-11-16 against OpenAI's docs:
+  - developers.openai.com/api/docs/guides/developer-mode (ChatGPT Plugins > + > "Add custom MCP server": name, Server URL,
+    authentication OAuth / No authentication (OAuth via static credentials, CIMD or DCR), then "Create as a plugin" and
+    install; in a chat, type @ and pick it)
+  - help.openai.com/articles/20001519 (Custom GPT retirement FAQ: new GPTs can't be made on personal accounts; GPTs
+    retire Dec 11, 2026; custom actions don't carry over)
+Plan availability isn't spelled out in those docs, so the steps say what to do when the option is missing.
+External sites are plain text, never links.{% endcomment %}
+<p class="ak-muted" style="margin: 0 0 12px;">ChatGPT connects to outside services as a plugin. You won't copy a key - ChatGPT sends you to a page here to approve it.</p>
+<ol>
+    <li>On a computer, open ChatGPT on the web and go to <strong>chatgpt.com/plugins</strong>.</li>
+    <li>Click the <strong>+</strong> button, then <strong>Add custom MCP server</strong>.</li>
+    <li>Name it <strong>Albright Labs</strong>. Under Connection, paste this as the <strong>Server URL</strong>:
+        {% include "albright_labs/connect/_copy.html" with value=links.mcp id="chatgpt-mcp" %}</li>
+    <li>For <strong>Authentication</strong>, choose <strong>OAuth</strong>.</li>
+    <li>Read the warning, confirm it, click <strong>Create as a plugin</strong>, then install the plugin.</li>
+    <li>ChatGPT opens a page on this site. Sign in if asked, choose <strong>Full access</strong> or <strong>Read only</strong>, and click <strong>Approve</strong>.</li>
+    <li>In a chat, type <strong>@</strong> and pick <strong>Albright Labs</strong>. The first time, paste the instructions below into the chat.</li>
+</ol>
+<p class="ak-note">Don't see <strong>Add custom MCP server</strong>? Your ChatGPT plan or workspace doesn't offer it yet - use the <strong>Other / any AI</strong> tab instead.<br>
+<strong>Custom GPTs:</strong> OpenAI no longer lets personal accounts make new custom GPTs and retires them on December 11, 2026, so we don't recommend them. If you already have one with Actions: Import from URL {% include "albright_labs/connect/_copy.html" with value=links.openapi id="chatgpt-openapi" %} then Authentication: API Key, Auth Type: Bearer, and paste a key made below.</p>

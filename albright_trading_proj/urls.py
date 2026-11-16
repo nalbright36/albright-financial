@@ -20,6 +20,7 @@ from django.contrib.staticfiles.views import serve as serve_static
 from django.urls import path, re_path
 
 from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
+from albright_bot_api.urls import oauth_urlpatterns as bot_oauth_urlpatterns
 from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
 from albright_labs import password_views
@@ -66,6 +67,7 @@ urlpatterns = [
     path("control/labs/", include("albright_labs.admin_urls")),
     path("control/", include("albright_control.urls")),
     path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
+    path("", include((bot_oauth_urlpatterns, "bot_oauth"))),
 ]
 
 # Local development with DEBUG off: `runserver` serves no static files, so every

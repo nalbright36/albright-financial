@@ -1,6 +1,7 @@
-from django.urls import path
+from django.urls import path, reverse_lazy
+from django.views.generic import RedirectView
 
-from . import api_views, fitness_api, key_views, meals_api, notes_api, schedule_api, views
+from . import api_views, fitness_api, mcp, meals_api, notes_api, oauth_views, schedule_api, views
 
 # Site pages. Token management and the activity log moved to the Admin area
 # (/control/bot-api/); the old URLs redirect there.
@@ -9,11 +10,10 @@ urlpatterns = [
     path("", views.moved_to_admin, name="tokens"),
     path("tokens/<int:pk>/revoke/", views.moved_to_admin, name="revoke"),
     path("activity/", views.moved_to_admin, {"target": "albright_control:bot_activity"}, name="activity"),
-    # My account > My API keys (key_views) - for anyone allowed API keys.
-    path("keys/", key_views.my_keys, name="my_keys"),
-    path("keys/<int:pk>/scopes/", key_views.my_key_scopes, name="my_key_scopes"),
-    path("keys/<int:pk>/rotate/", key_views.my_key_rotate, name="my_key_rotate"),
-    path("keys/<int:pk>/revoke/", key_views.my_key_revoke, name="my_key_revoke"),
+    # The API keys page moved to My account (/account/api-keys/, albright_labs.api_key_views): the old address
+    # redirects there for good.
+    path("keys/", RedirectView.as_view(url=reverse_lazy("labs:api_keys"), permanent=True), name="my_keys"),
+    path("keys/<int:pk>/<str:action>/", RedirectView.as_view(url=reverse_lazy("labs:api_keys"), permanent=True)),
     path("suggestions/<int:pk>/<str:decision>/", views.decide_suggestion, name="decide_suggestion"),
     path("trading-notes/bulk/", views.trading_notes_bulk, name="trading_notes_bulk"),
     path("trading-notes/<int:pk>/delete/", views.trading_note_delete, name="trading_note_delete"),
@@ -22,6 +22,9 @@ urlpatterns = [
 # The API itself (/api/bot/v1/) - token-authenticated JSON; included under the "bot_api_v1" namespace.
 api_urlpatterns = [
     path("docs", api_views.docs, name="docs"),
+    path("openapi.json", api_views.openapi, name="openapi"),
+    path("mcp", mcp.mcp, name="mcp"),
+    path("me", api_views.me, name="me"),
     path("me/storage", api_views.my_storage, name="me_storage"),
     path("trading/notes", api_views.trading_notes, name="trading_notes"),
     path("trading/strategies", api_views.trading_strategies, name="trading_strategies"),
@@ -76,4 +79,15 @@ api_urlpatterns = [
          name="schedule_subtask_complete"),
     path("schedule/<int:item_id>/checklist/<int:row_id>/uncomplete", schedule_api.schedule_subtask_uncomplete,
          name="schedule_subtask_uncomplete"),
+]
+
+# OAuth for MCP connectors (oauth_views) - at the site root, under the "bot_oauth" namespace. The approval page is in
+# My account (labs:api_key_authorize).
+oauth_urlpatterns = [
+    path(".well-known/oauth-protected-resource", oauth_views.protected_resource, name="protected_resource"),
+    path(".well-known/oauth-protected-resource/api/bot/v1/mcp", oauth_views.protected_resource,
+         name="protected_resource_mcp"),
+    path(".well-known/oauth-authorization-server", oauth_views.authorization_server, name="authorization_server"),
+    path("oauth/register", oauth_views.register, name="register"),
+    path("oauth/token", oauth_views.token, name="token"),
 ]

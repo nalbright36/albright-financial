@@ -997,5 +997,5 @@ def openapi(request):
     """The machine-readable spec for the food log endpoints - no key needed to read it (it holds no data)."""
     from django.http import JsonResponse
 
-    from . import food_ai
-    return JsonResponse(food_ai.openapi_spec(food_ai.api_base(request)), json_dumps_params={"indent": 2})
+    from . import catalog, connect
+    return JsonResponse(catalog.food_openapi(connect.api_base(request)), json_dumps_params={"indent": 2})

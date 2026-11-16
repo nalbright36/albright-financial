@@ -1,0 +1,21 @@
+{% comment %}Claude tab. Checked 2026-11-16 against Anthropic's docs:
+  - claude.com/docs/connectors/custom/add-unlisted (Free/Pro/Max/Ultra: Customize > Connectors > Add > Add custom
+    connector; name + remote MCP server URL; keep "Detected" auth; Add; Connect. In a chat: + > Connectors. Free plan:
+    one custom connector. Team/Enterprise: an Owner adds it in Organization settings > Connectors.)
+  - claude.com/docs/connectors/building/authentication (a person adding a custom connector signs in with OAuth -
+    DCR or CIMD; request headers / a fixed key are a beta for some organizations' Owners only. The same setup
+    backs claude.ai, Claude Desktop, Claude mobile, Claude Code and Cowork.)
+This site: OAuth with Dynamic Client Registration and PKCE (albright_bot_api.oauth_views).{% endcomment %}
+<p class="ak-muted" style="margin: 0 0 12px;">Claude connects through a custom connector. You won't copy a key - Claude sends you to a page here to approve it.</p>
+<ol>
+    <li>Open Claude on the web (<strong>claude.ai</strong>) or the Claude desktop app, and go to <strong>Customize &rsaquo; Connectors</strong>.</li>
+    <li>Click <strong>Add</strong>, then <strong>Add custom connector</strong>.</li>
+    <li>Name it <strong>Albright Labs</strong> and paste this as the <strong>remote MCP server URL</strong>, then click <strong>Continue</strong>:
+        {% include "albright_labs/connect/_copy.html" with value=links.mcp id="claude-mcp" %}</li>
+    <li>Keep the sign-in settings Claude marks <strong>Detected</strong> and click <strong>Add</strong>.</li>
+    <li>Click <strong>Connect</strong>. Claude opens a page on this site: choose <strong>Full access</strong> or <strong>Read only</strong> and click <strong>Approve</strong>.</li>
+    <li>In a chat, click <strong>+</strong> &rsaquo; <strong>Connectors</strong> and make sure <strong>Albright Labs</strong> is on.</li>
+    <li>Make a <strong>Project</strong> and paste the instructions below into its project instructions (or into your profile's personal preferences), so Claude always knows them.</li>
+</ol>
+<p class="ak-note">Once added, it works in Claude on the web, the desktop app and the mobile app. The Free plan allows one custom connector. On a Team or Enterprise plan, an Owner adds it first under <strong>Organization settings &rsaquo; Connectors</strong>; then you click <strong>Connect</strong>.<br>
+<strong>Claude Code:</strong> run <code>claude mcp add --transport http albright-labs {{ links.mcp }}</code>, then <code>/mcp</code> to sign in - or add <code>--header "Authorization: Bearer YOUR_KEY"</code> with a key made below in place of YOUR_KEY.</p>

@@ -1,8 +1,8 @@
-{% comment %}The copyable "Connect your AI" instructions (albright_bot_api.food_ai.instructions) - Food > Log food with
+{% comment %}The copyable "Connect your AI" instructions (albright_bot_api.connect.instructions) - Food > Log food with
 your AI, and My API keys. instructions, openapi_url; ai_id keeps the ids apart. Never holds a key.{% endcomment %}
 <div class="field" style="margin-bottom: 8px;">
     <label for="{{ ai_id|default:'ai-instructions' }}" style="font-weight: 600;">Paste this into your AI's custom instructions (or a project's instructions)</label>
-    <textarea id="{{ ai_id|default:'ai-instructions' }}" class="ledger-input fx-ai-instructions" readonly rows="18" spellcheck="false" style="width: 100%; min-height: 320px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.75rem; line-height: 1.5; white-space: pre; overflow: auto;">{{ instructions }}</textarea>
+    <textarea id="{{ ai_id|default:'ai-instructions' }}" class="ledger-input fx-ai-instructions" readonly rows="12" spellcheck="false" style="width: 100%; min-height: 220px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; overflow: auto;">{{ instructions }}</textarea>
 </div>
 <p style="margin: 0 0 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"><button type="button" class="btn btn-primary btn-sm js-copy" data-copy-target="{{ ai_id|default:'ai-instructions' }}">Copy instructions</button> <span style="font-size: 0.8125rem; color: var(--text-secondary);">For AIs that import actions or tools: <code style="overflow-wrap: anywhere;">{{ openapi_url }}</code></span></p>
 <p style="margin: 0; font-size: 0.8125rem; color: var(--text-secondary);">Your key is <strong>not</strong> in these instructions. Put it in your AI's <strong>secret / connection settings</strong> (as a Bearer token) - never paste it into a chat.</p>

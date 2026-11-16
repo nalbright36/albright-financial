@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .attachments import size_label
-from .models import Attachment
+from .models import Attachment, UserPreference
 
 
 @admin.register(Attachment)
@@ -25,3 +25,20 @@ class AttachmentAdmin(admin.ModelAdmin):
     @admin.display(description="Size", ordering="size_bytes")
     def size(self, obj):
         return size_label(obj.size_bytes)
+
+
+@admin.register(UserPreference)
+class UserPreferenceAdmin(admin.ModelAdmin):
+    """Per-user settings - here for "Can create API keys" (also on Admin > Users). Off disables the person's keys
+    (403 "API access disabled") without deleting them; on again re-enables them. Superusers always can."""
+    list_display = ("user", "api_keys_allowed", "active_keys")
+    list_editable = ("api_keys_allowed",)
+    list_filter = ("api_keys_allowed",)
+    search_fields = ("user__username", "user__email")
+    list_select_related = ("user",)
+    raw_id_fields = ("user",)
+    fields = ("user", "api_keys_allowed")
+
+    @admin.display(description="Active keys")
+    def active_keys(self, obj):
+        return obj.user.bot_tokens.filter(revoked_at__isnull=True).count()

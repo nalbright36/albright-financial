@@ -154,7 +154,7 @@ class AccountMenuTests(Base):
                     content = self.page(url)
                     self.assertEqual(hrefs(account_menu(content)),
                                      [(reverse("labs:account"), "My account"), (reverse("labs:circles"), "Circles"),
-                                      (reverse("user_logout"), "Logout")])
+                                      (reverse("labs:api_keys"), "API keys"), (reverse("user_logout"), "Logout")])
                     self.assertIn('aria-haspopup="true" aria-expanded="false" aria-controls="account-menu"', content)
                     self.assertIn(f'title="Signed in as {user.username}"', content)
                     links = links_html(content)
@@ -234,6 +234,7 @@ class PhoneHeaderTests(Base):
                                                 (reverse("labs:circles"), "Circles"),
                                                 (reverse("labs:people"), "People"),
                                                 (reverse("labs:activity"), "Notifications"),
+                                                (reverse("labs:api_keys"), "API keys"),
                                                 (reverse("user_logout"), "Logout")])
                 # Inside the hamburger panel, after the app's own links; the desktop tools keep theirs.
                 links_start = content.index('id="navbar-links"')

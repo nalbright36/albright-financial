@@ -5,6 +5,7 @@ down password and invite-token guessing. Counts live in the database
   - login: failed sign-ins only
   - signup: every invite page request (a bad token, a form post)
   - reset: forgot-password form posts
+  - oauth: OAuth client registrations (an AI app connecting over MCP)
 
 Over the limit, the page answers 429 with how long to wait, whatever was
 asked - so it never tells whether an account or invite exists.
@@ -16,7 +17,8 @@ from django.utils import timezone
 from .models import RateLimitHit
 
 # scope: (attempts, window in minutes)
-LIMITS = {"login": (10, 15), "signup": (20, 15), "reset": (5, 15)}
+LIMITS = {"login": (10, 15), "signup": (20, 15), "reset": (5, 15),
+          "oauth": (20, 60)}   # AI apps registering to connect (albright_bot_api.oauth_views)
 
 
 def client_ip(request):

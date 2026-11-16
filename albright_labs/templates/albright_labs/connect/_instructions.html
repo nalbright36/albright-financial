@@ -1,0 +1,9 @@
+{% comment %}The instructions block on every tab (albright_bot_api.connect.instructions - the same text everywhere, made with
+this site's address, never a key) with the big Copy button. tab keeps the ids apart.{% endcomment %}
+<button type="button" class="btn btn-primary ak-copy-big js-copy" data-copy-target="instructions-{{ tab }}">Copy instructions for your AI</button>
+<details style="margin-top: 8px;">
+    <summary class="ak-muted" style="cursor: pointer;">See the instructions</summary>
+    <label for="instructions-{{ tab }}" class="visually-hidden">Instructions for your AI</label>
+    <textarea id="instructions-{{ tab }}" class="ledger-input ak-instructions" readonly rows="12" spellcheck="false">{{ instructions }}</textarea>
+</details>
+<p class="ak-muted" style="margin: 8px 0 0;">Your key is never in these instructions. If your AI needs one, put it in its secret or connection settings - never in a chat message.</p>

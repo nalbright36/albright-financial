@@ -183,9 +183,9 @@ class UserPreference(models.Model):
     show_today_panel = models.BooleanField(default=False)
     # ...and whether that panel also lists today's completed tasks (struck through, at the bottom). Off: open ones only.
     show_completed_today = models.BooleanField(default=False)
-    # Admin > Users "Allow API keys": may this person make their own Bot API keys (My account > My API keys)?
-    # Superusers always may. Turning it off stops their keys working (albright_bot_api.scopes).
-    api_keys_allowed = models.BooleanField(default=False)
+    # Admin > Users "Can create API keys": may this person make their own Bot API keys (My account > API keys)?
+    # Superusers always may. Turning it off disables their keys - 403 "API access disabled" - until it's back on.
+    api_keys_allowed = models.BooleanField("Can create API keys", default=False)
     # The space each app last showed (Meals and Money's switcher): {"meals": space id, ...} - checked on every use.
     current_spaces = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -160,7 +160,7 @@
                     {% comment %}Phones only (style.css - under 640px, in the hamburger panel), two parts: the app's pages above (its
                     pill - .navbar__menu-app, first in #navbar-links - then its links, each with an icon: nav_icons), and
                     this account section at the bottom - darker, never in the app's accent, so it never looks like one of
-                    its pages: "Account · <username>", My account, Circles, People, Notifications, the theme toggle,
+                    its pages: "Account · <username>", My account, Circles, People, Notifications, API keys, the theme toggle,
                     Logout. Wider screens keep these in .navbar__tools.{% endcomment %}
                     <div class="navbar__menu-extra" id="navbar-menu-extra">
                         {% if user.is_authenticated %}
@@ -169,6 +169,7 @@
                         <a href="{% url 'labs:circles' %}" class="navbar__menu-item">{% nav_icon "circles" %}Circles{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }}</span>{% endif %}</a>
                         <a href="{% url 'labs:people' %}" class="navbar__menu-item">{% nav_icon "users" %}People</a>
                         <a href="{% url 'labs:activity' %}" class="navbar__menu-item">{% nav_icon "bell" %}Notifications</a>
+                        <a href="{% url 'labs:api_keys' %}" class="navbar__menu-item" id="menu-api-keys-link">{% nav_icon "key" %}API keys</a>
                         {% endif %}
                         <button type="button" class="navbar__menu-item navbar__menu-theme" id="theme-toggle-menu">
                             <svg class="navbar__icon icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
@@ -230,6 +231,7 @@
                             <a href="{% url 'labs:account' %}" id="nav-account-link">My account</a>
                             <a href="{% url 'labs:circles' %}" id="nav-circles-link">Circles{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }}</span>{% endif %}</a>
                             <a href="{% url 'labs:people' %}" id="nav-people-link">People</a>
+                            <a href="{% url 'labs:api_keys' %}" id="nav-api-keys-link">API keys</a>
                             <a href="{% url 'user_logout' %}">Logout</a>
                         </div>
                     </div>

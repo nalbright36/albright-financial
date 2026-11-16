@@ -24,13 +24,11 @@
         {% include "albright_labs/_storage_bar.html" with u=usage %}
         <p style="margin: 10px 0 0; font-size: 0.875rem; color: var(--text-secondary);">{% if attachment_files %}{{ attachment_files }} attachment{{ attachment_files|pluralize }} on Planner tasks and notes.{% else %}You haven't attached any files to Planner tasks or notes yet.{% endif %} Each file can be up to {{ attachment_max }}.{% if usage.full %} You're out of space: delete some attachments to add more.{% endif %}</p>
     </section>
-    {% if api_keys %}
     <section class="card" id="api-keys-link" style="margin-top: var(--space-5, 20px);">
-        <div class="card__header"><span class="card__label">API keys</span></div>
-        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">Let a bot (like a Grok assistant) add to and read from your apps, as you.</p>
-        <a href="{% url 'albright_bot_api:my_keys' %}" class="btn btn-secondary">My API keys</a>
+        <div class="card__header"><span class="card__label">API keys / Connect your AI</span></div>
+        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">{% if api_keys %}Let an AI assistant (like ChatGPT, Claude, Grok or Gemini) read and update your apps, as you.{% else %}Connect an AI assistant to your account - API access isn't turned on for you yet.{% endif %}</p>
+        <a href="{% url 'labs:api_keys' %}" class="btn btn-secondary">API keys / Connect your AI</a>
     </section>
-    {% endif %}
     {% include "albright_labs/_app_settings.html" %}
 </div>
 {% endblock %}

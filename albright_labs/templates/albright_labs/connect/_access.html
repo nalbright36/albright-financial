@@ -1,0 +1,15 @@
+{% comment %}Full access / Read only / Custom (albright_bot_api.scopes.preset) - the new-key form and each key's Edit access.
+prefix keeps ids apart; current = the picked choice; selected = the ticked scopes (Custom). Admin-only scopes are only
+in Custom (and only for admins - scopes.choices).{% endcomment %}
+<div class="ak-choices" role="radiogroup">
+    {% for value, label, help in access_choices %}
+    <label class="ak-choice" for="access-{{ prefix }}-{{ value }}">
+        <input type="radio" name="access" value="{{ value }}" id="access-{{ prefix }}-{{ value }}"{% if value == current %} checked{% endif %}>
+        <span><strong>{{ label }}</strong><span class="ak-muted">{{ help }}{% if value == "full" and full_apps %} ({{ full_apps }}){% endif %}</span></span>
+    </label>
+    {% endfor %}
+</div>
+<div class="ak-custom" id="custom-{{ prefix }}">
+    {% for group, rows in groups %}<p class="ak-group">{{ group }}</p>
+    {% for key, label in rows %}<label class="ak-check"><input type="checkbox" name="scopes" value="{{ key }}"{% if key in selected %} checked{% endif %}> <span>{{ label }}</span></label>{% endfor %}{% endfor %}
+</div>

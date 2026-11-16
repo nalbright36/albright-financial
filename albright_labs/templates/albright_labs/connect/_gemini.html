@@ -1,0 +1,16 @@
+{% comment %}Gemini tab. Checked 2026-11-16 against Google's docs: developers.google.com/connected-apps/mcp/dev-mode/usage
+(Settings > Gemini Apps Developer Mode, or gemini.google.com/devmode; "MCP Server URL" must be https; sign-in by OAuth -
+Dynamic Client Registration or a pre-registered client). Google's docs don't say which accounts get Developer Mode,
+and the consumer "custom apps" rules come only from third-party guides, so the tab says plainly that many accounts
+can't do this. Gems can't call outside APIs.{% endcomment %}
+<p class="ak-muted" style="margin: 0 0 12px;">The Gemini app can only use outside services through <strong>custom apps</strong>, which Google offers in <strong>Gemini Apps Developer Mode</strong> - and not on every account. Gems can't call outside services.</p>
+<p style="margin: 0 0 8px; font-weight: 600;">If your account has Developer Mode:</p>
+<ol>
+    <li>Open Gemini on the web and go to <strong>Settings &rsaquo; Gemini Apps Developer Mode</strong> (or <strong>gemini.google.com/devmode</strong>), and turn it on.</li>
+    <li>Connect an MCP server, and paste this as the <strong>MCP Server URL</strong>:
+        {% include "albright_labs/connect/_copy.html" with value=links.mcp id="gemini-mcp" %}</li>
+    <li>For sign-in, choose <strong>Dynamic Client Registration</strong>.</li>
+    <li>Gemini opens a page on this site: choose <strong>Full access</strong> or <strong>Read only</strong> and click <strong>Approve</strong>.</li>
+    <li>In a chat, paste the instructions below first.</li>
+</ol>
+<p class="ak-note">No Developer Mode? The Gemini app can't connect to this site for you. Use the <strong>Other / any AI</strong> tab's method with any assistant or script that can make web requests.</p>

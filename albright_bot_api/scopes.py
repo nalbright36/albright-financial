@@ -94,3 +94,61 @@ def denial(user, scope):
 def usable(token, scope):
     """The token has this scope AND its owner can use it now."""
     return scope in token.scopes and allowed(token.owner, scope)
+
+
+# --- The key form's three choices (My account > API keys) and how a key's access reads in its list. ---
+FULL, READ_ONLY, CUSTOM = "full", "read", "custom"
+ACCESS_CHOICES = [
+    (FULL, "Full access", "Read and change everything in the apps you can open"),
+    (READ_ONLY, "Read only", "See everything, change nothing"),
+    (CUSTOM, "Custom", "Pick exactly what it may do, app by app"),
+]
+
+
+def is_admin_only(scope):
+    """Admin-only scopes (trading, reseller, opportunities, ideas, site suggestions) - not tied to an app anyone
+    else can open. Never part of Full access or Read only, even for an admin: tick them under Custom."""
+    return scope not in APP_SCOPES and scope not in OPEN_SCOPES
+
+
+def is_read(scope):
+    return scope.endswith(":read")
+
+
+def preset(user, access):
+    """The scopes Full access / Read only give this person: their apps' scopes (and notifications), never admin-only
+    ones. None for Custom (the person picks)."""
+    if access not in (FULL, READ_ONLY):
+        return None
+    return [key for key in available(user) if not is_admin_only(key) and (access == FULL or is_read(key))]
+
+
+def access_of(user, scope_list):
+    """Which of the three choices a key's scopes match now - for ticking the right one in Edit access."""
+    held = set(scope_list)
+    for access in (FULL, READ_ONLY):
+        if held and held == set(preset(user, access)):
+            return access
+    return CUSTOM
+
+
+def summary(user, scope_list):
+    """One line for the key list: "Full access", "Read only", or "Planner (read and change), Meals (read)"."""
+    access = access_of(user, scope_list)
+    if access == FULL:
+        return "Full access"
+    if access == READ_ONLY:
+        return "Read only"
+    return ", ".join(f"{name} ({kind})" for name, kind in by_app(scope_list)) or "Nothing"
+
+
+def by_app(scope_list):
+    """[(app label, "read" | "change" | "read and change")] - for the key list and GET me."""
+    kinds_by_app = {}
+    for key in scope_list:
+        app = APP_SCOPES.get(key)
+        name = apps_registry.BY_KEY[app].label if app in apps_registry.BY_KEY else (
+            "Notifications" if key in OPEN_SCOPES else "Admin")
+        kinds_by_app.setdefault(name, set()).add("read" if is_read(key) else "change")
+    return [(name, "read and change" if kinds == {"read", "change"} else kinds.pop())
+            for name, kinds in kinds_by_app.items()]

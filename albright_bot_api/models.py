@@ -61,6 +61,8 @@ class BotToken(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
+    # Optional end date (My account > API keys: Never / 30 days / 90 days / 1 year). Past it: 401, like a revoked key.
+    expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -69,11 +71,11 @@ class BotToken(models.Model):
         return f"{self.name} ({self.display_prefix}…)"
 
     @classmethod
-    def issue(cls, owner, name, scopes):
+    def issue(cls, owner, name, scopes, expires_at=None):
         """Creates a token; returns (token row, the full token - shown once, never stored)."""
         raw = TOKEN_PREFIX + secrets.token_urlsafe(32)
         token = cls.objects.create(owner=owner, name=name, token_hash=hash_token(raw), display_prefix=raw[:8],
-                                   scopes=[s for s in SCOPE_KEYS if s in scopes])
+                                   scopes=[s for s in SCOPE_KEYS if s in scopes], expires_at=expires_at)
         return token, raw
 
     def set_scopes(self, scopes):
@@ -94,10 +96,42 @@ class BotToken(models.Model):
     def is_active(self):
         return self.revoked_at is None
 
+    @property
+    def is_expired(self):
+        return self.expires_at is not None and self.expires_at <= timezone.now()
+
     def revoke(self):
         if self.revoked_at is None:
             self.revoked_at = timezone.now()
             self.save(update_fields=["revoked_at"])
+
+
+class OAuthClient(models.Model):
+    """An AI app that registered itself to connect (OAuth Dynamic Client Registration, RFC 7591) - e.g. Claude,
+    ChatGPT or Gemini adding this site as a connector (oauth_views). Public clients: no secret, PKCE instead."""
+    client_id = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=100)
+    redirect_uris = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.client_id[:8]}…)"
+
+
+class OAuthCode(models.Model):
+    """A one-time code from the approval page (My account > API keys > Approve connection), swapped for a normal
+    API key (a BotToken) at the token endpoint. Only its hash is stored; it lasts 10 minutes."""
+    code_hash = models.CharField(max_length=64, unique=True)
+    client = models.ForeignKey(OAuthClient, on_delete=models.CASCADE, related_name="codes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    scopes = models.JSONField(default=list)
+    key_name = models.CharField(max_length=100)
+    redirect_uri = models.CharField(max_length=500)
+    code_challenge = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    token = models.ForeignKey(BotToken, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class BotRequestLog(models.Model):

@@ -1,6 +1,6 @@
-"""Food > "Log food with your AI": the instructions to paste into the person's AI (custom instructions / project),
-made with this site's address (albright_bot_api.food_ai), and how to give it a key. The key itself is never on this
-page - it goes in the AI's secret / connection settings."""
+"""Food > "Log food with your AI": the same instructions block as My account > API keys (albright_bot_api.connect -
+made with this site's address, food logging included), and a link to the step-by-step "Connect your AI" directions
+there. A key is never on this page."""
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.urls import reverse
@@ -8,8 +8,8 @@ from django.urls import reverse
 
 @login_required
 def connect(request):
-    from albright_bot_api import food_ai, scopes
-    base = food_ai.api_base(request)
+    from albright_bot_api import connect as ai, scopes
+    links = ai.urls(request)
     return render(request, "albright_fitness/food_ai.html", {
-        "instructions": food_ai.instructions(base), "openapi_url": base + "/fitness/openapi.json",
-        "keys_allowed": scopes.keys_allowed(request.user), "keys_url": reverse("albright_bot_api:my_keys")})
+        "instructions": ai.instructions(links["base"]), "openapi_url": links["openapi"],
+        "keys_allowed": scopes.keys_allowed(request.user), "keys_url": reverse("labs:api_keys") + "#connect"})

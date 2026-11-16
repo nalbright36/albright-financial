@@ -215,14 +215,14 @@ class FoodPageTests(AiFoodBase):
 
     def test_connect_your_ai_instructions_never_hold_a_key(self):
         page = self.client.get(reverse("albright_fitness:food_ai")).content.decode()
-        self.assertIn("/api/bot/v1/fitness/food-entries", page)
+        self.assertIn("/api/bot/v1/docs", page)
         self.assertIn("idempotency_key", page)
-        self.assertIn("PATCH or DELETE that entry", page)
+        self.assertIn("For food logging: estimate macros per item", page)
         self.assertNotIn(self.raw, page)
         self.assertNotIn("abt_", page)
         self.assertIn("Log food with your AI", self.client.get(reverse("albright_fitness:food")).content.decode())
-        keys = self.client.get(reverse("albright_bot_api:my_keys")).content.decode()
-        self.assertIn('id="food-ai"', keys)
+        keys = self.client.get(reverse("labs:api_keys")).content.decode()
+        self.assertIn('id="connect"', keys)
         self.assertIn(">Fitness</p>", keys)
         self.assertIn("Read your food log", keys)
         self.assertIn("Add and edit food entries", keys)

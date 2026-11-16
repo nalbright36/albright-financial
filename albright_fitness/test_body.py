@@ -250,7 +250,7 @@ class BotApiTests(Base):
         read = self.token(["fitness:read"])
         self.assertEqual(self.call("GET", "fitness/today", read).status_code, 200)
         self.assertEqual(self.call("POST", "fitness/weight", read, {"weight": 180}).status_code, 403)
-        page = self.as_user(self.wife).get(reverse("albright_bot_api:my_keys")).content.decode()
+        page = self.as_user(self.wife).get(reverse("labs:api_keys")).content.decode()
         self.assertIn('value="fitness:read"', page)
         self.assertIn("Log workouts, food and weigh-ins for me", page)
         no_fitness = allow_api_keys(with_apps(User.objects.create_user(username="lee", password=PASSWORD), ["meals"]))

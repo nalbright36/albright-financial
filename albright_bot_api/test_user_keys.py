@@ -41,7 +41,7 @@ class Base(TestCase):
                                                  content_type="application/json", **headers)
 
     def create_key(self, scopes, name="Sam's bot", client=None, password=PASSWORD):
-        response = (client or self.client).post(reverse("albright_bot_api:my_keys"),
+        response = (client or self.client).post(reverse("labs:api_keys"),
                                                 {"name": name, "scopes": scopes, "password": password})
         raw = None
         if response.status_code == 200 and response.context and response.context.get("new_key"):
@@ -87,7 +87,7 @@ class ActsAsOwnerTests(Base):
 
 class ScopesByAccessTests(Base):
     def test_form_offers_only_her_apps_scopes_in_plain_words(self):
-        page = self.client.get(reverse("albright_bot_api:my_keys")).content.decode()
+        page = self.client.get(reverse("labs:api_keys")).content.decode()
         self.assertIn("Add and check off tasks in my Planner", page)
         for scope in ("schedule:read", "meals:write", "notes:read"):
             self.assertIn(f'value="{scope}"', page)
@@ -101,7 +101,7 @@ class ScopesByAccessTests(Base):
         self.assertFalse(BotToken.objects.filter(owner=self.wife).exists())
         _response, raw = self.create_key(["schedule:read"])
         token = BotToken.objects.get(owner=self.wife)
-        self.client.post(reverse("albright_bot_api:my_key_scopes", args=[token.pk]),
+        self.client.post(reverse("labs:api_key_scopes", args=[token.pk]),
                          {"scopes": ["schedule:read", "ideas:read"], "password": PASSWORD})
         token.refresh_from_db()
         self.assertEqual(token.scopes, ["schedule:read"])
@@ -128,27 +128,30 @@ class ScopesByAccessTests(Base):
         self.assertEqual(response.json(), {"error": "Your account doesn't have access to Meals, so meals:read "
                                                     "doesn't work.", "required": "meals:read"})
         self.assertEqual(self.call("GET", f"schedule?start={TODAY}", raw).status_code, 200)   # the rest still works
-        page = self.client.get(reverse("albright_bot_api:my_keys")).content.decode()
+        page = self.client.get(reverse("labs:api_keys")).content.decode()
         self.assertIn("doesn't work", page)
 
 
 class AllowKeysTests(Base):
-    def test_off_hides_the_page_and_blocks_creating(self):
+    def test_off_shows_the_message_and_blocks_creating(self):
         allow_api_keys(self.wife, False)
-        self.assertEqual(self.client.get(reverse("albright_bot_api:my_keys")).status_code, 404)
+        page = self.client.get(reverse("labs:api_keys"))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "API access isn't turned on for your account. Ask Nathan to enable it.")
+        self.assertNotContains(page, 'id="key-form"')
+        self.assertNotContains(page, 'id="my-keys"')
         response, _raw = self.create_key(["schedule:read"])
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
         self.assertFalse(BotToken.objects.exists())
-        self.assertNotIn("My API keys", self.client.get(reverse("labs:account")).content.decode())
         allow_api_keys(self.wife)
-        self.assertIn(reverse("albright_bot_api:my_keys"), self.client.get(reverse("labs:account")).content.decode())
+        self.assertIn(reverse("labs:api_keys"), self.client.get(reverse("labs:account")).content.decode())
 
     def test_off_stops_her_existing_keys(self):
         _response, raw = self.create_key(["schedule:read"])
         allow_api_keys(self.wife, False)
         response = self.call("GET", "docs", raw)
         self.assertEqual(response.status_code, 403)
-        self.assertIn("turned off", response.json()["error"])
+        self.assertEqual(response.json()["error"], "API access disabled")
 
     def test_admin_users_toggle_and_key_counts(self):
         self.create_key(["schedule:read"])
@@ -181,37 +184,37 @@ class KeyLifecycleTests(Base):
         self.assertContains(response, raw)
         token = BotToken.objects.get(owner=self.wife)
         self.assertEqual(token.token_hash, hash_token(raw))
-        self.assertNotIn(raw, self.client.get(reverse("albright_bot_api:my_keys")).content.decode())
+        self.assertNotIn(raw, self.client.get(reverse("labs:api_keys")).content.decode())
 
     def test_password_needed_to_create_edit_and_rotate(self):
         response, raw = self.create_key(["schedule:read"], password="wrong")
         self.assertIsNone(raw)
-        self.assertContains(response, "That isn&#x27;t your password")
+        self.assertContains(response, "That isn&#x27;t your password", status_code=400)
         _response, raw = self.create_key(["schedule:read"])
         token = BotToken.objects.get(owner=self.wife)
-        self.client.post(reverse("albright_bot_api:my_key_scopes", args=[token.pk]), {"scopes": ["notes:read"], "password": "x"})
-        self.client.post(reverse("albright_bot_api:my_key_rotate", args=[token.pk]), {"password": "x"})
+        self.client.post(reverse("labs:api_key_scopes", args=[token.pk]), {"scopes": ["notes:read"], "password": "x"})
+        self.client.post(reverse("labs:api_key_rotate", args=[token.pk]), {"password": "x"})
         token.refresh_from_db()
         self.assertEqual((token.scopes, token.token_hash), (["schedule:read"], hash_token(raw)))
 
     def test_rotate_revoke_and_the_audit_log(self):
         _response, raw = self.create_key(["schedule:read"])
         token = BotToken.objects.get(owner=self.wife)
-        self.client.post(reverse("albright_bot_api:my_key_scopes", args=[token.pk]),
+        self.client.post(reverse("labs:api_key_scopes", args=[token.pk]),
                          {"scopes": ["schedule:read", "notes:read"], "password": PASSWORD})
-        response = self.client.post(reverse("albright_bot_api:my_key_rotate", args=[token.pk]), {"password": PASSWORD})
+        response = self.client.post(reverse("labs:api_key_rotate", args=[token.pk]), {"password": PASSWORD})
         new_raw = response.context["new_key"]
         self.assertEqual(self.call("GET", "docs", raw).status_code, 401)
         self.assertEqual(self.call("GET", "docs", new_raw).status_code, 200)
-        self.client.post(reverse("albright_bot_api:my_key_revoke", args=[token.pk]))
+        self.client.post(reverse("labs:api_key_revoke", args=[token.pk]))
         self.assertEqual(self.call("GET", "docs", new_raw).status_code, 401)
         actions = list(AuditEntry.objects.filter(user=self.wife).order_by("pk").values_list("action", flat=True))
         self.assertEqual(actions, ["token_created", "token_scopes_changed", "token_rotated", "token_revoked"])
 
     def test_she_cant_touch_my_keys(self):
         mine, _raw = BotToken.issue(self.boss, "Grok", ["trading:notes"])
-        for name in ("my_key_scopes", "my_key_rotate", "my_key_revoke"):
-            self.assertEqual(self.client.post(reverse(f"albright_bot_api:{name}", args=[mine.pk]),
+        for name in ("api_key_scopes", "api_key_rotate", "api_key_revoke", "api_key_rename"):
+            self.assertEqual(self.client.post(reverse(f"labs:{name}", args=[mine.pk]),
                                               {"password": PASSWORD}).status_code, 404)
         self.assertTrue(BotToken.objects.get(pk=mine.pk).is_active)
 
@@ -220,7 +223,7 @@ class KeyLifecycleTests(Base):
         _mine, my_raw = BotToken.issue(self.boss, "Grok", ["trading:notes"])
         self.call("GET", f"schedule?start={TODAY}", raw)
         self.call("GET", "trading/strategies", my_raw)
-        page = self.client.get(reverse("albright_bot_api:my_keys")).content.decode()
+        page = self.client.get(reverse("labs:api_keys")).content.decode()
         activity = page.split('id="my-key-activity"', 1)[1]
         self.assertIn("GET /api/bot/v1/schedule", activity)
         self.assertNotIn("trading/strategies", activity)

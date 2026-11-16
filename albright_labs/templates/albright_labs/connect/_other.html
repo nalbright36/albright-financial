@@ -1,0 +1,14 @@
+{% comment %}Other / any AI tab: for any assistant, app or script that can make web requests (or import an OpenAPI spec,
+or connect to an MCP server with a header). All addresses are this site's real ones.{% endcomment %}
+<p class="ak-muted" style="margin: 0 0 12px;">For any assistant, automation tool or script that can make web requests.</p>
+<ol>
+    <li>Make a key below (choose what it may do), and copy it.</li>
+    <li>Put the key in your AI's <strong>secret, credential or connection settings</strong> - never in a chat message. It's sent on every request as this header:
+        <span class="ak-copyrow"><code id="other-header">Authorization: Bearer YOUR_KEY</code></span></li>
+    <li>Give it these addresses:
+        <div>Base URL: {% include "albright_labs/connect/_copy.html" with value=links.base id="other-base" %}</div>
+        <div>Guide for AIs (no key needed): {% include "albright_labs/connect/_copy.html" with value=links.docs id="other-docs" %}</div>
+        <div>OpenAPI spec (for tools that import one): {% include "albright_labs/connect/_copy.html" with value=links.openapi id="other-openapi" %}</div>
+        <div>MCP server (for MCP clients - send the key as the header above): {% include "albright_labs/connect/_copy.html" with value=links.mcp id="other-mcp" %}</div></li>
+    <li>Paste the instructions below into its instructions or system prompt.</li>
+</ol>

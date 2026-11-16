@@ -436,7 +436,7 @@ class DigestAndApiTests(Base):
         self.assertEqual(Client().get(API + "activity", HTTP_AUTHORIZATION=f"Bearer {kate_raw}").json()["events"], [])  # her own
         docs = Client().get(API + "docs", HTTP_AUTHORIZATION=f"Bearer {raw}").content.decode()
         self.assertIn("GET  activity?since=", docs)
-        keys_page = self.client.get(reverse("albright_bot_api:my_keys")).content.decode()
+        keys_page = self.client.get(reverse("labs:api_keys")).content.decode()
         self.assertIn('value="activity:read"', keys_page)
 
     def test_prune_after_90_days(self):

@@ -537,7 +537,7 @@ class BotApiStrategyTests(TestCase):
     def test_documented(self):
         docs = self.client.get("/api/bot/v1/docs", HTTP_AUTHORIZATION=f"Bearer {self.raw}").content.decode()
         self.assertIn("GET  trading/strategies", docs)
-        self.assertIn('"strategy": "eng"}', docs)
+        self.assertIn('"strategy": "eng"', docs)
 
 
 # ---------------------------------------------------------------------------

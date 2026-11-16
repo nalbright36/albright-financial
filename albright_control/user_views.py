@@ -28,8 +28,10 @@ from .access import audit, superuser_required
 
 def _rows():
     from django.db.models import Count, Q
-    users = get_user_model().objects.order_by("username").annotate(
-        active_keys=Count("bot_tokens", filter=Q(bot_tokens__revoked_at__isnull=True)))
+    from django.utils import timezone
+    live = Q(bot_tokens__revoked_at__isnull=True) & (Q(bot_tokens__expires_at__isnull=True) |
+                                                     Q(bot_tokens__expires_at__gt=timezone.now()))
+    users = get_user_model().objects.order_by("username").annotate(active_keys=Count("bot_tokens", filter=live))
     prefs = {p.user_id: p for p in UserPreference.objects.filter(user__in=users)}
     apps = [app for app in apps_registry.APPS if not app.superuser_only]
     rows = []
@@ -102,8 +104,17 @@ def users(request):
               f"{user.username}: {', '.join(before) or 'none'} -> {', '.join(pref.allowed_apps) or 'none'}")
         messages.success(request, f"Saved {user.username}'s access.")
         return redirect("albright_control:users")
+    if action == "revoke_keys":
+        # "Revoke all keys": ends every one of the person's keys for good (Can create API keys is left as it is).
+        from albright_bot_api.models import BotToken
+        user = get_object_or_404(get_user_model(), pk=request.POST.get("user_id"))
+        from django.utils import timezone
+        count = BotToken.objects.filter(owner=user, revoked_at__isnull=True).update(revoked_at=timezone.now())
+        audit(request, "user_keys_revoked", f"{user.username}: revoked all API keys ({count})")
+        messages.success(request, f"Revoked {count} of {user.username}'s API key{'s' if count != 1 else ''}.")
+        return redirect("albright_control:users")
     if action == "api_keys":
-        # "Allow API keys": off stops the person's keys working at once (they're kept, and work again if it's
+        # "Can create API keys": off stops the person's keys working at once (they're kept, and work again if it's
         # turned back on); revoke them from Admin > Bot API to end them for good.
         user = get_object_or_404(get_user_model(), pk=request.POST.get("user_id"))
         if user.is_superuser:
@@ -113,7 +124,8 @@ def users(request):
         pref.api_keys_allowed = request.POST.get("allowed") == "1"
         pref.save()
         audit(request, "user_api_keys", f"{user.username}: API keys {'allowed' if pref.api_keys_allowed else 'not allowed'}")
-        messages.success(request, f"{user.username} {'can now' if pref.api_keys_allowed else 'can no longer'} use API keys.")
+        messages.success(request, f"{user.username} {'can now' if pref.api_keys_allowed else 'can no longer'} use API keys"
+                                  f"{'' if pref.api_keys_allowed else ' - their keys are disabled until you turn it back on'}.")
         return redirect("albright_control:users")
     if action == "invite":
         invite_form = InviteForm(request.POST)

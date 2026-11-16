@@ -1,0 +1,151 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}API keys · {% endblock %}
+{% block app_head %}<link rel="stylesheet" href="{% static_version 'labs/api_keys.css' %}">{% endblock %}
+{% block content %}
+{% comment %}
+My account > API keys / Connect your AI (albright_labs.api_key_views). In the labs namespace, so it has My account's
+neutral look. Without "Can create API keys": just the message. Otherwise, in order: the new key (shown once), the
+Connect your AI tabs (connect/_<tab>.html, one per AI - steps checked against each company's docs), making a key
+(name, Full access / Read only / Custom, expiry), the active keys, and their recent requests.
+{% endcomment %}
+<div class="container ak-page" style="padding-top: 32px; padding-bottom: 48px;">
+    <a href="{% url 'labs:account' %}" style="font-size: 0.875rem;">&larr; My account</a>
+    <h1 style="margin: 8px 0 6px;">API keys</h1>
+    <p style="margin: 0 0 20px; color: var(--text-secondary);">Connect an AI assistant (like ChatGPT, Claude, Grok or Gemini) to your account, so it can read and update your apps for you. It sees only what you can see, and what it adds is yours.</p>
+
+    {% if not allowed %}
+    <section class="card" id="api-access-off">
+        <p style="margin: 0;">API access isn't turned on for your account. Ask Nathan to enable it.</p>
+    </section>
+    {% else %}
+
+    {% if new_key %}
+    <section class="card ak-newkey" id="new-key" aria-labelledby="new-key-title">
+        <div class="card__header"><span class="card__label" id="new-key-title">Your new key{% if new_token %}: {{ new_token.name }}{% endif %}</span><span class="badge warn">shown once</span></div>
+        <p class="ak-warn" style="margin: 0;">Copy this key now. It won't be shown again - if you lose it, revoke it and make a new one.</p>
+        <code class="ak-newkey__value" id="new-key-value">{{ new_key }}</code>
+        <button type="button" class="btn btn-primary js-copy" data-copy-target="new-key-value">Copy key</button>
+        <p class="ak-muted" style="margin: 12px 0 0;">Put it only in your AI's secret or connection settings - never in a chat message. Next: <a href="#connect">connect your AI</a> below.</p>
+    </section>
+    {% endif %}
+
+    <section class="card" id="connect" aria-labelledby="connect-title">
+        <div class="card__header"><span class="card__label" id="connect-title">Connect your AI</span></div>
+        {% if new_token %}
+        <p class="ak-note" id="connect-new-key"><strong>{{ new_token.name }}</strong> can: {{ new_summary }}. Use it on the <strong>Other / any AI</strong> tab (or with Claude Code). ChatGPT, Claude, Grok and Gemini don't need it - they ask you to approve them here instead.</p>
+        {% else %}
+        <p class="ak-muted" style="margin: 0;">Pick your AI and follow the steps. ChatGPT, Claude, Grok and Gemini connect by sending you to a page here to approve them - no key to copy.</p>
+        {% endif %}
+        <div class="ak-tabs" role="tablist" aria-label="Your AI" hidden>
+            {% for key, label in tabs %}<button type="button" role="tab" class="ak-tab" id="tab-{{ key }}" data-tab="{{ key }}" aria-controls="panel-{{ key }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"{% if not forloop.first %} tabindex="-1"{% endif %}>{{ label }}</button>{% endfor %}
+        </div>
+        {% for key, label in tabs %}
+        <div class="ak-panel" role="tabpanel" id="panel-{{ key }}" aria-labelledby="tab-{{ key }}" tabindex="0">
+            {% with "albright_labs/connect/_"|add:key|add:".html" as partial %}{% include partial with tab=key %}{% endwith %}
+            {% include "albright_labs/connect/_instructions.html" with tab=key %}
+        </div>
+        {% endfor %}
+    </section>
+
+    <form method="post" class="card" id="key-form" style="margin-top: 20px;" novalidate>{% csrf_token %}
+        <div class="card__header"><span class="card__label">Make a key</span><span class="ak-muted">for the Other tab, Claude Code or your own scripts</span></div>
+        {% for e in form.non_field_errors %}<span class="ak-error">{{ e }}</span>{% endfor %}
+        <div class="ak-steps">
+            <div>
+                <label class="ak-step__label" for="{{ form.name.id_for_label }}"><span class="ak-step__num">1</span>Name</label>
+                {{ form.name }}
+                {% for e in form.name.errors %}<span class="ak-error">{{ e }}</span>{% endfor %}
+            </div>
+            <fieldset style="border: 0; padding: 0; margin: 0;">
+                <legend class="ak-step__label"><span class="ak-step__num">2</span>Access</legend>
+                {% include "albright_labs/connect/_access.html" with prefix="new" current=picked_access selected=picked %}
+                {% for e in form.scopes.errors %}<span class="ak-error">{{ e }}</span>{% endfor %}
+            </fieldset>
+            <div>
+                <label class="ak-step__label" for="key-expiry"><span class="ak-step__num">3</span>Expires <span style="font-weight: 400;" class="ak-muted">(optional)</span></label>
+                <select name="expiry" id="key-expiry" class="ledger-input" style="max-width: 220px;">
+                    {% for value, label in expiry_choices %}<option value="{{ value }}"{% if value == picked_expiry %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                {# A hidden username field, so password managers don't fill the key's name with the username. #}
+                <input type="text" name="username" value="{{ user.get_username }}" autocomplete="username" hidden aria-hidden="true" tabindex="-1">
+                <label class="ak-step__label" for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                {{ form.password }}
+                {% for e in form.password.errors %}<span class="ak-error">{{ e }}</span>{% endfor %}
+            </div>
+            <div><button type="submit" class="btn btn-primary">Create key</button></div>
+        </div>
+    </form>
+
+    <section class="card" style="margin-top: 20px; padding: 0;" id="my-keys">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Your keys</span></div>
+        {% if tokens %}
+        <div class="table-scroll">
+        <table class="holdings" id="my-keys-table">
+            <thead><tr><th>Name</th><th>Access</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead>
+            <tbody>
+            {% for t in tokens %}
+            <tr data-key="{{ t.pk }}">
+                <td><strong>{{ t.name }}</strong><div style="font-size: 0.75rem; color: var(--text-secondary);"><code>{{ t.display_prefix }}…</code></div></td>
+                <td style="font-size: 0.8125rem;">{{ t.summary }}{% for label in t.unusable %}<div><span class="badge warn" title="You no longer have access to this app">doesn't work</span> {{ label }}</div>{% endfor %}</td>
+                <td style="font-size: 0.8125rem; white-space: nowrap;">{{ t.created_at|date:"M j, Y" }}</td>
+                <td style="font-size: 0.8125rem;" class="ak-last-used">{% if t.last_used_at %}<time datetime="{{ t.last_used_at|date:'c' }}" title="{{ t.last_used_at|date:'M j, Y g:i A' }}">{{ t.last_used_at|timesince }} ago</time>{% else %}never{% endif %}</td>
+                <td style="font-size: 0.8125rem; white-space: nowrap;">{% if t.expires_at %}{% if t.is_expired %}<span class="badge loss">expired</span>{% else %}{{ t.expires_at|date:"M j, Y" }}{% endif %}{% else %}never{% endif %}</td>
+                <td>
+                    <div class="ak-actions">
+                        <details id="rename-key-{{ t.pk }}">
+                            <summary class="btn btn-secondary btn-sm">Rename</summary>
+                            <form method="post" action="{% url 'labs:api_key_rename' t.pk %}">{% csrf_token %}
+                                <input type="text" name="name" value="{{ t.name }}" maxlength="100" class="ledger-input" aria-label="New name for {{ t.name }}" autocomplete="off" required>
+                                <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 6px;">Save name</button>
+                            </form>
+                        </details>
+                        <details id="edit-key-{{ t.pk }}">
+                            <summary class="btn btn-secondary btn-sm">Edit access</summary>
+                            <form method="post" action="{% url 'labs:api_key_scopes' t.pk %}">{% csrf_token %}
+                                {% include "albright_labs/connect/_access.html" with prefix=t.pk current=t.access selected=t.scopes compact=True %}
+                                <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to change {{ t.name }}'s access" autocomplete="current-password" required style="margin-top: 6px;">
+                                <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 6px;">Save access</button>
+                            </form>
+                        </details>
+                        <form method="post" action="{% url 'labs:api_key_rotate' t.pk %}" style="display: flex; gap: 4px; flex-wrap: wrap;"
+                              data-confirm="Rotate {{ t.name }}? The current key stops working immediately - your AI needs the new one.">{% csrf_token %}
+                            <input type="password" name="password" class="ledger-input" placeholder="Password" aria-label="Your password, to rotate {{ t.name }}" autocomplete="current-password" required style="max-width: 120px;">
+                            <button type="submit" class="btn btn-secondary btn-sm">Rotate</button></form>
+                        <form method="post" action="{% url 'labs:api_key_revoke' t.pk %}"
+                              data-confirm="Revoke {{ t.name }}? It stops working immediately and can't be undone.">{% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">Revoke</button></form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No keys yet.</p>{% endif %}
+    </section>
+
+    <section class="card" style="margin-top: 20px; padding: 0;" id="my-key-activity">
+        <div class="card__header" style="padding: var(--space-4) var(--space-5) 0;"><span class="card__label">Activity</span><span style="font-size: 0.75rem; color: var(--text-secondary);">your keys' last {{ activity_limit }} requests</span></div>
+        {% if logs %}
+        <div class="table-scroll">
+        <table class="holdings">
+            <thead><tr><th>When</th><th>Key</th><th>Request</th><th>Result</th></tr></thead>
+            <tbody>
+            {% for log in logs %}
+            <tr><td style="font-size: 0.8125rem; white-space: nowrap;">{{ log.created_at|date:"M j, g:i:s A" }}</td>
+                <td style="font-size: 0.8125rem;">{{ log.token_name|default:log.token.name }}</td>
+                <td style="font-size: 0.8125rem;"><code>{{ log.method }} {{ log.endpoint }}</code></td>
+                <td style="font-size: 0.8125rem;"><span class="badge {% if log.status < 300 %}gain{% elif log.status < 500 %}warn{% else %}loss{% endif %}">{{ log.status }}</span> {{ log.summary }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p style="padding: 0 var(--space-5) var(--space-4); color: var(--text-secondary);">No requests yet.</p>{% endif %}
+    </section>
+    {% endif %}
+</div>
+<script src="{% static_version 'labs/api_keys.js' %}" defer></script>
+{% endblock %}

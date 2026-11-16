@@ -1,0 +1,47 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}Connect an AI · {% endblock %}
+{% block app_head %}<link rel="stylesheet" href="{% static_version 'labs/api_keys.css' %}">{% endblock %}
+{% block content %}
+{% comment %}
+The OAuth approval page (albright_bot_api.oauth_views.authorize) - an AI app (Claude, ChatGPT, Grok, Gemini...) sends
+the signed-in person here when they add this site as a connector. Approving makes a normal API key (named
+"<app> (connected)", shown in API keys) with Full access or Read only, and sends them back to the app. Shows where they
+go back to (the redirect's host), as the MCP spec asks. Without "Can create API keys": the message and Cancel only.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 620px;">
+    {% if problem %}
+    <h1 style="margin: 0 0 8px;">Can't connect</h1>
+    <section class="card"><p style="margin: 0;">{{ problem }}</p></section>
+    {% else %}
+    <h1 style="margin: 0 0 8px;">Connect {{ client.name }}?</h1>
+    <form method="post" class="card" id="approve-form">{% csrf_token %}
+        {% if not allowed %}
+        <p style="margin: 0 0 12px;">API access isn't turned on for your account. Ask Nathan to enable it.</p>
+        <button type="submit" name="decision" value="deny" class="btn btn-secondary">Cancel</button>
+        {% elif nothing %}
+        <p style="margin: 0 0 12px;">None of your apps can be used by an AI yet.</p>
+        <button type="submit" name="decision" value="deny" class="btn btn-secondary">Cancel</button>
+        {% else %}
+        <p style="margin: 0 0 12px;"><strong>{{ client.name }}</strong> wants to use your Albright Labs account as <strong>{{ user.get_username }}</strong>. It will see only what you can see, and what it adds will be yours.</p>
+        <fieldset style="border: 0; padding: 0; margin: 0 0 16px;">
+            <legend class="ak-step__label">What may it do?</legend>
+            <div class="ak-choices">
+                {% for value, label, help in choices %}
+                <label class="ak-choice" for="approve-{{ value }}">
+                    <input type="radio" name="access" value="{{ value }}" id="approve-{{ value }}"{% if forloop.first %} checked{% endif %}>
+                    <span><strong>{{ label }}</strong><span class="ak-muted">{{ help }}{% if value == "full" %} ({{ full }}){% endif %}</span></span>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+        <p class="ak-muted" style="margin: 0 0 16px;">After you approve, you'll go back to <strong>{{ redirect_host }}</strong>. You can change its access or disconnect it any time in <a href="{% url 'labs:api_keys' %}">API keys</a>.</p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="submit" name="decision" value="approve" class="btn btn-primary">Approve</button>
+            <button type="submit" name="decision" value="deny" class="btn btn-secondary">Cancel</button>
+        </div>
+        {% endif %}
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

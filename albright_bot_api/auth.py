@@ -2,7 +2,9 @@
 
   - HTTPS only when BOT_API_REQUIRE_HTTPS is on (default: whenever DEBUG
     is off, i.e. production) -> 403
-  - missing / wrong / revoked token -> 401
+  - missing / wrong / revoked / expired token -> 401
+  - the owner's "Can create API keys" turned off (Admin > Users) -> 403 "API access disabled" (the keys are kept and
+    work again when it's turned back on)
   - token without the endpoint's scope -> 403
   - more than RATE_LIMIT requests in the last minute for one token -> 429
 Every request - rejected ones too - is written to BotRequestLog. Only the
@@ -65,6 +67,37 @@ def _log(request, token, status, summary):
                                  summary=str(summary)[:300])
 
 
+def authenticate(request):
+    """The request's live token, or ApiError: not HTTPS (403), missing / wrong / revoked / expired (401 - the error
+    carries .token when there was one, so it's logged under its name), API access turned off for its owner (403)."""
+    if require_https() and not _is_https(request):
+        raise ApiError(403, "HTTPS is required.", "rejected: not HTTPS")
+    raw = _bearer(request)
+    found = BotToken.objects.select_related("owner").filter(token_hash=hash_token(raw)).first() if raw else None
+    if found is None:
+        raise ApiError(401, "Missing, wrong or revoked token.", "rejected: missing or wrong token")
+    if not found.is_active or found.is_expired:
+        expired = found.is_active
+        error = ApiError(401, "This key has expired." if expired else "Missing, wrong or revoked token.",
+                         "rejected: expired token" if expired else "rejected: revoked token")
+        error.token = found
+        raise error
+    if not scopes.keys_allowed(found.owner):
+        error = ApiError(403, "API access disabled", "rejected: API access disabled for the owner")
+        error.token = found
+        raise error
+    return found
+
+
+def error_response(request, exc, token=None):
+    """Logs an ApiError and answers it as JSON (401s say how to authenticate)."""
+    _log(request, getattr(exc, "token", token), exc.status, exc.summary)
+    response = JsonResponse({"error": exc.message, **exc.extra}, status=exc.status)
+    if exc.status == 401:
+        response["WWW-Authenticate"] = 'Bearer realm="albright-bot-api"'
+    return response
+
+
 def bot_endpoint(scope=None, methods=("GET",)):
     """Wraps an API view: fn(request, token, **kwargs) -> (data, status, summary). scope: one scope, or a tuple of
     scopes any one of which will do (the 403 names the first)."""
@@ -75,23 +108,9 @@ def bot_endpoint(scope=None, methods=("GET",)):
         def wrapper(request, **kwargs):
             token = None
             try:
-                if require_https() and not _is_https(request):
-                    raise ApiError(403, "HTTPS is required.", "rejected: not HTTPS")
-                raw = _bearer(request)
-                found = BotToken.objects.select_related("owner").filter(token_hash=hash_token(raw)).first() \
-                    if raw else None
-                if found is None:
-                    raise ApiError(401, "Missing, wrong or revoked token.", "rejected: missing or wrong token")
-                if not found.is_active:
-                    error = ApiError(401, "Missing, wrong or revoked token.", "rejected: revoked token")
-                    error.token = found   # logged under the revoked token's name
-                    raise error
-                token = found
+                token = authenticate(request)
                 if request.method not in methods:
                     raise ApiError(405, f"Method not allowed - use {' or '.join(methods)}.", f"rejected: {request.method}")
-                if not scopes.keys_allowed(token.owner):
-                    raise ApiError(403, "API keys are turned off for this token's account.",
-                                   "rejected: owner not allowed API keys")
                 held = [s for s in wanted if s in token.scopes]
                 if wanted and not held:
                     raise ApiError(403, f"This token doesn't have the {wanted[0]} scope.", f"rejected: needs {wanted[0]}",
@@ -107,12 +126,7 @@ def bot_endpoint(scope=None, methods=("GET",)):
                 with activity.acting(token.owner, token.name):    # what it changes shows "via <bot name>"
                     data, status, summary = view(request, token, **kwargs)
             except ApiError as exc:
-                log_token = getattr(exc, "token", token)
-                _log(request, log_token, exc.status, exc.summary)
-                response = JsonResponse({"error": exc.message, **exc.extra}, status=exc.status)
-                if exc.status == 401:
-                    response["WWW-Authenticate"] = 'Bearer realm="albright-bot-api"'
-                return response
+                return error_response(request, exc, token)
             BotToken.objects.filter(pk=token.pk).update(last_used_at=timezone.now())
             _log(request, token, status, summary)
             if isinstance(data, str):
