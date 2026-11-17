@@ -1,7 +1,8 @@
 /*
  * Eat out (albright_meals/eatout.html). Vanilla JS, progressive enhancement.
- *  - Changing a chip or the open-now toggle submits the GET form.
- *  - The "Find places" button still works without this file.
+ *  - Changing a chip, toggle or the sort submits the GET form; typed fields (craving, day / time) wait for
+ *    Enter or "Find places" - which also work without this file.
+ *  - "More filters" starts open on a wide screen (folded on a phone).
  *  - When weather follows the device, a rough GPS fix is posted to
  *    eat-out/location/ (the same PlannerSettings fields Planner weather uses).
  */
@@ -14,10 +15,17 @@
         form.addEventListener("change", function (event) {
             var target = event.target;
             if (!target || !form.contains(target)) return;
-            if (target.name === "other") return;
+            if (target.type === "text" || target.type === "time" || target.name === "day") return;
+            if (target.name === "when" && target.value === "at") {           // pick the day and time first
+                var time = document.getElementById("eo-time");
+                if (time) time.focus();
+                return;
+            }
             form.submit();
         });
     }
+    var more = document.getElementById("eo-more");
+    if (more && !more.open && window.matchMedia && window.matchMedia("(min-width: 801px)").matches) more.open = true;
 
     if (page.dataset.eoAuto !== "1" || !navigator.geolocation || !window.fetch) return;
     var deniedKey = "eo-geo-denied";

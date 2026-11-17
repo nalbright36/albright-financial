@@ -309,3 +309,63 @@ class RecipeNutritionLine(models.Model):
 
     def __str__(self):
         return self.ingredient
+
+
+# ---------------------------------------------------------------------------
+# Eat out (eatout.py): where the household has been, presets, the last-used filters
+# ---------------------------------------------------------------------------
+
+class RestaurantVisit(_Authored):
+    """"We went here": the household's rating of a place to eat, kept in its space (seen by whoever sees the space,
+    like its recipes). One row per place and space - going again updates it. Only the provider's place id, its
+    name and our own data are kept - never the provider's response."""
+    WONT_EAT, NOT_FOR_US, NEEDS_TWEAKS, WILL_EAT, FAVORITE, STAPLE = 1, 2, 3, 4, 5, 6
+    LEVELS = [(WONT_EAT, "Won't eat again"), (NOT_FOR_US, "Not for us"), (NEEDS_TWEAKS, "Needs tweaks"),
+              (WILL_EAT, "Will eat again"), (FAVORITE, "Favorite"), (STAPLE, "Staple")]
+    space = _space_fk()
+    place_id = models.CharField(max_length=64)          # "osm:node/123"
+    name = models.CharField(max_length=120)
+    level = models.PositiveSmallIntegerField(choices=LEVELS, validators=[MinValueValidator(1), MaxValueValidator(6)])
+    note = models.CharField(max_length=500, blank=True)
+    visited_on = models.DateField()
+    created_by = _user_fk("meal_restaurant_visits")
+
+    class Meta:
+        ordering = ["-visited_on", "-pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["space", "place_id"], name="meals_one_visit_per_place"),
+            models.CheckConstraint(condition=models.Q(level__gte=1, level__lte=6), name="meals_visit_level_1_to_6"),
+        ]
+
+    def __str__(self):
+        return f"{self.name}: {self.get_level_display()}"
+
+    @property
+    def emoji(self):
+        return RecipeRating.INFO[self.level][0]
+
+    @property
+    def color(self):
+        return RecipeRating.INFO[self.level][1]
+
+
+class EatOutPreset(models.Model):
+    """A named set of Eat out filters ("Date night") - a chip at the top of the page. One person's own."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="eat_out_presets")
+    name = models.CharField(max_length=40)
+    query = models.TextField(max_length=2000)            # eatout.query_string(filters) - no place
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "pk"]
+        constraints = [models.UniqueConstraint(fields=["user", "name"], name="meals_one_preset_name_per_user")]
+
+    def __str__(self):
+        return self.name
+
+
+class EatOutSettings(models.Model):
+    """The filters someone last searched with - Eat out opens with them."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="eat_out_settings")
+    last_query = models.TextField(max_length=2000, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

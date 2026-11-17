@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import eatout_views, views
 
 app_name = "albright_meals"
 
@@ -20,8 +20,12 @@ urlpatterns = [
     path("groceries/<int:pk>/merge/", views.grocery_merge, name="grocery_merge"),
     path("groceries/clear-checked/", views.grocery_clear, name="grocery_clear"),
     path("groceries/from-week/", views.grocery_from_week, name="grocery_from_week"),
-    path("eat-out/", views.eat_out, name="eat_out"),
-    path("eat-out/location/", views.eat_out_location, name="eat_out_location"),
+    path("eat-out/", eatout_views.eat_out, name="eat_out"),
+    path("eat-out/location/", eatout_views.eat_out_location, name="eat_out_location"),
+    path("eat-out/visit/", eatout_views.eat_out_visit, name="eat_out_visit"),
+    path("eat-out/presets/", eatout_views.eat_out_preset, name="eat_out_preset"),
+    path("eat-out/presets/<int:pk>/delete/", eatout_views.eat_out_preset_delete, name="eat_out_preset_delete"),
+    path("eat-out/leave/", eatout_views.eat_out_leave, name="eat_out_leave"),
     path("ideas/", views.ideas, name="ideas"),
     path("ideas/<int:pk>/plan/", views.idea_plan, name="idea_plan"),
     path("ideas/<int:pk>/decline/", views.idea_decline, name="idea_decline"),

@@ -4,12 +4,13 @@
 {% block app_head %}<link rel="stylesheet" href="{% static_version 'meals/eatout.css' %}">{% endblock %}
 {% block content %}
 {% comment %}
-Eat out (idea #78, layout F1): a short GET questionnaire on the left (stacked
-on a phone) and a ranked shortlist on the right. Works without JavaScript;
-eatout.js auto-submits chips and posts a rough GPS fix the same way Planner
-weather does. Save to try is deferred (idea #21).
+Eat out (eatout_views.eat_out, eatout.py): presets as chips, the place to search around, a GET filter form (Type of
+place, craving, distance, when; "More filters" folded on a phone) and the ranked list - each card with why it matched,
+the household's rating and "We went here". Works without JavaScript; eatout.js submits on a chip change, opens More
+filters on a wide screen and posts a rough GPS fix the way Planner weather does. External links go through
+outbound_href (eatout_views._card).
 {% endcomment %}
-<div class="container meals-page eo-page eo eo--wizard"{% if weather_auto %} data-eo-auto="1" data-eo-location-url="{{ location_url }}"{% endif %}>
+<div class="container meals-page eo-page eo"{% if weather_auto %} data-eo-auto="1" data-eo-location-url="{{ location_url }}"{% endif %}>
 {% csrf_token %}
 {% include "albright_labs/_space_switch.html" %}
     {% include "albright_meals/_notices.html" %}
@@ -17,9 +18,13 @@ weather does. Save to try is deferred (idea #21).
     <div class="eo-head">
       <div>
         <h1 class="eo-head__title">Eat out</h1>
-        <p class="eo-head__sub">Answer a few questions. We’ll rank a short list.</p>
+        <p class="eo-head__sub">Strict filters, ranked by fit, distance and what you thought last time.</p>
       </div>
     </div>
+
+    {% if presets %}<nav class="eo-presets" aria-label="Saved filters" id="eo-presets">
+      {% for row in presets %}<span class="eo-preset{% if row.on %} is-on{% endif %}"><a href="?{{ row.preset.query }}{% if loc_qs %}&amp;{{ loc_qs }}{% endif %}"{% if row.on %} aria-current="true"{% endif %}>{{ row.preset.name }}</a><form method="post" action="{% url 'albright_meals:eat_out_preset_delete' row.preset.pk %}" data-confirm="Delete the preset “{{ row.preset.name }}”?">{% csrf_token %}<input type="hidden" name="next" value="{{ qs }}"><button type="submit" class="eo-preset__x" aria-label="Delete the preset {{ row.preset.name }}">&times;</button></form></span>{% endfor %}
+    </nav>{% endif %}
 
     <div class="card eo-loc">
       <span class="eo-loc__pin"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.4c-2.5 0-4.5 1.95-4.5 4.4 0 3.3 4.5 8.5 4.5 8.5s4.5-5.2 4.5-8.5c0-2.45-2-4.4-4.5-4.4z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="5.7" r="1.5" fill="currentColor"/></svg></span>
@@ -30,15 +35,13 @@ weather does. Save to try is deferred (idea #21).
       <details class="eo-loc__change"{% if loc_error %} open{% endif %}>
         <summary class="btn btn-secondary btn-sm">Change</summary>
         <form method="get" action="{% url 'albright_meals:eat_out' %}" class="eo-loc__form">
-          {% for craving in filters.cravings %}<input type="hidden" name="craving" value="{{ craving }}">{% endfor %}
-          {% if filters.other %}<input type="hidden" name="other" value="{{ filters.other }}">{% endif %}
-          {% if filters.budget %}<input type="hidden" name="budget" value="{{ filters.budget }}">{% endif %}
-          <input type="hidden" name="far" value="{{ filters.far }}">
-          <input type="hidden" name="mode" value="{{ filters.mode }}">
-          <input type="hidden" name="open" value="{% if filters.open_now %}1{% else %}0{% endif %}">
+          <input type="hidden" name="f" value="1">
+          {% for t in filters.types %}<input type="hidden" name="type" value="{{ t }}">{% endfor %}
+          <input type="hidden" name="mi" value="{{ filters.miles }}">
+          <input type="hidden" name="when" value="{{ filters.when }}">
           <div class="field">
-            <label for="eo-q">City or address</label>
-            <input type="text" name="q" id="eo-q" class="ledger-input" value="{{ request.GET.q|default:'' }}" placeholder="City, or lat, lon" maxlength="200" autocomplete="off">
+            <label for="eo-q">City, address or zip</label>
+            <input type="text" name="q" id="eo-q" class="ledger-input" value="{{ request.GET.q|default:'' }}" placeholder="City, zip, or lat, lon" maxlength="200" autocomplete="off">
           </div>
           <div class="eo-loc__actions">
             <button type="submit" class="btn btn-primary btn-sm">Use this place</button>
@@ -51,99 +54,187 @@ weather does. Save to try is deferred (idea #21).
     </div>
 
     <div class="eo-split">
-
-    <form method="get" action="{% url 'albright_meals:eat_out' %}" class="card eo-wizard-card" id="eo-form">
+    <div>
+    <form method="get" action="{% url 'albright_meals:eat_out' %}" class="card eo-filters" id="eo-form">
+      <input type="hidden" name="f" value="1">
       {% if loc and loc.source == 'typed' %}
-      <input type="hidden" name="lat" value="{{ loc.lat }}">
-      <input type="hidden" name="lon" value="{{ loc.lon }}">
-      <input type="hidden" name="label" value="{{ loc.label }}">
-      {% elif loc and loc.source == 'current' or loc and loc.source == 'home' %}
-      <input type="hidden" name="src" value="{{ loc.source }}">
-      {% endif %}
-      <div class="eo-steps" aria-label="Progress">{% for done in steps %}<span{% if done %} class="is-done"{% endif %}></span>{% endfor %}</div>
-      <p class="eo-head__sub" style="margin-bottom: var(--space-4);">A few quick taps, then a short list.</p>
-      <div class="eo-q">
-        <span class="eo-q__label" id="eo-craving-label">What are you craving?</span>
-        <div class="eo-chips" role="group" aria-labelledby="eo-craving-label">
-          {% for key, label in cravings %}
-          <label class="eo-chip"><input type="checkbox" name="craving" value="{{ key }}"{% if key in filters.cravings %} checked{% endif %}> {{ label }}</label>
-          {% endfor %}
+      <input type="hidden" name="lat" value="{{ loc.lat }}"><input type="hidden" name="lon" value="{{ loc.lon }}"><input type="hidden" name="label" value="{{ loc.label }}">
+      {% elif loc %}<input type="hidden" name="src" value="{{ loc.source }}">{% endif %}
+
+      <fieldset class="eo-q" aria-describedby="eo-type-help">
+        <legend class="eo-q__label">Type of place</legend>
+        <div class="eo-chips">{% for key, label, help in types %}
+          <label class="eo-chip"{% if help %} title="{{ help }}"{% endif %}><input type="checkbox" name="type" value="{{ key }}"{% if key in filters.types %} checked{% endif %}> {{ label }}</label>{% endfor %}
         </div>
-        <label for="eo-other" class="visually-hidden">Or type a cuisine</label>
-        <input type="text" name="other" id="eo-other" class="ledger-input eo-other" value="{{ filters.other }}" placeholder="Or type a cuisine" maxlength="80" autocomplete="off">
-        {% if field_errors.craving %}<p class="field-error" id="eo-craving-error">{{ field_errors.craving }}</p>{% endif %}
-        {% if field_errors.other %}<p class="field-error" id="eo-other-error">{{ field_errors.other }}</p>{% endif %}
-      </div>
+        <p class="eo-help" id="eo-type-help">Sit-down: a server comes to your table. Fast casual: order at the counter.</p>
+        {% if field_errors.type %}<p class="field-error" id="eo-type-error">{{ field_errors.type }}</p>{% endif %}
+      </fieldset>
+
       <div class="eo-q">
-        <span class="eo-q__label" id="eo-budget-label">Budget</span>
-        <div class="eo-chips" role="group" aria-labelledby="eo-budget-label">
-          {% for key, label in budgets %}
-          <label class="eo-chip"><input type="radio" name="budget" value="{{ key }}"{% if filters.budget == key %} checked{% endif %}> {{ label }}</label>
-          {% endfor %}
+        <label class="eo-q__label" for="eo-crave">Craving</label>
+        <input type="text" name="crave" id="eo-crave" class="ledger-input eo-other" value="{{ filters.craving }}" placeholder="Ramen, oysters, rooftop…" maxlength="80" autocomplete="off">
+        {% if field_errors.crave %}<p class="field-error" id="eo-crave-error">{{ field_errors.crave }}</p>{% endif %}
+      </div>
+
+      <fieldset class="eo-q">
+        <legend class="eo-q__label">Distance</legend>
+        <div class="eo-chips">{% for m in miles %}
+          <label class="eo-chip"><input type="radio" name="mi" value="{{ m }}"{% if filters.miles == m %} checked{% endif %}> {{ m }} mi</label>{% endfor %}
         </div>
-        {% if field_errors.budget %}<p class="field-error" id="eo-budget-error">{{ field_errors.budget }}</p>{% endif %}
-      </div>
-      <div class="eo-q">
-        <span class="eo-q__label" id="eo-far-label">How far?</span>
-        <div class="eo-chips" role="group" aria-labelledby="eo-far-label">
-          {% for key, label in distances %}
-          <label class="eo-chip"><input type="radio" name="far" value="{{ key }}"{% if filters.far == key %} checked{% endif %}> {{ label }}</label>
-          {% endfor %}
+        {% if field_errors.mi %}<p class="field-error" id="eo-mi-error">{{ field_errors.mi }}</p>{% endif %}
+      </fieldset>
+
+      <fieldset class="eo-q eo-when">
+        <legend class="eo-q__label">When</legend>
+        <div class="eo-chips">{% for key, label in whens %}
+          <label class="eo-chip"><input type="radio" name="when" value="{{ key }}"{% if filters.when == key %} checked{% endif %}> {{ label }}</label>{% endfor %}
         </div>
-        {% if field_errors.far %}<p class="field-error" id="eo-far-error">{{ field_errors.far }}</p>{% endif %}
-      </div>
-      <div class="eo-q">
-        <span class="eo-q__label" id="eo-mode-label">Dine-in or takeout?</span>
-        <div class="eo-chips" role="group" aria-labelledby="eo-mode-label">
-          {% for key, label in modes %}
-          <label class="eo-chip"><input type="radio" name="mode" value="{{ key }}"{% if filters.mode == key %} checked{% endif %}> {{ label }}</label>
-          {% endfor %}
+        <div class="eo-when__at" data-eo-at>
+          <label for="eo-day" class="visually-hidden">Day</label>
+          <select name="day" id="eo-day" class="ledger-input eo-select">{% for i, name in days %}<option value="{{ i }}"{% if filters.at_day == i %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+          <label for="eo-time" class="visually-hidden">Time</label>
+          <input type="time" name="time" id="eo-time" class="ledger-input eo-select" value="{{ filters.at_time }}">
         </div>
-        {% if field_errors.mode %}<p class="field-error" id="eo-mode-error">{{ field_errors.mode }}</p>{% endif %}
-      </div>
-      <div class="eo-q">
-        <input type="hidden" name="open" value="0">
-        <label class="eo-toggle"><input type="checkbox" name="open" value="1"{% if filters.open_now %} checked{% endif %}><span class="eo-toggle__box" aria-hidden="true"></span> Open now</label>
-      </div>
+        <p class="eo-help">Checked against each place's hours, in its own time zone.</p>
+        {% if field_errors.when %}<p class="field-error" id="eo-when-error">{{ field_errors.when }}</p>{% endif %}
+      </fieldset>
+
+      <details class="eo-more" id="eo-more"{% if more_open %} open{% endif %}>
+        <summary class="eo-more__summary">More filters</summary>
+
+        <fieldset class="eo-q">
+          <legend class="eo-q__label">Cuisine</legend>
+          <div class="eo-chips"><a href="?{{ any_cuisine_qs }}" class="eo-chip eo-chip--any{% if not filters.cuisines %} is-on{% endif %}" data-eo-any="cuisine">Any</a>{% for key, label in cuisines %}
+            <label class="eo-chip"><input type="checkbox" name="cuisine" value="{{ key }}"{% if key in filters.cuisines %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </div>
+          {% if field_errors.cuisine %}<p class="field-error" id="eo-cuisine-error">{{ field_errors.cuisine }}</p>{% endif %}
+        </fieldset>
+
+        <fieldset class="eo-q">
+          <legend class="eo-q__label">Price</legend>
+          <div class="eo-chips">{% for key, label in prices %}
+            <label class="eo-chip"><input type="checkbox" name="price" value="{{ key }}"{% if key in filters.prices %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </div>
+          {% if field_errors.price %}<p class="field-error" id="eo-price-error">{{ field_errors.price }}</p>{% endif %}
+        </fieldset>
+
+        <fieldset class="eo-q">
+          <legend class="eo-q__label">Meal</legend>
+          <div class="eo-chips"><label class="eo-chip"><input type="radio" name="meal" value=""{% if not filters.meal %} checked{% endif %}> Any</label>{% for key, label in meals %}
+            <label class="eo-chip"><input type="radio" name="meal" value="{{ key }}"{% if filters.meal == key %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </div>
+          <p class="eo-help">Late night: open after 10 PM.</p>
+        </fieldset>
+
+        <fieldset class="eo-q">
+          <legend class="eo-q__label">Features</legend>
+          <div class="eo-chips">{% for key, label in features %}
+            <label class="eo-chip"><input type="checkbox" name="feat" value="{{ key }}"{% if key in filters.features %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </div>
+          {% if field_errors.feat %}<p class="field-error" id="eo-feat-error">{{ field_errors.feat }}</p>{% endif %}
+        </fieldset>
+
+        <fieldset class="eo-q">
+          <legend class="eo-q__label">Service</legend>
+          <div class="eo-chips">{% for key, label in services %}
+            <label class="eo-chip"><input type="checkbox" name="svc" value="{{ key }}"{% if key in filters.services %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </div>
+        </fieldset>
+
+        <fieldset class="eo-q">
+          <legend class="eo-q__label">Been there?</legend>
+          <div class="eo-chips">{% for key, label in seens %}
+            <label class="eo-chip"><input type="radio" name="seen" value="{{ key }}"{% if filters.seen == key %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </div>
+          <p class="eo-help">Our favorites: rated Will eat again, Favorite or Staple.</p>
+        </fieldset>
+
+        <div class="eo-q">
+          <input type="hidden" name="nochain" value="0">
+          <label class="eo-toggle"><input type="checkbox" name="nochain" value="1"{% if filters.no_chains %} checked{% endif %}><span class="eo-toggle__box" aria-hidden="true"></span> Exclude chains (local spots only)</label>
+          <input type="hidden" name="unknown" value="0">
+          <label class="eo-toggle"><input type="checkbox" name="unknown" value="1"{% if filters.include_unknown %} checked{% endif %}><span class="eo-toggle__box" aria-hidden="true"></span> Include places with unknown info</label>
+          <p class="eo-help">Off: a place has to be known to match every filter you picked (OpenStreetMap often lacks hours, prices and features).</p>
+        </div>
+
+        <div class="eo-q">
+          <label class="eo-q__label" for="eo-sort">Sort by</label>
+          <select name="sort" id="eo-sort" class="ledger-input eo-select">{% for key, label in sorts %}<option value="{{ key }}"{% if filters.sort == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          <p class="eo-help">Rating sorts by your household's own ratings - OpenStreetMap has no star ratings or review counts.</p>
+        </div>
+      </details>
+
       <button type="submit" class="btn btn-primary eo-find">Find places</button>
     </form>
+
+    <details class="card eo-save" id="eo-save">
+      <summary class="btn btn-secondary btn-sm">Save these filters</summary>
+      <form method="post" action="{% url 'albright_meals:eat_out_preset' %}" class="eo-save__form">{% csrf_token %}
+        <input type="hidden" name="query" value="{{ preset_query }}"><input type="hidden" name="next" value="{{ qs }}">
+        <label for="eo-preset-name">Name</label>
+        <input type="text" name="name" id="eo-preset-name" class="ledger-input" maxlength="40" placeholder="Date night, Quick lunch…" required>
+        <button type="submit" class="btn btn-primary btn-sm">Save preset</button>
+      </form>
+    </details>
+    </div>
 
     <div>
       <div class="eo-list-head">
         <div>
-          <h2>{% if places %}{{ places|length }} place{{ places|length|pluralize }}, ranked{% elif offline %}Places unavailable{% elif loc %}No matches{% else %}Set a place to begin{% endif %}</h2>
+          <h2 id="eo-results-h">{% if cards %}{{ cards|length }} place{{ cards|length|pluralize }}{% elif result.offline %}Places unavailable{% elif loc %}No matches{% else %}Set a place to begin{% endif %}</h2>
           <p>{% if loc %}{{ summary }}{% else %}Current location, Home, or a city you type.{% endif %}</p>
         </div>
-        {% if places %}<a href="?{{ pick_qs }}#eo-pick" class="btn btn-primary">{% if pick %}Pick again{% else %}Pick for me{% endif %}</a>{% endif %}
+        {% if cards %}<a href="?{{ pick_qs }}#eo-pick" class="btn btn-primary" id="eo-pick-btn">{% if pick %}Pick again{% else %}Pick for us{% endif %}</a>{% endif %}
       </div>
-      {% if budget_note %}<p class="eo-note">Prices aren’t listed on these places, so budget isn’t used to rank them yet.</p>{% endif %}
-      {% if offline %}<p class="eo-note eo-note--warn">{{ offline_message }}</p>{% endif %}
-      {% if empty_message and not offline %}<p class="eo-note">{{ empty_message }}</p>{% endif %}
+      {% if result.hidden %}<p class="eo-note" id="eo-hidden">{{ result.hidden }} place{{ result.hidden|pluralize }} hidden - you rated {{ result.hidden|pluralize:"it,them" }} Won't eat again or Not for us.</p>{% endif %}
+      {% if result.offline %}<p class="eo-note eo-note--warn">{{ result.offline_message }}</p>{% endif %}
+      {% if result.empty_message and not result.offline %}<div class="eo-note eo-empty" id="eo-empty">
+        <p><strong>{{ result.empty_message }}</strong>{% if result.total %} {{ result.total }} place{{ result.total|pluralize }} nearby didn't fit.{% endif %}</p>
+        {% if result.blockers %}<ul class="eo-blockers">{% for b in result.blockers %}{% if b.count %}<li>{{ b.label }}: ruled out {{ b.count }}</li>{% endif %}{% endfor %}</ul>
+        <div class="eo-relax">{% for b in result.blockers %}<a href="?{{ b.relax_qs }}" class="btn btn-secondary btn-sm" data-relax="{{ b.key }}">{{ b.relax_label }}</a>{% endfor %}</div>{% endif %}
+      </div>{% endif %}
       {% if not loc %}<p class="eo-note">Add a place to see what’s nearby. Type a city, or allow current location — the same one Planner weather uses.</p>{% endif %}
+
       <div class="eo-list">
-        {% for place in places %}
-        <article class="card eo-place{% if pick == forloop.counter %} is-pick{% endif %}"{% if pick == forloop.counter %} id="eo-pick"{% endif %}>
-          <span class="eo-place__rank">{{ forloop.counter }}</span>
-          <div>
-            <h3 class="eo-place__name">{{ place.name }}</h3>
-            <p class="eo-place__meta">{% if place.cuisine_label %}{{ place.cuisine_label }}{% endif %}{% if place.cuisine_label and place.style %} · {% endif %}{% if place.style %}{{ place.style }}{% endif %}{% if place.address %}{% if place.cuisine_label or place.style %} · {% endif %}{{ place.address }}{% endif %}</p>
-            {% if place.why %}<p class="eo-place__why">{{ place.why }}</p>{% endif %}
+        {% for c in cards %}{% with p=c.p %}
+        <article class="card eo-place{% if pick == forloop.counter %} is-pick{% endif %}" id="{% if pick == forloop.counter %}eo-pick{% else %}{{ c.anchor }}{% endif %}">
+          <div class="eo-place__photo" aria-hidden="true">{% if p.photo %}<img src="{{ p.photo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<span>{{ p.name|first|upper }}</span>{% endif %}</div>
+          <div class="eo-place__body">
+            <h3 class="eo-place__name">{{ p.name }}{% if p.visit %} <span class="eo-badge eo-badge--{{ p.visit.color }}" title="Your household: {{ p.visit.get_level_display }}{% if p.visit.note %} - {{ p.visit.note }}{% endif %}">{{ p.visit.emoji }} {{ p.visit.get_level_display }}</span>{% endif %}</h3>
+            <p class="eo-place__meta">{{ p.kind_label }}{% if p.cuisine_label %} · {{ p.cuisine_label }}{% endif %}{% if c.price %} · {{ c.price }}{% endif %}{% if p.address %} · {{ p.address }}{% endif %}</p>
             <div class="eo-place__stats">
-              <span class="eo-stat">{{ place.distance_label }}</span>
-              <span class="eo-stat{% if place.open_state == 'open' %} eo-stat--open{% elif place.open_state == 'closed' %} eo-stat--closed{% endif %}">{{ place.hours_label }}</span>
+              {% if p.rating %}<span class="eo-stat">{{ p.rating }} ({{ p.review_count }} reviews)</span>{% endif %}
+              <span class="eo-stat">{{ p.distance_label }}</span>
+              <span class="eo-stat{% if p.open_state == 'open' %} eo-stat--open{% elif p.open_state == 'closed' %} eo-stat--closed{% endif %}">{{ p.hours_label }}</span>
             </div>
-          </div>
-          <div class="eo-place__actions">
-            <a href="{{ place.directions_url }}" class="btn {% if pick == forloop.counter %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" target="_blank" rel="noopener noreferrer">{% if pick == forloop.counter %}I’ll go here{% else %}Choose{% endif %}</a>
-            <a href="{{ place.map_url }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">Map</a>
-            {% if pick == forloop.counter and next_pick %}<a href="?{{ next_pick_qs }}#eo-pick" class="btn btn-secondary btn-sm">Not this — pick again</a>{% endif %}
+            {% if p.why %}<ul class="eo-why" aria-label="Why it matched">{% for w in p.why %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+            <div class="eo-place__actions">
+              {% if c.directions %}<a href="{{ c.directions }}" class="btn {% if pick == forloop.counter %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" target="_blank" rel="noopener noreferrer">Directions</a>{% endif %}
+              {% if p.phone_digits %}<a href="tel:{{ p.phone_digits }}" class="btn btn-secondary btn-sm">Call</a>{% endif %}
+              {% if c.website %}<a href="{{ c.website }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">Website</a>{% endif %}
+              {% if c.menu %}<a href="{{ c.menu }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">Menu</a>{% endif %}
+              {% if c.reserve %}<a href="{{ c.reserve }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">Reserve</a>{% endif %}
+            </div>
+            <details class="eo-went">
+              <summary class="btn btn-secondary btn-sm">{% if p.visit %}Rate again{% else %}We went here{% endif %}</summary>
+              <form method="post" action="{% url 'albright_meals:eat_out_visit' %}" class="eo-went__form">{% csrf_token %}
+                <input type="hidden" name="space" value="{{ request.space.pk }}"><input type="hidden" name="place_id" value="{{ p.place_id }}"><input type="hidden" name="name" value="{{ p.name }}"><input type="hidden" name="next" value="{{ qs }}">
+                <fieldset><legend class="eo-q__label">How was it?</legend>
+                  <div class="eo-chips">{% for l in levels %}<label class="eo-chip"><input type="radio" name="level" value="{{ l.value }}"{% if p.visit.level == l.value %} checked{% endif %} required> {{ l.emoji }} {{ l.label }}</label>{% endfor %}</div>
+                </fieldset>
+                <label for="eo-note-{{ forloop.counter }}">Note (optional)</label>
+                <input type="text" name="note" id="eo-note-{{ forloop.counter }}" class="ledger-input" maxlength="500" value="{{ p.visit.note|default:'' }}">
+                <label for="eo-on-{{ forloop.counter }}">When</label>
+                <input type="date" name="visited_on" id="eo-on-{{ forloop.counter }}" class="ledger-input eo-select" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+              </form>
+            </details>
           </div>
         </article>
-        {% endfor %}
+        {% endwith %}{% endfor %}
       </div>
-      {% if loc or places or offline %}<p class="eo-attr">{{ attribution }}</p>{% endif %}
+      {% if loc or cards or result.offline %}<p class="eo-attr">{{ result.attribution }}</p>{% endif %}
     </div>
-
     </div>
 </div>
 {% endblock %}

@@ -1,5 +1,5 @@
-/* Eat out (idea #78, layout F1). Loaded only on this page. Uses the Meals
-   accent and the site’s light / dark tokens. */
+/* Eat out (eatout.html, eatout_leave.html). Loaded only on these pages. Uses the Meals accent and the
+   site's light / dark tokens - no hard-coded colors except the toggle knob. */
 
 .eo {
   padding-top: 0;
@@ -147,6 +147,67 @@
   outline-offset: 2px;
 }
 
+.eo-chip--any { text-decoration: none; }
+.eo-chip--any.is-on {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-hover);
+}
+fieldset.eo-q { border: 0; padding: 0; min-width: 0; }
+.eo-help { margin: 6px 0 0; font-size: 0.75rem; color: var(--text-secondary); }
+.eo-select { max-width: 12rem; border: 1px solid var(--border); border-radius: var(--radius-md, 10px); padding: 6px 8px; }
+.eo-when__at { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.eo-when:not(:has(input[value="at"]:checked)) .eo-when__at { display: none; }
+.eo-toggle + .eo-toggle, .eo-toggle + input + .eo-toggle { margin-top: 10px; }
+.eo-q .eo-toggle { display: flex; }
+
+.eo-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+.eo-filters { padding: var(--space-5); }
+.eo-more { border-top: 1px solid var(--border); padding-top: var(--space-3); margin-bottom: var(--space-3); }
+.eo-more__summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: var(--text-sm);
+  color: var(--accent-hover);
+  margin-bottom: var(--space-3);
+}
+.eo-more[open] .eo-more__summary { margin-bottom: var(--space-4); }
+.eo-save { margin-top: var(--space-3); padding: var(--space-3) var(--space-4); }
+.eo-save > summary { list-style: none; cursor: pointer; }
+.eo-save > summary::-webkit-details-marker { display: none; }
+.eo-save__form { display: flex; flex-direction: column; gap: 8px; margin-top: var(--space-3); }
+
+.eo-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--space-3); }
+.eo-preset {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.eo-preset a { color: var(--text-primary); text-decoration: none; padding: 6px 4px 6px 14px; }
+.eo-preset.is-on { background: var(--accent-soft); border-color: var(--accent); }
+.eo-preset.is-on a { color: var(--accent-hover); }
+.eo-preset form { margin: 0; }
+.eo-preset__x {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 1rem;
+  padding: 4px 10px 4px 6px;
+  cursor: pointer;
+  min-height: 32px;
+}
+.eo-preset__x:hover { color: var(--text-primary); }
+
 .eo-list {
   list-style: none;
   margin: 0;
@@ -157,7 +218,7 @@
 }
 .eo-place {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 72px minmax(0, 1fr);
   gap: 6px 14px;
   padding: var(--space-4);
   align-items: start;
@@ -166,31 +227,23 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-ring, var(--accent));
 }
-.eo-place__rank {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+.eo-place__photo {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.75rem;
   font-weight: 700;
-  font-size: 0.8125rem;
-  background: var(--surface-hover);
-  color: var(--text-secondary);
 }
-.eo-place.is-pick .eo-place__rank {
-  background: var(--accent-solid);
-  color: var(--accent-contrast);
-}
-.eo-place__name { margin: 0; font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.02em; }
-.eo-place__meta, .eo-place__why { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-secondary); }
-.eo-place__why { color: var(--text-primary); }
-.eo-place__stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
+.eo-place__photo img { width: 100%; height: 100%; object-fit: cover; }
+.eo-place__name { margin: 0; font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.eo-place__meta { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-secondary); }
+.eo-place__stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .eo-stat {
   display: inline-flex;
   align-items: center;
@@ -204,13 +257,42 @@
 }
 .eo-stat--open { color: var(--emerald); background: var(--emerald-bg); }
 .eo-stat--closed { color: var(--text-secondary); }
-.eo-place__actions {
+.eo-why { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; }
+.eo-why li {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-hover);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+.eo-badge {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.eo-badge--green, .eo-badge--gold { background: var(--accent-soft); color: var(--accent-hover); }
+.eo-badge--amber { background: var(--surface-hover); color: var(--text-primary); }
+.eo-place__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.eo-place__actions .btn { white-space: nowrap; text-align: center; }
+.eo-went { margin-top: 8px; }
+.eo-went > summary { list-style: none; cursor: pointer; display: inline-flex; }
+.eo-went > summary::-webkit-details-marker { display: none; }
+.eo-went__form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  align-items: stretch;
+  gap: 8px;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
 }
-.eo-place__actions .btn { white-space: nowrap; text-align: center; }
+.eo-went__form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 
 .eo-list-head {
   display: flex;
@@ -223,50 +305,27 @@
 .eo-list-head h2 { margin: 0; font-size: var(--text-xl); }
 .eo-list-head p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); }
 
-.eo-note {
-  margin: 0 0 var(--space-3);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
+.eo-note { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: var(--text-sm); }
 .eo-note--warn { color: var(--text-primary); }
-.eo-attr {
-  margin: var(--space-4) 0 0;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-}
+.eo-empty { border: 1px solid var(--border); border-radius: 12px; padding: var(--space-4); }
+.eo-empty p { margin: 0; color: var(--text-primary); }
+.eo-blockers { margin: 8px 0; padding-left: 1.2em; }
+.eo-relax { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.eo-attr { margin: var(--space-4) 0 0; color: var(--text-secondary); font-size: 0.75rem; }
 .eo-find { margin-top: var(--space-2); }
 
-.eo--wizard .eo-split {
-  display: grid;
-  grid-template-columns: minmax(280px, 380px) 1fr;
-  gap: var(--space-6);
-  align-items: start;
-}
-.eo-steps { display: flex; gap: 6px; margin: 0 0 var(--space-4); }
-.eo-steps span {
-  width: 28px;
-  height: 6px;
-  border-radius: 99px;
-  background: var(--border-strong);
-}
-.eo-steps span.is-done, .eo-steps span.is-on { background: var(--accent-solid); }
-.eo-wizard-card { padding: var(--space-5); }
-.eo-wizard-card .eo-q { margin-bottom: var(--space-5); }
-.eo-wizard-card .eo-q:last-of-type { margin-bottom: var(--space-3); }
+.eo-leave { max-width: 40rem; padding: var(--space-5); }
+.eo-leave__domain { font-size: var(--text-lg); font-weight: 700; }
+.eo-leave__url { overflow-wrap: anywhere; }
 
 .eo-page .btn { min-height: 40px; }
 .eo-page .btn-sm { min-height: 34px; }
 
 @media (max-width: 800px) {
-  .eo--wizard .eo-split { grid-template-columns: 1fr; }
-  .eo-place {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .eo-place__actions {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    padding-left: 42px;
-  }
+  .eo-split { grid-template-columns: 1fr; }
+  .eo-filters { padding: var(--space-4); }
+}
+@media (max-width: 480px) {
+  .eo-place { grid-template-columns: 48px minmax(0, 1fr); }
+  .eo-place__photo { width: 48px; height: 48px; font-size: 1.25rem; }
 }

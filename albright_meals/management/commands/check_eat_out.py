@@ -3,7 +3,7 @@
 Overpass host in eatout.OVERPASS_URLS, printing what each one did.
 
     python manage.py check_eat_out
-    python manage.py check_eat_out --lat 39.53 --lon -104.87 --far 30
+    python manage.py check_eat_out --lat 39.53 --lon -104.87 --far 10
 """
 import time
 
@@ -19,8 +19,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--lat", type=float, default=39.5300, help="Latitude (default: Lone Tree, CO)")
         parser.add_argument("--lon", type=float, default=-104.8710, help="Longitude")
-        parser.add_argument("--far", choices=list(eatout.RADIUS_MILES), default="15",
-                            help="walk (1 mi), 15 (5 mi) or 30 (12 mi)")
+        parser.add_argument("--far", choices=list(eatout.MILES), default=eatout.DEFAULT_MILES,
+                            help="miles: " + ", ".join(eatout.MILES))
 
     def handle(self, *args, lat, lon, far, **options):
         out = self.stdout.write
@@ -32,7 +32,7 @@ class Command(BaseCommand):
         for url in eatout.overpass_urls():
             started = time.monotonic()
             try:
-                response = requests.post(url, data={"data": query}, timeout=eatout.TIMEOUT,
+                response = requests.post(url, data={"data": query}, timeout=eatout.timeout_for(far),
                                          headers={"Accept": "application/json", "User-Agent": eatout.USER_AGENT})
             except requests.RequestException as exc:
                 out(self.style.ERROR(f"{eatout._host(url)}: HTTP status: none - {type(exc).__name__}: {exc}"))
