@@ -12,13 +12,15 @@
     logged elsewhere (the Body page, the dashboard, the Bot API) checks off that day's weigh-in too: after_weight().
   - "Skip today" checks it off with no weight (WeighInLog.skipped, shown greyed). Unchecking reopens it and keeps
     the weight - "Weight kept - edit it on the Body page."
+  - Done <=> weight logged, the same pattern as workouts (workout_sync): checked off anywhere without a weight, that
+    day's weight counts (or it's a skip) - on_toggle(); a weight removed on the Body page reopens what it checked off.
 """
 from datetime import date, time, timedelta
 from decimal import Decimal
 
 from django import forms
 from django.db import transaction
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, pre_delete
 from django.dispatch import receiver
 from django.urls import reverse
 
@@ -317,8 +319,11 @@ def skip(item, day, user):
 
 def complete(item, day, user, entry=None, skipped=False):
     from albright_planner import planner
+
+    from .workout_sync import from_fitness
     if not item.completions.filter(occurrence_date=day).exists():
-        planner.toggle(item, day, user, done=True)
+        with from_fitness():
+            planner.toggle(item, day, user, done=True)
     _record(item, day, entry, skipped)
 
 
@@ -334,11 +339,33 @@ def after_weight(entry):
         if day is None:
             continue
         if not item.completions.filter(occurrence_date=day).exists():
-            if planner.toggle(item, day, entry.owner, done=True) is None:
-                continue
+            from .workout_sync import from_fitness
+            with from_fitness():
+                if planner.toggle(item, day, entry.owner, done=True) is None:
+                    continue
             done.append(item)
         _record(item, day, entry)
     return done
+
+
+def on_toggle(item, day, done, user):
+    """The Planner / Home / Bot API checked a weigh-in off or reopened it (workout_sync.on_planner_toggle). Checked
+    off with no weight saved through it: that day's weight counts if there is one, else it's a skip (greyed).
+    Reopened: the _reopened receiver drops the record - the weight itself always stays."""
+    if done and not WeighInLog.objects.filter(item=item, occurrence_date=day).exists():
+        entry = WeightEntry.objects.filter(owner=item.owner, date=day).first()
+        _record(item, day, entry, skipped=entry is None)
+
+
+@receiver(pre_delete, sender=WeightEntry, dispatch_uid="fitness_weigh_in_weight_deleted")
+def _weight_deleted(sender, instance, **kwargs):
+    """A weight removed (the Body page): the weigh-in it checked off is open again - done means a weight is logged."""
+    from albright_planner import planner
+
+    from .workout_sync import from_fitness
+    for logged in WeighInLog.objects.filter(weight_entry=instance).select_related("item"):
+        with from_fitness():
+            planner.toggle(logged.item, logged.occurrence_date, instance.owner, done=False)
 
 
 @receiver(post_delete, sender="albright_planner.ItemCompletion", dispatch_uid="fitness_weigh_in_reopened")

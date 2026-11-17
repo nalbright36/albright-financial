@@ -11,9 +11,9 @@ Programs (program_views.program_list): mine, with New program (the guided setup)
     <a href="{% url 'albright_fitness:program_new' %}" class="btn btn-primary" id="fx-program-new">New program</a>
     <a href="{% url 'albright_fitness:program_templates' %}" class="btn btn-secondary">Start from a template</a>
 </div>
-{% if archived or archived_count %}<nav class="fx-tabs" aria-label="Which programs">
-    <a href="{% url 'albright_fitness:programs' %}" class="fx-tabs__item{% if not archived %} is-on{% endif %}"{% if not archived %} aria-current="page"{% endif %}>Yours</a>
-    <a href="{% url 'albright_fitness:programs' %}?show=archived" class="fx-tabs__item{% if archived %} is-on{% endif %}" id="fx-programs-archived"{% if archived %} aria-current="page"{% endif %}>Archived ({{ archived_count }})</a>
+{% if archived or archived_count %}<nav class="fx-seg" aria-label="Which programs">
+    <a href="{% url 'albright_fitness:programs' %}" class="fx-seg__item{% if not archived %} is-on{% endif %}"{% if not archived %} aria-current="page"{% endif %}>Yours</a>
+    <a href="{% url 'albright_fitness:programs' %}?show=archived" class="fx-seg__item{% if archived %} is-on{% endif %}" id="fx-programs-archived"{% if archived %} aria-current="page"{% endif %}>Archived ({{ archived_count }})</a>
 </nav>{% endif %}
 <section class="card fx-card" aria-labelledby="fx-mine-h">
     <h2 class="fx-card__title" id="fx-mine-h">{% if archived %}Archived{% else %}Yours{% endif %}</h2>

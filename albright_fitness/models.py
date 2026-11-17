@@ -215,6 +215,9 @@ class Workout(models.Model):
     program_name = models.CharField(max_length=100, blank=True)
     program_day_name = models.CharField(max_length=60, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    # "Completed from Planner": made when its Planner task was checked off with no workout logged (workout_sync) -
+    # no sets needed; unchecking the task deletes it while it still has none.
+    from_planner = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = WorkoutQuerySet.as_manager()

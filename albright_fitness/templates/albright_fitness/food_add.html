@@ -15,7 +15,7 @@ Recent (what I log most - one tap), My foods (servings), Quick add (just the num
     <noscript><button type="submit" class="btn btn-secondary btn-sm">Change</button></noscript>
 </form>
 
-<nav class="fx-tabs" aria-label="How to add">{% for key, label in tabs %}<a href="?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}&amp;tab={{ key }}" class="fx-tabs__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+<nav class="fx-seg" aria-label="How to add">{% for key, label in tabs %}<a href="?date={{ on|date:'Y-m-d' }}&amp;slot={{ slot }}&amp;tab={{ key }}" class="fx-seg__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
 
 {% if tab == "search" %}
 <section class="card fx-card" id="fx-usda">

@@ -212,6 +212,8 @@ def complete_matching(workout, exercises=None):
     into a workout still in progress - its other, pre-filled exercises don't count yet). Returns the Planner items
     checked off."""
     from albright_planner import services
+
+    from .workout_sync import from_fitness
     if exercises is not None:
         logged = {e.pk for e in exercises}
     else:
@@ -225,7 +227,8 @@ def complete_matching(workout, exercises=None):
         if not services.is_scheduled(item, workout.date) or services.is_done(item, workout.date):
             continue
         if _matches(session, workout, logged, partial=exercises is not None):
-            services.complete_occurrence(item, workout.date, workout.owner)
+            with from_fitness():                       # never finishes the (maybe still open) workout
+                services.complete_occurrence(item, workout.date, workout.owner)
             done.append(item)
     return done
 

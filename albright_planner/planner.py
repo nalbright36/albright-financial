@@ -398,6 +398,9 @@ def toggle(item, occurrence_date, user, done=None):
         else _toggle(item, occurrence_date, user, done)
     if now_done is not None and now_done != was_done:
         _record_toggle(item, occurrence_date, now_done, user)
+        if item.source_app == "fitness":               # one done state: the workout / weigh-in in Fitness follows
+            from albright_fitness import workout_sync
+            workout_sync.on_planner_toggle(item, occurrence_date, now_done, user)
     return now_done
 
 

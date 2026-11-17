@@ -5,7 +5,7 @@
 <div class="fx-narrow fx-setup">
 <div class="fx-head"><div><h1 class="fx-head__title">{{ p.name }}</h1><p class="fx-head__sub">Add the exercises for each workout.</p></div></div>
 {% include "albright_fitness/_setup_steps.html" %}
-{% if days|length > 1 %}<nav class="fx-tabs" aria-label="Workouts">{% for d in days %}<a href="?day={{ d.pk }}" class="fx-tabs__item{% if d == day %} is-on{% endif %}"{% if d == day %} aria-current="page"{% endif %}>{{ d.name }}</a>{% endfor %}</nav>{% endif %}
+{% if days|length > 1 %}<nav class="fx-seg" aria-label="Workouts">{% for d in days %}<a href="?day={{ d.pk }}" class="fx-seg__item{% if d == day %} is-on{% endif %}"{% if d == day %} aria-current="page"{% endif %}>{{ d.name }}</a>{% endfor %}</nav>{% endif %}
 <section class="card fx-card" aria-labelledby="fx-pe-h">
     <h2 class="fx-card__title" id="fx-pe-h">{{ day.name }} <span class="fx-muted fx-small">{{ day.weekdays|days }}</span></h2>
     <form method="get" class="fx-search" role="search" data-ex-search data-url="{% url 'albright_fitness:exercise_search' %}">

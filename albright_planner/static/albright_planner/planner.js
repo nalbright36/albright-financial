@@ -164,6 +164,7 @@
                     if (choice === "all") { setRows(el, true); el.dataset.openSubtasks = "0"; }
                     showProgress(el, res.data);
                     if (res.data.note) weighInNote(el, res.data.note);
+                    else el.querySelectorAll(".pl-kept-note").forEach(function (n) { n.remove(); });
                     if (todayBox && todayBox.contains(el)) { todayChecked(el, res.data.done); return; }
                     if (res.data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
                 });
@@ -192,9 +193,19 @@
         var input = panel.querySelector("input[name=weight]");
         if (input) input.focus();
     }
-    function weighInNote(el, text) {
+    function weighInNote(el, text) {          // also a workout's "Workout kept - edit it in Fitness."
         var box = el.querySelector(".wi");
-        if (!box) return;
+        if (!box) {
+            var kept = el.querySelector(".pl-kept-note");
+            if (!kept) {
+                kept = document.createElement("span");
+                kept.className = "wi-result wi-note pl-kept-note";
+                kept.setAttribute("role", "status");
+                el.appendChild(kept);
+            }
+            kept.textContent = text;
+            return;
+        }
         box.classList.remove("is-done");
         box.innerHTML = "";
         var note = document.createElement("span");

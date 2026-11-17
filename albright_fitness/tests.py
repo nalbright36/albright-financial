@@ -354,8 +354,14 @@ class ProgramTests(Base):
         self.assertNotIn("ScheduleItem.objects", source)
         self.assertNotIn("ItemCompletion", source)
         self.assertIn("services.upsert_weekly_source_item(", source)
-        self.assertIn("services.complete_occurrence(", source)
         self.assertIn("services.end_source_items(", source)
+        # Finishing a workout checks the Planner off in one place - workout_sync (Planner rows only read, for backfill).
+        from . import workout_sync
+        sync = pathlib.Path(workout_sync.__file__).read_text(encoding="utf-8")
+        self.assertIn("workout_sync.workout_finished(workout)", source)
+        self.assertIn("services.complete_occurrence(", sync)
+        self.assertNotIn("ScheduleItem.objects", sync)
+        self.assertNotIn("Completion.objects.create", sync)
 
 
 # ---------------------------------------------------------------------------

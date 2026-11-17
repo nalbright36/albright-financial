@@ -256,12 +256,16 @@ items by default. Returns 201 {"id", "title", "kind", "date", "start_time", "end
 Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item; a one-off item's own date otherwise).
 Checks off THAT occurrence only. Only items the owner may edit and that can be checked off (anything else is a 404
 or 400). For a one-at-a-time task, completing its current occurrence makes the next one appear (see ONE AT A TIME).
-Returns {"item_id", "occurrence_date", "done"}.""",
+Returns {"item_id", "occurrence_date", "done"}. A Fitness workout task (type "workout") counts in Fitness too: the
+workout already logged for it is finished, or a "Completed from Planner" one (no sets) is made - "workout_id" says
+which. A weigh-in completed this way uses that day's weight, or counts as skipped.""",
        scopes=("schedule:write",), section="schedule", body=OCCURRENCE["properties"],
        example={"occurrence_date": "2026-11-16"}, returns={"item_id": 41, "occurrence_date": "2026-11-16", "done": True}),
     Op("POST", "schedule/{id}/uncomplete", "uncompleteScheduleItem", "Un-check one occurrence of a Planner item", """\
 Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item). Un-checks THAT occurrence only; for a
-one-at-a-time task it puts it back. Returns {"item_id", "occurrence_date", "done"}.""",
+one-at-a-time task it puts it back. Returns {"item_id", "occurrence_date", "done"}. A workout task: an empty
+"Completed from Planner" workout is deleted; one with logged sets is kept ("note": "Workout kept - edit it in
+Fitness."). A weigh-in keeps its weight.""",
        scopes=("schedule:write",), section="schedule", body=OCCURRENCE["properties"],
        example={"occurrence_date": "2026-11-16"}, returns={"item_id": 41, "occurrence_date": "2026-11-16", "done": False}),
     Op("POST", "schedule/{id}/checklist/{item_id}/complete", "completeChecklistItem",
@@ -542,7 +546,8 @@ day - a second one that day replaces it (200 instead of 201). Also checks off th
        example={"weight": 182.4, "unit": "lb"},
        returns={"id": 19, "date": "2026-11-16", "weight": 182.4, "unit": "lb", "replaced": False, "planner_completed": True}),
     Op("GET", "fitness/today", "getFitnessToday", "Today's planned workout, workouts done and macros vs targets", """\
-Returns {"date", "planned": [{"name", "program", "done"}], "workouts_done": [{"id", "name"}], "macros":
+Returns {"date", "planned": [{"name", "program", "done"}], "workouts_done": [{"id", "name", "from_planner"
+(checked off on the Planner, no sets logged)}], "macros":
 {"calories"|"protein"|"carbs"|"fat"|"fiber": {"eaten", "target", "remaining" (negative = over), "tracked"}}}.""",
        scopes=("fitness:read",), section="fitness",
        returns={"date": "2026-11-16", "planned": [{"name": "Upper", "program": "Strength", "done": False}],

@@ -16,7 +16,7 @@
 
 <div class="card fx-card"><ul class="fx-list">{% for we, text in lines %}
     <li class="fx-row"><a href="{% url 'albright_fitness:exercise' we.exercise.pk %}" class="fx-row__title">{{ we.exercise.name }}</a><span class="fx-row__ind" title="{{ text }}">{{ text|default:"-" }}</span></li>
-{% empty %}<li class="fx-empty">Nothing logged.</li>{% endfor %}</ul></div>
+{% empty %}<li class="fx-empty" id="fx-from-planner">{% if w.from_planner %}Completed from Planner - no sets logged.{% if editable %} <a href="{% url 'albright_fitness:workout' w.pk %}">Add what you did</a>{% endif %}{% else %}Nothing logged.{% endif %}</li>{% endfor %}</ul></div>
 {% if w.notes %}<p class="fx-notes">{{ w.notes|linebreaksbr }}</p>{% endif %}
 <a href="{% url 'albright_fitness:dashboard' %}" class="btn btn-primary">Done</a>
 </div>

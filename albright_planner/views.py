@@ -571,6 +571,9 @@ def toggle(request, pk):
     if item.is_weigh_in and not done:                  # reopened: the weight it was logged with stays
         from albright_fitness import weigh_in
         note = weigh_in.KEPT_NOTE
+    elif item.is_workout and not done:                 # reopened: a workout with logged sets stays
+        from albright_fitness import workout_sync
+        note = workout_sync.kept_note(item, occurrence)
     if _wants_json(request):
         rows = checklist.occurrence_rows(item, occurrence)
         shown = checklist.progress(rows) if rows else None

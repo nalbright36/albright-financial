@@ -427,7 +427,7 @@ def today(request, token):
                      "remaining": int(target - eaten[n]) if target else None, "tracked": n in (profile.tracked or [])}
     done = Workout.objects.filter(owner=user, date=on, finished_at__isnull=False).select_related("program_day")
     return ({"date": on.isoformat(), "planned": [{"name": d.name, "program": d.program.name, "done": bool(w)} for d, w in stats.todays(user, on)],
-             "workouts_done": [{"id": w.pk, "name": w.title} for w in done], "macros": macros},
+             "workouts_done": [{"id": w.pk, "name": w.title, "from_planner": w.from_planner} for w in done], "macros": macros},
             200, "read fitness today")
 
 

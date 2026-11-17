@@ -64,10 +64,13 @@ def dashboard(request):
     data = stats.dashboard(request.user)
     top = max([r["sets"] for r in data["volume"]] or [1])
     open_workout = Workout.objects.filter(owner=request.user, finished_at__isnull=True).first()
+    stale_workout = None
+    if open_workout is not None and open_workout.created_at < timezone.now() - STALE_AFTER:
+        open_workout, stale_workout = None, open_workout   # "Unfinished workout from Nov 12 - Finish or Discard"
     profile = NutritionProfile.load(request.user)
     eaten = nutrition.totals(FoodLogEntry.objects.filter(owner=request.user, date=timezone.localdate()))
     return render(request, "albright_fitness/dashboard.html", {
-        **data, "volume_max": top, "open_workout": open_workout, "progress": nutrition.progress(profile, eaten),
+        **data, "volume_max": top, "open_workout": open_workout, "stale_workout": stale_workout, "progress": nutrition.progress(profile, eaten),
         "food_average": nutrition.averages(request.user), "tracked": profile.tracked or [],
         "week_summary": insights.week(request.user, stats.week_start(timezone.localdate())), "weight": _dashboard_weight(request.user, profile),
         "records_text": [(r, training.record_text(r)) for r in data["records"]],
@@ -76,6 +79,7 @@ def dashboard(request):
 
 
 RECENT_EXERCISES = 8
+STALE_AFTER = timedelta(hours=24)       # an open workout older than this gets Finish / Discard, not Continue
 
 
 def recent_exercises(user, limit=RECENT_EXERCISES):
@@ -384,7 +388,7 @@ def edit_workout(request, pk):
 def delete_workout(request, pk):
     _owned(request, pk).delete()
     messages.success(request, "Workout deleted.")
-    return redirect("albright_fitness:history")
+    return redirect("albright_fitness:dashboard" if request.POST.get("back") == "today" else "albright_fitness:history")
 
 
 @login_required

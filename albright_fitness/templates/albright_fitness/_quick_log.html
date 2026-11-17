@@ -11,10 +11,10 @@ The Today page's Quick log (views._quick_log), three tabs - the last one used is
 <section class="card fx-card fx-quicklog" id="fx-quicklog" aria-labelledby="fx-quick-h" data-quicklog>
     <div class="fx-quicklog__head">
         <h2 class="fx-card__title" id="fx-quick-h">Quick log</h2>
-        <div class="fx-tabs fx-quicklog__tabs" role="tablist" aria-label="What to log" data-quick-tabs hidden>
-            <button type="button" role="tab" class="fx-tabs__item is-on" id="fx-qt-workout" aria-controls="fx-qp-workout" aria-selected="true" data-quick-tab="workout">Workout</button>
-            <button type="button" role="tab" class="fx-tabs__item" id="fx-qt-food" aria-controls="fx-qp-food" aria-selected="false" tabindex="-1" data-quick-tab="food">Food</button>
-            {% if quick.show_weight %}<button type="button" role="tab" class="fx-tabs__item" id="fx-qt-weight" aria-controls="fx-qp-weight" aria-selected="false" tabindex="-1" data-quick-tab="weight">Weight</button>{% endif %}
+        <div class="fx-seg fx-quicklog__tabs" role="tablist" aria-label="What to log" data-quick-tabs hidden>
+            <button type="button" role="tab" class="fx-seg__item is-on" id="fx-qt-workout" aria-controls="fx-qp-workout" aria-selected="true" data-quick-tab="workout">Workout</button>
+            <button type="button" role="tab" class="fx-seg__item" id="fx-qt-food" aria-controls="fx-qp-food" aria-selected="false" tabindex="-1" data-quick-tab="food">Food</button>
+            {% if quick.show_weight %}<button type="button" role="tab" class="fx-seg__item" id="fx-qt-weight" aria-controls="fx-qp-weight" aria-selected="false" tabindex="-1" data-quick-tab="weight">Weight</button>{% endif %}
         </div>
     </div>
 

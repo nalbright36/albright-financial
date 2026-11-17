@@ -166,17 +166,15 @@ def planner_occurrence(user, day, requested_date=None):
 @transaction.atomic
 def finish(workout):
     """Finish a workout: its end time, new personal records, and - started from a Planner task - that occurrence
-    checked off. Returns the new records."""
-    from albright_planner import services
+    checked off (workout_sync.workout_finished - the one place a finished workout ticks the Planner). Returns the new
+    records."""
     now = timezone.localtime()
     workout.finished_at = timezone.now()
     workout.end_time = workout.end_time or now.time().replace(microsecond=0)
     workout.save(update_fields=["finished_at", "end_time"])
     records = training.detect_records(workout)
-    if workout.planner_item_id and workout.planner_date and workout.planner_item.owner_id == workout.owner_id:
-        services.complete_occurrence(workout.planner_item, workout.planner_date, workout.owner)
-    from . import schedule
-    schedule.complete_matching(workout)                # the same exercise / program day scheduled that day
+    from . import workout_sync
+    workout_sync.workout_finished(workout)             # its Planner task, and whatever else that day it covers
     _record_finish(workout, records)
     return records
 

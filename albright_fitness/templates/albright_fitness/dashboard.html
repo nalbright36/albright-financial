@@ -12,7 +12,12 @@ streak (weeks with every planned workout done), this week's working sets by musc
     <form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Blank workout</button></form>
 </div>
 
-{% if open_workout %}<a href="{% url 'albright_fitness:workout' open_workout.pk %}" class="card fx-resume" id="fx-resume"><strong>Continue {{ open_workout.title }}</strong> <span class="fx-muted">started {{ open_workout.date|date:"M j" }}</span> &rarr;</a>{% endif %}
+{% if open_workout %}<a href="{% url 'albright_fitness:workout' open_workout.pk %}" class="card fx-resume" id="fx-resume"><strong>Continue {{ open_workout.title }}</strong> <span class="fx-muted">started {{ open_workout.date|date:"M j" }}</span> &rarr;</a>
+{% elif stale_workout %}<div class="fx-stale" id="fx-stale" role="status">
+    <span>Unfinished workout from <a href="{% url 'albright_fitness:workout' stale_workout.pk %}">{{ stale_workout.date|date:"M j" }}</a></span>
+    <form method="post" action="{% url 'albright_fitness:finish' stale_workout.pk %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="fx-stale-finish">Finish</button></form>
+    <form method="post" action="{% url 'albright_fitness:delete_workout' stale_workout.pk %}" data-confirm="Discard the unfinished workout from {{ stale_workout.date|date:'M j' }}? Any sets in it are deleted.">{% csrf_token %}<input type="hidden" name="back" value="today"><button type="submit" class="btn btn-secondary btn-sm" id="fx-stale-discard">Discard</button></form>
+</div>{% endif %}
 
 {% include "albright_fitness/_quick_log.html" %}
 
@@ -22,7 +27,7 @@ streak (weeks with every planned workout done), this week's working sets by musc
     {% for day, done in today %}
     <div class="fx-row">
         <span class="fx-row__title">{{ day.name }} <span class="fx-muted fx-small">{{ day.program.name }}</span></span>
-        {% if done %}<a href="{% url 'albright_fitness:summary' done.pk %}" class="fx-pill fx-pill--done">Done &#x2713;</a>
+        {% if done %}<a href="{% url 'albright_fitness:summary' done.pk %}" class="fx-pill fx-pill--done" data-today-done>{% if done.from_planner %}&#x2713; Done &middot; from Planner{% else %}Done &#x2713;{% endif %}</a>
         {% else %}<form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="btn btn-primary fx-start">Start</button></form>{% endif %}
     </div>
     {% empty %}

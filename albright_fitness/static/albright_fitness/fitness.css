@@ -59,6 +59,9 @@ details[open] > summary { margin-bottom: var(--space-3); }
 
 /* ---------- Dashboard ---------- */
 .fx-resume { display: block; margin-bottom: var(--space-4); border-left: 4px solid var(--accent); color: var(--text-primary); }
+.fx-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: var(--space-4); padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 10px; font-size: var(--text-sm); color: var(--text-secondary); }
+.fx-stale form { margin: 0; }
 .fx-today .fx-row { min-height: 56px; }
 .fx .fx-start { min-width: 120px; font-size: 1rem; }
 .fx-start--big { width: 100%; min-height: 56px !important; font-size: 1.125rem; }
@@ -224,12 +227,21 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-meal__actions form { margin: 0; }
 .fx-food-row form, .fx-plan-row, .fx-card > form.fx-row { margin: 0; }
 .fx .ledger-input.fx-servings { width: 76px; flex: 0 0 76px; min-height: 36px; text-align: center; }
-.fx-tabs { display: flex; gap: 2px; padding: 3px; margin: var(--space-3) 0; border-radius: 11px; background: var(--surface-hover);
+/* The one segmented control (Quick log's tabs - <button role="tab"> - and the link tabs on Add food, Programs and
+   Program setup). Theme variables only, and every button default is reset so no browser white box leaks through.
+   On: a .is-on class, aria-selected="true" (tabs) or aria-current="page" (links). */
+.fx-seg { display: flex; gap: 4px; padding: 4px; margin: var(--space-3) 0; border-radius: 12px; background: var(--surface-hover);
   border: 1px solid var(--border); overflow-x: auto; }
-.fx-tabs__item { flex: 1 0 auto; padding: 8px 10px; border-radius: 8px; text-align: center; font-size: var(--text-sm); font-weight: 600;
-  color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
-.fx-tabs__item.is-on { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
-@media (max-width: 420px) { .fx-tabs__item { padding: 8px 6px; font-size: 0.8125rem; } }
+.fx-seg__item { -webkit-appearance: none; appearance: none; flex: 1 0 auto; margin: 0; padding: 8px 10px; border: 1px solid transparent;
+  border-radius: 8px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-sm); font-weight: 600;
+  line-height: 1.25; text-align: center; text-decoration: none; white-space: nowrap; cursor: pointer; box-shadow: none;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+.fx-seg__item:hover { background: var(--surface-raised); color: var(--text-primary); }
+.fx-seg__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fx-seg__item.is-on, .fx-seg__item[aria-selected="true"], .fx-seg__item[aria-current="page"] {
+  background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+@media (max-width: 420px) { .fx-seg__item { padding: 8px 6px; font-size: 0.8125rem; } }
+@media (forced-colors: active) { .fx-seg__item[aria-selected="true"], .fx-seg__item[aria-current="page"] { border-color: Highlight; } }
 .fx-slot-pick { margin-top: var(--space-3); }
 .fx-slot-pick .fx-label { margin: 0; }
 .fx-note { margin: 0 0 var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--text-primary);

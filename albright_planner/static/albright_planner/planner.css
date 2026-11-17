@@ -396,6 +396,7 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .wi-result { font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 .wi-result.is-skipped, .wi-note { color: var(--text-secondary); font-weight: 400; }
 .wi-note { white-space: normal; }
+.pl-kept-note { display: block; flex-basis: 100%; margin-top: 2px; }
 .wi-panel { display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; width: min(320px, calc(100vw - 32px));
     padding: 12px; border: 1px solid var(--pl-line); border-radius: 12px; background: var(--pl-card, var(--bg-elevated));
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }

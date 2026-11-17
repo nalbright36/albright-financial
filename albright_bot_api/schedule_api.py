@@ -296,7 +296,15 @@ def _set_done(request, token, item_id, done):
     result = planner.toggle(item, occurrence, token.owner, done=done)
     if result is None:
         raise ApiError(400, f"Item {item_id} isn't scheduled on {occurrence}.", "rejected: not scheduled that day")
-    return ({"item_id": item.pk, "occurrence_date": occurrence.isoformat(), "done": result}, 200,
+    extra = {}
+    if item.is_workout:                                 # Fitness follows (workout_sync): the workout it counts as
+        from albright_fitness import workout_sync
+        if result:
+            counted = workout_sync.finished_workout(item, occurrence)
+            extra = {"workout_id": counted.pk} if counted else {}
+        elif workout_sync.kept_note(item, occurrence):
+            extra = {"note": workout_sync.KEPT_NOTE}
+    return ({"item_id": item.pk, "occurrence_date": occurrence.isoformat(), "done": result, **extra}, 200,
             f"{'completed' if done else 'uncompleted'} item #{item.pk} on {occurrence}")
 
 
