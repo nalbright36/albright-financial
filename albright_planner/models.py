@@ -156,6 +156,16 @@ class ScheduleItem(models.Model):
         return self.source_app in LOCKED_SOURCES
 
     @property
+    def is_weigh_in(self):
+        """A Fitness weigh-in task (albright_fitness.weigh_in): private, logged with a weight, edited from Fitness."""
+        return self.source_app == "fitness" and self.source_id.startswith("weighin-")
+
+    @property
+    def is_workout(self):
+        """A Fitness task that's a workout (its check-off asks "Log this workout?")."""
+        return self.source_app == "fitness" and not self.is_weigh_in
+
+    @property
     def source_href(self):
         """Where the item's source link points: a site page as is; an external URL through the link check."""
         url = self.source_url

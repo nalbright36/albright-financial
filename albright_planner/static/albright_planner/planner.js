@@ -5,6 +5,10 @@
  *   workouts    checking off a Fitness workout task (data-log-url) first asks "Log this workout?" - Log now opens
  *               Fitness for that occurrence, pre-filled (finishing it there checks it off); Mark done without
  *               logging just checks it off; Cancel leaves it
+ *   weigh-ins   a Fitness weigh-in task's "Log weight" opens a small form (a bottom sheet on phones): Save logs the
+ *               weight for that day (asks "Replace today's ...?" when there's one already) and checks it off, showing
+ *               "182.0 lb (−0.4 since last)" in place; "Skip today" checks it off with no weight. Checking its box
+ *               without a weight opens that form instead; unchecking keeps the weight ("Weight kept - ...").
  *   rows        every item is one line; its checklist chevron opens the subtasks under it (and closes them) - kept
  *               open only while you stay on the page; a click anywhere else on the row opens it like its title does
  *   check-off   a task's box records (or undoes) THIS occurrence only - saved in the background, struck through.
@@ -139,6 +143,8 @@
             box.setAttribute("aria-checked", done ? "true" : "false");
             if (item) item.classList.toggle("is-done", done);
         };
+        var weighIn = item && item.querySelector("[data-wi-open-task] [data-wi-form]");
+        if (!was && weighIn) { openWeighIn(weighIn); return; }    // a weigh-in is checked off by logging it
         var logUrl = item && item.getAttribute("data-log-url");
         var first = !was && logUrl ? askLog(form) : Promise.resolve("task");
         first.then(function (logChoice) {
@@ -157,11 +163,106 @@
                     showTask(el, res.data.done);
                     if (choice === "all") { setRows(el, true); el.dataset.openSubtasks = "0"; }
                     showProgress(el, res.data);
+                    if (res.data.note) weighInNote(el, res.data.note);
                     if (todayBox && todayBox.contains(el)) { todayChecked(el, res.data.done); return; }
                     if (res.data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
                 });
             });
         }).catch(function () { show(was); });
+    });
+
+    // ---------- Weigh-ins: "Log weight" (albright_fitness/_weigh_in_box.html) ----------
+    var openPanel = null;
+    function closeWeighIn() {
+        if (!openPanel) return;
+        var box = openPanel.closest(".wi"), button = box && box.querySelector("[data-wi-open]"), back = box && box.querySelector("[data-wi-close]");
+        openPanel.classList.remove("is-open");
+        if (button) button.setAttribute("aria-expanded", "false");
+        if (back) back.hidden = true;
+        openPanel = null;
+    }
+    function openWeighIn(panel) {
+        if (openPanel === panel) return;
+        closeWeighIn();
+        var box = panel.closest(".wi"), button = box.querySelector("[data-wi-open]"), back = box.querySelector("[data-wi-close]");
+        panel.classList.add("is-open");
+        if (button) button.setAttribute("aria-expanded", "true");
+        if (back) back.hidden = false;
+        openPanel = panel;
+        var input = panel.querySelector("input[name=weight]");
+        if (input) input.focus();
+    }
+    function weighInNote(el, text) {
+        var box = el.querySelector(".wi");
+        if (!box) return;
+        box.classList.remove("is-done");
+        box.innerHTML = "";
+        var note = document.createElement("span");
+        note.className = "wi-result wi-note";
+        note.textContent = text;
+        box.appendChild(note);
+    }
+    function weighInDone(el, data) {
+        var box = el.querySelector(".wi");
+        if (box) {
+            box.classList.add("is-done");
+            box.removeAttribute("data-wi-open-task");
+            box.innerHTML = "";
+            var result = document.createElement("span");
+            result.className = "wi-result" + (data.skipped ? " is-skipped" : "");
+            result.textContent = data.result;
+            box.appendChild(result);
+        }
+        showTask(el, true);
+    }
+    function saveWeighIn(form, body) {
+        var msg = form.querySelector("[data-wi-msg]"), item = form.closest(".pl-item, .pl-view");
+        if (msg) msg.textContent = "";
+        return post(form.action, body).then(function (res) {
+            if (res.data.confirm) {                                   // that day already has a weight
+                if (!window.confirm(res.data.confirm)) return;
+                body.set("replace", "1");
+                return saveWeighIn(form, body);
+            }
+            if (!res.ok) { if (msg) msg.textContent = res.data.error || "Couldn't save that - try again."; return; }
+            closeWeighIn();
+            withTwins(item).forEach(function (el) {
+                weighInDone(el, res.data);
+                if (todayBox && todayBox.contains(el)) {
+                    todayChecked(el, true);
+                    if (todayBox.getAttribute("data-show-completed") !== "1") todayToast("Weigh-in: " + res.data.result, true);
+                }
+            });
+        });
+    }
+    document.addEventListener("click", function (event) {
+        var opener = event.target.closest && event.target.closest("[data-wi-open]");
+        if (opener) {
+            var panel = document.getElementById(opener.getAttribute("aria-controls"));
+            if (panel === openPanel) closeWeighIn(); else if (panel) openWeighIn(panel);
+            return;
+        }
+        if (event.target.closest && event.target.closest("[data-wi-close]")) { closeWeighIn(); return; }
+        if (openPanel && !openPanel.contains(event.target) && !(event.target.closest && event.target.closest(".pl-check-form"))) closeWeighIn();
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && openPanel) { closeWeighIn(); }
+    });
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form.matches || !form.matches("[data-wi-form]") || !window.fetch || !window.FormData) return;
+        event.preventDefault();
+        var body = new FormData(form);
+        if (event.submitter && event.submitter.name === "skip") body.set("skip", "1");
+        else if (!String(body.get("weight") || "").trim()) {
+            var msg = form.querySelector("[data-wi-msg]");
+            if (msg) msg.textContent = "Enter your weight, or Skip today.";
+            return;
+        }
+        saveWeighIn(form, body).catch(function () {
+            var msg = form.querySelector("[data-wi-msg]");
+            if (msg) msg.textContent = "Couldn't save that - try again.";
+        });
     });
 
     // ---------- One-line rows: the checklist chevron, and the whole row as a target ----------
@@ -175,7 +276,7 @@
             return;
         }
         var row = event.target.closest && event.target.closest(".pl-item");
-        if (!row || event.defaultPrevented || event.target.closest("a, button, form, input, label, select, .pl-item__cl")) return;
+        if (!row || event.defaultPrevented || event.target.closest("a, button, form, input, label, select, .pl-item__cl, .wi")) return;
         var link = row.querySelector(".pl-item__body");
         if (link) link.click();                       // the view panel (or the meal / record it links to)
     });

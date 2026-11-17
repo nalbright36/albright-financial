@@ -51,6 +51,13 @@ tick right here (saved to the note) for someone who can edit it.
         {% if item.idea_id %}<a href="{% url 'albright_control:idea' item.idea_id %}" class="pl-view__fact" id="pl-view-idea">Idea #{{ item.idea_id }} &rarr;</a>{% endif %}
     </p>
     {% endif %}
+    {% if item.is_weigh_in %}{% load weigh_in_tags %}
+    <section class="pl-view__section pl-view__fitness pl-view__weigh-in" id="pl-view-weigh-in" aria-labelledby="pl-view-wi-h">
+        <h3 class="pl-view__label" id="pl-view-wi-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_scale.html" %}</span> Weigh-in</h3>
+        {% if item.owner_id == request.user.pk %}{% weigh_in_box o %}
+        <p class="pl-small"><a href="{{ item.source_url }}" id="pl-view-wi-schedule">Weigh-in schedule &rarr;</a></p>{% endif %}
+    </section>
+    {% endif %}
     {% if fitness %}
     <section class="pl-view__section pl-view__fitness" id="pl-view-fitness" aria-labelledby="pl-view-fit-h">
         <h3 class="pl-view__label" id="pl-view-fit-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workout</h3>

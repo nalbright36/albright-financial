@@ -4,8 +4,9 @@
 {% comment %}
 Body metrics (body_views.body_page, body.py): weigh-ins with the 7-day average (faint daily dots, the bold average
 line), the changes over 2 and 4 weeks in plain words, the goal and - when the trend supports one - a projected
-date; measurements with a small trend each; settings (units, goal, hide weight from the dashboard, a weekly
-weigh-in reminder on the Planner). Only you ever see this page.
+date; the weigh-in schedule (weigh_in.py - "Weigh-in" tasks on the Planner, logged right from the task; the form
+shows only the fields its frequency needs and previews the next 3 dates - fitness.js); measurements with a small
+trend each; settings (units, goal, hide weight from the dashboard). Only you ever see this page.
 {% endcomment %}
 <div class="fx-narrow">
 <div class="fx-head"><div><h1 class="fx-head__title">Body</h1><p class="fx-head__sub">Only you see this - it's never shared.</p></div></div>
@@ -20,6 +21,56 @@ weigh-in reminder on the Planner). Only you ever see this page.
     <label for="fx-weigh-note" class="visually-hidden">Note (optional)</label>
     <input type="text" name="note" id="fx-weigh-note" class="ledger-input fx-input-wide" maxlength="200" placeholder="Note (optional)">
 </form>
+
+<section class="card fx-card fx-wis" id="fx-weigh-in-schedule" aria-labelledby="fx-wis-h">
+    <h2 class="fx-card__title" id="fx-wis-h">Weigh-in schedule</h2>
+    {% if wi_schedule %}
+    <p class="fx-wis__now" id="fx-wis-text">{% if wi_schedule.active %}<strong>{{ wi_text }}</strong>{% else %}<strong>Paused</strong> <span class="fx-muted">({{ wi_text }})</span>{% endif %}</p>
+    {% if wi_next %}<p class="fx-help" id="fx-wis-next">Next: {% for d in wi_next %}{{ d|date:"D M j" }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    {% else %}
+    <p class="fx-empty" id="fx-wis-text">No weigh-in schedule yet.</p>
+    {% endif %}
+    <p class="fx-help">Each weigh-in is a yellow &ldquo;Weigh-in&rdquo; task on your Planner - log your weight right from it. Only you see them.</p>
+    {% if wi_schedule %}
+    <div class="fx-row-form fx-wis__actions">
+        <form method="post" action="{% url 'albright_fitness:weigh_in_pause' wi_schedule.pk %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="fx-wis-pause">{% if wi_schedule.active %}Pause{% else %}Resume{% endif %}</button></form>
+        <form method="post" action="{% url 'albright_fitness:weigh_in_delete' wi_schedule.pk %}" data-confirm="Delete your weigh-in schedule? Future weigh-ins leave your Planner; past ones and your weights are kept.">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="fx-wis-delete">Delete</button></form>
+    </div>
+    {% endif %}
+    <details class="fx-wis__edit" id="fx-wis-edit"{% if wi_editing or not wi_schedule %} open{% endif %}>
+        <summary class="btn btn-secondary btn-sm">{% if wi_schedule %}Edit{% else %}Set up weigh-ins{% endif %}</summary>
+        <form method="post" action="{% url 'albright_fitness:weigh_in_save' %}" class="fx-form fx-wis__form" id="fx-wis-form" data-preview-url="{{ wi_preview_url }}" novalidate>{% csrf_token %}
+            {% if wi_form.non_field_errors %}<p class="field-error">{{ wi_form.non_field_errors|join:" " }}</p>{% endif %}
+            <fieldset class="fx-chips fx-wis__freq" aria-describedby="fx-wis-preview">
+                <legend class="fx-label">How often</legend>
+                {% for radio in wi_form.frequency %}<label class="fx-chip">{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}
+            </fieldset>
+            <fieldset class="fx-chips" data-wi-for="weekly">
+                <legend class="fx-label">On</legend>
+                {% for box in wi_form.days_of_week %}<label class="fx-chip">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}
+                {% if wi_form.days_of_week.errors %}<p class="field-error" id="fx-wis-days-error">{{ wi_form.days_of_week.errors|join:" " }}</p>{% endif %}
+            </fieldset>
+            <div class="field" data-wi-for="every_n_days"><label for="fx-wis-n">Every how many days</label>
+                <input type="number" name="interval_n" id="fx-wis-n" class="ledger-input fx-unit-select" min="2" max="60" inputmode="numeric" value="{{ wi_form.interval_n.value|default_if_none:'' }}">
+                {% if wi_form.interval_n.errors %}<p class="field-error">{{ wi_form.interval_n.errors|join:" " }}</p>{% endif %}</div>
+            <div class="field" data-wi-for="monthly"><label for="fx-wis-dom">Day of the month</label>
+                <input type="number" name="day_of_month" id="fx-wis-dom" class="ledger-input fx-unit-select" min="1" max="31" inputmode="numeric" value="{{ wi_form.day_of_month.value|default_if_none:'' }}" aria-describedby="fx-wis-dom-help">
+                <p class="fx-help" id="fx-wis-dom-help">A shorter month uses its last day.</p>
+                {% if wi_form.day_of_month.errors %}<p class="field-error">{{ wi_form.day_of_month.errors|join:" " }}</p>{% endif %}</div>
+            <div class="fx-macro-inputs">
+                <div class="field"><label for="fx-wis-time">Time (optional)</label>{{ wi_form.time_of_day.as_widget }}</div>
+                <div class="field"><label for="fx-wis-start">Starts</label><input type="date" name="start_date" id="fx-wis-start" class="ledger-input" value="{{ wi_form.start_date.value|date:'Y-m-d'|default:wi_form.start_date.value|default_if_none:'' }}"></div>
+                <div class="field"><label for="fx-wis-end">Ends (optional)</label><input type="date" name="end_date" id="fx-wis-end" class="ledger-input" value="{{ wi_form.end_date.value|date:'Y-m-d'|default:wi_form.end_date.value|default_if_none:'' }}">
+                    {% if wi_form.end_date.errors %}<p class="field-error">{{ wi_form.end_date.errors|join:" " }}</p>{% endif %}</div>
+            </div>
+            <p class="fx-help fx-wis__preview" id="fx-wis-preview" role="status" aria-live="polite">{% if wi_next %}Next: {% for d in wi_next %}{{ d|date:"D M j" }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
+            <div class="fx-row-form">
+                <button type="submit" class="btn btn-primary" name="mode" value="{% if wi_schedule %}edit{% else %}new{% endif %}" id="fx-wis-save">Save</button>
+                {% if wi_schedule %}<button type="submit" class="btn btn-secondary" name="mode" value="new" id="fx-wis-replace" data-confirm="This replaces your current weigh-in schedule ({{ wi_text }}). Past weigh-ins and weights are kept. Continue?">Save as a new schedule</button>{% endif %}
+            </div>
+        </form>
+    </details>
+</section>
 
 <section class="card fx-card" id="fx-weight-trend" aria-labelledby="fx-weight-h">
     <h2 class="fx-card__title" id="fx-weight-h">Weight <span class="fx-muted fx-small">({{ unit }})</span></h2>
@@ -69,11 +120,6 @@ weigh-in reminder on the Planner). Only you ever see this page.
         <p class="fx-help">Units apply everywhere in Fitness - Body, Targets, logging and charts.</p>
         <div class="field"><label for="fx-bs-goal">Goal weight ({{ unit }}, optional)</label><input type="number" name="goal" id="fx-bs-goal" class="ledger-input" step="0.1" value="{{ goal|default_if_none:'' }}" inputmode="decimal"></div>
         <label class="fx-check"><input type="checkbox" name="hide_weight" value="1"{% if profile.hide_weight %} checked{% endif %}> Hide weight from the Fitness dashboard</label>
-        <div class="fx-row-form">
-            <label class="fx-check"><input type="checkbox" name="weigh_in_reminder" value="1"{% if profile.weigh_in_reminder %} checked{% endif %}> Weekly weigh-in reminder on my Planner, on</label>
-            <label for="fx-bs-day" class="visually-hidden">Reminder day</label>
-            <select name="weigh_in_weekday" id="fx-bs-day" class="ledger-input fx-unit-select">{% for n, name in weekdays %}<option value="{{ n }}"{% if profile.weigh_in_weekday == n %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
-        </div>
         <button type="submit" class="btn btn-primary">Save</button>
     </form>
 </details>

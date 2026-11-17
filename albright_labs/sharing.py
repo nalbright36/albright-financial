@@ -184,6 +184,11 @@ def _owner_only(user, obj):
         raise ShareError("Only its owner can share it.")
 
 
+def never_shared(obj):
+    """A thing of a shareable kind that stays private anyway: a Fitness weigh-in task (body metrics never are)."""
+    return bool(getattr(obj, "is_weigh_in", False))
+
+
 def resolve_target(user, kind, circle_id=None, who="", user_id=None):
     """{"circle": ...} or {"user": ...} this owner may share with (one of their circles that shares the app, or a
     person) - else ShareError. A user_id must be someone they're connected with (albright_labs.connections).
@@ -215,6 +220,8 @@ def share(user, obj, permission=VIEW, circle_id=None, who="", user_id=None, by=N
     """Share with a circle (id), a connected person (user_id), or a person by exact username / email (who).
     Returns the grant (updated if it existed)."""
     _owner_only(user, obj)
+    if never_shared(obj):
+        raise ShareError("Weigh-ins are private - they can't be shared.")
     kind = kind_of(obj)
     if permission not in PERMISSIONS:
         raise ShareError("Pick View or Edit.")
@@ -268,7 +275,7 @@ def apply_defaults(obj, owner, by=None):
     """Share a new thing the way its owner shares new things in its app (on the site, quick add and bots)."""
     kind = kind_of(obj)
     d = default_for(owner, kind.app)
-    if d is None or d.mode == SharingDefault.ONLY_ME:
+    if d is None or d.mode == SharingDefault.ONLY_ME or never_shared(obj):
         return []
     made = []
     try:

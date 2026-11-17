@@ -378,6 +378,8 @@ def today_panel(user, show_completed=False):
     meals = sources.meals(user, day, day, show=True) if sources.can_open(user, "meals") else []
     return {"date": day, "tasks": open_tasks + done, "events": [o for o in occs if o.item.kind == ScheduleItem.EVENT],
             "meals": meals, "workouts": open_workouts + done_workouts,
+            "has_weigh_in": any(o.item.is_weigh_in for o in workouts),
+            "weigh_ins_only": bool(workouts) and all(o.item.is_weigh_in for o in workouts),
             "open": len(open_tasks) + len(open_workouts), "overdue": len(late), "done": len(done) + len(done_workouts),
             "show_completed": show_completed}
 

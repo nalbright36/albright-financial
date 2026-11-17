@@ -1,6 +1,7 @@
 from django.urls import path
 
-from . import body_views, challenge_views, food_ai_views, food_find_views, food_views, log_views, program_views, views
+from . import (body_views, challenge_views, food_ai_views, food_find_views, food_views, log_views, program_views, views,
+               weigh_in_views)
 
 app_name = "albright_fitness"
 
@@ -72,5 +73,11 @@ urlpatterns = [
     path("body/weight/<int:pk>/delete/", body_views.delete_weight, name="delete_weight"),
     path("body/measurements/", body_views.log_measurements, name="log_measurements"),
     path("body/settings/", body_views.body_settings, name="body_settings"),
+    # Weigh-in schedules and logging from a weigh-in task (weigh_in_views).
+    path("body/weigh-ins/", weigh_in_views.save, name="weigh_in_save"),
+    path("body/weigh-ins/preview/", weigh_in_views.preview, name="weigh_in_preview"),
+    path("body/weigh-ins/<int:pk>/pause/", weigh_in_views.pause, name="weigh_in_pause"),
+    path("body/weigh-ins/<int:pk>/delete/", weigh_in_views.delete, name="weigh_in_delete"),
+    path("weigh-in/<int:pk>/log/", weigh_in_views.log, name="weigh_in_log"),
     path("insights/", body_views.insights_page, name="insights"),
 ]

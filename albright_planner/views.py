@@ -413,7 +413,7 @@ def notes_preview(request):
 def _fitness_panel(item, user, occurrence):
     """A Fitness task's exercises, targets and last time, with Start workout (albright_fitness.schedule.panel) - for
     someone who can open Fitness. A failure just leaves the section out."""
-    if item.source_app != "fitness" or not sources.can_open(user, "fitness"):
+    if item.source_app != "fitness" or item.is_weigh_in or not sources.can_open(user, "fitness"):
         return None
     try:
         from albright_fitness import schedule
@@ -485,6 +485,9 @@ def _after_edit(request, item, changes, scope, occurrence):
 @login_required
 def edit_item(request, pk):
     item = _visible(request, pk)
+    if item.is_weigh_in:                               # its schedule is edited in Fitness (albright_fitness.weigh_in)
+        messages.info(request, "Weigh-ins are set up on Fitness > Body - edit the schedule there.")
+        return redirect(item.source_url or reverse("albright_fitness:body"))
     occurrence = _day(request.GET.get("date") or request.POST.get("occurrence"))
     if occurrence is None or (item.repeats and not planner.valid_occurrence(item, occurrence)):
         occurrence = planner.current_or_first(item)
@@ -564,11 +567,17 @@ def toggle(request, pk):
             return JsonResponse({"ok": False, "error": "Not scheduled that day."}, status=400)
         messages.error(request, "That item isn't scheduled that day.")
         return redirect(_next(request))
+    note = ""
+    if item.is_weigh_in and not done:                  # reopened: the weight it was logged with stays
+        from albright_fitness import weigh_in
+        note = weigh_in.KEPT_NOTE
     if _wants_json(request):
         rows = checklist.occurrence_rows(item, occurrence)
         shown = checklist.progress(rows) if rows else None
         return JsonResponse({"ok": True, "done": done, **({"progress": shown["label"], "progress_title": shown["title"]}
-                                                           if shown else {})})
+                                                           if shown else {}), **({"note": note} if note else {})})
+    if note:
+        messages.info(request, note)
     return redirect(_next(request))
 
 

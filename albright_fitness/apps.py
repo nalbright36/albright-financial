@@ -7,4 +7,4 @@ class AlbrightFitnessConfig(AppConfig):
     verbose_name = "Albright Fitness"
 
     def ready(self):
-        from . import schedule  # noqa: F401 - its post_delete receiver (a schedule's Planner task goes with it)
+        from . import schedule, weigh_in  # noqa: F401 - their post_delete receivers

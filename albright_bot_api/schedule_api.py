@@ -157,8 +157,29 @@ def _repeat(data, start):
     return rule, until, count
 
 
+def _type(item):
+    """ "weigh_in" (a Fitness weigh-in), "workout" (a Fitness workout), else the item's kind ("task" / "event")."""
+    if item.is_weigh_in:
+        return "weigh_in"
+    return "workout" if item.source_app == "fitness" else item.kind
+
+
+def _weigh_in_json(o):
+    """A weigh-in occurrence's result: {"weight", "unit", "skipped"} once done, else None."""
+    if not o.item.is_weigh_in or not o.done:
+        return None
+    from albright_fitness import body, weigh_in
+    from albright_fitness.models import WeighInLog, WeightEntry
+    unit = weigh_in.unit_of(o.item.owner)
+    log = WeighInLog.objects.filter(item=o.item, occurrence_date=o.occurrence_date).select_related("weight_entry").first()
+    if log and log.skipped:
+        return {"weight": None, "unit": unit, "skipped": True}
+    entry = (log.weight_entry if log else None) or WeightEntry.objects.filter(owner=o.item.owner, date=o.occurrence_date).first()
+    return {"weight": f"{body.shown(entry.weight_kg, unit)}" if entry else None, "unit": unit, "skipped": False}
+
+
 def _occurrence_json(o, files=None):
-    return {"item_id": o.item.pk, "title": o.title, "date": o.date.isoformat(),
+    return {"item_id": o.item.pk, "type": _type(o.item), "title": o.title, "date": o.date.isoformat(),
             "occurrence_date": o.occurrence_date.isoformat(), "start_time": o.start_time.strftime("%H:%M") if o.start_time else None,
             "end_time": o.end_time.strftime("%H:%M") if o.end_time else None, "kind": o.item.kind,
             "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats,
@@ -168,7 +189,8 @@ def _occurrence_json(o, files=None):
             "checklist": [{"id": r.pk, "text": r.text, "done": r.checked,
                            "done_by": _person(r.done_by) if r.checked and r.done_by else None}
                           for r in getattr(o, "checklist", [])],
-            "attachments": (files or {}).get(o.item.pk, [])}
+            "attachments": (files or {}).get(o.item.pk, []),
+            **({"weigh_in": _weigh_in_json(o)} if o.item.is_weigh_in else {})}
 
 
 def _person(user):
@@ -178,7 +200,7 @@ def _person(user):
 
 def _item_json(request, item):
     from albright_planner import recurrence
-    return {"id": item.pk, "title": item.title, "kind": item.kind, "date": item.date.isoformat(),
+    return {"id": item.pk, "type": _type(item), "title": item.title, "kind": item.kind, "date": item.date.isoformat(),
             "start_time": item.start_time.strftime("%H:%M") if item.start_time else None,
             "end_time": item.end_time.strftime("%H:%M") if item.end_time else None, "checkable": item.checkable,
             "notes": item.notes, "rrule": item.recurrence or None,

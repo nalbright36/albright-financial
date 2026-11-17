@@ -25,7 +25,7 @@ Styles and check-off: the Planner's planner.css / planner.js.
     {% endif %}
     {% if planner_today.workouts %}
     <div class="pl-today__sec pl-today__sec--workouts" id="planner-today-workouts">
-        <h3 class="pl-label"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workouts today</h3>
+        <h3 class="pl-label"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> {% if planner_today.weigh_ins_only %}Weigh-in today{% elif planner_today.has_weigh_in %}Fitness today{% else %}Workouts today{% endif %}</h3>
         <ul class="pl-list" data-empty="No workouts left today.">{% for o in planner_today.workouts %}{% include "albright_planner/_occ.html" with here=planner_today.here start=True %}{% endfor %}</ul>
     </div>
     {% endif %}

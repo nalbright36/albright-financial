@@ -145,16 +145,14 @@ class WeightTests(Base):
         self.assertIn("Waist", page)
         self.assertIn("Body fat", page)
 
-    def test_weekly_reminder_on_the_planner_off_by_default(self):
-        profile = NutritionProfile.load(self.me)
-        self.assertFalse(profile.weigh_in_reminder)
+    def test_weigh_ins_are_off_by_default_and_set_up_on_the_schedule_card(self):
+        # The old weekly reminder setting is gone: weigh-in schedules (test_weigh_in.py) replace it.
         self.client.post(url("body_settings"), {"weight_unit": "lb", "height_unit": "in", "weigh_in_reminder": "1", "weigh_in_weekday": "4"})
-        item = ScheduleItem.objects.get(owner=self.me, source_app="fitness", source_id="weigh-in")
-        self.assertEqual((item.title, item.recurrence, item.archived), ("Weigh in", "FREQ=WEEKLY;BYDAY=FR", False))
-        self.assertFalse(bool(grants_of(item)))
-        self.client.post(url("body_settings"), {"weight_unit": "lb", "height_unit": "in"})
-        item.refresh_from_db()
-        self.assertTrue(item.archived or item.recurrence_until == self.today)
+        self.assertFalse(ScheduleItem.objects.filter(owner=self.me, source_app="fitness").exists())
+        page = self.client.get(url("body")).content.decode()
+        self.assertIn('id="fx-weigh-in-schedule"', page)
+        self.assertIn("No weigh-in schedule yet.", page)
+        self.assertNotIn("weigh_in_reminder", page)
 
     def test_hide_weight_from_the_dashboard(self):
         self.weigh(0, 181)

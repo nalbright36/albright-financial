@@ -518,3 +518,14 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 /* "Log food with your AI" - the instructions to copy. */
 .fx-ai-instructions { width: 100%; min-height: 360px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.75rem;
     line-height: 1.5; white-space: pre; overflow: auto; resize: vertical; }
+
+/* Body > Weigh-in schedule (weigh_in.py): the schedule in plain words, its next dates, Pause / Delete and the form. */
+.fx-wis__now { margin: 0 0 4px; }
+.fx-wis__actions { margin-top: 10px; }
+.fx-wis__edit { margin-top: 10px; }
+.fx-wis__edit > summary { list-style: none; display: inline-flex; }
+.fx-wis__edit > summary::-webkit-details-marker { display: none; }
+.fx-wis__edit[open] > summary { margin-bottom: 10px; }
+.fx-wis__form fieldset { min-width: 0; }
+.fx-wis__form legend { width: 100%; margin-bottom: 4px; }
+.fx-wis__preview { min-height: 1.2em; font-weight: 600; color: var(--text-primary); }

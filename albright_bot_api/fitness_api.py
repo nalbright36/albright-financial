@@ -401,9 +401,12 @@ def weight(request, token):
         raise ApiError(400, '"unit" must be "lb" or "kg".', "rejected: bad unit")
     low, high = (45, 880) if unit == "lb" else (20, 400)
     value = _number(data, "weight", low, high, required=True)
-    entry, created = body.log_weight(token.owner, _date(data), value, unit, _str(data, "note", 200))
+    from albright_fitness.models import WeighInLog
+    entry, created = body.log_weight(token.owner, _date(data), value, unit, _str(data, "note", 200))  # checks off that day's weigh-in
+    completed = WeighInLog.objects.filter(weight_entry=entry, item__owner=token.owner).exists()
     return ({"id": entry.pk, "date": entry.date.isoformat(), "weight": f"{body.shown(entry.weight_kg, unit)}", "unit": unit,
-             "replaced": not created}, 201 if created else 200, f"logged weight for {entry.date}")
+             "replaced": not created, "planner_completed": completed}, 201 if created else 200,
+            f"logged weight for {entry.date}" + (" (weigh-in checked off)" if completed else ""))
 
 
 # ---------------------------------------------------------------------------

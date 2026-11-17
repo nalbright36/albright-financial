@@ -1,0 +1,18 @@
+{% extends "albright_fitness/base.html" %}
+{% block page_title %}Weigh-in · {% endblock %}
+{% block fitness %}
+{% comment %}Logging a weigh-in from its task (without JS) on a day that already has a weight: replace it, or keep it.
+With JS, planner.js asks the same question with confirm() instead (weigh_in_views.log, 409).{% endcomment %}
+<div class="fx-narrow">
+<section class="card fx-card" id="fx-weigh-in-replace" aria-labelledby="fx-wir-h">
+    <h1 class="fx-card__title" id="fx-wir-h">{{ question }}</h1>
+    <p class="fx-help">There's already a weigh-in for {{ day|date:"l, M j" }}. One weigh-in a day - saving replaces it.</p>
+    <form method="post" action="{% url 'albright_fitness:weigh_in_log' item.pk %}" class="fx-row-form">{% csrf_token %}
+        <input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="weight" value="{{ weight }}">
+        <input type="hidden" name="replace" value="1"><input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="btn btn-primary">Replace with {{ weight }}</button>
+        <a href="{{ next|default:'/planner/' }}" class="btn btn-secondary">Keep the old one</a>
+    </form>
+</section>
+</div>
+{% endblock %}

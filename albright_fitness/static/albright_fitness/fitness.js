@@ -688,3 +688,39 @@
         });
     });
 })();
+
+// ---------- Body > Weigh-in schedule: only the fields the frequency needs, and a live preview of the next 3 dates ----------
+(function () {
+    "use strict";
+    var form = document.getElementById("fx-wis-form");
+    if (!form) return;
+    var preview = document.getElementById("fx-wis-preview"), wait = null;
+    function frequency() {
+        var on = form.querySelector("input[name=frequency]:checked");
+        return on ? on.value : "";
+    }
+    function showFields() {
+        var f = frequency();
+        form.querySelectorAll("[data-wi-for]").forEach(function (el) {
+            var mine = el.getAttribute("data-wi-for") === f;
+            el.hidden = !mine;
+            el.querySelectorAll("input").forEach(function (i) { i.disabled = !mine; });   // left out of the post
+        });
+    }
+    function refresh() {
+        if (!window.fetch || !preview) return;
+        var params = new URLSearchParams(new FormData(form));
+        params.delete("csrfmiddlewaretoken");
+        params.delete("mode");
+        fetch(form.getAttribute("data-preview-url") + "?" + params.toString(), {credentials: "same-origin"})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                preview.textContent = d.ok ? (d.dates.length ? "Next: " + d.dates.join(" · ") : "No weigh-ins left before the end date.") : (d.error || "");
+            })
+            .catch(function () {});
+    }
+    form.addEventListener("change", function () { showFields(); clearTimeout(wait); wait = setTimeout(refresh, 150); });
+    form.addEventListener("input", function () { clearTimeout(wait); wait = setTimeout(refresh, 300); });
+    showFields();
+    refresh();
+})();

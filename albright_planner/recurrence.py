@@ -91,7 +91,10 @@ def describe(rule):
             out["repeat"] = "weekly" if interval == 1 else "every_n_weeks"
         out["days"] = byday
     elif freq == "MONTHLY" and "BYMONTHDAY" in p:
-        out.update(repeat="monthly_day", month_day=int(p["BYMONTHDAY"]))
+        # "30,-1" + BYSETPOS=1 / "-1": day 30 (31) or the month's last day when it's shorter (Fitness weigh-ins).
+        days = [int(x) for x in p["BYMONTHDAY"].split(",") if x.lstrip("-").isdigit()]
+        positive = [x for x in days if x > 0]
+        out.update(repeat="monthly_day", month_day=positive[0] if positive else 31, or_last=-1 in days)
     elif freq == "MONTHLY" and byday:
         out.update(repeat="monthly_nth", nth=int(byday[0][:-2]), nth_weekday=byday[0][-2:])
     elif freq == "YEARLY":
@@ -118,7 +121,7 @@ def summary(rule, start, until=None, count=None, today=None, long_days=False):
         "weekdays": "Every weekday",
         "weekly": f"Every {days}",
         "every_n_weeks": f"Every {d['interval']} weeks on {days}",
-        "monthly_day": f"Monthly on day {d['month_day']}",
+        "monthly_day": f"Monthly on day {d['month_day']}" + (" (or the last day)" if d.get("or_last") else ""),
         "monthly_nth": f"Monthly on the {ORDINALS.get(d['nth'], d['nth'])} "
                        f"{LONG_DAY_NAMES[WEEKDAYS.index(d['nth_weekday'])] if d['nth_weekday'] in WEEKDAYS else ''}",
         "yearly": f"Every year on {start:%b} {start.day}",

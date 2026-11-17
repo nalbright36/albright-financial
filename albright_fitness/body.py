@@ -6,12 +6,12 @@
 - A goal weight gets a projected date only when the recent trend supports one: at least 5 weigh-ins over at least
   14 of the last 28 days, the average moving toward the goal by at least 0.1 lb a week, and the date within 2 years.
 - Measurements (cm, shown in the person's height unit) and body fat %, each with its own trend.
-- An optional weekly "Weigh in" task on the Planner (off by default).
+- Weigh-in schedules and their Planner tasks live in weigh_in.py; every weigh-in logged here checks off that
+  day's weigh-in task (weigh_in.after_weight).
 """
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from django.urls import reverse
 from django.utils import timezone
 
 from .models import KG_TO_LB, LB, Measurement, NutritionProfile, WeightEntry
@@ -24,7 +24,6 @@ MIN_RATE_LB_WEEK = Decimal("0.1")
 MAX_PROJECTION_DAYS = 730
 CM_PER_IN = Decimal("2.54")
 STEADY = Decimal("0.1")                 # under this (in the person's unit) is "about the same"
-REMINDER_SOURCE, REMINDER_ID = "fitness", "weigh-in"
 
 
 def q(value, places="0.1"):
@@ -55,9 +54,12 @@ def length_to_cm(value, unit):
 
 
 def log_weight(user, day, value, unit, note=""):
-    """Record (or replace) the day's weigh-in -> (entry, created)."""
-    return WeightEntry.objects.update_or_create(owner=user, date=day,
-                                                defaults={"weight_kg": to_kg(value, unit), "note": (note or "")[:200]})
+    """Record (or replace) the day's weigh-in -> (entry, created). Checks off that day's weigh-in task, if any."""
+    from . import weigh_in
+    entry, created = WeightEntry.objects.update_or_create(
+        owner=user, date=day, defaults={"weight_kg": to_kg(value, unit), "note": (note or "")[:200]})
+    weigh_in.after_weight(entry)
+    return entry, created
 
 
 # ---------------------------------------------------------------------------
@@ -196,22 +198,3 @@ def measurement_charts(user, unit):
         out.append({"key": key, "label": label, "unit": shown_unit, "latest": series_rows[-1], "change": diff,
                     "chart": time_chart(series_rows)})
     return out
-
-
-# ---------------------------------------------------------------------------
-# The weekly weigh-in reminder (the Planner)
-# ---------------------------------------------------------------------------
-
-def set_reminder(profile, on, weekday=None, today=None):
-    """Turn the weekly "Weigh in" task on (or move it to another weekday) or off. Off ends it after today."""
-    from albright_planner import services
-    today = today or timezone.localdate()
-    if weekday is not None:
-        profile.weigh_in_weekday = weekday
-    profile.weigh_in_reminder = on
-    profile.save(update_fields=["weigh_in_reminder", "weigh_in_weekday", "updated_at"])
-    if on:
-        services.upsert_weekly_source_item(profile.user, REMINDER_SOURCE, REMINDER_ID, "Weigh in", today,
-                                           [profile.weigh_in_weekday], url=reverse("albright_fitness:body"))
-    else:
-        services.end_source_items(profile.user, REMINDER_SOURCE, [REMINDER_ID], today)

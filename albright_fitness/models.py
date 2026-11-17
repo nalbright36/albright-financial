@@ -13,6 +13,7 @@ else is private to its owner, even within a circle: NutritionProfile (body info,
 
 Body metrics (Phase 3): WeightEntry and Measurement - private to their owner, never shared with anyone.
 """
+from datetime import time as datetime_time
 from decimal import Decimal
 
 from django.conf import settings
@@ -495,6 +496,60 @@ class WeightEntry(models.Model):
 
     def __str__(self):
         return f"{self.date}: {self.weight_kg} kg"
+
+
+def _default_weigh_in_time():
+    return datetime_time(7, 0)
+
+
+class WeighInSchedule(models.Model):
+    """When I mean to weigh in (weigh_in.py): its Planner task - mine, private, Fitness yellow, source "fitness",
+    source_id "weighin-<pk>", titled "Weigh-in" - is ONE repeating ScheduleItem made through the Planner's service
+    helpers, like ScheduledSession's. Editing, pausing or deleting ends that task after its last completed day (or
+    removes it when nothing was completed) and starts a fresh one - completed weigh-ins and weights never change.
+    At most one active schedule per person. Deleting the task in the Planner deletes the schedule (as with
+    ScheduledSession)."""
+    DAILY, WEEKLY, EVERY_N_DAYS, MONTHLY = "daily", "weekly", "every_n_days", "monthly"
+    FREQUENCIES = [(DAILY, "Daily"), (WEEKLY, "Weekly"), (EVERY_N_DAYS, "Every few days"), (MONTHLY, "Monthly")]
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_weigh_ins")
+    frequency = models.CharField(max_length=12, choices=FREQUENCIES, default=WEEKLY)
+    days_of_week = models.JSONField(default=list, blank=True)           # weekly: [0, 3] = Mon & Thu (0 = Monday)
+    interval_n = models.PositiveSmallIntegerField(null=True, blank=True,
+                                                  validators=[MinValueValidator(2), MaxValueValidator(60)])
+    day_of_month = models.PositiveSmallIntegerField(null=True, blank=True,  # a shorter month: its last day
+                                                    validators=[MinValueValidator(1), MaxValueValidator(31)])
+    time_of_day = models.TimeField(null=True, blank=True, default=_default_weigh_in_time)   # empty = all day
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    active = models.BooleanField(default=True)
+    planner_item = models.OneToOneField("albright_planner.ScheduleItem", on_delete=models.CASCADE, null=True,
+                                        blank=True, related_name="weigh_in_schedule")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-pk"]
+        constraints = [models.UniqueConstraint(fields=["owner"], condition=Q(active=True),
+                                               name="fitness_one_active_weigh_in")]
+
+    def __str__(self):
+        return f"Weigh-ins for {self.owner}"
+
+    @property
+    def source_id(self):
+        return f"weighin-{self.pk}"
+
+
+class WeighInLog(models.Model):
+    """What happened to one weigh-in occurrence: the weight logged for it, or skipped ("Skip today" - done, no
+    weight). Unchecking the task deletes this row but never the WeightEntry."""
+    item = models.ForeignKey("albright_planner.ScheduleItem", on_delete=models.CASCADE, related_name="weigh_in_logs")
+    occurrence_date = models.DateField()
+    weight_entry = models.ForeignKey(WeightEntry, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    skipped = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["item", "occurrence_date"], name="fitness_one_weigh_in_log")]
 
 
 class Measurement(models.Model):

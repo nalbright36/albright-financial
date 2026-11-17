@@ -200,20 +200,24 @@ Occurrences between start and end, inclusive (default: the 7 days from today; at
 and time. Includes items shared with the owner. A one-at-a-time task lists only its current occurrence
 (on its date - which may be in the past if it's overdue) and the ones already done; expand=all (optional)
 lists every scheduled occurrence in the range instead. Returns {"start", "end", "occurrences": [{"item_id",
-"title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
+"type" ("task"|"event"|"workout"|"weigh_in" - a Fitness weigh-in: private, logged with a weight), "title", "date" (the day it shows, after any move), "occurrence_date" (the day it was scheduled - use this
 to complete it), "start_time", "end_time", "kind" ("task"|"event"), "checkable", "done", "repeats",
 "created_by", "owner" (whose item - first name), "mine" (false for an item someone shared with the owner),
 "done_by" (who checked it off - either person, for a shared item - or null), "one_at_a_time", "checklist":
 [{"id", "text", "done", "done_by"}] (that occurrence's subtasks - each occurrence starts with all open),
 "attachments": [{"id", "name", "type" (MIME), "size" (bytes), "url"}] (the item's files and photos -
-read-only; no upload through the API)}]}.""",
+read-only; no upload through the API), "weigh_in" (weigh_in only: {"weight", "unit", "skipped"} once done,
+else null)}]}. To log a weigh-in, POST fitness/weight - it checks off that day's weigh-in task.""",
        scopes=("schedule:read",), display="schedule?start=YYYY-MM-DD&end=YYYY-MM-DD&expand=all", section="schedule",
        query={"start": D(), "end": D(), "expand": ENUM(["all"], "all = every occurrence of one-at-a-time tasks")},
        example={"start": "2026-11-16", "end": "2026-11-22"},
        returns={"start": "2026-11-16", "end": "2026-11-22", "occurrences": [
-           {"item_id": 41, "title": "Gym", "date": "2026-11-16", "occurrence_date": "2026-11-16", "start_time": "06:00",
-            "end_time": None, "kind": "task", "checkable": True, "done": False, "repeats": "Weekly on Mon, Wed, Fri",
-            "mine": True, "checklist": [], "attachments": []}]}),
+           {"item_id": 41, "type": "task", "title": "Gym", "date": "2026-11-16", "occurrence_date": "2026-11-16",
+            "start_time": "06:00", "end_time": None, "kind": "task", "checkable": True, "done": False,
+            "repeats": "Weekly on Mon, Wed, Fri", "mine": True, "checklist": [], "attachments": []},
+           {"item_id": 57, "type": "weigh_in", "title": "Weigh-in", "date": "2026-11-16", "occurrence_date": "2026-11-16",
+            "start_time": "07:00", "end_time": None, "kind": "task", "checkable": True, "done": True, "repeats": True,
+            "mine": True, "checklist": [], "attachments": [], "weigh_in": {"weight": "182.0", "unit": "lb", "skipped": False}}]}),
     Op("POST", "schedule", "addScheduleItem", "Add a task or event to the Planner (one-off or repeating)", """\
 Body: {"title": str (required, <=200), "date": YYYY-MM-DD (required - the first day), "start_time": HH:MM
 (optional; none = all day), "end_time": HH:MM (optional), "kind": "task"|"event" (default "task"),
@@ -531,11 +535,12 @@ could be logged.""",
                 "unknown": [], "records": [], "program_day": None, "planner_completed": False, "url": "/fitness/workouts/77/"}),
     Op("POST", "fitness/weight", "logWeight", "Log today's weigh-in", """\
 Body: {"weight": 182.4 (required), "unit": "lb"|"kg" (default the owner's), "date", "note"}. One weigh-in a
-day - a second one that day replaces it (200 instead of 201). Returns {"id", "date", "weight", "unit", "replaced"}.""",
+day - a second one that day replaces it (200 instead of 201). Also checks off that day's Planner weigh-in task
+(type "weigh_in") when the owner has one. Returns {"id", "date", "weight", "unit", "replaced", "planner_completed"}.""",
        scopes=("fitness:write",), section="fitness", status=201,
        body={"weight": N(), "unit": ENUM(["lb", "kg"]), "date": D(), "note": S()}, required=("weight",),
        example={"weight": 182.4, "unit": "lb"},
-       returns={"id": 19, "date": "2026-11-16", "weight": 182.4, "unit": "lb", "replaced": False}),
+       returns={"id": 19, "date": "2026-11-16", "weight": 182.4, "unit": "lb", "replaced": False, "planner_completed": True}),
     Op("GET", "fitness/today", "getFitnessToday", "Today's planned workout, workouts done and macros vs targets", """\
 Returns {"date", "planned": [{"name", "program", "done"}], "workouts_done": [{"id", "name"}], "macros":
 {"calories"|"protein"|"carbs"|"fat"|"fiber": {"eaten", "target", "remaining" (negative = over), "tracked"}}}.""",

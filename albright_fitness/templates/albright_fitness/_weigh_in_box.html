@@ -1,0 +1,22 @@
+{% comment %}A weigh-in task's control (weigh_in_tags.weigh_in_box, weigh_in.box): done - the weight and its change
+("182.0 lb (−0.4 since last)") or "Skipped" (greyed); open - "Log weight", which opens a small form (a bottom sheet
+with a big number field on phones - planner.css .wi-panel) with the last weight as the placeholder, the person's unit,
+Save and "Skip today". planner.js saves it with fetch (asks "Replace today's ...?" when that day already has a
+weight) and shows the result in place; without JS the form is always shown and posts normally.{% endcomment %}
+{% if wi %}<div class="wi{% if wi.done %} is-done{% endif %}" data-weigh-in{% if not wi.done %} data-wi-open-task{% endif %}>
+{% if wi.done %}<span class="wi-result{% if wi.skipped %} is-skipped{% endif %}" data-wi-result>{{ wi.result }}</span>
+{% elif not wi.future %}<button type="button" class="pl-btn wi-open" data-wi-open aria-expanded="false" aria-controls="wi-{{ wi.item.pk }}-{{ wi.date|date:'Ymd' }}">Log weight</button>
+<div class="wi-backdrop" data-wi-close hidden></div>
+<form method="post" action="{{ wi.url }}" class="wi-panel" id="wi-{{ wi.item.pk }}-{{ wi.date|date:'Ymd' }}" data-wi-form aria-label="Log weight for {{ wi.date|date:'D M j' }}">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <input type="hidden" name="date" value="{{ wi.date|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ here }}">
+    <label class="wi-label" for="wi-in-{{ wi.item.pk }}-{{ wi.date|date:'Ymd' }}">Weight on {{ wi.date|date:"D M j" }}</label>
+    <div class="wi-row">
+        <input type="number" name="weight" id="wi-in-{{ wi.item.pk }}-{{ wi.date|date:'Ymd' }}" class="wi-input" step="0.1" min="{{ wi.min }}" max="{{ wi.max }}" inputmode="decimal" placeholder="{{ wi.placeholder }}" autocomplete="off">
+        <span class="wi-unit">{{ wi.unit }}</span>
+        <button type="submit" class="pl-btn pl-btn--primary wi-save">Save</button>
+    </div>
+    <button type="submit" name="skip" value="1" class="wi-skip" formnovalidate>Skip today</button>
+    <p class="wi-msg" role="status" aria-live="polite" data-wi-msg></p>
+</form>{% endif %}
+</div>{% endif %}

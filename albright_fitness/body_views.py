@@ -12,10 +12,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import body, insights
+from . import body, insights, weigh_in_views
 from .models import Measurement, NutritionProfile, WeightEntry
 
-WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 CHART_DAYS = 90
 
 
@@ -61,8 +60,8 @@ def body_page(request):
         "changes": [c for c in (body.change(points, 2, unit), body.change(points, 4, unit)) if c],
         "projection": body.projection(request.user, profile), "goal": body.shown(profile.goal_weight_kg, unit),
         "entries": [(e, body.shown(e.weight_kg, unit)) for e in entries], "parts": Measurement.PARTS,
-        "measurements": body.measurement_charts(request.user, length_unit), "weekdays": list(enumerate(WEEKDAYS)),
-        "today": timezone.localdate()})
+        "measurements": body.measurement_charts(request.user, length_unit),
+        "today": timezone.localdate(), **weigh_in_views.card_context(request, getattr(request, "_weigh_in_form", None))})
 
 
 @login_required
@@ -119,7 +118,7 @@ def log_measurements(request):
 @login_required
 @require_POST
 def body_settings(request):
-    """Units, goal weight, hiding weight from the dashboard, and the weekly weigh-in reminder."""
+    """Units, goal weight and hiding weight from the dashboard (weigh-in schedules: weigh_in_views)."""
     profile = NutritionProfile.load(request.user)
     if request.POST.get("weight_unit") in WEIGHT_LIMITS:
         profile.weight_unit = request.POST["weight_unit"]
@@ -136,11 +135,6 @@ def body_settings(request):
         profile.goal_weight_kg = None
     profile.hide_weight = bool(request.POST.get("hide_weight"))
     profile.save()
-    weekday = request.POST.get("weigh_in_weekday", "")
-    weekday = int(weekday) if weekday.isdigit() and int(weekday) <= 6 else profile.weigh_in_weekday
-    reminder = bool(request.POST.get("weigh_in_reminder"))
-    if reminder != profile.weigh_in_reminder or (reminder and weekday != profile.weigh_in_weekday):
-        body.set_reminder(profile, reminder, weekday)
     messages.success(request, "Saved.")
     return redirect("albright_fitness:body")
 
