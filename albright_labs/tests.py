@@ -1,5 +1,4 @@
-"""Albright Labs: the public landing at "/" (no private or market data, the
-resume button only while the resume page is on, the strict headers); Home
+"""Albright Labs (the public home page at "/" is in test_public_home): Home
 for signed-in users (tiles that fail on their own); the "where I land"
 setting after sign-in and on "/" ("next" still wins); the header's Home
 button and brand; the last_app cookie; and the resume page's stylesheet
@@ -15,13 +14,13 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from albright_resume.models import Project, ResumeSettings
+from albright_resume.models import ResumeSettings
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import tiles
 from .testing import current_tiles, home_tiles, launcher_links, launcher_tiles, with_apps
 from .checks import static_files_collected
-from .models import LandingSettings, UserPreference
+from .models import UserPreference
 
 OUTLOOK = "albright_trading_app.views.get_market_outlook"
 CLIENT = "alpaca.trading.client.TradingClient"
@@ -32,69 +31,6 @@ def resume_site(enabled=True, name="Pat Example"):
     site.page_enabled, site.full_name = enabled, name
     site.save()
     return site
-
-
-class PublicLandingTests(TestCase):
-    def setUp(self):
-        resume_site(enabled=True)
-        LandingSettings.objects.update_or_create(pk=1, defaults={"headline": "I build data tools that pay for themselves."})
-        Project.objects.all().delete()
-        Project.objects.create(title="Shown project", tagline="A published one-liner.", published=True, order=1)
-        Project.objects.create(title="Secret draft", tagline="Not published.", published=False, order=2)
-        Project.objects.create(title="Placeholder tagline", tagline="[PLACEHOLDER] pitch",
-                               description="The real description.", published=True, order=3)
-
-    def get(self):
-        with mock.patch(OUTLOOK) as outlook, mock.patch(CLIENT) as alpaca:
-            response = self.client.get("/")
-        outlook.assert_not_called()       # no market data
-        alpaca.assert_not_called()        # no API calls
-        return response
-
-    def test_landing_for_visitors(self):
-        response = self.get()
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "albright_labs/landing.html")
-        page = response.content.decode()
-        self.assertIn("Albright Labs", page)
-        self.assertIn(f'href="{reverse("user_login")}" id="sign-in">Sign in</a>', page)
-        self.assertIn('<h1 class="rs-name" id="labs-name">Pat Example</h1>', page)
-        self.assertIn("I build data tools that pay for themselves.", page)
-        self.assertIn(f'href="{reverse("albright_resume:page")}" id="resume-button">View my interactive resume</a>', page)
-        self.assertIn("Shown project", page)
-        self.assertIn("A published one-liner.", page)
-        self.assertIn("The real description.", page)     # placeholder tagline skipped, description used
-        self.assertNotIn("[PLACEHOLDER", page)
-        self.assertNotIn("Secret draft", page)            # unpublished never shown
-        self.assertIn("&copy;", page)
-
-    def test_no_private_data_or_app_links(self):
-        User.objects.create_user(username="someone-private", password="pw-not-real-12345")
-        page = self.get().content.decode()
-        for private in ("someone-private", "Logout", "Grok Bot", "Watchlist", "Inbox", "Trading Account",
-                        "equity", "app-launcher", "navbar__links"):
-            self.assertNotIn(private, page)
-
-    def test_strict_security_headers(self):
-        response = self.get()
-        csp = response["Content-Security-Policy"]
-        self.assertIn("script-src 'self'", csp)
-        self.assertIn("style-src 'self'", csp)
-        self.assertIn("frame-ancestors 'none'", csp)
-        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
-        self.assertNotIn("<script>", response.content.decode())   # nothing inline for the CSP to block
-
-    def test_resume_button_hides_when_the_resume_page_is_off(self):
-        resume_site(enabled=False)
-        page = self.get().content.decode()
-        self.assertNotIn('id="resume-button"', page)
-        self.assertNotIn(f'href="{reverse("albright_resume:page")}"', page)
-        self.assertIn("Shown project", page)
-
-    def test_name_falls_back_to_labs_without_settings(self):
-        ResumeSettings.objects.filter(pk=1).update(full_name="")
-        LandingSettings.objects.all().delete()
-        self.assertIn('id="labs-name">Albright Labs</h1>', self.get().content.decode())
 
 
 class HomeTests(TestCase):

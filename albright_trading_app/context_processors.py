@@ -7,7 +7,7 @@ from albright_labs import apps_registry
 # (albright_labs.apps_registry). Anything else - the trading app's own pages,
 # login/logout, Django's /admin/ - is "trading". The site-wide Admin area
 # (/control/, albright_control) is "admin", and so are the resume management
-# pages (/control/resume/, albright_resume_admin) and Admin > Home page
+# pages (/control/resume/, albright_resume_admin) and Admin > Invite requests
 # (labs_admin). The hub ("/", "/home/") is "labs".
 APP_KEYS = {ns: app.accent for ns, app in apps_registry.BY_NAMESPACE.items() if ns}
 APP_KEYS[apps_registry.HOME_NAMESPACE] = apps_registry.HOME_ACCENT

@@ -1,0 +1,11 @@
+{% autoescape off %}Someone asked for an invite on the Albright Labs home page.
+
+Email: {{ email }}
+Requested: {{ requested }}{% if note %}
+Note: {{ note }}{% endif %}
+
+Send them an invite or decline it in Admin > Invite requests:
+{{ link }}
+
+- Albright Labs
+{{ site_url }}{% endautoescape %}

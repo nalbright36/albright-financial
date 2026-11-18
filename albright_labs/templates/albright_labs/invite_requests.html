@@ -1,0 +1,63 @@
+{% extends "index.html" %}
+{% block page_title %}Invite requests · {% endblock %}
+{% comment %}Admin > Invite requests (albright_labs.public_views): "Request an invite" on the public home page.{% endcomment %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 980px;">
+    <h1 style="margin: 0 0 6px;">Invite requests</h1>
+    <p style="margin: 0 0 20px; color: var(--text-secondary);">From "Request an invite" on the <a href="{% url 'labs:root' %}">public home page</a>.
+        "Send invite" makes an invite with the apps you tick (the same link and email as
+        <a href="{% url 'albright_control:users' %}#invites">Users &rsaquo; Invite user</a>); "Decline" sends nothing.
+        {% if not email_configured %}<strong>Email isn't set up</strong>, so invites aren't emailed - copy the link shown after sending.{% endif %}</p>
+
+    {% if sent %}
+    <section class="card" style="margin-bottom: 16px;" id="invite-sent">
+        <div class="card__header"><span class="card__label">Invite for {{ sent.row.email }}</span></div>
+        <p style="margin: 0 0 8px;">{% if sent.ok %}Emailed. {% endif %}{{ sent.message }}</p>
+        <label for="invite-link" style="font-size: 0.8125rem; color: var(--text-secondary);">Invite link (shown once - copy it now if you need it)</label>
+        <input id="invite-link" class="ledger-input" type="text" readonly value="{{ sent.link }}" style="width: 100%;">
+    </section>
+    {% endif %}
+
+    <nav class="sub-tabs" aria-label="Filter requests" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+        {% for key, label, count in filters %}
+        <a class="btn btn-sm {% if status == key %}btn-primary{% else %}btn-secondary{% endif %}" href="?{% if key %}status={{ key }}{% endif %}"{% if status == key %} aria-current="page"{% endif %}>{{ label }} ({{ count }})</a>
+        {% endfor %}
+    </nav>
+
+    {% if rows %}
+    <section class="card" style="padding: 0;">
+        <div class="table-scroll">
+        <table class="holdings" id="invite-requests-table">
+            <thead><tr><th>Email</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            {% for row in rows %}
+            <tr data-request="{{ row.pk }}" data-status="{{ row.status }}">
+                <td><strong>{{ row.email }}</strong>
+                    {% if row.note %}<div style="font-size: 0.8125rem; color: var(--text-secondary); max-width: 32rem; overflow-wrap: anywhere;">{{ row.note }}</div>{% endif %}</td>
+                <td style="font-size: 0.8125rem; white-space: nowrap;">{{ row.created_at|date:"M j, g:i A" }}</td>
+                <td><span class="badge {% if row.status == 'new' %}gain{% elif row.status == 'declined' %}loss{% else %}neutral{% endif %}">{{ row.get_status_display }}</span>
+                    {% if row.handled_at %}<div style="font-size: 0.75rem; color: var(--text-secondary);">{{ row.handled_at|date:"M j" }}{% if row.handled_by %} by {{ row.handled_by.username }}{% endif %}{% if row.invitation %} &middot; invite {{ row.invitation.status }}{% endif %}</div>{% endif %}</td>
+                <td class="users-actions">{% if row.status == 'new' %}
+                    <details>
+                        <summary class="btn btn-primary btn-sm">Send invite</summary>
+                        <form method="post" action="{% url 'labs_admin:invite_request_send' row.pk %}" style="margin-top: 8px;">{% csrf_token %}
+                            <fieldset style="border: 0; padding: 0; margin: 0 0 8px;"><legend style="font-size: 0.8125rem; color: var(--text-secondary);">Apps to grant</legend>
+                                {% for key, label, on in app_choices %}<label style="display: inline-flex; gap: 4px; margin-right: 10px; font-size: 0.8125rem;"><input type="checkbox" name="apps" value="{{ key }}"{% if on %} checked{% endif %}> {{ label }}</label>{% endfor %}
+                            </fieldset>
+                            <button type="submit" class="btn btn-primary btn-sm">Send invite to {{ row.email }}</button>
+                        </form>
+                    </details>
+                    <form method="post" action="{% url 'labs_admin:invite_request_decline' row.pk %}">{% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-sm">Decline</button></form>
+                    {% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+    {% else %}
+    <p class="card" style="margin: 0; color: var(--text-secondary);" id="invite-requests-empty">No {% if status %}{{ status }} {% endif %}requests yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

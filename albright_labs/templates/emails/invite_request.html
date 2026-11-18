@@ -1,0 +1,6 @@
+{% extends "emails/_base.html" %}
+{% block body %}
+<p style="margin:0 0 12px;">Someone asked for an invite on the Albright Labs home page.</p>
+<p style="margin:0;"><strong>Email:</strong> {{ email }}<br><strong>Requested:</strong> {{ requested }}{% if note %}<br><strong>Note:</strong> {{ note }}{% endif %}</p>
+<p style="margin:12px 0 0;">Send them an invite or decline it in <strong>Admin &rsaquo; Invite requests</strong>.</p>
+{% endblock %}

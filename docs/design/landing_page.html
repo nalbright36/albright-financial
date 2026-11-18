@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Albright Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07090c}
+a{color:#e8eaed;text-decoration:none}a:hover{color:#ffffff}
+.disp{font-family:'Space Grotesk',Inter,system-ui,sans-serif;letter-spacing:-0.02em}
+.navlink{color:#aab2bd;font-size:15px;padding:10px 4px}.navlink:hover{color:#ffffff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:12px;font-weight:600;font-size:15px;transition:transform .15s ease,background .15s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn-pri{background:#f4f5f7;color:#07090c}.btn-pri:hover{background:#ffffff;color:#07090c}
+.btn-sec{border:1px solid #2b333f;color:#e8eaed;background:#0f1318}.btn-sec:hover{background:#151a21}
+.fl{animation:fl 7s ease-in-out infinite}
+.fl2{animation:fl 8s ease-in-out -3s infinite}
+.fl3{animation:fl 9s ease-in-out -5s infinite}
+@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.ring{stroke-dasharray:264;stroke-dashoffset:264;animation:ring 2.4s ease-out .4s forwards}
+.ring2{stroke-dasharray:201;stroke-dashoffset:201;animation:ring2 2.4s ease-out .7s forwards}
+@keyframes ring{to{stroke-dashoffset:90}}
+@keyframes ring2{to{stroke-dashoffset:60}}
+.tick{animation:tick 6s ease-in-out infinite}
+@keyframes tick{0%,30%{background:transparent;border-color:#5b6472}40%,90%{background:#facc15;border-color:#facc15}100%{background:transparent;border-color:#5b6472}}
+.tickmark{animation:tickm 6s ease-in-out infinite}
+@keyframes tickm{0%,30%{opacity:0}40%,90%{opacity:1}100%{opacity:0}}
+.strike{animation:strike 6s ease-in-out infinite}
+@keyframes strike{0%,30%{color:#e8eaed;text-decoration-color:transparent}40%,90%{color:#7d8794;text-decoration-color:#7d8794}100%{color:#e8eaed;text-decoration-color:transparent}}
+.caret{display:inline-block;width:2px;height:16px;background:#e8eaed;vertical-align:-3px;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.typing span{display:inline-block;width:6px;height:6px;border-radius:50%;background:#9aa3af;margin-right:4px;animation:dot 1.2s ease-in-out infinite}
+.typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
+@keyframes dot{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+.appcard{transition:transform .2s ease,border-color .2s ease}.appcard:hover{transform:translateY(-3px);border-color:#3a4351}
+.glow{position:absolute;border-radius:50%;filter:blur(70px);pointer-events:none}
+@media (max-width:760px){.hide-sm{display:none !important}.hero-h{font-size:44px !important}.sec-h{font-size:34px !important}.navlinks{display:none !important}}
+@media (prefers-reduced-motion:reduce){.fl,.fl2,.fl3,.tick,.tickmark,.strike,.caret,.typing span{animation:none !important}.ring,.ring2{animation:none;stroke-dashoffset:90}}
+</style>
+</head>
+<body>
+<div style="background: #07090c; color: #e8eaed; font-family: Inter, system-ui, sans-serif; min-height: 100vh; overflow-x: hidden;">
+
+<!-- NAV -->
+<header style="position: sticky; top: 0; z-index: 20; background: rgba(7,9,12,0.82); backdrop-filter: blur(14px); border-bottom: 1px solid #161b22;">
+<nav aria-label="Main" style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 28px;">
+<a href="#top" style="display: flex; align-items: center; gap: 10px;" aria-label="Albright Labs home">
+<img src="logo-mark-white.png" alt="" style="height: 32px; width: auto;">
+<span class="disp" style="font-size: 18px; font-weight: 600;">Albright Labs</span>
+</a>
+<div class="navlinks" style="display: flex; gap: 22px; flex-grow: 1;">
+<a class="navlink" href="#apps">Apps</a>
+<a class="navlink" href="#features">Features</a>
+<a class="navlink" href="#circles">Sharing</a>
+<a class="navlink" href="#ai">Your AI</a>
+</div>
+<div style="display: flex; gap: 10px; margin-left: auto;">
+<a class="btn btn-sec" href="#signin" style="min-height: 42px; padding: 0 16px;">Sign in</a>
+<a class="btn btn-pri" href="#invite" style="min-height: 42px; padding: 0 16px;">Request an invite</a>
+</div>
+</nav>
+</header>
+
+<!-- HERO -->
+<section id="top" style="position: relative; max-width: 1200px; margin: 0 auto; padding: 88px 24px 72px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px;">
+<div class="glow" style="width: 520px; height: 520px; right: -80px; top: 40px; background: rgba(160,180,210,0.14);"></div>
+<div style="flex: 1 1 440px; min-width: 0; position: relative;">
+<div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid #262e39; border-radius: 999px; font-size: 13px; color: #b8c0cb; background: #0d1116;">
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #2dd4bf;"></span>
+<span>Invite-only · Built for households</span>
+</div>
+<h1 class="disp hero-h" style="margin: 22px 0 18px; font-size: 64px; line-height: 1.02; font-weight: 700;">Everything you run at home, in one place.</h1>
+<p style="margin: 0 0 32px; font-size: 19px; line-height: 1.55; color: #aab2bd; max-width: 520px;">Plan the week, cook from your own recipe book, log workouts and meals, keep notes and watch your money. One app, shared with the people you live with.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 12px;">
+<a class="btn btn-pri" href="#invite">Request an invite</a>
+<a class="btn btn-sec" href="#features">See what it does</a>
+</div>
+<p style="margin: 22px 0 0; font-size: 14px; color: #8b94a1;">Works in any browser and installs on your phone's home screen.</p>
+</div>
+
+<!-- hero collage -->
+<div style="flex: 1 1 480px; min-width: 0; position: relative; height: 540px;">
+<!-- Today card -->
+<div class="fl" style="position: absolute; left: 6%; top: 40px; width: 74%; max-width: 400px; background: #10141a; border: 1px solid #252c36; border-radius: 20px; padding: 22px; box-shadow: 0 30px 80px rgba(0,0,0,0.55);">
+<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+<div>
+<div class="disp" style="font-size: 22px; font-weight: 600;">Today</div>
+<div style="font-size: 13px; color: #8b94a1;">Tuesday, November 17</div>
+</div>
+<span style="font-size: 12px; color: #8b94a1;">4 left</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.22);">
+<span class="tick" style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; display: grid; place-items: center; flex: none;"><svg class="tickmark" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#07090c" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+<span class="strike" style="font-size: 15px; text-decoration: line-through; flex-grow: 1;">Weigh-in</span>
+<span style="font-size: 12px; color: #facc15;">7:00 AM</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.22);">
+<span style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; flex: none;"></span>
+<span style="font-size: 15px; flex-grow: 1;">Upper body · Week 3</span>
+<span style="font-size: 12px; color: #facc15;">6:00 PM</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; background: #151a21;">
+<span style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; flex: none;"></span>
+<span style="font-size: 15px; flex-grow: 1;">Grocery run · 6 items</span>
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #fb923c;"></span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; background: #151a21;">
+<span style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; flex: none;"></span>
+<span style="font-size: 15px; flex-grow: 1;">Renew car registration</span>
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #a3e635;"></span>
+</div>
+</div>
+<div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #1f252e; display: flex; justify-content: space-between; font-size: 13px; color: #9aa3af;">
+<span>Dinner: Lemon herb chicken</span>
+<span style="color: #fb923c;">Meals</span>
+</div>
+</div>
+
+<!-- macro ring card -->
+<div class="fl2 hide-sm" style="position: absolute; right: 0; top: 0; width: 200px; background: #10141a; border: 1px solid #252c36; border-radius: 18px; padding: 18px; box-shadow: 0 24px 60px rgba(0,0,0,0.5);">
+<div style="font-size: 12px; color: #9aa3af; margin-bottom: 10px;">Calories today</div>
+<div style="position: relative; width: 104px; height: 104px; margin: 0 auto 10px;">
+<svg width="104" height="104" viewBox="0 0 104 104" aria-hidden="true"><circle cx="52" cy="52" r="42" fill="none" stroke="#232a34" stroke-width="10"></circle><circle class="ring" cx="52" cy="52" r="42" fill="none" stroke="#facc15" stroke-width="10" stroke-linecap="round" transform="rotate(-90 52 52)"></circle><circle cx="52" cy="52" r="32" fill="none" stroke="#1b2129" stroke-width="6"></circle><circle class="ring2" cx="52" cy="52" r="32" fill="none" stroke="#34d399" stroke-width="6" stroke-linecap="round" transform="rotate(-90 52 52)"></circle></svg>
+<div style="position: absolute; inset: 0; display: grid; place-items: center; text-align: center;">
+<div><div class="disp" style="font-size: 20px; font-weight: 700;">1,450</div><div style="font-size: 11px; color: #8b94a1;">of 2,200</div></div>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #9aa3af;"><span>Protein 112g</span><span style="color: #34d399;">●</span></div>
+</div>
+
+<!-- recipe card -->
+<div class="fl3 hide-sm" style="position: absolute; right: 2%; bottom: 20px; width: 250px; background: #10141a; border: 1px solid #252c36; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5);">
+<div style="height: 96px; background: #1a1410; position: relative; overflow: hidden;">
+<svg width="250" height="96" viewBox="0 0 250 96" aria-hidden="true"><circle cx="125" cy="62" r="54" fill="#241b14"></circle><circle cx="125" cy="62" r="42" fill="#3a2a1c"></circle><ellipse cx="112" cy="58" rx="20" ry="13" fill="#c98a4a"></ellipse><ellipse cx="140" cy="66" rx="18" ry="11" fill="#d39a58"></ellipse><circle cx="104" cy="74" r="5" fill="#7fb24a"></circle><circle cx="150" cy="50" r="4" fill="#7fb24a"></circle><circle cx="128" cy="44" r="3.5" fill="#f2d16b"></circle><circle cx="96" cy="52" r="3" fill="#f2d16b"></circle></svg>
+</div>
+<div style="padding: 14px 16px 16px;">
+<div style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">Lemon herb chicken</div>
+<div style="display: flex; gap: 6px; flex-wrap: wrap;">
+<span style="font-size: 12px; padding: 4px 9px; border-radius: 999px; background: rgba(251,146,60,0.14); color: #fdba74;">Staple</span>
+<span style="font-size: 12px; padding: 4px 9px; border-radius: 999px; background: #1a2029; color: #aab2bd;">35 min</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- APPS -->
+<section id="apps" style="max-width: 1200px; margin: 0 auto; padding: 72px 24px;">
+<div style="max-width: 640px; margin-bottom: 40px;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #8b94a1; margin-bottom: 12px;">The apps</div>
+<h2 class="disp sec-h" style="margin: 0 0 14px; font-size: 44px; line-height: 1.08; font-weight: 700;">Pick the apps you need. Skip the rest.</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #aab2bd;">Each app has its own color, so you always know where you are. Turn on only what fits your life, and set the one that opens first.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px;">
+<div class="appcard" style="background: #0e1217; border: 1px solid #1f262f; border-radius: 16px; padding: 20px; display: flex; gap: 14px;">
+<span style="width: 42px; height: 42px; border-radius: 12px; background: rgba(163,230,53,0.14); color: #a3e635; display: grid; place-items: center; flex: none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"></path><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"></path></svg></span>
+<div><div style="font-weight: 600; margin-bottom: 4px;">Planner</div><div style="font-size: 14px; color: #9aa3af; line-height: 1.5;">Tasks, checklists and repeats, shared with your household.</div></div>
+</div>
+<div class="appcard" style="background: #0e1217; border: 1px solid #1f262f; border-radius: 16px; padding: 20px; display: flex; gap: 14px;">
+<span style="width: 42px; height: 42px; border-radius: 12px; background: rgba(251,146,60,0.14); color: #fb923c; display: grid; place-items: center; flex: none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 2c-2 2-3 5-3 8h3v12"></path></svg></span>
+<div><div style="font-weight: 600; margin-bottom: 4px;">Meals</div><div style="font-size: 14px; color: #9aa3af; line-height: 1.5;">Recipes, meal plans, grocery lists and places to eat out.</div></div>
+</div>
+<div class="appcard" style="background: #0e1217; border: 1px solid #1f262f; border-radius: 16px; padding: 20px; display: flex; gap: 14px;">
+<span style="width: 42px; height: 42px; border-radius: 12px; background: rgba(250,204,21,0.14); color: #facc15; display: grid; place-items: center; flex: none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12"></path></svg></span>
+<div><div style="font-weight: 600; margin-bottom: 4px;">Fitness</div><div style="font-size: 14px; color: #9aa3af; line-height: 1.5;">Workouts, programs, food and macros, weigh-ins.</div></div>
+</div>
+<div class="appcard" style="background: #0e1217; border: 1px solid #1f262f; border-radius: 16px; padding: 20px; display: flex; gap: 14px;">
+<span style="width: 42px; height: 42px; border-radius: 12px; background: rgba(52,211,153,0.14); color: #34d399; display: grid; place-items: center; flex: none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"></rect><path d="M2 10h20M6 15h4"></path></svg></span>
+<div><div style="font-weight: 600; margin-bottom: 4px;">Money</div><div style="font-size: 14px; color: #9aa3af; line-height: 1.5;">Your balances and spending, at a glance.</div></div>
+</div>
+<div class="appcard" style="background: #0e1217; border: 1px solid #1f262f; border-radius: 16px; padding: 20px; display: flex; gap: 14px;">
+<span style="width: 42px; height: 42px; border-radius: 12px; background: rgba(244,114,182,0.14); color: #f472b6; display: grid; place-items: center; flex: none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"></path><path d="M8 12h8M8 16h5"></path></svg></span>
+<div><div style="font-weight: 600; margin-bottom: 4px;">Notes</div><div style="font-size: 14px; color: #9aa3af; line-height: 1.5;">Rich notes with lists, photos and files.</div></div>
+</div>
+<div class="appcard" style="background: #0e1217; border: 1px solid #1f262f; border-radius: 16px; padding: 20px; display: flex; gap: 14px;">
+<span style="width: 42px; height: 42px; border-radius: 12px; background: rgba(167,139,250,0.14); color: #a78bfa; display: grid; place-items: center; flex: none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"></path></svg></span>
+<div><div style="font-weight: 600; margin-bottom: 4px;">Opportunities</div><div style="font-size: 14px; color: #9aa3af; line-height: 1.5;">Job, freelance and side-income leads, screened for scams.</div></div>
+</div>
+</div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 0; display: flex; flex-direction: column; gap: 120px;">
+
+<!-- Planner -->
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 56px;">
+<div style="flex: 1 1 400px; min-width: 0;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #a3e635; margin-bottom: 12px;">Planner</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">Your week, sorted.</h2>
+<p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #aab2bd;">One list for the whole house. Repeating chores roll forward on their own, and your workouts and weigh-ins show up right next to everything else.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; color: #d3d8de;">
+<div style="display: flex; gap: 12px;"><span style="color: #a3e635;">—</span><span>Repeat daily, weekly or every few days, one at a time</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #a3e635;">—</span><span>Checklists inside tasks that reset each time</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #a3e635;">—</span><span>Share a task with your household when you create it</span></div>
+</div>
+</div>
+<div style="flex: 1 1 460px; min-width: 0; position: relative;">
+<div class="glow" style="width: 360px; height: 360px; left: 10%; top: 10%; background: rgba(163,230,53,0.10);"></div>
+<div style="position: relative; background: #10141a; border: 1px solid #252c36; border-radius: 22px; padding: 22px; box-shadow: 0 30px 80px rgba(0,0,0,0.5);">
+<div style="display: flex; gap: 8px; margin-bottom: 18px; overflow: hidden;">
+<span style="padding: 8px 12px; border-radius: 10px; background: #151a21; font-size: 13px; color: #9aa3af; text-align: center;">Mon<br><b style="color: #e8eaed;">16</b></span>
+<span style="padding: 8px 12px; border-radius: 10px; background: rgba(163,230,53,0.14); border: 1px solid rgba(163,230,53,0.4); font-size: 13px; color: #a3e635; text-align: center;">Tue<br><b>17</b></span>
+<span style="padding: 8px 12px; border-radius: 10px; background: #151a21; font-size: 13px; color: #9aa3af; text-align: center;">Wed<br><b style="color: #e8eaed;">18</b></span>
+<span style="padding: 8px 12px; border-radius: 10px; background: #151a21; font-size: 13px; color: #9aa3af; text-align: center;">Thu<br><b style="color: #e8eaed;">19</b></span>
+<span style="padding: 8px 12px; border-radius: 10px; background: #151a21; font-size: 13px; color: #9aa3af; text-align: center;">Fri<br><b style="color: #e8eaed;">20</b></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px;">
+<div style="padding: 14px; border-radius: 14px; background: #151a21; border: 1px solid #222934;">
+<div style="display: flex; align-items: center; gap: 12px;">
+<span style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; flex: none;"></span>
+<span style="font-size: 15px; font-weight: 500; flex-grow: 1;">Clean out the garage</span>
+<span style="font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #1f2630; color: #aab2bd;">Shared · Home</span>
+</div>
+<div style="margin: 12px 0 0 30px; display: flex; flex-direction: column; gap: 8px; font-size: 14px;">
+<div style="display: flex; gap: 10px; align-items: center; color: #7d8794;"><span style="width: 14px; height: 14px; border-radius: 4px; background: #a3e635; flex: none;"></span><span style="text-decoration: line-through;">Donate boxes</span></div>
+<div style="display: flex; gap: 10px; align-items: center; color: #7d8794;"><span style="width: 14px; height: 14px; border-radius: 4px; background: #a3e635; flex: none;"></span><span style="text-decoration: line-through;">Sweep floor</span></div>
+<div style="display: flex; gap: 10px; align-items: center; color: #d3d8de;"><span style="width: 14px; height: 14px; border-radius: 4px; border: 2px solid #5b6472; flex: none;"></span><span>Hang bike rack</span></div>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 14px; background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.22);">
+<span style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; flex: none;"></span>
+<span style="font-size: 15px; flex-grow: 1;">Lower body · Programs</span>
+<span style="font-size: 12px; color: #facc15;">Fitness</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 14px; background: #151a21;">
+<span style="width: 18px; height: 18px; border-radius: 6px; border: 2px solid #5b6472; flex: none;"></span>
+<span style="font-size: 15px; flex-grow: 1;">Water the plants</span>
+<span style="font-size: 12px; color: #8b94a1;">Every 3 days</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Meals -->
+<div style="display: flex; flex-wrap: wrap-reverse; align-items: center; gap: 56px;">
+<div style="flex: 1 1 460px; min-width: 0; position: relative; min-height: 440px;">
+<div class="glow" style="width: 360px; height: 360px; left: 20%; top: 5%; background: rgba(251,146,60,0.10);"></div>
+<div class="fl" style="position: relative; width: 78%; max-width: 380px; background: #10141a; border: 1px solid #252c36; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.5);">
+<div style="height: 150px; background: #18120d; overflow: hidden;">
+<svg width="100%" height="150" viewBox="0 0 380 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="190" cy="92" r="84" fill="#221911"></circle><circle cx="190" cy="92" r="66" fill="#33261a"></circle><path d="M140 96c10-26 40-34 56-22s30 6 42 18-8 34-48 34-58-8-50-30z" fill="#b8763c"></path><circle cx="164" cy="80" r="7" fill="#e7c25c"></circle><circle cx="214" cy="112" r="6" fill="#e7c25c"></circle><path d="M150 112l10-6M226 76l10 4M184 70l4-9M200 124l6 8" stroke="#6ea83e" stroke-width="5" stroke-linecap="round"></path></svg>
+</div>
+<div style="padding: 18px 20px 20px;">
+<div style="font-size: 12px; color: #8b94a1; margin-bottom: 4px;">Imported from a link</div>
+<div class="disp" style="font-size: 20px; font-weight: 600; margin-bottom: 12px;">Honey garlic salmon</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;">
+<span style="font-size: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(251,146,60,0.14); color: #fdba74;">Favorite</span>
+<span style="font-size: 12px; padding: 5px 10px; border-radius: 999px; background: #1a2029; color: #aab2bd;">4 servings</span>
+<span style="font-size: 12px; padding: 5px 10px; border-radius: 999px; background: #1a2029; color: #aab2bd;">25 min</span>
+</div>
+<div style="display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 12px; background: #fb923c; color: #1a0e04; font-weight: 600; font-size: 14px;">Add 7 ingredients to groceries</div>
+</div>
+</div>
+<div class="fl2 hide-sm" style="position: absolute; right: 0; top: 150px; width: 240px; background: #10141a; border: 1px solid #252c36; border-radius: 18px; padding: 16px; box-shadow: 0 24px 60px rgba(0,0,0,0.5);">
+<div style="font-size: 13px; font-weight: 600; margin-bottom: 12px;">Grocery list</div>
+<div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px;">
+<div style="display: flex; justify-content: space-between;"><span>Salmon fillets</span><span style="color: #8b94a1;">4</span></div>
+<div style="display: flex; justify-content: space-between;"><span>Honey</span><span style="color: #8b94a1;">1/3 cup</span></div>
+<div style="display: flex; justify-content: space-between; align-items: center;"><span>Garlic</span><span style="font-size: 11px; padding: 3px 7px; border-radius: 6px; background: rgba(251,146,60,0.16); color: #fdba74;">Already on list</span></div>
+<div style="display: flex; justify-content: space-between;"><span>Green beans</span><span style="color: #8b94a1;">1 lb</span></div>
+</div>
+</div>
+</div>
+<div style="flex: 1 1 400px; min-width: 0;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #fb923c; margin-bottom: 12px;">Meals</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">Dinner, decided.</h2>
+<p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #aab2bd;">Build a recipe book your family actually eats from. Paste a link, rate it after dinner, and turn the plan into a grocery list in one tap.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; color: #d3d8de;">
+<div style="display: flex; gap: 12px;"><span style="color: #fb923c;">—</span><span>Import a recipe from any link</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #fb923c;">—</span><span>Rate dishes from "Won't eat again" to "Staple"</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #fb923c;">—</span><span>Grocery lists that catch duplicates</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #fb923c;">—</span><span>Eat Out finds places that fit tonight's mood</span></div>
+</div>
+</div>
+</div>
+
+<!-- Fitness -->
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 56px;">
+<div style="flex: 1 1 400px; min-width: 0;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #facc15; margin-bottom: 12px;">Fitness</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">Train, eat, weigh in. One log.</h2>
+<p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #aab2bd;">Log a whole workout in one line, see your macros fill up through the day, and follow a program that lands on your planner automatically.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; color: #d3d8de;">
+<div style="display: flex; gap: 12px;"><span style="color: #facc15;">—</span><span>Quick log: type it the way you'd text it</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #facc15;">—</span><span>Food search with real nutrition data</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #facc15;">—</span><span>Programs and weigh-in schedules on your planner</span></div>
+</div>
+</div>
+<div style="flex: 1 1 460px; min-width: 0; position: relative;">
+<div class="glow" style="width: 360px; height: 360px; left: 15%; top: 0; background: rgba(250,204,21,0.09);"></div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 14px;">
+<div style="background: #10141a; border: 1px solid #252c36; border-radius: 18px; padding: 18px; box-shadow: 0 24px 60px rgba(0,0,0,0.45);">
+<div style="font-size: 13px; color: #9aa3af; margin-bottom: 10px;">Quick log</div>
+<div style="display: flex; gap: 10px;">
+<div style="flex-grow: 1; min-height: 46px; display: flex; align-items: center; padding: 0 14px; border-radius: 12px; background: #0b0e12; border: 1px solid #facc15; font-size: 15px;">bench 185×8,8,7 · run 3.1mi 28:30<span class="caret"></span></div>
+<span style="min-height: 46px; padding: 0 18px; border-radius: 12px; background: #facc15; color: #1a1400; font-weight: 600; display: grid; place-items: center;">Save</span>
+</div>
+</div>
+<div style="display: flex; gap: 14px; flex-wrap: wrap;">
+<div style="flex: 1 1 200px; background: #10141a; border: 1px solid #252c36; border-radius: 18px; padding: 18px;">
+<div style="font-size: 13px; color: #9aa3af; margin-bottom: 14px;">Macros</div>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+<div><div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>Protein</span><span style="color: #9aa3af;">112 / 160g</span></div><div style="height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 70%; height: 8px; border-radius: 4px; background: #facc15;"></div></div></div>
+<div><div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>Carbs</span><span style="color: #9aa3af;">140 / 220g</span></div><div style="height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 64%; height: 8px; border-radius: 4px; background: #e5b80f;"></div></div></div>
+<div><div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>Fat</span><span style="color: #9aa3af;">48 / 70g</span></div><div style="height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 68%; height: 8px; border-radius: 4px; background: #c99d0a;"></div></div></div>
+</div>
+</div>
+<div style="flex: 1 1 200px; background: #10141a; border: 1px solid #252c36; border-radius: 18px; padding: 18px;">
+<div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 13px; color: #9aa3af;">Weight</span><span style="font-size: 12px; color: #34d399;">−4.6 lb</span></div>
+<div class="disp" style="font-size: 26px; font-weight: 700; margin-bottom: 6px;">182.0 <span style="font-size: 14px; color: #8b94a1;">lb</span></div>
+<svg width="100%" height="70" viewBox="0 0 200 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 L25 18 L50 16 L75 26 L100 30 L125 34 L150 42 L175 46 L200 54" fill="none" stroke="#facc15" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="200" cy="54" r="4" fill="#facc15"></circle></svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Notes -->
+<div style="display: flex; flex-wrap: wrap-reverse; align-items: center; gap: 56px;">
+<div style="flex: 1 1 460px; min-width: 0; position: relative;">
+<div class="glow" style="width: 340px; height: 340px; left: 20%; top: 0; background: rgba(244,114,182,0.09);"></div>
+<div style="position: relative; background: #10141a; border: 1px solid #252c36; border-radius: 22px; padding: 24px; box-shadow: 0 30px 80px rgba(0,0,0,0.5);">
+<div style="display: flex; gap: 6px; padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid #1f252e; color: #9aa3af;">
+<span style="width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-weight: 700;">B</span>
+<span style="width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-style: italic;">I</span>
+<span style="width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"></path></svg></span>
+<span style="width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: rgba(244,114,182,0.14); color: #f472b6;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="M21 15l-5-5L5 21"></path></svg></span>
+</div>
+<div class="disp" style="font-size: 24px; font-weight: 600; margin-bottom: 12px;">Kitchen remodel ideas</div>
+<div style="font-size: 15px; line-height: 1.7; color: #c9cfd6; margin-bottom: 14px;">Quotes due by the 30th. Keep the window, move the sink to the island.</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 15px; color: #c9cfd6; margin-bottom: 18px;">
+<div>• Quartz, light grey veining</div>
+<div>• Brass pulls</div>
+<div>• Under-cabinet lights</div>
+</div>
+<div style="display: flex; gap: 10px;">
+<div style="width: 120px; height: 84px; border-radius: 12px; background: #1b1f26; overflow: hidden;"><svg width="120" height="84" viewBox="0 0 120 84" aria-hidden="true"><rect width="120" height="84" fill="#20262e"></rect><rect x="10" y="40" width="100" height="34" rx="3" fill="#2f3741"></rect><rect x="10" y="36" width="100" height="6" rx="2" fill="#cfd5dc"></rect><rect x="18" y="10" width="34" height="20" rx="2" fill="#2a323c"></rect><rect x="68" y="10" width="34" height="20" rx="2" fill="#2a323c"></rect><circle cx="40" cy="57" r="2" fill="#c9a24a"></circle><circle cx="80" cy="57" r="2" fill="#c9a24a"></circle></svg></div>
+<div style="flex-grow: 1; min-height: 84px; border-radius: 12px; background: #151a21; border: 1px solid #222934; display: flex; align-items: center; gap: 12px; padding: 0 14px;">
+<span style="width: 36px; height: 36px; border-radius: 8px; background: rgba(244,114,182,0.14); color: #f472b6; display: grid; place-items: center; font-size: 11px; font-weight: 700;">PDF</span>
+<div><div style="font-size: 14px;">Contractor quote</div><div style="font-size: 12px; color: #8b94a1;">1.2 MB</div></div>
+</div>
+</div>
+</div>
+</div>
+<div style="flex: 1 1 400px; min-width: 0;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #f472b6; margin-bottom: 12px;">Notes</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">Notes that hold everything.</h2>
+<p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #aab2bd;">Write with real formatting, keep lists going as you type, and drop in photos and files. Link a note to a task so the details are always one tap away.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; color: #d3d8de;">
+<div style="display: flex; gap: 12px;"><span style="color: #f472b6;">—</span><span>Rich text, lists and checklists</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #f472b6;">—</span><span>Attach photos, PDFs and documents</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #f472b6;">—</span><span>Private by default, shareable when you want</span></div>
+</div>
+</div>
+</div>
+
+<!-- Money & more -->
+<div>
+<div style="max-width: 640px; margin-bottom: 36px;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #34d399; margin-bottom: 12px;">Money &amp; side income</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">For the money side of life.</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #aab2bd;">Keep an eye on your spending and find real ways to earn a little extra on the side.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+<div style="background: #0e1217; border: 1px solid #1f262f; border-radius: 20px; padding: 22px;">
+<div style="font-size: 13px; font-weight: 600; color: #34d399; margin-bottom: 14px;">Money</div>
+<div style="font-size: 13px; color: #9aa3af; margin-bottom: 14px;">November spending</div>
+<div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+<div style="display: flex; align-items: center; gap: 10px;"><span style="width: 80px;">Groceries</span><div style="flex-grow: 1; height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 72%; height: 8px; border-radius: 4px; background: #34d399;"></div></div></div>
+<div style="display: flex; align-items: center; gap: 10px;"><span style="width: 80px;">Dining</span><div style="flex-grow: 1; height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 45%; height: 8px; border-radius: 4px; background: #34d399;"></div></div></div>
+<div style="display: flex; align-items: center; gap: 10px;"><span style="width: 80px;">Gas</span><div style="flex-grow: 1; height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 30%; height: 8px; border-radius: 4px; background: #34d399;"></div></div></div>
+<div style="display: flex; align-items: center; gap: 10px;"><span style="width: 80px;">Home</span><div style="flex-grow: 1; height: 8px; border-radius: 4px; background: #1f2630;"><div style="width: 22%; height: 8px; border-radius: 4px; background: #34d399;"></div></div></div>
+</div>
+</div>
+<div style="background: #0e1217; border: 1px solid #1f262f; border-radius: 20px; padding: 22px;">
+<div style="font-size: 13px; font-weight: 600; color: #a78bfa; margin-bottom: 14px;">Opportunities</div>
+<div style="display: flex; flex-direction: column; gap: 10px;">
+<div style="padding: 12px; border-radius: 12px; background: #151a21;"><div style="font-size: 14px; font-weight: 500;">Freelance data dashboard</div><div style="font-size: 12px; color: #8b94a1;">Remote · matches your skills</div></div>
+<div style="padding: 12px; border-radius: 12px; background: #151a21;"><div style="font-size: 14px; font-weight: 500;">Open-source bug bounty</div><div style="font-size: 12px; color: #8b94a1;">Official source · checked for scams</div></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- CIRCLES -->
+<section id="circles" style="max-width: 1200px; margin: 0 auto; padding: 140px 24px 0;">
+<div style="background: #0c1014; border: 1px solid #1c222b; border-radius: 28px; padding: 56px 48px; display: flex; flex-wrap: wrap; gap: 48px; align-items: center; position: relative; overflow: hidden;">
+<div class="glow" style="width: 420px; height: 420px; right: -100px; top: -120px; background: rgba(45,212,191,0.10);"></div>
+<div style="flex: 1 1 380px; min-width: 0; position: relative;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #2dd4bf; margin-bottom: 12px;">Circles</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">Share with the people you live with.</h2>
+<p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #aab2bd;">Make a circle for your household, your parents, or your gym partner. Everything starts private, and you choose exactly what each circle can see.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; color: #d3d8de;">
+<div style="display: flex; gap: 12px;"><span style="color: #2dd4bf;">—</span><span>Opt-in sharing, item by item or app by app</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #2dd4bf;">—</span><span>Shared recipes, groceries and tasks stay in sync</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #2dd4bf;">—</span><span>An activity feed so nothing gets done twice</span></div>
+</div>
+</div>
+<div style="flex: 1 1 380px; min-width: 0; position: relative;">
+<div style="background: #10141a; border: 1px solid #252c36; border-radius: 20px; padding: 20px;">
+<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px;">
+<div style="display: flex;">
+<span style="width: 38px; height: 38px; border-radius: 50%; background: #2a3442; display: grid; place-items: center; font-weight: 700; color: #2dd4bf; border: 2px solid #10141a;">A</span>
+<span style="width: 38px; height: 38px; border-radius: 50%; background: #3a2a3a; display: grid; place-items: center; font-weight: 700; color: #f9a8d4; border: 2px solid #10141a; margin-left: -10px;">S</span>
+</div>
+<div><div style="font-weight: 600;">Home</div><div style="font-size: 13px; color: #8b94a1;">2 people · Meals, Planner</div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
+<div style="display: flex; gap: 12px; align-items: flex-start;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #a3e635; margin-top: 6px; flex: none;"></span><span><b>Sam</b> checked off <span style="color: #c9cfd6;">Grocery run</span><br><span style="font-size: 12px; color: #8b94a1;">12 min ago</span></span></div>
+<div style="display: flex; gap: 12px; align-items: flex-start;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #fb923c; margin-top: 6px; flex: none;"></span><span><b>Alex</b> rated <span style="color: #c9cfd6;">Honey garlic salmon</span> Favorite<br><span style="font-size: 12px; color: #8b94a1;">Yesterday</span></span></div>
+<div style="display: flex; gap: 12px; align-items: flex-start;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #fb923c; margin-top: 6px; flex: none;"></span><span><b>Sam</b> added 3 items to <span style="color: #c9cfd6;">Groceries</span><br><span style="font-size: 12px; color: #8b94a1;">Yesterday</span></span></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- AI -->
+<section id="ai" style="max-width: 1200px; margin: 0 auto; padding: 140px 24px 0; display: flex; flex-wrap: wrap-reverse; gap: 56px; align-items: center;">
+<div style="flex: 1 1 460px; min-width: 0; position: relative;">
+<div class="glow" style="width: 380px; height: 380px; left: 10%; top: 0; background: rgba(200,210,230,0.08);"></div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 12px; max-width: 460px;">
+<div style="align-self: flex-end; max-width: 80%; padding: 12px 16px; border-radius: 18px 18px 4px 18px; background: #e8eaed; color: #0b0d10; font-size: 15px; line-height: 1.5;">Had a burrito bowl for lunch, chicken, white rice, black beans, cheese.</div>
+<div style="align-self: flex-start; max-width: 86%; padding: 14px 16px; border-radius: 18px 18px 18px 4px; background: #141920; border: 1px solid #252c36; font-size: 15px; line-height: 1.55; color: #d3d8de;">Logged it to lunch: about <b style="color: #e8eaed;">720 kcal</b>, 48g protein. You're at 1,450 of 2,200 calories today.</div>
+<div style="align-self: flex-start; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #10141a; border: 1px solid rgba(250,204,21,0.3); width: 86%; box-sizing: border-box;">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: rgba(250,204,21,0.14); color: #facc15; display: grid; place-items: center; flex: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 2c-2 2-3 5-3 8h3v12"></path></svg></span>
+<div style="flex-grow: 1;"><div style="font-size: 14px; font-weight: 500;">Chicken burrito bowl</div><div style="font-size: 12px; color: #8b94a1;">Lunch · 720 kcal · P48 C70 F24</div></div>
+<span style="font-size: 11px; padding: 3px 8px; border-radius: 6px; background: rgba(250,204,21,0.14); color: #fde047;">AI estimate</span>
+</div>
+<div class="typing" style="align-self: flex-end; padding: 12px 16px; border-radius: 18px; background: #1a1f27;"><span></span><span></span><span></span></div>
+</div>
+</div>
+<div style="flex: 1 1 400px; min-width: 0;">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #cbd2db; margin-bottom: 12px;">Your AI</div>
+<h2 class="disp sec-h" style="margin: 0 0 16px; font-size: 44px; line-height: 1.08; font-weight: 700;">Bring the AI you already use.</h2>
+<p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #aab2bd;">Connect ChatGPT, Claude, Grok or any assistant with a personal key. Tell it what you ate, what's on your list, or what's for dinner, and it updates your account for you.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; color: #d3d8de;">
+<div style="display: flex; gap: 12px;"><span style="color: #cbd2db;">—</span><span>Step-by-step setup for each AI</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #cbd2db;">—</span><span>You choose exactly what it can see and change</span></div>
+<div style="display: flex; gap: 12px;"><span style="color: #cbd2db;">—</span><span>Turn it off any time with one click</span></div>
+</div>
+</div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section style="max-width: 1200px; margin: 0 auto; padding: 140px 24px 0;">
+<h2 class="disp sec-h" style="margin: 0 0 36px; font-size: 44px; line-height: 1.08; font-weight: 700; text-align: center;">Up and running in three steps.</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+<div style="background: #0e1217; border: 1px solid #1f262f; border-radius: 20px; padding: 26px;">
+<div class="disp" style="font-size: 40px; font-weight: 700; color: #3a4351; margin-bottom: 14px;">01</div>
+<div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Get an invite</div>
+<div style="font-size: 15px; line-height: 1.6; color: #9aa3af;">Request access, or join through someone already on Albright Labs.</div>
+</div>
+<div style="background: #0e1217; border: 1px solid #1f262f; border-radius: 20px; padding: 26px;">
+<div class="disp" style="font-size: 40px; font-weight: 700; color: #3a4351; margin-bottom: 14px;">02</div>
+<div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Pick your apps</div>
+<div style="font-size: 15px; line-height: 1.6; color: #9aa3af;">Turn on the ones you'll use and choose which one opens first.</div>
+</div>
+<div style="background: #0e1217; border: 1px solid #1f262f; border-radius: 20px; padding: 26px;">
+<div class="disp" style="font-size: 40px; font-weight: 700; color: #3a4351; margin-bottom: 14px;">03</div>
+<div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Add it to your phone</div>
+<div style="font-size: 15px; line-height: 1.6; color: #9aa3af;">Save it to your home screen and it opens like any other app.</div>
+</div>
+</div>
+</section>
+
+<!-- CTA -->
+<section id="invite" style="max-width: 1200px; margin: 0 auto; padding: 140px 24px 100px;">
+<div style="position: relative; overflow: hidden; border-radius: 28px; border: 1px solid #222a34; background: #0c1014; padding: 72px 32px; text-align: center;">
+<div class="glow" style="width: 600px; height: 300px; left: 50%; top: -120px; margin-left: -300px; background: rgba(210,220,235,0.12);"></div>
+<img src="logo-mark-white.png" alt="" style="height: 64px; width: auto; position: relative; margin-bottom: 18px;">
+<h2 class="disp sec-h" style="position: relative; margin: 0 0 14px; font-size: 48px; line-height: 1.05; font-weight: 700;">Ready when you are.</h2>
+<p style="position: relative; margin: 0 auto 30px; max-width: 520px; font-size: 17px; line-height: 1.6; color: #aab2bd;">Albright Labs is invite-only while it grows. Request a spot and we'll send you a link.</p>
+<form style="position: relative; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 480px; margin: 0 auto;">
+<label for="invite-email" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Email address</label>
+<input id="invite-email" type="email" placeholder="you@email.com" style="flex: 1 1 240px; min-height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid #2b333f; background: #07090c; color: #e8eaed; font: inherit; font-size: 15px;">
+<button type="submit" class="btn btn-pri" style="border: none; cursor: pointer; font-family: inherit;">Request an invite</button>
+</form>
+<p id="signin" style="position: relative; margin: 20px 0 0; font-size: 14px; color: #8b94a1;">Already have an account? <a href="#signin" style="color: #e8eaed; text-decoration: underline;">Sign in</a></p>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer style="border-top: 1px solid #161b22;">
+<div style="max-width: 1200px; margin: 0 auto; padding: 28px 24px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; font-size: 14px; color: #8b94a1;">
+<div style="display: flex; align-items: center; gap: 10px;"><img src="logo-mark-white.png" alt="" style="height: 22px; width: auto;"><span>© 2026 Albright Labs</span></div>
+<div style="display: flex; gap: 20px;"><a href="#privacy" style="color: #8b94a1;">Privacy</a><a href="#terms" style="color: #8b94a1;">Terms</a><a href="#contact" style="color: #8b94a1;">Contact</a></div>
+</div>
+</footer>
+
+</div>
+</body>
+</html>

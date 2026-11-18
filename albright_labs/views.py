@@ -1,7 +1,7 @@
 """Albright Labs pages.
 
-  "/"        - visitors: the public landing page (no login, no private or market
-               data, no API calls; the resume app's strict security headers).
+  "/"        - visitors: the public home page (public_views.landing: no login,
+               no private or market data, no API calls; strict security headers).
                Signed in: their "Open after sign-in" app if set, else Home (the
                app picker). "/?picker=1" always shows the picker (labs.landing).
                Someone who can open just one app goes straight to it.
@@ -14,7 +14,7 @@
                "access pending" there.
   "/home/account/" - My account (linked from the header): the same settings as forms.
   "/join/<token>/" - an invite's sign-up page (invite_views).
-  /control/labs/ - Admin > Home page: the landing page's editable text.
+  /control/labs/ - Admin > Invite requests (public_views).
 """
 import logging
 
@@ -27,44 +27,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_control.access import audit, superuser_required
-from albright_resume.security import public_headers
-
-from . import app_access, apps_registry, landing, launcher, tiles
-from .forms import LandingSettingsForm
-from .models import LandingSettings
+from . import app_access, apps_registry, landing, launcher, public_views, tiles
 
 log = logging.getLogger(__name__)
-
-
-def _blurb(project):
-    """A project's one-line blurb for the landing page - never placeholder text."""
-    for text in (project.tagline, project.description):
-        text = (text or "").strip()
-        if text and "[PLACEHOLDER" not in text:
-            return text
-    return ""
-
-
-def landing_context():
-    """Only published, public resume content - the same things /resume/ shows visitors."""
-    from albright_resume.models import Project, ResumeSettings
-    site = ResumeSettings.objects.filter(pk=1).first()
-    settings_row = LandingSettings.objects.filter(pk=LandingSettings.SINGLETON_PK).first()
-    name = (settings_row.name if settings_row and settings_row.name else "") or (site.full_name if site else "")
-    projects = [{"title": p.title, "blurb": _blurb(p)}
-                for p in Project.objects.filter(published=True).order_by("order", "pk")[:6]]
-    return {
-        "name": name or "Albright Labs",
-        "headline": settings_row.headline if settings_row else "",
-        "resume_on": bool(site and site.page_enabled),
-        "projects": projects,
-    }
-
-
-@public_headers
-def public_landing(request):
-    return render(request, "albright_labs/landing.html", landing_context())
 
 
 @never_cache
@@ -72,7 +37,7 @@ def root(request):
     """"/": the public landing for visitors. Signed in: "/?picker=1" is always the picker; otherwise their
     "Open after sign-in" app, else the picker. Someone with a single app goes straight to it either way."""
     if not request.user.is_authenticated:
-        return public_landing(request)
+        return public_views.landing(request)
     target = landing.single_app_url(request)
     if not target and request.GET.get(landing.PICKER_PARAM) != "1":
         target = landing.landing_url(request)
@@ -313,15 +278,3 @@ def show_app(request, key):
     messages.success(request, f"{app.label} is back in your navigation.")
     return _back(request, app.landing_url_name)
 
-
-@superuser_required
-def landing_settings(request):
-    """Admin > Home page: the public landing page's name and headline."""
-    row = LandingSettings.load()
-    form = LandingSettingsForm(request.POST or None, instance=row)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        audit(request, "landing_settings_saved", row.headline[:100])
-        messages.success(request, "Landing page saved.")
-        return redirect("labs_admin:settings")
-    return render(request, "albright_labs/landing_settings.html", {"form": form, **landing_context()})

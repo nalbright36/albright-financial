@@ -1,0 +1,68 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ meta_title }}</title>
+<meta name="description" content="{{ meta_description }}">
+<link rel="canonical" href="{{ canonical }}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Albright Labs">
+<meta property="og:title" content="{{ meta_title }}">
+<meta property="og:description" content="{{ meta_description }}">
+<meta property="og:url" content="{{ canonical }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Albright Labs logo">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ meta_title }}">
+<meta name="twitter:description" content="{{ meta_description }}">
+<meta name="twitter:image" content="{{ og_image }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="{% static 'css/landing.css' %}">
+{% include "_head_icons.html" %}
+</head>
+{% comment %}
+The public pages for visitors (albright_labs.public_views): the home page and its footer pages. Not the app's
+index.html - no app nav, no launcher, nothing private. Served with strict headers (script/style from this site
+only, plus Google Fonts), so there's no inline style or script anywhere here: every style is in css/landing.css.
+"home" is "" on the home page (the nav links are #anchors) and "/" on the others.
+{% endcomment %}
+<body class="ld-body">
+<div class="ld-page">
+
+<!-- NAV -->
+<header class="ld-header">
+<nav aria-label="Main" class="ld-nav">
+<a href="{{ home }}#top" class="ld-brand" aria-label="Albright Labs home">
+<img src="{% static 'icons/logo-mark-white.png' %}" alt="" class="ld-brand__logo" width="65" height="32">
+<span class="disp ld-brand__name">Albright Labs</span>
+</a>
+<div class="navlinks ld-navlinks">
+<a class="navlink" href="{{ home }}#apps">Apps</a>
+<a class="navlink" href="{{ home }}#features">Features</a>
+<a class="navlink" href="{{ home }}#circles">Sharing</a>
+<a class="navlink" href="{{ home }}#ai">Your AI</a>
+</div>
+<div class="ld-nav__actions">
+<a class="btn btn-sec btn--nav" href="{% url 'user_login' %}" id="nav-sign-in">Sign in</a>
+<a class="btn btn-pri btn--nav ld-nav__invite" href="{{ home }}#invite">Request an invite</a>
+</div>
+</nav>
+</header>
+
+{% block content %}{% endblock %}
+
+<!-- FOOTER -->
+<footer class="ld-footer">
+<div class="ld-footer__inner">
+<div class="ld-footer__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="" class="ld-footer__logo" width="44" height="22"><span>&copy; {% now "Y" %} Albright Labs</span></div>
+<div class="ld-footer__links"><a href="{% url 'labs:privacy' %}">Privacy</a><a href="{% url 'labs:terms' %}">Terms</a><a href="{% url 'labs:contact' %}">Contact</a></div>
+</div>
+</footer>
+
+</div>
+</body>
+</html>

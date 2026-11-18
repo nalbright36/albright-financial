@@ -6,6 +6,7 @@ down password and invite-token guessing. Counts live in the database
   - signup: every invite page request (a bad token, a form post)
   - reset: forgot-password form posts
   - oauth: OAuth client registrations (an AI app connecting over MCP)
+  - invite: "Request an invite" posts on the public home page
 
 Over the limit, the page answers 429 with how long to wait, whatever was
 asked - so it never tells whether an account or invite exists.
@@ -18,7 +19,8 @@ from .models import RateLimitHit
 
 # scope: (attempts, window in minutes)
 LIMITS = {"login": (10, 15), "signup": (20, 15), "reset": (5, 15),
-          "oauth": (20, 60)}   # AI apps registering to connect (albright_bot_api.oauth_views)
+          "oauth": (20, 60),   # AI apps registering to connect (albright_bot_api.oauth_views)
+          "invite": (5, 60)}   # "Request an invite" on the public home page (albright_labs.public_views)
 
 
 def client_ip(request):

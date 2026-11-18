@@ -1,0 +1,12 @@
+{% extends "albright_labs/public_base.html" %}
+{% comment %}A placeholder footer page (Privacy / Terms / Contact; public_views.placeholder).{% endcomment %}
+{% block content %}
+<main class="ld-doc">
+<h1 class="disp ld-doc__h">{{ page_title }}</h1>
+<p class="ld-doc__body">{{ body }}</p>
+<div class="ld-actions">
+<a class="btn btn-pri" href="{% url 'labs:root' %}#invite">Request an invite</a>
+<a class="btn btn-sec" href="{% url 'labs:root' %}">Back to home</a>
+</div>
+</main>
+{% endblock %}

@@ -1,67 +1,439 @@
-{% load static %}<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Albright Labs{% if name and name != "Albright Labs" %} · {{ name }}{% endif %}</title>
-    <meta name="description" content="{{ headline|default:'Albright Labs' }}">
-    <script src="{% static 'labs/theme.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'resume/resume.css' %}">
-    {% include "_head_icons.html" %}
-</head>
+{% extends "albright_labs/public_base.html" %}{% load static %}
 {% comment %}
-The public landing page (labs.views.public_landing): no login, no private data,
-no market data, no API calls - only the landing settings and the resume app's
-PUBLISHED projects. Served with the resume app's strict security headers
-(script/style 'self' only), so everything here is static files.
+The public home page (docs/design/landing_page.html; public_views.landing). The design's inline styles are
+classes in css/landing.css (the CSP allows no inline style); the values are the design's.
+--acc on .acc-* sets a section's accent (kicker, dashes, icon chips).
 {% endcomment %}
-<body class="labs-landing">
-<header class="rs-top">
-    <div class="rs-wrap rs-top__inner">
-        <a href="{% url 'labs:root' %}" class="rs-logo" id="labs-brand"><img src="{% static 'icons/icon-192.png' %}" alt="Albright" width="30" height="30" class="rs-logo__mark"><span>Labs</span></a>
-        <nav class="rs-top__nav labs-top__nav" aria-label="Site">
-            {% if resume_on %}<a href="{% url 'albright_resume:page' %}">Resume</a>{% endif %}
-            {% if projects %}<a href="#build">What I build</a>{% endif %}
-        </nav>
-        <a class="rs-btn rs-btn--sm rs-btn--ghost" href="{% url 'user_login' %}" id="sign-in">Sign in</a>
-    </div>
-</header>
+{% block content %}
+<main>
+<!-- HERO -->
+<section id="top" class="ld-hero">
+<div class="glow glow--hero"></div>
+<div class="ld-hero__copy">
+<div class="ld-pill">
+<span class="ld-pill__dot"></span>
+<span>Invite-only · Built for households</span>
+</div>
+<h1 class="disp hero-h ld-hero__h">Everything you run at home, in one place.</h1>
+<p class="ld-hero__lead">Plan the week, cook from your own recipe book, log workouts and meals, keep notes and watch your money. One app, shared with the people you live with.</p>
+<div class="ld-actions">
+<a class="btn btn-pri" href="#invite">Request an invite</a>
+<a class="btn btn-sec" href="#features">See what it does</a>
+</div>
+<p class="ld-hero__note">Works in any browser and installs on your phone's home screen.</p>
+</div>
 
-<main id="top">
-    <section class="rs-hero labs-hero">
-        <div class="rs-wrap">
-            <p class="rs-eyebrow"><span class="rs-dot" aria-hidden="true"></span> Albright Labs</p>
-            <h1 class="rs-name" id="labs-name">{{ name }}</h1>
-            {% if headline %}<p class="rs-headline" id="labs-headline">{{ headline }}</p>{% endif %}
-            {% if resume_on %}
-            <div class="rs-actions">
-                <a class="rs-btn rs-btn--primary" href="{% url 'albright_resume:page' %}" id="resume-button">View my interactive resume</a>
-            </div>
-            {% endif %}
-        </div>
-    </section>
+<!-- hero collage -->
+<div class="ld-collage" aria-hidden="true">
+<!-- Today card -->
+<div class="fl ld-mock ld-today">
+<div class="ld-today__head">
+<div>
+<div class="disp ld-today__title">Today</div>
+<div class="ld-meta13">Tuesday, November 17</div>
+</div>
+<span class="ld-meta12">4 left</span>
+</div>
+<div class="ld-stack8">
+<div class="ld-task ld-task--fit">
+<span class="tick ld-check ld-check--tick"><svg class="tickmark" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#07090c" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+<span class="strike ld-task__label ld-task__label--done">Weigh-in</span>
+<span class="ld-task__time">7:00 AM</span>
+</div>
+<div class="ld-task ld-task--fit">
+<span class="ld-check"></span>
+<span class="ld-task__label">Upper body · Week 3</span>
+<span class="ld-task__time">6:00 PM</span>
+</div>
+<div class="ld-task">
+<span class="ld-check"></span>
+<span class="ld-task__label">Grocery run · 6 items</span>
+<span class="ld-dot bg-orange"></span>
+</div>
+<div class="ld-task">
+<span class="ld-check"></span>
+<span class="ld-task__label">Renew car registration</span>
+<span class="ld-dot bg-lime"></span>
+</div>
+</div>
+<div class="ld-today__foot">
+<span>Dinner: Lemon herb chicken</span>
+<span class="t-orange">Meals</span>
+</div>
+</div>
 
-    {% if projects %}
-    <section class="rs-section" id="build">
-        <div class="rs-wrap">
-            <h2 class="rs-h2">What I build</h2>
-            <div class="rs-grid">
-                {% for p in projects %}
-                <article class="rs-card rs-mini">
-                    <h3>{{ p.title }}</h3>
-                    {% if p.blurb %}<p>{{ p.blurb|truncatechars:180 }}</p>{% endif %}
-                </article>
-                {% endfor %}
-            </div>
-        </div>
-    </section>
-    {% endif %}
+<!-- macro ring card -->
+<div class="fl2 hide-sm ld-mock ld-ring">
+<div class="ld-ring__label">Calories today</div>
+<div class="ld-ring__dial">
+<svg width="104" height="104" viewBox="0 0 104 104" aria-hidden="true"><circle cx="52" cy="52" r="42" fill="none" stroke="#232a34" stroke-width="10"></circle><circle class="ring" cx="52" cy="52" r="42" fill="none" stroke="#facc15" stroke-width="10" stroke-linecap="round" transform="rotate(-90 52 52)"></circle><circle cx="52" cy="52" r="32" fill="none" stroke="#1b2129" stroke-width="6"></circle><circle class="ring2" cx="52" cy="52" r="32" fill="none" stroke="#34d399" stroke-width="6" stroke-linecap="round" transform="rotate(-90 52 52)"></circle></svg>
+<div class="ld-ring__center">
+<div><div class="disp ld-ring__value">1,450</div><div class="ld-ring__of">of 2,200</div></div>
+</div>
+</div>
+<div class="ld-ring__foot"><span>Protein 112g</span><span class="t-emerald">●</span></div>
+</div>
+
+<!-- recipe card -->
+<div class="fl3 hide-sm ld-mock ld-recipe">
+<div class="ld-recipe__art">
+<svg width="250" height="96" viewBox="0 0 250 96" aria-hidden="true"><circle cx="125" cy="62" r="54" fill="#241b14"></circle><circle cx="125" cy="62" r="42" fill="#3a2a1c"></circle><ellipse cx="112" cy="58" rx="20" ry="13" fill="#c98a4a"></ellipse><ellipse cx="140" cy="66" rx="18" ry="11" fill="#d39a58"></ellipse><circle cx="104" cy="74" r="5" fill="#7fb24a"></circle><circle cx="150" cy="50" r="4" fill="#7fb24a"></circle><circle cx="128" cy="44" r="3.5" fill="#f2d16b"></circle><circle cx="96" cy="52" r="3" fill="#f2d16b"></circle></svg>
+</div>
+<div class="ld-recipe__body">
+<div class="ld-recipe__title">Lemon herb chicken</div>
+<div class="ld-tags">
+<span class="ld-tag ld-tag--orange">Staple</span>
+<span class="ld-tag">35 min</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- APPS -->
+<section id="apps" class="ld-section ld-apps">
+<div class="ld-intro acc-gray">
+<div class="ld-kicker">The apps</div>
+<h2 class="disp sec-h ld-h2 ld-h2--tight">Pick the apps you need. Skip the rest.</h2>
+<p class="ld-lead ld-lead--flush">Each app has its own color, so you always know where you are. Turn on only what fits your life, and set the one that opens first.</p>
+</div>
+<div class="ld-appgrid">
+<div class="appcard ld-appcard acc-lime">
+<span class="ld-chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"></path><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"></path></svg></span>
+<div><div class="ld-appcard__name">Planner</div><div class="ld-appcard__text">Tasks, checklists and repeats, shared with your household.</div></div>
+</div>
+<div class="appcard ld-appcard acc-orange">
+<span class="ld-chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 2c-2 2-3 5-3 8h3v12"></path></svg></span>
+<div><div class="ld-appcard__name">Meals</div><div class="ld-appcard__text">Recipes, meal plans, grocery lists and places to eat out.</div></div>
+</div>
+<div class="appcard ld-appcard acc-yellow">
+<span class="ld-chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12"></path></svg></span>
+<div><div class="ld-appcard__name">Fitness</div><div class="ld-appcard__text">Workouts, programs, food and macros, weigh-ins.</div></div>
+</div>
+<div class="appcard ld-appcard acc-emerald">
+<span class="ld-chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"></rect><path d="M2 10h20M6 15h4"></path></svg></span>
+<div><div class="ld-appcard__name">Money</div><div class="ld-appcard__text">Your balances and spending, at a glance.</div></div>
+</div>
+<div class="appcard ld-appcard acc-pink">
+<span class="ld-chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"></path><path d="M8 12h8M8 16h5"></path></svg></span>
+<div><div class="ld-appcard__name">Notes</div><div class="ld-appcard__text">Rich notes with lists, photos and files.</div></div>
+</div>
+<div class="appcard ld-appcard acc-violet">
+<span class="ld-chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"></path></svg></span>
+<div><div class="ld-appcard__name">Opportunities</div><div class="ld-appcard__text">Job, freelance and side-income leads, screened for scams.</div></div>
+</div>
+</div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="ld-features">
+
+<!-- Planner -->
+<div class="ld-feature acc-lime">
+<div class="ld-feature__copy">
+<div class="ld-kicker">Planner</div>
+<h2 class="disp sec-h ld-h2">Your week, sorted.</h2>
+<p class="ld-lead">One list for the whole house. Repeating chores roll forward on their own, and your workouts and weigh-ins show up right next to everything else.</p>
+<div class="ld-bullets">
+<div><span class="ld-dash">—</span><span>Repeat daily, weekly or every few days, one at a time</span></div>
+<div><span class="ld-dash">—</span><span>Checklists inside tasks that reset each time</span></div>
+<div><span class="ld-dash">—</span><span>Share a task with your household when you create it</span></div>
+</div>
+</div>
+<div class="ld-feature__art" aria-hidden="true">
+<div class="glow glow--planner"></div>
+<div class="ld-mock ld-panel">
+<div class="ld-days">
+<span class="ld-day">Mon<br><b>16</b></span>
+<span class="ld-day ld-day--on">Tue<br><b>17</b></span>
+<span class="ld-day">Wed<br><b>18</b></span>
+<span class="ld-day">Thu<br><b>19</b></span>
+<span class="ld-day">Fri<br><b>20</b></span>
+</div>
+<div class="ld-stack10">
+<div class="ld-bigtask">
+<div class="ld-bigtask__row">
+<span class="ld-check"></span>
+<span class="ld-bigtask__label">Clean out the garage</span>
+<span class="ld-badge">Shared · Home</span>
+</div>
+<div class="ld-sublist">
+<div class="ld-sub ld-sub--done"><span class="ld-subcheck ld-subcheck--on"></span><span>Donate boxes</span></div>
+<div class="ld-sub ld-sub--done"><span class="ld-subcheck ld-subcheck--on"></span><span>Sweep floor</span></div>
+<div class="ld-sub"><span class="ld-subcheck"></span><span>Hang bike rack</span></div>
+</div>
+</div>
+<div class="ld-task ld-task--fit ld-task--lg">
+<span class="ld-check"></span>
+<span class="ld-task__label">Lower body · Programs</span>
+<span class="ld-task__time">Fitness</span>
+</div>
+<div class="ld-task ld-task--lg">
+<span class="ld-check"></span>
+<span class="ld-task__label">Water the plants</span>
+<span class="ld-meta12">Every 3 days</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Meals -->
+<div class="ld-feature ld-feature--rev acc-orange">
+<div class="ld-feature__art ld-meals-art" aria-hidden="true">
+<div class="glow glow--meals"></div>
+<div class="fl ld-mock ld-dish">
+<div class="ld-dish__art">
+<svg width="100%" height="150" viewBox="0 0 380 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="190" cy="92" r="84" fill="#221911"></circle><circle cx="190" cy="92" r="66" fill="#33261a"></circle><path d="M140 96c10-26 40-34 56-22s30 6 42 18-8 34-48 34-58-8-50-30z" fill="#b8763c"></path><circle cx="164" cy="80" r="7" fill="#e7c25c"></circle><circle cx="214" cy="112" r="6" fill="#e7c25c"></circle><path d="M150 112l10-6M226 76l10 4M184 70l4-9M200 124l6 8" stroke="#6ea83e" stroke-width="5" stroke-linecap="round"></path></svg>
+</div>
+<div class="ld-dish__body">
+<div class="ld-dish__from">Imported from a link</div>
+<div class="disp ld-dish__title">Honey garlic salmon</div>
+<div class="ld-tags ld-tags--lg">
+<span class="ld-tag ld-tag--orange">Favorite</span>
+<span class="ld-tag">4 servings</span>
+<span class="ld-tag">25 min</span>
+</div>
+<div class="ld-dish__cta">Add 7 ingredients to groceries</div>
+</div>
+</div>
+<div class="fl2 hide-sm ld-mock ld-grocery">
+<div class="ld-grocery__title">Grocery list</div>
+<div class="ld-grocery__rows">
+<div><span>Salmon fillets</span><span class="ld-grocery__qty">4</span></div>
+<div><span>Honey</span><span class="ld-grocery__qty">1/3 cup</span></div>
+<div><span>Garlic</span><span class="ld-grocery__dupe">Already on list</span></div>
+<div><span>Green beans</span><span class="ld-grocery__qty">1 lb</span></div>
+</div>
+</div>
+</div>
+<div class="ld-feature__copy">
+<div class="ld-kicker">Meals</div>
+<h2 class="disp sec-h ld-h2">Dinner, decided.</h2>
+<p class="ld-lead">Build a recipe book your family actually eats from. Paste a link, rate it after dinner, and turn the plan into a grocery list in one tap.</p>
+<div class="ld-bullets">
+<div><span class="ld-dash">—</span><span>Import a recipe from any link</span></div>
+<div><span class="ld-dash">—</span><span>Rate dishes from "Won't eat again" to "Staple"</span></div>
+<div><span class="ld-dash">—</span><span>Grocery lists that catch duplicates</span></div>
+<div><span class="ld-dash">—</span><span>Eat Out finds places that fit tonight's mood</span></div>
+</div>
+</div>
+</div>
+
+<!-- Fitness -->
+<div class="ld-feature acc-yellow">
+<div class="ld-feature__copy">
+<div class="ld-kicker">Fitness</div>
+<h2 class="disp sec-h ld-h2">Train, eat, weigh in. One log.</h2>
+<p class="ld-lead">Log a whole workout in one line, see your macros fill up through the day, and follow a program that lands on your planner automatically.</p>
+<div class="ld-bullets">
+<div><span class="ld-dash">—</span><span>Quick log: type it the way you'd text it</span></div>
+<div><span class="ld-dash">—</span><span>Food search with real nutrition data</span></div>
+<div><span class="ld-dash">—</span><span>Programs and weigh-in schedules on your planner</span></div>
+</div>
+</div>
+<div class="ld-feature__art" aria-hidden="true">
+<div class="glow glow--fitness"></div>
+<div class="ld-fit">
+<div class="ld-mock ld-card18 ld-card18--shadow">
+<div class="ld-card18__label ld-card18__label--10">Quick log</div>
+<div class="ld-quick">
+<div class="ld-quick__input">bench 185×8,8,7 · run 3.1mi 28:30<span class="caret"></span></div>
+<span class="ld-quick__save">Save</span>
+</div>
+</div>
+<div class="ld-fit__row">
+<div class="ld-mock ld-card18 ld-fit__half">
+<div class="ld-card18__label ld-card18__label--14">Macros</div>
+<div class="ld-macros">
+<div><div class="ld-macro__head"><span>Protein</span><span class="ld-macro__of">112 / 160g</span></div><div class="ld-bar"><div class="ld-bar__fill ld-w70 bg-yellow"></div></div></div>
+<div><div class="ld-macro__head"><span>Carbs</span><span class="ld-macro__of">140 / 220g</span></div><div class="ld-bar"><div class="ld-bar__fill ld-w64 bg-yellow2"></div></div></div>
+<div><div class="ld-macro__head"><span>Fat</span><span class="ld-macro__of">48 / 70g</span></div><div class="ld-bar"><div class="ld-bar__fill ld-w68 bg-yellow3"></div></div></div>
+</div>
+</div>
+<div class="ld-mock ld-card18 ld-fit__half">
+<div class="ld-weight__head"><span class="ld-weight__label">Weight</span><span class="ld-weight__delta">−4.6 lb</span></div>
+<div class="disp ld-weight__value">182.0 <span class="ld-weight__unit">lb</span></div>
+<svg width="100%" height="70" viewBox="0 0 200 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 L25 18 L50 16 L75 26 L100 30 L125 34 L150 42 L175 46 L200 54" fill="none" stroke="#facc15" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="200" cy="54" r="4" fill="#facc15"></circle></svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Notes -->
+<div class="ld-feature ld-feature--rev acc-pink">
+<div class="ld-feature__art" aria-hidden="true">
+<div class="glow glow--notes"></div>
+<div class="ld-mock ld-panel ld-panel--notes">
+<div class="ld-toolbar">
+<span class="ld-tool ld-tool--b">B</span>
+<span class="ld-tool ld-tool--i">I</span>
+<span class="ld-tool"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"></path></svg></span>
+<span class="ld-tool ld-tool--on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="M21 15l-5-5L5 21"></path></svg></span>
+</div>
+<div class="disp ld-note__title">Kitchen remodel ideas</div>
+<div class="ld-note__text">Quotes due by the 30th. Keep the window, move the sink to the island.</div>
+<div class="ld-note__list">
+<div>• Quartz, light grey veining</div>
+<div>• Brass pulls</div>
+<div>• Under-cabinet lights</div>
+</div>
+<div class="ld-note__files">
+<div class="ld-note__photo"><svg width="120" height="84" viewBox="0 0 120 84" aria-hidden="true"><rect width="120" height="84" fill="#20262e"></rect><rect x="10" y="40" width="100" height="34" rx="3" fill="#2f3741"></rect><rect x="10" y="36" width="100" height="6" rx="2" fill="#cfd5dc"></rect><rect x="18" y="10" width="34" height="20" rx="2" fill="#2a323c"></rect><rect x="68" y="10" width="34" height="20" rx="2" fill="#2a323c"></rect><circle cx="40" cy="57" r="2" fill="#c9a24a"></circle><circle cx="80" cy="57" r="2" fill="#c9a24a"></circle></svg></div>
+<div class="ld-note__file">
+<span class="ld-note__pdf">PDF</span>
+<div><div class="ld-note__fname">Contractor quote</div><div class="ld-meta12">1.2 MB</div></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ld-feature__copy">
+<div class="ld-kicker">Notes</div>
+<h2 class="disp sec-h ld-h2">Notes that hold everything.</h2>
+<p class="ld-lead">Write with real formatting, keep lists going as you type, and drop in photos and files. Link a note to a task so the details are always one tap away.</p>
+<div class="ld-bullets">
+<div><span class="ld-dash">—</span><span>Rich text, lists and checklists</span></div>
+<div><span class="ld-dash">—</span><span>Attach photos, PDFs and documents</span></div>
+<div><span class="ld-dash">—</span><span>Private by default, shareable when you want</span></div>
+</div>
+</div>
+</div>
+
+<!-- Money & more -->
+<div>
+<div class="ld-intro ld-intro--36 acc-emerald">
+<div class="ld-kicker">Money &amp; side income</div>
+<h2 class="disp sec-h ld-h2">For the money side of life.</h2>
+<p class="ld-lead ld-lead--flush">Keep an eye on your spending and find real ways to earn a little extra on the side.</p>
+</div>
+<div class="ld-moneygrid" aria-hidden="true">
+<div class="ld-box acc-emerald">
+<div class="ld-box__title">Money</div>
+<div class="ld-box__sub">November spending</div>
+<div class="ld-spend">
+<div><span class="ld-spend__label">Groceries</span><div class="ld-bar ld-bar--grow"><div class="ld-bar__fill ld-w72 bg-emerald"></div></div></div>
+<div><span class="ld-spend__label">Dining</span><div class="ld-bar ld-bar--grow"><div class="ld-bar__fill ld-w45 bg-emerald"></div></div></div>
+<div><span class="ld-spend__label">Gas</span><div class="ld-bar ld-bar--grow"><div class="ld-bar__fill ld-w30 bg-emerald"></div></div></div>
+<div><span class="ld-spend__label">Home</span><div class="ld-bar ld-bar--grow"><div class="ld-bar__fill ld-w22 bg-emerald"></div></div></div>
+</div>
+</div>
+<div class="ld-box acc-violet">
+<div class="ld-box__title">Opportunities</div>
+<div class="ld-stack10">
+<div class="ld-lead-item"><div class="ld-lead-item__title">Freelance data dashboard</div><div class="ld-meta12">Remote · matches your skills</div></div>
+<div class="ld-lead-item"><div class="ld-lead-item__title">Open-source bug bounty</div><div class="ld-meta12">Official source · checked for scams</div></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- CIRCLES -->
+<section id="circles" class="ld-section ld-section--gap">
+<div class="ld-circles acc-teal">
+<div class="glow glow--circles"></div>
+<div class="ld-circles__copy">
+<div class="ld-kicker">Circles</div>
+<h2 class="disp sec-h ld-h2">Share with the people you live with.</h2>
+<p class="ld-lead">Make a circle for your household, your parents, or your gym partner. Everything starts private, and you choose exactly what each circle can see.</p>
+<div class="ld-bullets">
+<div><span class="ld-dash">—</span><span>Opt-in sharing, item by item or app by app</span></div>
+<div><span class="ld-dash">—</span><span>Shared recipes, groceries and tasks stay in sync</span></div>
+<div><span class="ld-dash">—</span><span>An activity feed so nothing gets done twice</span></div>
+</div>
+</div>
+<div class="ld-circles__copy" aria-hidden="true">
+<div class="ld-mock ld-feed">
+<div class="ld-feed__head">
+<div class="ld-avatars">
+<span class="ld-avatar ld-avatar--a">A</span>
+<span class="ld-avatar ld-avatar--s">S</span>
+</div>
+<div><div class="ld-feed__name">Home</div><div class="ld-meta13">2 people · Meals, Planner</div></div>
+</div>
+<div class="ld-feed__rows">
+<div><span class="ld-dot ld-dot--feed bg-lime"></span><span><b>Sam</b> checked off <span class="ld-feed__what">Grocery run</span><br><span class="ld-meta12">12 min ago</span></span></div>
+<div><span class="ld-dot ld-dot--feed bg-orange"></span><span><b>Alex</b> rated <span class="ld-feed__what">Honey garlic salmon</span> Favorite<br><span class="ld-meta12">Yesterday</span></span></div>
+<div><span class="ld-dot ld-dot--feed bg-orange"></span><span><b>Sam</b> added 3 items to <span class="ld-feed__what">Groceries</span><br><span class="ld-meta12">Yesterday</span></span></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- AI -->
+<section id="ai" class="ld-section ld-section--gap ld-ai acc-silver">
+<div class="ld-feature__art" aria-hidden="true">
+<div class="glow glow--ai"></div>
+<div class="ld-chat">
+<div class="ld-chat__me">Had a burrito bowl for lunch, chicken, white rice, black beans, cheese.</div>
+<div class="ld-chat__ai">Logged it to lunch: about <b>720 kcal</b>, 48g protein. You're at 1,450 of 2,200 calories today.</div>
+<div class="ld-chat__entry">
+<span class="ld-chip ld-chip--sm acc-yellow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 2c-2 2-3 5-3 8h3v12"></path></svg></span>
+<div class="ld-grow"><div class="ld-chat__food">Chicken burrito bowl</div><div class="ld-meta12">Lunch · 720 kcal · P48 C70 F24</div></div>
+<span class="ld-chat__est">AI estimate</span>
+</div>
+<div class="typing ld-chat__typing"><span></span><span></span><span></span></div>
+</div>
+</div>
+<div class="ld-feature__copy">
+<div class="ld-kicker">Your AI</div>
+<h2 class="disp sec-h ld-h2">Bring the AI you already use.</h2>
+<p class="ld-lead">Connect ChatGPT, Claude, Grok or any assistant with a personal key. Tell it what you ate, what's on your list, or what's for dinner, and it updates your account for you.</p>
+<div class="ld-bullets">
+<div><span class="ld-dash">—</span><span>Step-by-step setup for each AI</span></div>
+<div><span class="ld-dash">—</span><span>You choose exactly what it can see and change</span></div>
+<div><span class="ld-dash">—</span><span>Turn it off any time with one click</span></div>
+</div>
+</div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="ld-section ld-section--gap">
+<h2 class="disp sec-h ld-h2 ld-h2--center">Up and running in three steps.</h2>
+<div class="ld-steps">
+<div class="ld-step">
+<div class="disp ld-step__num">01</div>
+<div class="ld-step__title">Get an invite</div>
+<div class="ld-step__text">Request access, or join through someone already on Albright Labs.</div>
+</div>
+<div class="ld-step">
+<div class="disp ld-step__num">02</div>
+<div class="ld-step__title">Pick your apps</div>
+<div class="ld-step__text">Turn on the ones you'll use and choose which one opens first.</div>
+</div>
+<div class="ld-step">
+<div class="disp ld-step__num">03</div>
+<div class="ld-step__title">Add it to your phone</div>
+<div class="ld-step__text">Save it to your home screen and it opens like any other app.</div>
+</div>
+</div>
+</section>
+
+<!-- CTA -->
+<section id="invite" class="ld-section ld-cta-wrap">
+<div class="ld-cta">
+<div class="glow glow--cta"></div>
+<img src="{% static 'icons/logo-mark-white.png' %}" alt="" class="ld-cta__logo" width="129" height="64">
+<h2 class="disp sec-h ld-cta__h">Ready when you are.</h2>
+<p class="ld-cta__lead">Albright Labs is invite-only while it grows. Request a spot and we'll send you a link.</p>
+{% if thanks %}
+<p class="ld-thanks" id="invite-thanks" role="status">{{ thanks_text }}</p>
+{% else %}
+<form method="post" action="{% url 'labs:invite_request' %}" class="ld-invite" id="invite-form">
+{% csrf_token %}
+<label for="invite-email" class="ld-sr">Email address</label>
+<input id="invite-email" name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@email.com" class="ld-input ld-invite__email" value="{{ form.email.value|default_if_none:'' }}"{% if form.email.errors %} aria-invalid="true" aria-describedby="invite-error"{% endif %}>
+<button type="submit" class="btn btn-pri ld-invite__submit">Request an invite</button>
+<label for="invite-note" class="ld-sr">A note (optional)</label>
+<input id="invite-note" name="note" type="text" maxlength="500" autocomplete="off" placeholder="Anything we should know? (optional)" class="ld-input ld-invite__note" value="{{ form.note.value|default_if_none:'' }}">
+<div class="ld-hp" aria-hidden="true"><label for="invite-website">Leave this empty</label><input id="invite-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+{% if form.errors %}<p class="ld-error" id="invite-error" role="alert">{% for field in form %}{% for e in field.errors %}{{ e }} {% endfor %}{% endfor %}</p>{% endif %}
+</form>
+{% endif %}
+<p id="signin" class="ld-cta__signin">Already have an account? <a href="{% url 'user_login' %}" id="cta-sign-in">Sign in</a></p>
+</div>
+</section>
 </main>
-
-<footer class="rs-footer">
-    <div class="rs-wrap">
-        {% if resume_on %}<a href="{% url 'albright_resume:page' %}">Resume</a> &middot; {% endif %}&copy; {% now "Y" %} {{ name }}
-    </div>
-</footer>
-</body>
-</html>
+{% endblock %}

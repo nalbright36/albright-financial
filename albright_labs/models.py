@@ -199,20 +199,26 @@ class UserPreference(models.Model):
         return cls.objects.filter(user=user).first() or cls(user=user)
 
 
-class LandingSettings(models.Model):
-    """The public landing page's editable text (Admin > Home page). One row."""
-    SINGLETON_PK = 1
-    name = models.CharField(max_length=120, blank=True,
-                            help_text="Shown as the hero title. Blank: the name on the resume page.")
-    headline = models.CharField(max_length=200, blank=True, help_text="One line under the name.")
-    updated_at = models.DateTimeField(auto_now=True)
+class InviteRequest(models.Model):
+    """"Request an invite" on the public home page (albright_labs.invite_requests). One row per email (stored
+    lowercased): asking again just shows the same thanks. Admin > Invite requests sends a real Invitation
+    ("Send invite") or declines it. Only a salted hash of the visitor's IP is kept, never the address."""
+    STATUSES = [("new", "New"), ("invited", "Invited"), ("declined", "Declined")]
+    email = models.EmailField(unique=True)
+    note = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=10, choices=STATUSES, default="new")
+    ip_hash = models.CharField(max_length=64, blank=True)
+    handled_at = models.DateTimeField(null=True, blank=True)
+    handled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+    invitation = models.ForeignKey("Invitation", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
 
     def __str__(self):
-        return "Landing page settings"
-
-    @classmethod
-    def load(cls):
-        return cls.objects.get_or_create(pk=cls.SINGLETON_PK)[0]
+        return f"Invite request from {self.email} ({self.status})"
 
 
 INVITE_DAYS_CHOICES = [(1, "1 day"), (3, "3 days"), (7, "7 days"), (14, "14 days"), (30, "30 days")]

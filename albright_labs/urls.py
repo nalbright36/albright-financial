@@ -2,13 +2,18 @@ from django.urls import path
 
 from albright_bot_api import oauth_views
 
-from . import (activity_views, api_key_views, attachment_views, circle_views, invite_views, push_views, share_views,
-               views)
+from . import (activity_views, api_key_views, attachment_views, circle_views, invite_views, public_views, push_views,
+               share_views, views)
 
 app_name = "labs"
 
 urlpatterns = [
     path("", views.root, name="root"),
+    # The public home page's invite form and footer pages (public_views) - no login.
+    path("invite/", public_views.invite_request, name="invite_request"),
+    path("privacy/", public_views.placeholder, {"page": "privacy"}, name="privacy"),
+    path("terms/", public_views.placeholder, {"page": "terms"}, name="terms"),
+    path("contact/", public_views.placeholder, {"page": "contact"}, name="contact"),
     path("home/", views.hub, name="hub"),
     path("home/tiles/<slug:key>/", views.tile, name="tile"),
     path("home/launcher/", views.launcher_lines, name="launcher_lines"),

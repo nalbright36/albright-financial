@@ -80,7 +80,7 @@ class AdminGroupTests(Base):
             "system": [("albright_control:health", "System health"), ("albright_control:integrations", "Integrations"),
                        ("albright_control:ai_usage", "AI usage"), ("albright_control:data", "Data"),
                        ("albright_control:storage", "Storage"), ("albright_control:audit", "Audit log")],
-            "site": [("albright_resume_admin:overview", "Resume"), ("labs_admin:settings", "Home page"),
+            "site": [("albright_resume_admin:overview", "Resume"), ("labs_admin:invite_requests", "Invite requests"),
                      ("albright_control:users", "Users")],
         }
         for key, items in expected.items():
@@ -99,7 +99,7 @@ class AdminGroupTests(Base):
             reverse("albright_control:health"): ("system", "System health"),
             reverse("albright_control:audit"): ("system", "Audit log"),
             reverse("albright_resume_admin:conversations"): ("site", "Resume"),
-            reverse("labs_admin:settings"): ("site", "Home page"),
+            reverse("labs_admin:invite_requests"): ("site", "Invite requests"),
             reverse("albright_control:users"): ("site", "Users"),
         }
         for url, (group, item) in cases.items():

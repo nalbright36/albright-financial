@@ -3,22 +3,26 @@ from django import forms
 from albright_labs.guards import reject_secrets
 
 from . import apps_registry
-from .models import INVITE_DAYS_CHOICES, LandingSettings
+from .models import INVITE_DAYS_CHOICES
 
 INPUT = {"class": "ledger-input"}
 
 
-class LandingSettingsForm(forms.ModelForm):
-    class Meta:
-        model = LandingSettings
-        fields = ["name", "headline"]
-        widgets = {"name": forms.TextInput(attrs=INPUT), "headline": forms.TextInput(attrs=INPUT)}
+class InviteRequestForm(forms.Form):
+    """The public home page's "Request an invite" form. `website` is a honeypot: hidden from people (and screen
+    readers), so anything in it came from a bot."""
+    email = forms.EmailField(max_length=254, error_messages={"required": "Enter your email address.",
+                                                             "invalid": "Enter a valid email address."})
+    note = forms.CharField(max_length=500, required=False)
+    website = forms.CharField(max_length=200, required=False)
 
-    def clean(self):
-        cleaned = super().clean()
-        for field in ("name", "headline"):
-            reject_secrets(cleaned.get(field) or "", field)
-        return cleaned
+    def clean_email(self):
+        return self.cleaned_data["email"].strip().lower()
+
+    def clean_note(self):
+        note = " ".join((self.cleaned_data.get("note") or "").split())
+        reject_secrets(note, "note")
+        return note
 
 
 class CreateUserForm(forms.Form):

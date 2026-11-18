@@ -37,7 +37,7 @@ GROUPS = (
     )),
     ("site", "Site", (
         ("Resume", "albright_resume_admin:overview", ("albright_resume_admin:*",)),
-        ("Home page", "labs_admin:settings", ("labs_admin:*",)),
+        ("Invite requests", "labs_admin:invite_requests", ("labs_admin:*",)),
         ("Users", "albright_control:users", ("albright_control:users",)),
     )),
 )
@@ -50,7 +50,7 @@ ICONS = {
     "albright_control:ideas": "lightbulb", "albright_control:health": "activity", "albright_control:integrations": "plug",
     "albright_control:ai_usage": "cpu", "albright_control:data": "database",
     "albright_control:storage": "archive", "albright_control:audit": "scroll",
-    "albright_resume_admin:overview": "file-text", "labs_admin:settings": "layout", "albright_control:users": "users",
+    "albright_resume_admin:overview": "file-text", "labs_admin:invite_requests": "inbox", "albright_control:users": "users",
 }
 
 # Late/failing jobs come from every job's history - recounted at most once a minute.
@@ -70,6 +70,7 @@ def _job_problems():
 def attention():
     """URL name -> (count, tone) for the items that need a look."""
     from albright_bot_api.models import SiteSuggestion
+    from albright_labs.models import InviteRequest
     from albright_resume.models import ChatConversation
 
     from .models import Idea
@@ -77,6 +78,7 @@ def attention():
     found = {
         "albright_control:suggestions": (SiteSuggestion.objects.filter(status="new").count(), "warn"),
         "albright_control:ideas": (Idea.objects.filter(status="new").count(), "warn"),
+        "labs_admin:invite_requests": (InviteRequest.objects.filter(status="new").count(), "warn"),
         "albright_control:health": (failing + late, "loss" if failing else "warn"),
         "albright_resume_admin:overview": (ChatConversation.objects.filter(reviewed=False).count(), "warn"),
     }
