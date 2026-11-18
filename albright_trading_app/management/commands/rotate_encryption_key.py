@@ -6,6 +6,7 @@ Re-encrypts every value stored with the credentials encryption key:
 
   - AlpacaCredentials.encrypted_api_key / encrypted_secret_key (albright_trading_app)
   - GmailConnection.encrypted_token (albright_crypto_app)
+  - Connection.key_encrypted (albright_assistant - each person's AI provider key)
 
 Set up .env first: ALPACA_CREDENTIALS_ENCRYPTION_KEY = the NEW key, and
 ALPACA_CREDENTIALS_ENCRYPTION_OLD_KEYS = the OLD key (comma-separate several).
@@ -30,6 +31,7 @@ from albright_trading_app.crypto_utils import get_fernet, old_fernets, primary_f
 ENCRYPTED_FIELDS = [
     ("albright_trading_app.AlpacaCredentials", ["encrypted_api_key", "encrypted_secret_key"]),
     ("albright_crypto_app.GmailConnection", ["encrypted_token"]),
+    ("albright_assistant.Connection", ["key_encrypted"]),        # each person's own AI provider key
 ]
 
 
@@ -45,7 +47,7 @@ def _opens(fernet, token):
 
 
 class Command(BaseCommand):
-    help = "Re-encrypt stored credentials (Alpaca keys, Gmail token) with the current encryption key."
+    help = "Re-encrypt stored credentials (Alpaca keys, Gmail token, AI assistant keys) with the current encryption key."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true",

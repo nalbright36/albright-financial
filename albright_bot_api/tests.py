@@ -225,7 +225,7 @@ class EndpointTests(BotApiTestCase):
         for pattern in api_urlpatterns:
             route = str(pattern.pattern).replace("<int:lot_id>", "<id>").replace("<int:entry_id>", "<id>") \
                 .replace("<int:opportunity_id>", "<id>").replace("<int:item_id>", "<id>") \
-                .replace("<int:note_id>", "<id>").replace("<int:row_id>", "<item_id>")   # a subtask's id
+                .replace("<int:note_id>", "<id>").replace("<int:recipe_id>", "<id>").replace("<int:row_id>", "<item_id>")   # a subtask's id
             self.assertIn(route, text, route)
         for phrase in ("Authorization: Bearer", "401", "403", "429", "5000", "PLAIN TEXT", "WHAT YOU CANNOT DO"):
             self.assertIn(phrase, text)
@@ -366,12 +366,16 @@ class HardLimitTests(BotApiTestCase):
         return [(method, path, self.call(method, path, body)) for method, path, body in calls]
 
     def test_api_routes_are_only_these_get_and_post_views(self):
-        from albright_bot_api import api_views, fitness_api, mcp, meals_api, notes_api, schedule_api
+        from albright_bot_api import api_views, fitness_api, mcp, meals_api, notes_api, overview_api, schedule_api
         from albright_bot_api.urls import api_urlpatterns
         for pattern in api_urlpatterns:
             self.assertIsInstance(pattern, URLPattern)
             if str(pattern.pattern) == "mcp":                       # the MCP server (runs the views below as tools)
                 self.assertEqual(pattern.callback.__module__, mcp.__name__)
+                continue
+            # The read helpers across apps (search, today, one recipe) - read-only, for the AI assistant too.
+            if str(pattern.pattern) in ("search", "today", "meals/recipes/<int:recipe_id>"):
+                self.assertEqual(pattern.callback.__module__, overview_api.__name__)
                 continue
             # Meals', Notes', the Planner's and Fitness's endpoints (they do write, to those apps' own tables) live in
             # their own modules, under meals/, notes, schedule and fitness/; everything else is in api_views.
@@ -385,8 +389,8 @@ class HardLimitTests(BotApiTestCase):
                 self.assertEqual(pattern.callback.__module__, fitness_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 49)   # incl. me, openapi.json, mcp, me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
-        self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 8)
+        self.assertEqual(len(api_urlpatterns), 52)   # incl. search, today (overview_api), me, openapi.json, mcp, me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
+        self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 9)   # + one recipe (overview_api)
         self.assertEqual(sum(str(p.pattern).startswith("notes") for p in api_urlpatterns), 2)
         self.assertEqual(sum(str(p.pattern).startswith("schedule") for p in api_urlpatterns), 5)   # + checklist tick / untick
         self.assertEqual(sum(str(p.pattern).startswith("fitness/") for p in api_urlpatterns), 15)   # + food-entries (+ recent, <id>), openapi.json, programs, pause, resume, food entries, foods search

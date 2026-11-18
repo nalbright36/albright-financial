@@ -76,7 +76,7 @@ class AdminGroupTests(Base):
                          [reverse("albright_control:overview"), "bot", "system", "site"])
         expected = {
             "bot": [("albright_control:bot_api", "Bot API"), ("albright_control:suggestions", "Bot suggestions"),
-                    ("albright_control:ideas", "Ideas")],
+                    ("assistant_admin:overview", "AI assistant"), ("albright_control:ideas", "Ideas")],
             "system": [("albright_control:health", "System health"), ("albright_control:integrations", "Integrations"),
                        ("albright_control:ai_usage", "AI usage"), ("albright_control:data", "Data"),
                        ("albright_control:storage", "Storage"), ("albright_control:audit", "Audit log")],
@@ -236,6 +236,7 @@ class PhoneHeaderTests(Base):
                                                 (reverse("labs:people"), "People"),
                                                 (reverse("labs:activity"), "Notifications"),
                                                 (reverse("labs:api_keys"), "API keys"),
+                                                (reverse("assistant:setup"), "AI assistant"),   # superuser
                                                 (reverse("user_logout"), "Logout")])
                 # Inside the hamburger panel, after the app's own links; the desktop tools keep theirs.
                 links_start = content.index('id="navbar-links"')
