@@ -106,7 +106,7 @@ class LauncherTilesTests(Base):
         self.client.logout()
         login = self.client.get(reverse("user_login")).content.decode()
         self.assertNotIn('id="app-launcher"', login)
-        self.assertIn('id="theme-toggle"', login)
+        self.assertNotIn('id="theme-toggle"', login)                    # a public page: always dark
 
     def test_button_and_panel_markup(self):
         content = self.page(reverse("trading_home"))
@@ -319,9 +319,10 @@ class LauncherRenderingTests(Base):
                 self.assertRegex(content, r'<link rel="stylesheet" href="/static/style\.css\?v=\d+">')
                 self.assertRegex(content, r'<link rel="stylesheet" href="/static/labs/launcher\.css\?v=\d+">')
                 self.assertRegex(content, r'<script src="/static/labs/launcher\.js\?v=\d+"></script>')
-        # Everything with the header extends index.html - the one place they're included.
+        # Everything with the header extends index.html - the one place they're included. The logged-out
+        # pages (templates/base_public.html) have no header, so no launcher either.
         self.client.logout()
-        self.assertRegex(self.client.get(reverse("user_login")).content.decode(), r'/static/labs/launcher\.css\?v=\d+')
+        self.assertNotIn("launcher.css", self.client.get(reverse("user_login")).content.decode())
 
     def test_collectstatic_finds_the_files(self):
         for path in ("style.css", "labs/launcher.css", "labs/launcher.js"):

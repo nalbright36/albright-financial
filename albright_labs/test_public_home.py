@@ -34,6 +34,7 @@ class LandingPageTests(TestCase):
         response = self.get()
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "albright_labs/landing.html")
+        self.assertTemplateUsed(response, "base_public.html")               # shared with sign-in etc.
         self.assertTemplateNotUsed(response, "index.html")              # not the app base
         page = response.content.decode()
         self.assertIn("Everything you run at home, in one place.", page)
@@ -43,8 +44,11 @@ class LandingPageTests(TestCase):
             self.assertNotIn(private, page)
         self.assertNotIn("logo-mark-white.png\"", page.replace("/static/icons/logo-mark-white.png\"", ""))
         self.assertIn('src="/static/icons/logo-mark-white.png"', page)
+        self.assertIn('<link rel="stylesheet" href="/static/css/public.css">', page)
         self.assertIn('<link rel="stylesheet" href="/static/css/landing.css">', page)
+        self.assertLess(page.index("css/public.css"), page.index("css/landing.css"))
         self.assertTrue(finders.find("css/landing.css"))
+        self.assertTrue(finders.find("css/public.css"))
 
     def test_links_go_to_sign_in_the_invite_form_and_sections(self):
         page = self.get().content.decode()
@@ -88,11 +92,15 @@ class LandingPageTests(TestCase):
 
     def test_reduced_motion_and_scroll_offset_are_in_the_css(self):
         with open(finders.find("css/landing.css"), encoding="utf-8") as fh:
-            css = fh.read()
-        self.assertIn("@media (prefers-reduced-motion:reduce)", css)
-        self.assertIn("scroll-padding-top", css)
-        self.assertIn("@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}", css)
-        self.assertIn("fonts.googleapis.com/css2?family=Inter", css)
+            landing = fh.read()
+        with open(finders.find("css/public.css"), encoding="utf-8") as fh:
+            shared = fh.read()
+        self.assertIn("@media (prefers-reduced-motion:reduce)", landing)
+        self.assertIn("@media (prefers-reduced-motion:reduce)", shared)
+        self.assertIn("scroll-padding-top", shared)
+        self.assertIn("@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}", shared)
+        self.assertIn("fonts.googleapis.com/css2?family=Inter", shared)
+        self.assertNotIn("fonts.googleapis.com", landing)               # loaded once, by public.css
 
     def test_old_resume_promo_is_gone(self):
         page = self.get().content.decode()

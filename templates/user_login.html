@@ -1,34 +1,27 @@
-{% extends "index.html" %}
-
-{% block content %}
-<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
-
-    <div class="card">
-        <div class="card__header"><span class="card__label">Sign In</span></div>
-
-        <form action="{% url 'user_login' %}" method="post">
-            {% csrf_token %}
-            {% if login_form.errors %}<p class="field-error" id="login-error">That username and password didn't match. Please try again.</p>{% endif %}
-            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-
-            <div class="field">
-                <label for="username">Username</label>
-                <input id="username" type="text" name="username" placeholder="Enter Username" autocomplete="username" required>
-            </div>
-
-            <div class="field">
-                <label for="password">Password</label>
-                <input id="password" type="password" name="password" placeholder="Enter Password" autocomplete="current-password" required>
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;">Login</button>
-        </form>
-
-        <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 18px; font-size: 0.8125rem;">
-            <a href="{% url 'password_reset' %}" style="color: var(--text-secondary);" id="forgot-password">Forgot password?</a>
-            <span style="color: var(--text-secondary);">Accounts are by invite only.</span>
-        </div>
-    </div>
-
+{% extends "base_public_form.html" %}
+{% comment %}Sign in (albright_trading_app.views.user_login). Keeps ?next= in a hidden field; failed sign-ins are rate limited.{% endcomment %}
+{% block page_title %}Sign in{% endblock %}
+{% block heading %}Sign in{% endblock %}
+{% block card %}
+<p class="pa-lead">Welcome back. Accounts are by invite only.</p>
+{% if login_form.errors %}<p class="pa-alert" role="alert" id="login-error">{% if login_form.non_field_errors %}That username and password didn't match. Please try again.{% else %}Enter your username and password.{% endif %}</p>{% endif %}
+<form action="{% url 'user_login' %}" method="post" class="pa-form" id="login-form">
+{% csrf_token %}
+{% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+<div class="pa-field">
+<label class="pa-label" for="username">Username</label>
+<input id="username" class="ld-input pa-input" type="text" name="username" value="{{ login_form.username.value|default:'' }}" autocomplete="username" autocapitalize="none" spellcheck="false" required{% if login_form.username.errors %} aria-invalid="true" aria-describedby="username-error"{% endif %}>
+{% for error in login_form.username.errors %}{% if forloop.first %}<p class="pa-field-error" id="username-error">{{ error }}</p>{% endif %}{% endfor %}
 </div>
+<div class="pa-field">
+<label class="pa-label" for="password">Password</label>
+<div class="pa-pw">
+<input id="password" class="ld-input pa-input" type="password" name="password" autocomplete="current-password" required{% if login_form.password.errors %} aria-invalid="true" aria-describedby="password-error"{% endif %}>
+<button type="button" class="pa-pw__toggle" data-password-toggle aria-controls="password" aria-label="Show password" hidden>Show</button>
+</div>
+{% for error in login_form.password.errors %}{% if forloop.first %}<p class="pa-field-error" id="password-error">{{ error }}</p>{% endif %}{% endfor %}
+</div>
+<button type="submit" class="btn btn-pri pa-submit">Sign in</button>
+</form>
 {% endblock %}
+{% block links %}<a href="{% url 'password_reset' %}" id="forgot-password">Forgot password?</a><a href="{% url 'labs:root' %}#invite" id="request-invite">Request an invite</a><a href="{% url 'labs:root' %}" id="back-home">Back to home</a>{% endblock %}

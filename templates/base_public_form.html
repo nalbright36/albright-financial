@@ -1,0 +1,27 @@
+{% extends "base_public.html" %}{% load static %}
+{% comment %}
+The logged-out form pages - sign in, sign up (an invite link), password reset - on base_public.html: a centered
+card on the dark page with the home page CTA's soft glow, the logo + "Albright Labs" linking home, a heading,
+then the page's form and small links. Fields: _public_field.html. Messages (e.g. "You're signed out.") show above
+the form. The show/hide password buttons start hidden and js/public.js turns them on.
+{% endcomment %}
+{% block title %}{% block page_title %}{% endblock %} · Albright Labs{% endblock %}
+{% block meta %}{{ block.super }}
+<meta name="robots" content="noindex">{% endblock %}
+{% block header %}{% endblock %}
+{% block content %}
+<main class="pa-main">
+<div class="glow glow--form" aria-hidden="true"></div>
+<section class="pa-card" aria-labelledby="pa-title" id="public-card">
+<a href="{% url 'labs:root' %}" class="pa-brand" aria-label="Albright Labs home">
+<img src="{% static 'icons/logo-mark-white.png' %}" alt="" class="pa-brand__logo" width="57" height="28">
+<span class="disp pa-brand__name">Albright Labs</span>
+</a>
+<h1 class="disp pa-title" id="pa-title">{% block heading %}{% endblock %}</h1>
+{% if messages %}{% for message in messages %}<p class="pa-notice" role="status">{{ message }}</p>{% endfor %}{% endif %}
+{% block card %}{% endblock %}
+<nav class="pa-links" aria-label="More">{% block links %}<a href="{% url 'labs:root' %}" id="back-home">Back to home</a>{% endblock %}</nav>
+</section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/public.js' %}" defer></script>{% endblock %}

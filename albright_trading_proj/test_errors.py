@@ -88,10 +88,12 @@ class ErrorPageTests(TestCase):
         self.assertIn('id="error-page"', body)
         self.assertIn(f'<p class="err__code">{status}</p>', body)
         self.assertIn("logo-mark-white.png", body)
-        self.assertIn("logo-mark-dark.png", body)
-        self.assertIn('alt="Albright"', body)
+        self.assertNotIn("logo-mark-dark.png", body)                # always dark, like the public pages
+        self.assertIn(">Albright Labs</span>", body)
+        self.assertNotIn("Trading", body)
         self.assertIn("Go back", body)
-        self.assertIn("prefers-color-scheme", body)
+        self.assertIn("color-scheme: dark", body)
+        self.assertNotIn("prefers-color-scheme", body)
         self.assertClean(response)
 
     def test_400(self):

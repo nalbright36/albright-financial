@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseRedirect,HttpResponse
+from django.contrib import messages
 from django.contrib.auth import authenticate,login,logout
 from django.contrib.auth.models import auth
 from django.core.cache import cache
@@ -1871,6 +1872,8 @@ def user_login(request):
 @login_required
 def user_logout(request):
     logout(request)
+    # The sign-in page (templates/base_public_form.html) shows it - the confirmation that you're out.
+    messages.success(request, "You're signed out.")
     return HttpResponseRedirect(reverse('user_login'))
 
 # There's no public registration: accounts are invite-only (albright_labs.invites).

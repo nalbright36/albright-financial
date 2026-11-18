@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ meta_title }}</title>
-<meta name="description" content="{{ meta_description }}">
-<link rel="canonical" href="{{ canonical }}">
+<title>{% block title %}{% if meta_title %}{{ meta_title }}{% else %}Albright Labs{% endif %}{% endblock %}</title>
+{% block meta %}<meta name="description" content="{{ meta_description|default:'Albright Labs - your planner, meals, fitness, notes and money in one place, by invite.' }}">
+{% if canonical %}<link rel="canonical" href="{{ canonical }}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Albright Labs">
 <meta property="og:title" content="{{ meta_title }}">
@@ -18,21 +18,26 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ meta_title }}">
 <meta name="twitter:description" content="{{ meta_description }}">
-<meta name="twitter:image" content="{{ og_image }}">
+<meta name="twitter:image" content="{{ og_image }}">{% endif %}{% endblock %}
+<meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="{% static 'css/landing.css' %}">
+<link rel="stylesheet" href="{% static 'css/public.css' %}">
+{% block styles %}{% endblock %}
 {% include "_head_icons.html" %}
 </head>
 {% comment %}
-The public pages for visitors (albright_labs.public_views): the home page and its footer pages. Not the app's
-index.html - no app nav, no launcher, nothing private. Served with strict headers (script/style from this site
-only, plus Google Fonts), so there's no inline style or script anywhere here: every style is in css/landing.css.
-"home" is "" on the home page (the nav links are #anchors) and "/" on the others.
+Every public, logged-out page: the home page and its footer pages (albright_labs.public_views), sign in, sign up
+(an invite link) and password reset (base_public_form.html). Not the app's index.html - no app nav, no app chip,
+no launcher, no app accent colors, nothing private; always dark. No inline style or script anywhere: the shared
+styles are css/public.css (the home page adds css/landing.css), scripts are files (js/public.js), so these pages
+work under the strict public headers (albright_resume.security). "home" is "" on the home page (the nav links are
+#anchors) and "/" elsewhere.
 {% endcomment %}
 <body class="ld-body">
 <div class="ld-page">
 
+{% block header %}
 <!-- NAV -->
 <header class="ld-header">
 <nav aria-label="Main" class="ld-nav">
@@ -52,6 +57,7 @@ only, plus Google Fonts), so there's no inline style or script anywhere here: ev
 </div>
 </nav>
 </header>
+{% endblock %}
 
 {% block content %}{% endblock %}
 
@@ -64,5 +70,6 @@ only, plus Google Fonts), so there's no inline style or script anywhere here: ev
 </footer>
 
 </div>
+{% block scripts %}{% endblock %}
 </body>
 </html>

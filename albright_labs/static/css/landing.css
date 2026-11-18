@@ -1,17 +1,8 @@
-/* The public home page and its footer pages (albright_labs/public_base.html, landing.html, public_page.html).
-   From docs/design/landing_page.html: its <style> block first, unchanged, then its inline styles as classes (the
-   page's CSP allows no inline style). Fonts load like the app's style.css: @import from Google Fonts. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
-
+/* The public home page only (albright_labs/landing.html). Fonts, colors, header, footer, buttons and inputs are
+   shared with the other logged-out pages: public.css, loaded first by templates/base_public.html.
+   From docs/design/landing_page.html: its <style> block (the shared part is in public.css), then its inline
+   styles as classes (the page's CSP allows no inline style). */
 /* --- From the design's <style> ------------------------------------------------------------------------------- */
-body{margin:0;background:#07090c}
-a{color:#e8eaed;text-decoration:none}a:hover{color:#ffffff}
-.disp{font-family:'Space Grotesk',Inter,system-ui,sans-serif;letter-spacing:-0.02em}
-.navlink{color:#aab2bd;font-size:15px;padding:10px 4px}.navlink:hover{color:#ffffff}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:12px;font-weight:600;font-size:15px;transition:transform .15s ease,background .15s ease}
-.btn:hover{transform:translateY(-1px)}
-.btn-pri{background:#f4f5f7;color:#07090c}.btn-pri:hover{background:#ffffff;color:#07090c}
-.btn-sec{border:1px solid #2b333f;color:#e8eaed;background:#0f1318}.btn-sec:hover{background:#151a21}
 .fl{animation:fl 7s ease-in-out infinite}
 .fl2{animation:fl 8s ease-in-out -3s infinite}
 .fl3{animation:fl 9s ease-in-out -5s infinite}
@@ -32,14 +23,8 @@ a{color:#e8eaed;text-decoration:none}a:hover{color:#ffffff}
 .typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
 @keyframes dot{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
 .appcard{transition:transform .2s ease,border-color .2s ease}.appcard:hover{transform:translateY(-3px);border-color:#3a4351}
-.glow{position:absolute;border-radius:50%;filter:blur(70px);pointer-events:none}
 
-/* --- Page, scrolling ------------------------------------------------------------------------------------------ */
-html{scroll-padding-top:84px}                                  /* #anchors land below the sticky header */
-@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
-.ld-page{background:#07090c;color:#e8eaed;font-family:Inter,system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
-.ld-page main{display:block}
-.ld-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* --- Shared bits of the page ------------------------------------------------------------------------------------ */
 .ld-grow{flex-grow:1}
 .ld-meta12{font-size:12px;color:#8b94a1}
 .ld-meta13{font-size:13px;color:#8b94a1}
@@ -48,18 +33,6 @@ html{scroll-padding-top:84px}                                  /* #anchors land 
 .bg-yellow{background:#facc15}.bg-yellow2{background:#e5b80f}.bg-yellow3{background:#c99d0a}
 .acc-lime{--acc:#a3e635}.acc-orange{--acc:#fb923c}.acc-yellow{--acc:#facc15}.acc-emerald{--acc:#34d399}
 .acc-pink{--acc:#f472b6}.acc-violet{--acc:#a78bfa}.acc-teal{--acc:#2dd4bf}.acc-silver{--acc:#cbd2db}.acc-gray{--acc:#8b94a1}
-a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e8eaed;outline-offset:2px}
-
-/* --- Header --------------------------------------------------------------------------------------------------- */
-.ld-header{position:sticky;top:0;z-index:20;background:rgba(7,9,12,0.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid #161b22}
-.ld-nav{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:28px}
-.ld-brand{display:flex;align-items:center;gap:10px}
-.ld-brand__logo{height:32px;width:auto}
-.ld-brand__name{font-size:18px;font-weight:600}
-.ld-navlinks{display:flex;gap:22px;flex-grow:1}
-.ld-nav__actions{display:flex;gap:10px;margin-left:auto}
-.btn--nav{min-height:42px;padding:0 16px}
-.ld-nav a{white-space:nowrap}
 
 /* --- Hero ----------------------------------------------------------------------------------------------------- */
 .ld-hero{position:relative;max-width:1200px;margin:0 auto;padding:88px 24px 72px;display:flex;flex-wrap:wrap;align-items:center;gap:56px}
@@ -69,7 +42,6 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e8ea
 .ld-pill__dot{width:7px;height:7px;border-radius:50%;background:#2dd4bf}
 .ld-hero__h{margin:22px 0 18px;font-size:64px;line-height:1.02;font-weight:700}
 .ld-hero__lead{margin:0 0 32px;font-size:19px;line-height:1.55;color:#aab2bd;max-width:520px}
-.ld-actions{display:flex;flex-wrap:wrap;gap:12px}
 .ld-hero__note{margin:22px 0 0;font-size:14px;color:#8b94a1}
 .ld-collage{flex:1 1 480px;min-width:0;position:relative;height:540px}
 
@@ -271,9 +243,6 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e8ea
 .ld-cta__h{position:relative;margin:0 0 14px;font-size:48px;line-height:1.05;font-weight:700}
 .ld-cta__lead{position:relative;margin:0 auto 30px;max-width:520px;font-size:17px;line-height:1.6;color:#aab2bd}
 .ld-invite{position:relative;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:480px;margin:0 auto}
-.ld-input{min-height:48px;padding:0 16px;border-radius:12px;border:1px solid #2b333f;background:#07090c;color:#e8eaed;font:inherit;font-size:15px;box-sizing:border-box}
-.ld-input::placeholder{color:#7d8794}
-.ld-input[aria-invalid="true"]{border-color:#f87171}
 .ld-invite__email{flex:1 1 240px;min-width:0}
 .ld-invite__note{flex:1 1 100%}
 .ld-invite__submit{border:none;cursor:pointer;font-family:inherit}
@@ -283,25 +252,9 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e8ea
 .ld-cta__signin{position:relative;margin:20px 0 0;font-size:14px;color:#8b94a1}
 .ld-cta__signin a{color:#e8eaed;text-decoration:underline}
 
-/* --- Footer --------------------------------------------------------------------------------------------------- */
-.ld-footer{border-top:1px solid #161b22}
-.ld-footer__inner{max-width:1200px;margin:0 auto;padding:28px 24px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;font-size:14px;color:#8b94a1}
-.ld-footer__brand{display:flex;align-items:center;gap:10px}
-.ld-footer__logo{height:22px;width:auto}
-.ld-footer__links{display:flex;gap:20px}
-.ld-footer__links a{color:#8b94a1}
-.ld-footer__links a:hover{color:#ffffff}
-
-/* --- Footer pages (public_page.html) -------------------------------------------------------------------------- */
-.ld-doc{max-width:720px;margin:0 auto;padding:96px 24px 120px}
-.ld-doc__h{margin:0 0 18px;font-size:44px;line-height:1.08;font-weight:700}
-.ld-doc__body{margin:0 0 28px;font-size:17px;line-height:1.6;color:#aab2bd}
-
 /* --- Small screens, reduced motion (the design's, after the classes so they still win) -------------------------- */
-@media (max-width:760px){.hide-sm{display:none !important}.hero-h{font-size:44px !important}.sec-h{font-size:34px !important}.navlinks{display:none !important}}
-@media (max-width:960px){.navlinks{display:none !important}}   /* no room beside the buttons on a tablet */
+@media (max-width:760px){.hide-sm{display:none !important}.hero-h{font-size:44px !important}.sec-h{font-size:34px !important}}
 @media (max-width:760px){
-  .ld-nav{gap:12px;padding:12px 16px}
   .ld-hero,.ld-section,.ld-features{padding-left:16px;padding-right:16px}
   .ld-section--gap{padding-top:100px}
   .ld-hero{padding-top:56px;gap:40px}
@@ -314,12 +267,9 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e8ea
   .ld-invite__note{order:1}                                    /* email, note, then the button */
   .ld-invite__submit{order:2;flex:1 1 100%}
   .ld-error{order:3}
-  .ld-doc__h{font-size:34px}
 }
 @media (max-width:440px){
-  .ld-nav__invite{display:none}                                 /* the hero's button is right below */
-  .ld-brand__name{font-size:16px}
   .ld-hero__h{font-size:40px !important}
 }
 @media (prefers-reduced-motion:reduce){.fl,.fl2,.fl3,.tick,.tickmark,.strike,.caret,.typing span{animation:none !important}.ring,.ring2{animation:none;stroke-dashoffset:90}}
-@media (prefers-reduced-motion:reduce){.btn:hover,.appcard:hover{transform:none}}
+@media (prefers-reduced-motion:reduce){.appcard:hover{transform:none}}

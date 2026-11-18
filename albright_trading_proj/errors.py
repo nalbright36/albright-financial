@@ -168,8 +168,7 @@ def page_context(request, status, key=None, **extra):
                 sign_in = login
     context = {"status": status, "title": title, "sentence": sentence, "home_url": home or "/",
                "sign_in_url": sign_in, "app_button": _app_button(request, user),
-               "logo_on_dark": _static("icons/logo-mark-white.png"),
-               "logo_on_light": _static("icons/logo-mark-dark.png")}
+               "logo_on_dark": _static("icons/logo-mark-white.png")}
     context.update(extra)
     return context
 
@@ -193,8 +192,7 @@ def render_error(request, status, key=None, *, template=None, http_status=None, 
 def render_500(reference, http_status=500):
     """The standalone 500 page. Static URLs only - no request, user, DB or base template."""
     context = {"status": 500, "title": PAGES[500][0], "sentence": PAGES[500][1], "reference": reference,
-               "logo_on_dark": _static("icons/logo-mark-white.png"),
-               "logo_on_light": _static("icons/logo-mark-dark.png")}
+               "logo_on_dark": _static("icons/logo-mark-white.png")}
     try:
         html = loader.get_template("errors/500.html").render(context)
     except Exception:  # noqa: BLE001 - the templates themselves may be the problem

@@ -1,11 +1,8 @@
-{% extends "index.html" %}
-{% block page_title %}Check your email · {% endblock %}
-{% block content %}
-<div class="container" style="padding-top: 60px; padding-bottom: 48px; max-width: 440px;">
-    <div class="card">
-        <div class="card__header"><span class="card__label">Check your email</span></div>
-        <p style="margin: 0;">If that address belongs to an account, a link to choose a new password is on its way.</p>
-        <p style="margin: 16px 0 0; font-size: 0.8125rem;"><a href="{% url 'user_login' %}" style="color: var(--text-secondary);">Back to sign in</a></p>
-    </div>
-</div>
+{% extends "base_public_form.html" %}
+{% comment %}After "Send the link" (password_views.ResetDone) - the same page whether or not the address has an account.{% endcomment %}
+{% block page_title %}Check your email{% endblock %}
+{% block heading %}Check your email{% endblock %}
+{% block card %}
+<p class="pa-text" id="reset-sent">If that address belongs to an account, a link to choose a new password is on its way.</p>
 {% endblock %}
+{% block links %}<a href="{% url 'user_login' %}" id="back-to-sign-in">Back to sign in</a><a href="{% url 'labs:root' %}" id="back-home">Back to home</a>{% endblock %}

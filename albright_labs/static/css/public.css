@@ -1,0 +1,104 @@
+/* Shared by every public, logged-out page (templates/base_public.html): the home page, its footer pages,
+   sign-in, sign-up, password reset. From docs/design/landing_page.html - fonts, colors, header, footer, buttons,
+   inputs - plus the centered form card. Home-page-only styles: landing.css. Fonts load like the app's style.css:
+   @import from Google Fonts. No inline style anywhere (the public CSP allows none). */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* --- From the design's <style> ------------------------------------------------------------------------------- */
+body{margin:0;background:#07090c}
+a{color:#e8eaed;text-decoration:none}a:hover{color:#ffffff}
+.disp{font-family:'Space Grotesk',Inter,system-ui,sans-serif;letter-spacing:-0.02em}
+.navlink{color:#aab2bd;font-size:15px;padding:10px 4px}.navlink:hover{color:#ffffff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:12px;font-weight:600;font-size:15px;transition:transform .15s ease,background .15s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn-pri{background:#f4f5f7;color:#07090c}.btn-pri:hover{background:#ffffff;color:#07090c}
+.btn-sec{border:1px solid #2b333f;color:#e8eaed;background:#0f1318}.btn-sec:hover{background:#151a21}
+.glow{position:absolute;border-radius:50%;filter:blur(70px);pointer-events:none}
+
+/* --- Page, scrolling ------------------------------------------------------------------------------------------ */
+html{scroll-padding-top:84px}                                  /* #anchors land below the sticky header */
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+.ld-page{background:#07090c;color:#e8eaed;font-family:Inter,system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+.ld-page main{display:block}
+.ld-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e8eaed;outline-offset:2px}
+
+/* --- Header --------------------------------------------------------------------------------------------------- */
+.ld-header{position:sticky;top:0;z-index:20;background:rgba(7,9,12,0.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid #161b22}
+.ld-nav{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:28px}
+.ld-brand{display:flex;align-items:center;gap:10px}
+.ld-brand__logo{height:32px;width:auto}
+.ld-brand__name{font-size:18px;font-weight:600}
+.ld-navlinks{display:flex;gap:22px;flex-grow:1}
+.ld-nav__actions{display:flex;gap:10px;margin-left:auto}
+.btn--nav{min-height:42px;padding:0 16px}
+.ld-nav a{white-space:nowrap}
+.ld-actions{display:flex;flex-wrap:wrap;gap:12px}
+
+/* --- Inputs (the home page's invite input) -------------------------------------------------------------------- */
+.ld-input{min-height:48px;padding:0 16px;border-radius:12px;border:1px solid #2b333f;background:#07090c;color:#e8eaed;font:inherit;font-size:15px;box-sizing:border-box}
+.ld-input::placeholder{color:#7d8794}
+.ld-input[aria-invalid="true"]{border-color:#f87171}
+
+/* --- Footer --------------------------------------------------------------------------------------------------- */
+.ld-footer{border-top:1px solid #161b22}
+.ld-footer__inner{max-width:1200px;margin:0 auto;padding:28px 24px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;font-size:14px;color:#8b94a1}
+.ld-footer__brand{display:flex;align-items:center;gap:10px}
+.ld-footer__logo{height:22px;width:auto}
+.ld-footer__links{display:flex;gap:20px}
+.ld-footer__links a{color:#8b94a1}
+.ld-footer__links a:hover{color:#ffffff}
+
+/* --- Footer pages (public_page.html) -------------------------------------------------------------------------- */
+.ld-doc{max-width:720px;margin:0 auto;padding:96px 24px 120px}
+.ld-doc__h{margin:0 0 18px;font-size:44px;line-height:1.08;font-weight:700}
+.ld-doc__body{margin:0 0 28px;font-size:17px;line-height:1.6;color:#aab2bd}
+
+/* --- Form pages: sign in, sign up, password reset (templates/base_public_form.html) ----------------------------- */
+.ld-page .pa-main{position:relative;overflow:hidden;min-height:calc(100vh - 86px);display:flex;align-items:center;justify-content:center;padding:56px 16px;box-sizing:border-box}
+.glow--form{width:560px;height:560px;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(160,180,210,0.12)}
+.pa-card{position:relative;width:100%;max-width:420px;box-sizing:border-box;background:#10141a;border:1px solid #252c36;border-radius:20px;padding:32px 28px;box-shadow:0 30px 80px rgba(0,0,0,0.55)}
+.pa-brand{display:inline-flex;align-items:center;gap:10px;margin-bottom:26px}
+.pa-brand__logo{height:28px;width:auto}
+.pa-brand__name{font-size:17px;font-weight:600}
+.pa-title{margin:0 0 8px;font-size:30px;line-height:1.1;font-weight:700}
+.pa-lead{margin:0 0 22px;font-size:15px;line-height:1.55;color:#aab2bd}
+.pa-lead strong{color:#e8eaed}
+.pa-text{margin:0 0 22px;font-size:15px;line-height:1.55;color:#d3d8de}
+.pa-form{display:flex;flex-direction:column;gap:18px;margin:0}
+.pa-field{display:flex;flex-direction:column;gap:7px}
+.pa-label{font-size:14px;font-weight:500;color:#d3d8de}
+.pa-input{width:100%}
+.pa-input:focus{outline:none;border-color:#ffffff;box-shadow:0 0 0 3px rgba(255,255,255,0.28)}
+.pa-input[aria-invalid="true"]:focus{border-color:#ffffff}
+.pa-input:disabled,.pa-input[readonly]{color:#aab2bd;background:#0b0e12;border-color:#1f252e}
+.pa-help{font-size:13px;line-height:1.5;color:#8b94a1}
+.pa-help ul{margin:4px 0 0;padding-left:18px}
+.pa-field-error{margin:0;font-size:13px;line-height:1.45;color:#fca5a5}  /* 9.6:1 on #10141a */
+.pa-alert{margin:0 0 18px;padding:12px 14px;border-radius:12px;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);font-size:14px;line-height:1.5;color:#fecaca}
+.pa-notice{margin:0 0 18px;padding:12px 14px;border-radius:12px;border:1px solid #2b333f;background:#151a21;font-size:14px;line-height:1.5;color:#e8eaed}
+.pa-pw{position:relative}
+.pa-pw .pa-input{padding-right:76px}
+.pa-pw__toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:36px;min-width:60px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#aab2bd;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.pa-pw__toggle:hover{color:#ffffff;background:#151a21}
+.pa-pw__toggle[hidden]{display:none}
+.pa-submit{width:100%;border:none;cursor:pointer;font-family:inherit;margin-top:4px}
+.pa-links{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 16px;margin-top:22px;font-size:13px}
+.pa-links a{color:#aab2bd;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#3a4351}
+.pa-links a:hover{color:#ffffff;text-decoration-color:currentColor}
+.pa-links--center{justify-content:center}
+
+/* --- Small screens, reduced motion ------------------------------------------------------------------------------ */
+@media (max-width:960px){.navlinks{display:none !important}}   /* no room beside the buttons on a tablet */
+@media (max-width:760px){
+  .ld-nav{gap:12px;padding:12px 16px}
+  .ld-doc__h{font-size:34px}
+}
+@media (max-width:440px){
+  .ld-nav__invite{display:none}                                 /* the hero's button is right below */
+  .ld-brand__name{font-size:16px}
+  .ld-page .pa-main{padding:32px 16px;align-items:flex-start}
+  .pa-card{padding:28px 20px}
+  .pa-title{font-size:26px}
+}
+@media (prefers-reduced-motion:reduce){.btn:hover{transform:none}}

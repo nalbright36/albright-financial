@@ -1,7 +1,7 @@
 """The public home page for visitors, its invite form and footer pages, and Admin > Invite requests.
 
   "/" (visitors)  - landing: the marketing page (templates/albright_labs/landing.html). It extends
-                    public_base.html, not the app's index.html - no app nav, no launcher, nothing private.
+                    templates/base_public.html, not the app's index.html - no app nav, no launcher, nothing private.
                     Strict headers (albright_resume.security.landing_headers): scripts and styles from this
                     site only, plus Google Fonts. Everything is static files; there's no inline style or script.
   "/invite/"      - the "Request an invite" form's POST (albright_labs.invite_requests): CSRF, a valid email,

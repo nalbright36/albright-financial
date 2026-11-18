@@ -163,12 +163,13 @@ class AccountMenuTests(Base):
                     # Far right: after the app's links.
                     self.assertGreater(content.index('id="account-menu"'), content.index('id="navbar-links"'))
 
-    def test_visitors_get_login_only(self):
+    def test_visitors_get_no_app_header(self):
+        # The sign-in page is a public page (templates/base_public.html): no app header at all.
         self.client.logout()
         content = self.page(reverse("user_login"))
         self.assertNotIn('id="account-menu"', content)
-        links = content.split('id="navbar-links"', 1)[1].split("</div>", 1)[0]
-        self.assertEqual(hrefs(links), [(reverse("user_login"), "Login")])        # accounts are invite-only
+        self.assertNotIn('id="navbar-links"', content)
+        self.assertNotIn("navbar__chip", content)
 
 
 class SharedHeaderRuleTests(Base):
@@ -284,11 +285,12 @@ class PhoneHeaderTests(Base):
         self.assertIn(":root { --menu-bg: #171C24; --menu-account-bg: #11151B;", full)
         self.assertIn(".navbar__menu-app, .navbar__icon { display: none; }", full)   # wider screens: unchanged
 
-    def test_visitors_menu_has_only_the_theme_toggle(self):
+    def test_visitors_get_no_phone_menu(self):
+        # Sign-in is a public page (templates/base_public.html): no app header, so no menu or theme toggle.
         self.client.logout()
-        extra = menu_extra(self.page(reverse("user_login")))
-        self.assertIn('id="theme-toggle-menu"', extra)
-        self.assertEqual(hrefs(extra), [])
+        content = self.page(reverse("user_login"))
+        self.assertNotIn('id="theme-toggle-menu"', content)
+        self.assertNotIn('id="navbar-links"', content)
 
     def test_the_chip_names_the_app_as_its_label_and_tooltip(self):
         for url, name in ((reverse("albright_crypto_app:inbox"), "Opportunities"),

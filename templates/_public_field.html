@@ -1,0 +1,8 @@
+{% load public_forms %}{# One labeled field on a logged-out form page (base_public_form.html): the input (public_forms.public_input sets aria-invalid / aria-describedby), help, a show/hide button for passwords, and its errors right under it. #}
+<div class="pa-field">
+<label class="pa-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+{% if field.field.widget.input_type == "password" %}<div class="pa-pw">{% public_input field %}<button type="button" class="pa-pw__toggle" data-password-toggle aria-controls="{{ field.id_for_label }}" aria-label="Show password" hidden>Show</button></div>
+{% else %}{% public_input field %}{% endif %}
+{% if field.help_text %}<div class="pa-help" id="{{ field.auto_id }}-help">{{ field.help_text|safe }}</div>{% endif %}
+{% for error in field.errors %}<p class="pa-field-error" id="{{ field.auto_id }}-error{% if not forloop.first %}-{{ forloop.counter }}{% endif %}">{{ error }}</p>{% endfor %}
+</div>
