@@ -126,6 +126,7 @@ class Section:
 
 SECTIONS = [
     Section("account", "ACCOUNT (this key, its owner, and these docs)"),
+    Section("overview", "OVERVIEW (search and today, across the apps this key can read)", """Each answers with only the parts this key may read: a key with just notes:read gets notes back, and so on."""),
     Section("schedule", "SCHEDULE (the owner's Planner - tasks and events, one-off or repeating)", """\
 Every call is a 403 if the owner can't open the Planner. Dates are YYYY-MM-DD, times HH:MM (24-hour, the
 owner's local time). A repeating item is one item; each date it happens is an "occurrence".
@@ -193,6 +194,23 @@ Any valid token. Returns {"used_bytes": int, "limit_bytes": int, "percent": floa
 above a lowered limit), "remaining_bytes": int, "tier": name of their storage plan, e.g. "Standard"}.""",
        section="account", returns={"used_bytes": 1048576, "limit_bytes": 104857600, "percent": 1.0,
                                    "remaining_bytes": 103809024, "tier": "Standard"}),
+
+    # ----- overview (overview_api) -------------------------------------------------------------------------------
+    Op("GET", "search", "searchMyItems", "Search the owner's notes, recipes, grocery list and Planner items", """Finds the owner's items whose words match q (required, <=100 characters): up to 10 each of their notes (full-text,
+not archived), the current Meals space's recipes and grocery lines (by title / name), and Planner items they can
+see (by title). Only the parts this key can read are included. Returns {"q", "notes": [{"id", "title", "tags"}],
+"recipes": [{"id", "title"}], "groceries": [{"id", "name", "checked"}], "planner_items": [{"id", "title", "kind",
+"date"}]}. Use the ids with getNote, getRecipe and the other endpoints.""",
+       scopes=("notes:read", "meals:read", "schedule:read"), display="search?q=<words>", section="overview",
+       query={"q": S("Words to look for", maxLength=100)}, required=("q",), example={"q": "chili"},
+       returns={"q": "chili", "notes": [{"id": 8, "title": "Chili notes", "tags": []}],
+                "recipes": [{"id": 12, "title": "Turkey chili"}], "groceries": [], "planner_items": []}),
+    Op("GET", "today", "getTodaySummary", "Today at a glance: Planner, meals and fitness", """The owner's today (in their time zone): {"date", "weekday", "planner": [occurrences, as in listSchedule],
+"meals": [today's meal plan entries, as in getMealPlan], "fitness": {"planned_workouts": [{"name", "program",
+"done"}], "macros": {"calories": {"eaten", "target"}, ...}}}. Only the parts this key can read are included.""",
+       scopes=("schedule:read", "meals:read", "fitness:read"), section="overview",
+       returns={"date": "2026-11-16", "weekday": "Monday", "planner": [], "meals": [],
+                "fitness": {"planned_workouts": [], "macros": {"calories": {"eaten": 1450, "target": 2200}}}}),
 
     # ----- schedule --------------------------------------------------------------------------------------------------
     Op("GET", "schedule", "listSchedule", "Planner occurrences in a date range", """\
@@ -363,6 +381,11 @@ for several; love=1: at least two people in the space rated it and all Favorite 
        example={"q": "chili"},
        returns={"scope": "space", "recipes": [{"id": 12, "title": "Turkey chili", "servings": 6, "ingredients": [
            {"name": "ground turkey", "quantity": "2", "unit": "lb", "note": ""}], "steps": ["Brown the turkey."]}]}),
+    Op("GET", "meals/recipes/{id}", "getRecipe", "One recipe, with its ingredients and steps", """A recipe the owner can read: their Meals space's, one shared with them, or a library recipe (anything else is a
+404). Returns the recipe as in listRecipes.""",
+       scopes=("meals:read",), section="meals", query={"space": SPACE},
+       returns={"id": 12, "title": "Turkey chili", "servings": 6, "ingredients": [
+           {"name": "ground turkey", "quantity": "2", "unit": "lb", "note": ""}], "steps": ["Brown the turkey."]}),
     Op("POST", "meals/recipes", "saveRecipe", "Create a recipe, or update the one with the same title", """\
 Create a recipe in the space, or update the space's one with the same title (case-insensitive) -
 only the fields you send change.
@@ -422,6 +445,10 @@ The note belongs to the owner and shows "by <your token's name>". Returns 201 {"
              "link": O('{"app", "type", "id"} or {"url"}'), "share": SHARE},
        required=("title",), example={"title": "Gift ideas", "body": "- Board game\n- Scarf", "tags": ["family"]},
        returns={"id": 8, "title": "Gift ideas", "url": "/notes/8/", "linked": None}),
+    Op("GET", "notes/{id}", "getNote", "One of the owner's notes, with its text", """One of the owner's own notes (anything else is a 404) with its Markdown "body" (the first 20000 characters;
+"truncated": true when there's more). Returns the note as in listNotes plus "body" and "truncated".""",
+       scopes=("notes:read",), section="notes",
+       returns={"id": 8, "title": "Gift ideas", "tags": ["family"], "body": "- Board game", "truncated": False}),
     Op("PATCH", "notes/{id}", "updateNote", "Add to or replace a note's text, or add tags", """\
 Only notes this token created, or that are shared with the owner to edit (anything else is a 404).
 Body: {"append": str} (added after a blank line) or {"body": str} (replaces it), and/or {"tags": [str]}

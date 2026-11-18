@@ -117,8 +117,9 @@ def _query_value(value):
     return value
 
 
-def call(request, op, arguments):
-    """Runs one operation as an API request with the caller's key; returns the MCP tool result."""
+def call(request, op, arguments, as_token=None):
+    """Runs one operation as an API request with the caller's key; returns the MCP tool result. as_token: the in-site
+    AI assistant's token (albright_assistant.tools) - set on the inner request, never sent as a header."""
     path = op.path
     for name in op.path_params:
         value = arguments.get(name)
@@ -139,6 +140,8 @@ def call(request, op, arguments):
         return _tool_text(f"No such endpoint: {op.method} {path}.", error=True)
     inner = _inner_request(request, op.method, full_path, query, body)
     inner.resolver_match = match
+    if as_token is not None:
+        inner.assistant_token = as_token
     response = match.func(inner, *match.args, **match.kwargs)
     text = response.content.decode("utf-8", "replace")
     data = None
@@ -161,7 +164,7 @@ def _tool_text(text, error=False):
 def _inner_request(outer, method, path, query, body):
     from django.core.handlers.wsgi import WSGIRequest
     data = json.dumps(body).encode() if body is not None else b""
-    environ = {k: v for k, v in outer.META.items() if isinstance(v, str)}
+    environ = {k: v for k, v in outer.META.items() if isinstance(v, str) and k != "HTTP_COOKIE"}
     environ.update({
         "REQUEST_METHOD": method, "PATH_INFO": path, "SCRIPT_NAME": "", "QUERY_STRING": urlencode(query, doseq=True),
         "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": str(len(data)), "wsgi.input": BytesIO(data),

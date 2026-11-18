@@ -1,0 +1,81 @@
+{% extends "index.html" %}
+{% block page_title %}Your AI assistant · {% endblock %}
+{% block content %}
+{% comment %}
+My account > Your AI assistant (albright_assistant.views.setup). Connect a provider with your own developer API key:
+the steps for the chosen provider (providers/_<key>.html - checked against its docs), the key box, then the model,
+limits and Disconnect. The key is never shown again - only its last 4 characters. Tabs are plain links (?provider=),
+so they work without JavaScript.
+{% endcomment %}
+<div class="container as-setup" style="padding-top: 32px; padding-bottom: 48px; max-width: 860px;">
+    <a href="{% url 'labs:account' %}" style="font-size: 0.875rem;">&larr; My account</a>
+    <h1 style="margin: 8px 0 6px;">Your AI assistant</h1>
+    <p class="as-lead">Chat with an AI from any page - the round button at the bottom right. It can look things up and make changes in your apps for you (it asks first before deleting or sharing anything). It uses <strong>your own</strong> AI provider account and developer API key: you pay the provider directly, usually cents per chat, and this site never pays for or sees your bill.</p>
+    <p class="as-lead">This is separate from <a href="{% url 'labs:api_keys' %}">API keys</a>, which connect an outside AI app (like the ChatGPT or Claude apps) to your account.</p>
+
+    {% if conn %}
+    <section class="card as-card" id="assistant-connected" aria-labelledby="connected-title">
+        <div class="card__header"><span class="card__label" id="connected-title">Connected</span>{% if conn.disabled %}<span class="badge loss">Turned off by an admin</span>{% endif %}</div>
+        <p class="as-status"><strong>{{ conn.provider_label }}</strong> &middot; key ending <code id="key-last4">{{ conn.key_last4 }}</code> &middot; {{ today_count }} of {{ conn.daily_limit }} messages today</p>
+        {% if conn.last_error_kind %}<p class="as-muted" id="last-error">Last problem: {{ conn.last_error_kind|cut:"_"|capfirst }} ({{ conn.last_error_at|timesince }} ago).</p>{% endif %}
+        <form method="post" action="{% url 'assistant:settings' %}" class="as-form" id="assistant-settings">{% csrf_token %}
+            <div class="field">
+                <label for="as-model">Model</label>
+                <select id="as-model" name="model" class="ledger-input" aria-describedby="as-model-help">
+                    {% for m in models %}<option value="{{ m.id }}"{% if m.id == conn.model %} selected{% endif %}>{{ m.label }}{% if m.price_in %} - ${{ m.price_in }} / ${{ m.price_out }} per million tokens{% endif %}</option>{% endfor %}
+                </select>
+                <small id="as-model-help" class="as-muted">From {{ conn.provider_label }}'s own list for your key. The one picked when you connected is a good everyday choice for chatting and using tools.</small>
+            </div>
+            <div class="as-grid">
+                <div class="field">
+                    <label for="as-daily">Messages per day</label>
+                    <input id="as-daily" name="daily_limit" type="number" min="1" max="2000" value="{{ conn.daily_limit }}" class="ledger-input">
+                </div>
+                <div class="field">
+                    <label for="as-steps">Tool steps per message</label>
+                    <input id="as-steps" name="max_steps" type="number" min="1" max="20" value="{{ conn.max_steps }}" class="ledger-input" aria-describedby="as-steps-help">
+                    <small id="as-steps-help" class="as-muted">How many rounds of looking up or changing things one answer may take.</small>
+                </div>
+            </div>
+            {% if conn.provider != "openrouter" %}
+            <details class="as-details"{% if conn.price_in_per_m %} open{% endif %}>
+                <summary>Cost estimate (optional)</summary>
+                <p class="as-muted">{{ conn.provider_label }}'s model list doesn't include prices. To see an estimated cost per chat, enter your model's price from their pricing page (US dollars per million tokens). Blank shows token counts only.</p>
+                <div class="as-grid">
+                    <div class="field"><label for="as-price-in">Input $ / million</label><input id="as-price-in" name="price_in" inputmode="decimal" value="{{ conn.price_in_per_m|default_if_none:'' }}" class="ledger-input"></div>
+                    <div class="field"><label for="as-price-out">Output $ / million</label><input id="as-price-out" name="price_out" inputmode="decimal" value="{{ conn.price_out_per_m|default_if_none:'' }}" class="ledger-input"></div>
+                </div>
+            </details>
+            {% endif %}
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <div class="as-row">
+            <form method="post" action="{% url 'assistant:refresh_models' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Refresh model list</button></form>
+            <form method="post" action="{% url 'assistant:disconnect' %}" data-confirm="Disconnect {{ conn.provider_label }}? Your key is deleted from this site. Your past chats stay until you delete them.">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="assistant-disconnect">Disconnect</button></form>
+        </div>
+        <p class="as-privacy" id="assistant-privacy">Your messages, and the parts of your account the assistant reads to answer, are sent to {{ conn.provider_label }}.</p>
+    </section>
+    {% endif %}
+
+    <section class="card as-card" id="assistant-connect" aria-labelledby="connect-title">
+        <div class="card__header"><span class="card__label" id="connect-title">{% if conn %}Connect a different provider{% else %}Connect your AI provider{% endif %}</span></div>
+        <nav class="as-tabs" aria-label="AI provider">
+            {% for p in providers %}<a href="?provider={{ p.key }}#assistant-connect" class="as-tab{% if p.key == selected %} is-active{% endif %}"{% if p.key == selected %} aria-current="page"{% endif %}>{{ p.label }}</a>{% endfor %}
+        </nav>
+        <div class="as-steps" id="steps-{{ provider.key }}">
+            {% include "albright_assistant/providers/_"|add:provider.key|add:".html" %}
+        </div>
+        <form method="post" action="{% url 'assistant:connect' %}" class="as-form" id="assistant-key-form" autocomplete="off">{% csrf_token %}
+            <input type="hidden" name="provider" value="{{ provider.key }}">
+            <div class="field">
+                <label for="as-key">Your {{ provider.label }} API key</label>
+                <input id="as-key" name="api_key" type="password" class="ledger-input" autocomplete="off" spellcheck="false" autocapitalize="none" required placeholder="{{ provider.key_prefix }}…"{% if key_error %} aria-invalid="true" aria-describedby="as-key-error"{% endif %}>
+                {% if key_error %}<p class="field-error" id="as-key-error" role="alert">{{ key_error }}</p>{% endif %}
+            </div>
+            <button type="submit" class="btn btn-primary">Connect</button>
+            <p class="as-muted">We check the key with one free call that lists your models, then store it encrypted. It's never shown again (only its last 4 characters).</p>
+        </form>
+        <p class="as-privacy">Your messages, and the parts of your account the assistant reads to answer, are sent to {{ provider.label }}.</p>
+    </section>
+</div>
+{% endblock %}

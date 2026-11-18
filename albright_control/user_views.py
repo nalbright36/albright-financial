@@ -40,7 +40,8 @@ def _rows():
         allowed = set(app_access.allowed_keys(user, pref)) if user.is_active else set(pref.allowed_apps or [])
         rows.append({"user": user, "cells": [{"key": app.key, "label": app.label, "on": app.key in allowed}
                                              for app in apps],
-                     "keys_allowed": user.is_superuser or pref.api_keys_allowed, "active_keys": user.active_keys})
+                     "keys_allowed": user.is_superuser or pref.api_keys_allowed, "active_keys": user.active_keys,
+                     "assistant_allowed": user.is_superuser or pref.assistant_allowed})
     return rows, apps
 
 
@@ -126,6 +127,20 @@ def users(request):
         audit(request, "user_api_keys", f"{user.username}: API keys {'allowed' if pref.api_keys_allowed else 'not allowed'}")
         messages.success(request, f"{user.username} {'can now' if pref.api_keys_allowed else 'can no longer'} use API keys"
                                   f"{'' if pref.api_keys_allowed else ' - their keys are disabled until you turn it back on'}.")
+        return redirect("albright_control:users")
+    if action == "assistant":
+        # "Can use AI assistant": off hides the button and stops the person's assistant at once (their connection and
+        # chats are kept, and work again if it's turned back on).
+        user = get_object_or_404(get_user_model(), pk=request.POST.get("user_id"))
+        if user.is_superuser:
+            messages.error(request, "Superusers can always use the AI assistant.")
+            return redirect("albright_control:users")
+        pref = UserPreference.objects.filter(user=user).first() or UserPreference(user=user)
+        pref.assistant_allowed = request.POST.get("allowed") == "1"
+        pref.save()
+        audit(request, "user_assistant", f"{user.username}: AI assistant {'allowed' if pref.assistant_allowed else 'not allowed'}")
+        messages.success(request, f"{user.username} {'can now' if pref.assistant_allowed else 'can no longer'} use the AI "
+                                  "assistant.")
         return redirect("albright_control:users")
     if action == "invite":
         invite_form = InviteForm(request.POST)

@@ -13,6 +13,7 @@ Connect your AI tabs (connect/_<tab>.html, one per AI - steps checked against ea
     <a href="{% url 'labs:account' %}" style="font-size: 0.875rem;">&larr; My account</a>
     <h1 style="margin: 8px 0 6px;">API keys</h1>
     <p style="margin: 0 0 20px; color: var(--text-secondary);">Connect an AI assistant (like ChatGPT, Claude, Grok or Gemini) to your account, so it can read and update your apps for you. It sees only what you can see, and what it adds is yours.</p>
+    {% if assistant_widget %}<p style="margin: -12px 0 20px; font-size: 0.875rem;" id="api-keys-assistant-link">Want to chat with an AI right here instead? Set up <a href="{% url 'assistant:setup' %}">your AI assistant</a>.</p>{% endif %}
 
     {% if not allowed %}
     <section class="card" id="api-access-off">

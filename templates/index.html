@@ -11,6 +11,8 @@
         {# The current app's own stylesheet (apps_registry.App.stylesheet) - on every page of that app. #}
         {% if app_stylesheet %}<link rel="stylesheet" href="{% static_version app_stylesheet %}">{% endif %}
         {# Anything else a page needs in <head> (e.g. Home's Today panel borrows the Planner's stylesheet). #}
+        {# The floating AI assistant (albright_assistant: only for people with "Can use AI assistant"). #}
+        {% if assistant_widget %}<link rel="stylesheet" href="{% static_version 'assistant/assistant.css' %}">{% endif %}
         {% block app_head %}{% endblock %}
         <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Trading" }}</title>
         {% include "_head_icons.html" %}
@@ -170,6 +172,7 @@
                         <a href="{% url 'labs:people' %}" class="navbar__menu-item">{% nav_icon "users" %}People</a>
                         <a href="{% url 'labs:activity' %}" class="navbar__menu-item">{% nav_icon "bell" %}Notifications</a>
                         <a href="{% url 'labs:api_keys' %}" class="navbar__menu-item" id="menu-api-keys-link">{% nav_icon "key" %}API keys</a>
+                        {% if assistant_widget %}<a href="{% url 'assistant:setup' %}" class="navbar__menu-item" id="menu-assistant-link">{% nav_icon "message" %}AI assistant</a>{% endif %}
                         {% endif %}
                         <button type="button" class="navbar__menu-item navbar__menu-theme" id="theme-toggle-menu">
                             <svg class="navbar__icon icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
@@ -232,6 +235,7 @@
                             <a href="{% url 'labs:circles' %}" id="nav-circles-link">Circles{% if circle_invites %} <span class="badge navbar__badge">{{ circle_invites }}</span>{% endif %}</a>
                             <a href="{% url 'labs:people' %}" id="nav-people-link">People</a>
                             <a href="{% url 'labs:api_keys' %}" id="nav-api-keys-link">API keys</a>
+                            {% if assistant_widget %}<a href="{% url 'assistant:setup' %}" id="nav-assistant-link">AI assistant</a>{% endif %}
                             <a href="{% url 'user_logout' %}">Logout</a>
                         </div>
                     </div>
@@ -463,5 +467,6 @@
         {# The current app's own script (apps_registry.App.script), then anything else a page adds. #}
         {% if app_script %}<script src="{% static_version app_script %}"></script>{% endif %}
         {% block app_scripts %}{% endblock %}
+        {% if assistant_widget %}{% include "albright_assistant/_widget.html" %}<script src="{% static_version 'assistant/assistant.js' %}" defer></script>{% endif %}
     </body>
 </html>

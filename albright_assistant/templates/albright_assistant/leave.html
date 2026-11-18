@@ -1,0 +1,20 @@
+{% extends "index.html" %}
+{% block page_title %}Unverified link · {% endblock %}
+{% block content %}
+{# The warning page for an external link from Your AI assistant or the assistant's replies (views.leave). #}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 640px;">
+    <section class="card" id="leave-warning">
+        {% if url %}
+        <h1 style="margin: 0 0 8px; font-size: 1.375rem;">This site isn't on your verified list</h1>
+        <p style="margin: 0 0 6px; color: var(--text-secondary);">You're about to leave for:</p>
+        <p style="margin: 0 0 6px; font-weight: 700;" id="leave-domain">{{ domain }}</p>
+        {% if status == "lookalike" %}<p style="color: var(--red);">This domain looks like an impersonation of a site on your verified list. Don't continue unless you're certain it's genuine.</p>{% endif %}
+        <p style="font-size: 0.8125rem; color: var(--text-secondary); overflow-wrap: anywhere;">Full link: {{ url }}</p>
+        <a href="{{ url }}" class="btn btn-primary" id="leave-continue" rel="noopener noreferrer nofollow" target="_blank">Continue to {{ domain }}</a>
+        {% else %}
+        <h1 style="margin: 0 0 8px; font-size: 1.375rem;">That isn't a web link</h1>
+        <p style="margin: 0; color: var(--text-secondary);">Only http(s) links can be opened.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

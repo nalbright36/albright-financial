@@ -23,7 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 from albright_labs import activity
 
 from . import scopes
-from .models import BotRequestLog, BotToken, hash_token
+from .models import ASSISTANT, BotRequestLog, BotToken, hash_token
 
 RATE_LIMIT = 60          # requests per minute per token
 RATE_WINDOW = timedelta(minutes=1)
@@ -69,7 +69,21 @@ def _log(request, token, status, summary):
 
 def authenticate(request):
     """The request's live token, or ApiError: not HTTPS (403), missing / wrong / revoked / expired (401 - the error
-    carries .token when there was one, so it's logged under its name), API access turned off for its owner (403)."""
+    carries .token when there was one, so it's logged under its name), API access turned off for its owner (403).
+
+    The in-site AI assistant (albright_assistant) calls the API views in-process with its own token on the request
+    object (request.assistant_token - a Python attribute, nothing a client can send); it's checked against the
+    assistant's permission instead of "Can create API keys". A Bearer value never authenticates as that token."""
+    inproc = getattr(request, "assistant_token", None)
+    if inproc is not None:
+        from albright_assistant import access
+        if not inproc.is_active or inproc.kind != ASSISTANT:
+            raise ApiError(401, "The assistant's access was revoked.", "rejected: assistant token revoked")
+        if not access.allowed(inproc.owner):
+            error = ApiError(403, "The AI assistant is turned off for this account.", "rejected: assistant not allowed")
+            error.token = inproc
+            raise error
+        return inproc
     if require_https() and not _is_https(request):
         raise ApiError(403, "HTTPS is required.", "rejected: not HTTPS")
     raw = _bearer(request)

@@ -1,0 +1,75 @@
+{% comment %}
+The floating AI assistant (templates/index.html, every signed-in app page - only for people with "Can use AI
+assistant": context_processors.assistant). The round button bottom-right in the app's accent, lifted above any fixed
+bottom bar (static/assistant/assistant.js). Not connected: the button opens a short "Connect your AI" card. Connected:
+a drawer on the right (a full-screen sheet on phones) - the chat, past chats, starter chips, the composer. Every
+answer is fetched by polling /assistant/runs/<id>/ (albright_assistant.runner).
+{% endcomment %}
+{% with w=assistant_widget %}
+<div class="as-widget" id="assistant" data-connected="{{ w.connected|yesno:'1,0' }}"
+     data-state-url="{% url 'assistant:state' %}" data-send-url="{% url 'assistant:send' %}"
+     data-chat-url="{% url 'assistant:chat' 0 %}" data-chat-delete-url="{% url 'assistant:chat_delete' 0 %}"
+     data-delete-all-url="{% url 'assistant:chats_delete_all' %}" data-run-url="{% url 'assistant:run' 0 %}"
+     data-approve-url="{% url 'assistant:run_approve' 0 %}" data-cancel-url="{% url 'assistant:run_cancel' 0 %}"
+     data-undo-url="{% url 'assistant:action_undo' 0 %}" data-setup-url="{% url 'assistant:setup' %}">
+    {{ w.page|json_script:"assistant-page" }}
+    <input type="hidden" id="assistant-csrf" value="{{ csrf_token }}">
+    <button type="button" class="as-fab" id="assistant-fab" aria-expanded="false"
+            aria-controls="{% if w.connected %}assistant-panel{% else %}assistant-connect-card{% endif %}"
+            aria-label="{% if w.connected %}Open the AI assistant{% else %}Set up the AI assistant{% endif %}">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+    </button>
+
+    {% if not w.connected %}
+    <section class="as-connect" id="assistant-connect-card" role="dialog" aria-labelledby="assistant-connect-title" hidden>
+        <button type="button" class="as-icon-btn as-connect__close" data-assistant-close aria-label="Close">&times;</button>
+        <h2 class="as-connect__title" id="assistant-connect-title">{% if w.disabled %}Assistant turned off{% else %}Connect your AI{% endif %}</h2>
+        {% if w.disabled %}
+        <p>An admin has turned the AI assistant off for your account.</p>
+        {% else %}
+        <p>Chat with your own OpenAI, Claude, Grok, Gemini or OpenRouter account from any page. It can look things up and make changes for you. You pay your provider directly - usually cents per chat.</p>
+        <a href="{% url 'assistant:setup' %}" class="btn btn-primary" id="assistant-connect-link">Set it up</a>
+        {% endif %}
+    </section>
+    {% else %}
+    <section class="as-panel" id="assistant-panel" role="dialog" aria-labelledby="assistant-title" hidden>
+        <header class="as-panel__head" id="assistant-head">
+            <span class="as-panel__grab" aria-hidden="true"></span>
+            <div class="as-panel__titles">
+                <h2 class="as-panel__title" id="assistant-title">Assistant</h2>
+                <p class="as-panel__meta"><span id="assistant-model">{{ w.provider }} &middot; {{ w.model }}</span> <span id="assistant-cost" class="as-panel__cost"></span></p>
+            </div>
+            <button type="button" class="as-icon-btn" id="assistant-history-btn" aria-expanded="false" aria-controls="assistant-history" aria-label="Past chats" title="Past chats">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+            </button>
+            <button type="button" class="as-icon-btn" id="assistant-new" aria-label="New chat" title="New chat">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button type="button" class="as-icon-btn" data-assistant-close aria-label="Close the assistant" title="Close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </header>
+        <div class="as-history" id="assistant-history" hidden>
+            <ul class="as-history__list" id="assistant-history-list"></ul>
+            <button type="button" class="btn btn-secondary btn-sm" id="assistant-delete-all">Delete all chats</button>
+        </div>
+        <div class="as-refresh" id="assistant-refresh" hidden>Updated - <a href="" id="assistant-refresh-link">refresh</a> to see it.</div>
+        <div class="as-log" id="assistant-log" role="log" aria-live="polite" aria-relevant="additions">
+            <p class="as-empty" id="assistant-empty">Ask about your plans, meals, workouts or notes - or ask it to add or change something.</p>
+        </div>
+        <div class="as-chips" id="assistant-chips">{% for chip in w.chips %}<button type="button" class="as-chip" data-chip="{{ chip }}">{{ chip }}</button>{% endfor %}</div>
+        <form class="as-compose" id="assistant-form">
+            <label class="visually-hidden" for="assistant-input">Message the assistant</label>
+            <textarea id="assistant-input" rows="1" maxlength="4000" placeholder="Ask anything…" autocomplete="off"></textarea>
+            <button type="button" class="as-icon-btn as-mic" id="assistant-mic" aria-label="Speak your message" aria-pressed="false" hidden>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            </button>
+            <button type="submit" class="as-send" id="assistant-send" aria-label="Send">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+        </form>
+        <p class="as-foot">Your messages, and what it reads to answer, are sent to {{ w.provider }}.</p>
+    </section>
+    {% endif %}
+</div>
+{% endwith %}

@@ -52,6 +52,17 @@ def hash_token(raw):
     return hashlib.sha256((raw or "").encode()).hexdigest()
 
 
+KEY, ASSISTANT = "key", "assistant"
+
+
+class KeyManager(models.Manager):
+    """BotToken.objects: the API keys people make (My account > API keys, OAuth connections) - never the in-site AI
+    assistant's own key (albright_assistant), which isn't a key anyone holds. BotToken.all_objects has both."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(kind=KEY)
+
+
 class BotToken(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bot_tokens")
     name = models.CharField(max_length=100)
@@ -63,6 +74,14 @@ class BotToken(models.Model):
     revoked_at = models.DateTimeField(null=True, blank=True)
     # Optional end date (My account > API keys: Never / 30 days / 90 days / 1 year). Past it: 401, like a revoked key.
     expires_at = models.DateTimeField(null=True, blank=True)
+    # "key": an API key someone holds. "assistant": the in-site AI assistant's (albright_assistant.runner) - its value
+    # is thrown away when it's made, so it can't be sent over HTTP; the assistant passes the row itself
+    # (auth.authenticate's in-process path). Kept out of every key list by BotToken.objects.
+    kind = models.CharField(max_length=10, choices=[(KEY, "API key"), (ASSISTANT, "AI assistant")], default=KEY,
+                            db_index=True)
+
+    objects = KeyManager()
+    all_objects = models.Manager()
 
     class Meta:
         ordering = ["-created_at"]

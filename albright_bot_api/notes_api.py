@@ -158,3 +158,11 @@ def note_update(request, token, note_id):
 def notes_collection(request):
     """GET lists (notes:read); POST creates (notes:write)."""
     return notes_create(request) if request.method == "POST" else notes_list(request)
+
+
+def note_item(request, note_id):
+    """GET reads one note with its text (notes:read - overview_api); PATCH changes it (notes:write)."""
+    if request.method == "GET":
+        from .overview_api import note_detail
+        return note_detail(request, note_id=note_id)
+    return note_update(request, note_id=note_id)

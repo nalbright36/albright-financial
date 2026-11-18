@@ -29,6 +29,13 @@
         <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">{% if api_keys %}Let an AI assistant (like ChatGPT, Claude, Grok or Gemini) read and update your apps, as you.{% else %}Connect an AI assistant to your account - API access isn't turned on for you yet.{% endif %}</p>
         <a href="{% url 'labs:api_keys' %}" class="btn btn-secondary">API keys / Connect your AI</a>
     </section>
+    {% if assistant_widget %}
+    <section class="card" id="assistant-link" style="margin-top: var(--space-5, 20px);">
+        <div class="card__header"><span class="card__label">Your AI assistant</span></div>
+        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">{% if assistant_widget.connected %}Connected to {{ assistant_widget.provider }} &middot; {{ assistant_widget.model }}. Change the model, your limits or disconnect.{% else %}Chat with your own OpenAI, Claude, Grok, Gemini or OpenRouter account from any page - the round button at the bottom right.{% endif %}</p>
+        <a href="{% url 'assistant:setup' %}" class="btn btn-secondary">Your AI assistant</a>
+    </section>
+    {% endif %}
     {% include "albright_labs/_app_settings.html" %}
 </div>
 {% endblock %}

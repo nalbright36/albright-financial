@@ -1,0 +1,39 @@
+{% extends "index.html" %}
+{% block page_title %}AI assistant · {% endblock %}
+{% comment %}Admin > AI assistant (albright_assistant.admin_views): connections and usage - never keys or message text.{% endcomment %}
+{% block content %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1080px;">
+    <h1 style="margin: 0 0 6px;">AI assistant</h1>
+    <p style="margin: 0 0 20px; color: var(--text-secondary);">People who connected their own AI provider (they pay it directly). Turn the assistant on for someone in <a href="{% url 'albright_control:users' %}">Users</a> ("Can use AI assistant"). Keys and messages are never shown here.</p>
+    {% if rows %}
+    <section class="card" style="padding: 0;">
+        <div class="table-scroll">
+        <table class="holdings" id="assistant-connections">
+            <thead><tr><th>User</th><th>Provider</th><th>Model</th><th>Messages 7d</th><th>Messages 30d</th><th>Last used</th><th>Recent errors (30d)</th><th></th></tr></thead>
+            <tbody>
+            {% for row in rows %}
+            <tr data-connection="{{ row.conn.pk }}">
+                <td><strong>{{ row.conn.user.username }}</strong></td>
+                <td>{{ row.conn.provider_label }}</td>
+                <td style="font-size: 0.8125rem; overflow-wrap: anywhere;">{{ row.conn.model_label }}</td>
+                <td>{{ row.m7 }}</td>
+                <td>{{ row.m30 }}</td>
+                <td style="font-size: 0.8125rem; white-space: nowrap;">{% if row.conn.last_used_at %}{{ row.conn.last_used_at|date:"M j, g:i A" }}{% else %}never{% endif %}</td>
+                <td style="font-size: 0.8125rem;">{% for label, n in row.errors %}{{ label }} ({{ n }}){% if not forloop.last %}, {% endif %}{% empty %}<span style="color: var(--text-secondary);">none</span>{% endfor %}</td>
+                <td><form method="post" action="{% url 'assistant_admin:toggle' row.conn.pk %}" style="margin: 0;">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" role="switch" aria-checked="{{ row.conn.disabled|yesno:'false,true' }}" aria-label="Assistant enabled: {{ row.conn.user.username }}">{% if row.conn.disabled %}Disabled &middot; enable{% else %}On &middot; disable{% endif %}</button></form></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+    {% else %}
+    <p class="card" style="margin: 0; color: var(--text-secondary);" id="assistant-empty">Nobody has connected a provider yet.</p>
+    {% endif %}
+    <section class="card" style="margin-top: 16px;" id="assistant-hosts">
+        <div class="card__header"><span class="card__label">Provider hosts</span></div>
+        <p style="margin: 0 0 8px; font-size: 0.875rem; color: var(--text-secondary);">The assistant calls these over HTTPS from the server. To check the server can reach them, run <code>python manage.py assistant_check_hosts</code> in a console there.</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 0.875rem;">{% for label, host in hosts %}<li>{{ label }}: <code>{{ host }}</code></li>{% endfor %}</ul>
+    </section>
+</div>
+{% endblock %}

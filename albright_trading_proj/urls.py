@@ -43,6 +43,8 @@ urlpatterns = [
     path("reset/done/", password_views.ResetComplete.as_view(), name="password_reset_complete"),
     # Albright Labs, the hub: "/" (public landing, or the signed-in user's landing setting) and "/home/".
     path("", include("albright_labs.urls")),
+    # The in-site AI assistant: /account/assistant/ (setup) and /assistant/... (the chat) - albright_assistant.
+    path("", include("albright_assistant.urls")),
     path("", include("albright_trading_app.urls")),
     path("albright_reselling_app/", include("albright_reselling_app.urls")),
     # The Opportunities app (package albright_crypto_app). Its old prefixes
@@ -65,6 +67,7 @@ urlpatterns = [
     path("resume/", include("albright_resume.urls")),
     path("control/resume/", include("albright_resume.admin_urls")),
     path("control/labs/", include("albright_labs.admin_urls")),
+    path("control/assistant/", include("albright_assistant.admin_urls")),
     path("control/", include("albright_control.urls")),
     path("api/bot/v1/", include((bot_api_urlpatterns, "bot_api_v1"))),
     path("", include((bot_oauth_urlpatterns, "bot_oauth"))),

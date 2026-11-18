@@ -186,6 +186,9 @@ class UserPreference(models.Model):
     # Admin > Users "Can create API keys": may this person make their own Bot API keys (My account > API keys)?
     # Superusers always may. Turning it off disables their keys - 403 "API access disabled" - until it's back on.
     api_keys_allowed = models.BooleanField("Can create API keys", default=False)
+    # Admin > Users "Can use AI assistant": the in-site assistant with the person's own AI provider key
+    # (albright_assistant). Superusers always may.
+    assistant_allowed = models.BooleanField("Can use AI assistant", default=False)
     # The space each app last showed (Meals and Money's switcher): {"meals": space id, ...} - checked on every use.
     current_spaces = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)

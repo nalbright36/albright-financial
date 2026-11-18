@@ -22,6 +22,7 @@ GROUPS = (
                                                              "albright_control:suggestion_status",
                                                              "albright_control:suggestion_notes",
                                                              "albright_control:suggestion_delete")),
+        ("AI assistant", "assistant_admin:overview", ("assistant_admin:*",)),
         ("Ideas", "albright_control:ideas", ("albright_control:ideas", "albright_control:idea_add",
                                              "albright_control:idea", "albright_control:idea_status",
                                              "albright_control:idea_notes", "albright_control:suggestion_to_idea")),
@@ -47,7 +48,7 @@ GROUPS = (
 ICONS = {
     "overview": "dashboard", "bot": "bot", "system": "activity", "site": "layout",
     "albright_control:overview": "dashboard", "albright_control:bot_api": "bot", "albright_control:suggestions": "message",
-    "albright_control:ideas": "lightbulb", "albright_control:health": "activity", "albright_control:integrations": "plug",
+    "albright_control:ideas": "lightbulb", "assistant_admin:overview": "message", "albright_control:health": "activity", "albright_control:integrations": "plug",
     "albright_control:ai_usage": "cpu", "albright_control:data": "database",
     "albright_control:storage": "archive", "albright_control:audit": "scroll",
     "albright_resume_admin:overview": "file-text", "labs_admin:invite_requests": "inbox", "albright_control:users": "users",

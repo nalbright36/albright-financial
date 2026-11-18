@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'albright_money',
     'albright_fitness',
     'albright_weather',
+    'albright_assistant',
     'django.contrib.humanize',
 ]
 
@@ -126,6 +127,7 @@ TEMPLATES = [
                 'albright_reselling_app.context_processors.watchlist_nav',
                 'albright_labs.context_processors.app_nav',
                 'albright_control.nav.admin_nav',
+                'albright_assistant.context_processors.assistant',
             ],
         },
     },

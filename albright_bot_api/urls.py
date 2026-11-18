@@ -1,7 +1,7 @@
 from django.urls import path, reverse_lazy
 from django.views.generic import RedirectView
 
-from . import api_views, fitness_api, mcp, meals_api, notes_api, oauth_views, schedule_api, views
+from . import api_views, fitness_api, mcp, meals_api, notes_api, oauth_views, overview_api, schedule_api, views
 
 # Site pages. Token management and the activity log moved to the Admin area
 # (/control/bot-api/); the old URLs redirect there.
@@ -66,9 +66,13 @@ api_urlpatterns = [
     path("meals/ideas", meals_api.ideas, name="meals_ideas"),
     path("meals/recipes", meals_api.recipes, name="meals_recipes"),
     path("meals/recipes/import", meals_api.recipes_import, name="meals_recipes_import"),
+    path("meals/recipes/<int:recipe_id>", overview_api.recipe_detail, name="meals_recipe"),
     # Notes (albright_bot_api.notes_api).
     path("notes", notes_api.notes_collection, name="notes"),
-    path("notes/<int:note_id>", notes_api.note_update, name="note"),
+    path("notes/<int:note_id>", notes_api.note_item, name="note"),
+    # Read helpers across apps (albright_bot_api.overview_api).
+    path("search", overview_api.search, name="search"),
+    path("today", overview_api.today, name="today"),
     # Activity (albright_labs.activity) - the owner's notifications.
     path("activity", api_views.activity, name="activity"),
     # Planner (albright_bot_api.schedule_api).
