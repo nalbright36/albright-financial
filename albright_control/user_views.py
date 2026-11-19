@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
-from albright_labs import app_access, apps_registry, invites, password_views
+from albright_labs import app_access, apps_registry, archive, invites, password_views
 from albright_labs.forms import CreateUserForm, InviteForm
 from albright_labs.models import Invitation, UserPreference
 
@@ -29,11 +29,12 @@ from .access import audit, superuser_required
 def _rows():
     from django.db.models import Count, Q
     from django.utils import timezone
-    live = Q(bot_tokens__revoked_at__isnull=True) & (Q(bot_tokens__expires_at__isnull=True) |
+    live = Q(bot_tokens__revoked_at__isnull=True) & Q(bot_tokens__kind="key") & (Q(bot_tokens__expires_at__isnull=True) |
                                                      Q(bot_tokens__expires_at__gt=timezone.now()))
     users = get_user_model().objects.order_by("username").annotate(active_keys=Count("bot_tokens", filter=live))
     prefs = {p.user_id: p for p in UserPreference.objects.filter(user__in=users)}
-    apps = [app for app in apps_registry.APPS if not app.superuser_only]
+    # Archived apps (albright_labs.archive) aren't listed - each person's stored entry for one is kept, untouched.
+    apps = [app for app in archive.live_apps() if not app.superuser_only]
     rows = []
     for user in users:
         pref = prefs.get(user.pk) or UserPreference(user=user)

@@ -1,5 +1,5 @@
 /*
- * Public pages (landing, resume): apply the theme chosen with the site's
+ * Public pages (landing, sign-in, errors): apply the theme chosen with the site's
  * toggle (localStorage "theme") before first paint. Loaded as a blocking
  * <script src> in <head> - an external file, so the strict CSP
  * (script-src 'self') holds. No choice saved: the CSS follows the system.

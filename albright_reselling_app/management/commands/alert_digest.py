@@ -15,8 +15,10 @@ from django.core.management.base import BaseCommand
 
 from albright_reselling_app.scanner.alerts import send_daily_digest
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Send the daily Telegram digest of yesterday's results and today's live counts."
 

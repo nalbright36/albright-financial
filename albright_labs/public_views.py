@@ -2,7 +2,7 @@
 
   "/" (visitors)  - landing: the marketing page (templates/albright_labs/landing.html). It extends
                     templates/base_public.html, not the app's index.html - no app nav, no launcher, nothing private.
-                    Strict headers (albright_resume.security.landing_headers): scripts and styles from this
+                    Strict headers (albright_labs.security.landing_headers): scripts and styles from this
                     site only, plus Google Fonts. Everything is static files; there's no inline style or script.
   "/invite/"      - the "Request an invite" form's POST (albright_labs.invite_requests): CSRF, a valid email,
                     5 posts an hour per IP, a honeypot field. It ends on "/?invite=thanks#invite" (the thanks
@@ -18,7 +18,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from albright_control.access import audit, superuser_required
-from albright_resume.security import landing_headers
+from .security import landing_headers
 
 from . import apps_registry, emails, invites, ratelimit
 from . import invite_requests as flow
@@ -88,8 +88,9 @@ STATUS_FILTERS = (("", "All"), ("new", "New"), ("invited", "Invited"), ("decline
 
 
 def _app_choices():
+    from .archive import live_apps
     return [(app.key, app.label, app.key in flow.DEFAULT_APPS)
-            for app in apps_registry.APPS if not app.superuser_only]
+            for app in live_apps() if not app.superuser_only]
 
 
 @superuser_required
@@ -113,7 +114,8 @@ def invite_request_send(request, pk):
     if row.status != "new":
         messages.error(request, f"That request is already {row.get_status_display().lower()}.")
         return redirect("labs_admin:invite_requests")
-    allowed = set(apps_registry.grantable_keys())
+    from .archive import live_keys
+    allowed = set(live_keys(apps_registry.grantable_keys()))
     apps = [key for key in apps_registry.grantable_keys() if key in set(request.POST.getlist("apps")) & allowed]
     invite, raw, ok, message = flow.send_invite(row, request.user, apps)
     audit(request, "invite_request_sent", f"#{row.pk} {row.email}: invite #{invite.pk}, "

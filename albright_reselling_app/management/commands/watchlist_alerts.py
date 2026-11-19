@@ -25,8 +25,10 @@ from django.utils import timezone
 
 from albright_reselling_app.scanner.alerts import send_watchlist_alerts
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Send any due watchlist closing-soon alerts (database-only, safe to run frequently or overlap)."
 

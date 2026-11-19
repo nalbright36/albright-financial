@@ -11,6 +11,7 @@ from django.db.models import Sum
 from albright_trading_app.models import RedditDailyMentionCount, RedditSentimentSummary
 from albright_trading_app.reddit_ticker_matcher import build_ticker_patterns, find_tickers
 from albright_trading_app.reddit_sentiment_scorer import get_analyzer, classify_sentiment
+from albright_labs.archive import skip_if_archived
 
 # NOTE: fix the import above to match your actual app name/module
 # layout before running — see the note at the bottom of the chat
@@ -23,6 +24,7 @@ LOOKBACK_HOURS = 24
 POST_LISTING_LIMIT = 500  # per subreddit, per run — adjust based on rate-limit headroom
 
 
+@skip_if_archived("trading")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Pulls Reddit mentions of S&P 500 tickers over the last 24h, scores sentiment, and updates rolling summaries."
 

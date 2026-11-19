@@ -1,8 +1,8 @@
 """The Admin area's top nav (templates/index.html): Overview, then three
 dropdown groups - Bot, System, Site. The group holding the open page is
 marked active, and a group shows a count badge when something inside needs
-attention (new ideas and bot suggestions, late or failing jobs, unreviewed
-resume conversations).
+attention (new ideas and bot suggestions, new invite requests, late or
+failing jobs).
 
 Each item: (label, URL name, the pages that count as it). A page is
 "namespace:url_name"; "namespace:*" is every page in that namespace.
@@ -37,7 +37,6 @@ GROUPS = (
         ("Audit log", "albright_control:audit", ("albright_control:audit",)),
     )),
     ("site", "Site", (
-        ("Resume", "albright_resume_admin:overview", ("albright_resume_admin:*",)),
         ("Invite requests", "labs_admin:invite_requests", ("labs_admin:*",)),
         ("Users", "albright_control:users", ("albright_control:users",)),
     )),
@@ -51,7 +50,7 @@ ICONS = {
     "albright_control:ideas": "lightbulb", "assistant_admin:overview": "message", "albright_control:health": "activity", "albright_control:integrations": "plug",
     "albright_control:ai_usage": "cpu", "albright_control:data": "database",
     "albright_control:storage": "archive", "albright_control:audit": "scroll",
-    "albright_resume_admin:overview": "file-text", "labs_admin:invite_requests": "inbox", "albright_control:users": "users",
+    "labs_admin:invite_requests": "inbox", "albright_control:users": "users",
 }
 
 # Late/failing jobs come from every job's history - recounted at most once a minute.
@@ -72,7 +71,6 @@ def attention():
     """URL name -> (count, tone) for the items that need a look."""
     from albright_bot_api.models import SiteSuggestion
     from albright_labs.models import InviteRequest
-    from albright_resume.models import ChatConversation
 
     from .models import Idea
     failing, late = _job_problems()
@@ -81,7 +79,6 @@ def attention():
         "albright_control:ideas": (Idea.objects.filter(status="new").count(), "warn"),
         "labs_admin:invite_requests": (InviteRequest.objects.filter(status="new").count(), "warn"),
         "albright_control:health": (failing + late, "loss" if failing else "warn"),
-        "albright_resume_admin:overview": (ChatConversation.objects.filter(reviewed=False).count(), "warn"),
     }
     return {name: value for name, value in found.items() if value[0]}
 

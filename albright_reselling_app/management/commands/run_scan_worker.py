@@ -23,8 +23,10 @@ from albright_reselling_app.scan_service import (
     estimate_historical_resale,
     score_discount_likelihood,
 )
+from albright_labs.archive import skip_if_archived
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = (
         "Persistent worker: polls for pending ScanRequests, ReconciliationRequests, "

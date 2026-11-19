@@ -13,6 +13,7 @@ from openai import OpenAI
 
 from albright_trading_app.models import NewsDailyMentionCount, NewsSentimentSummary
 from albright_trading_app.views import get_sp500_constituents
+from albright_labs.archive import skip_if_archived
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ CLASSIFICATION_BATCH_SIZE = 25  # articles per OpenAI call — keeps cost down
 LOOKBACK_HOURS = 24
 
 
+@skip_if_archived("trading")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Pulls the last 24h of news for S&P 500 symbols, classifies sentiment via OpenAI (batched), and updates daily/rolling summaries."
 

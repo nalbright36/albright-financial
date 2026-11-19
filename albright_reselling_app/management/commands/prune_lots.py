@@ -35,6 +35,7 @@ from django.utils import timezone
 from albright_reselling_app.scanner_models import AIReview, AlertSent, BidWatch, CriticalAlertSent, \
     LotEvaluation, ScanRun, SourcedLot, SpotPrice
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 NONE_CATEGORY_STALE_AFTER = timedelta(days=30)
 CLOSED_STALE_AFTER = timedelta(days=120)
@@ -82,6 +83,7 @@ def _stale_closed_no_signal(now):
     )
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Delete stale scanner lots (and their evaluations) past retention, protecting anything with real history."
 

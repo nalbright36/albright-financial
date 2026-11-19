@@ -353,7 +353,10 @@ def rows(user, events, prefs=None):
             from .models import CircleInvite
             pending = {i.pk: i for i in CircleInvite.objects.filter(pk__in=invite_ids, user=user)
                        if i.status == "pending"}
+    from .archive import is_app_archived
+    # "archived": an archived app's notification (albright_labs.archive) - shown as plain text, never a link.
     return [{"event": e, "text": text(e), "app": e.app, "app_label": APP_LABELS.get(e.app, e.app.title()),
+             "archived": is_app_archived(e.app),
              "initials": sharing.initials(e.actor) if e.actor_id else "?", "color": avatar_color(e.actor),
              "unread": e.pk in unread_ids, "circle": e.circle, "when": when(e.updated_at),
              "invite": pending.get(e.object_id) if e.verb == "invited" else None} for e in events]
@@ -369,11 +372,13 @@ def when(moment, now=None):
 
 
 def as_json(event, user=None):
-    """The Bot API's shape."""
+    """The Bot API's shape (an archived app's event has no url - albright_labs.archive)."""
+    from .archive import is_app_archived
     return {"id": event.pk, "app": event.app, "verb": event.verb, "text": text(event), "actor": actor_name(event),
             "via": event.via or None, "summary": event.summary, "count": event.count,
             "circle": {"id": event.circle_id, "name": event.circle.name} if event.circle_id else None,
-            "url": event.url or None, "created_at": event.created_at.isoformat(), "updated_at": event.updated_at.isoformat()}
+            "url": (None if is_app_archived(event.app) else event.url or None),
+            "created_at": event.created_at.isoformat(), "updated_at": event.updated_at.isoformat()}
 
 
 # ---------------------------------------------------------------------------

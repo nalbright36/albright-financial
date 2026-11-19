@@ -26,10 +26,6 @@ from django.test.runner import DiscoverRunner
 SEED_MODELS = {
     "auth.Permission",
     "contenttypes.ContentType",
-    "albright_resume.ResumeSettings",        # albright_resume 0002_placeholder_content
-    "albright_resume.WorkExperience",
-    "albright_resume.EducationItem",
-    "albright_resume.Project",
     "albright_fitness.Exercise",             # albright_fitness 0002_seed_exercises (the library; owner is null)
 }
 LOCK_KEY = zlib.crc32(b"albright-test-database")      # any fixed bigint shared by every run
@@ -114,6 +110,15 @@ def release_lock(holder):
 
 
 class AlbrightTestRunner(DiscoverRunner):
+    def setup_test_environment(self, **kwargs):
+        # Tests run with every app live, so archived apps' own tests (their code still exists) keep running; the
+        # archive tests (albright_labs.test_archive) switch archiving on with override_settings. What the deployed
+        # settings say is kept for the test that checks the default.
+        from django.conf import settings
+        super().setup_test_environment(**kwargs)
+        settings.ARCHIVED_APPS_DEPLOYED = list(settings.ARCHIVED_APPS)
+        settings.ARCHIVED_APPS = []
+
     def setup_databases(self, **kwargs):
         self._lock = acquire_lock()
         if self._lock is None:

@@ -29,6 +29,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from albright_reselling_app.models import LedgerEntry, LedgerExpense, LedgerSale
+from albright_labs.archive import skip_if_archived
 
 UNKNOWN_DATE_NOTE_SNIPPET = "actual sale date unknown"
 MISMATCH_TOLERANCE = Decimal("0.01")
@@ -139,6 +140,7 @@ def _plan_expenses_sheet(ws, owner):
     return plan, skipped
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Imports selling_ledger.xlsx's Selling + Expenses sheets (Personal Items ledger + business expenses)."
 

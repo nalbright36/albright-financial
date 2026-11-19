@@ -27,6 +27,7 @@ from albright_reselling_app.scanner.bid_watch import resolve_watches
 from albright_reselling_app.scanner.pipeline import _categories_for, _cfg, _keywords_for
 from albright_reselling_app.scanner_models import SourcedLot
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 ADAPTERS = {"shopgoodwill": ShopGoodwillAdapter, "maxsold": MaxSoldAdapter, "hibid": HiBidAdapter}
 RESULTS_WINDOW_DAYS = 7
@@ -69,6 +70,7 @@ def _closing_features(lot, evaluation):
     return features
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Record final (closed) prices for already-scanned lots, and summarize how they closed vs. max bid."
 

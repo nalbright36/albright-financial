@@ -1,4 +1,4 @@
-"""Strict response headers for the public pages: the resume, and the home page for visitors (which may also
+"""Strict response headers for the public pages: the home page for visitors and its footer pages (which also
 load Google Fonts - its stylesheet @imports them, the way the app's style.css does)."""
 from functools import wraps
 

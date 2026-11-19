@@ -24,8 +24,10 @@ from django.utils import timezone
 from albright_trading_app import strategy_attribution as sa
 from albright_trading_app.grok_bot import ReadOnlyAlpaca, _fills_data, _orders_data, _positions_data
 from albright_trading_app.models import AlpacaCredentials, BotStrategy, StrategyDailySnapshot
+from albright_labs.archive import skip_if_archived
 
 
+@skip_if_archived("trading")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Store today's P&L snapshot for each Grok Bot strategy (backfilling history on the first run)."
 

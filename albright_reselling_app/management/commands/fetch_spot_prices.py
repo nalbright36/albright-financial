@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from albright_reselling_app.scanner_models import SpotPrice
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ def _has_today_price(metal: str) -> bool:
     return bool(latest and timezone.localtime(latest.fetched_at).date() == timezone.localdate())
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Fetch today's silver/gold spot prices from goldapi.io and store them. Run once a day."
 

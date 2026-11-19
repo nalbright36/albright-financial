@@ -10,6 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from albright_labs.archive import part_of
+
 from .models import InventorySuggestion, SiteSuggestion, TradingNote
 
 
@@ -28,6 +30,7 @@ def _delete_notes(request, notes):
     messages.success(request, f"Deleted {len(titles)} note{'s' if len(titles) != 1 else ''}.")
 
 
+@part_of("trading")
 @login_required
 @require_POST
 def trading_notes_bulk(request):
@@ -56,6 +59,7 @@ def trading_notes_bulk(request):
     return _back_to_notes()
 
 
+@part_of("trading")
 @login_required
 @require_POST
 def trading_note_delete(request, pk):
@@ -69,6 +73,7 @@ def moved_to_admin(request, target="albright_control:bot_api"):
     return redirect(target, permanent=True)
 
 
+@part_of("reselling")
 @login_required
 @require_POST
 def decide_suggestion(request, pk, decision):

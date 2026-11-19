@@ -27,6 +27,11 @@ from albright_labs import password_views
 from albright_labs import push_views
 from albright_trading_proj import site_icons
 
+
+def gone(request, *args, **kwargs):
+    from django.http import HttpResponseGone
+    return HttpResponseGone("Gone - this page was removed.", content_type="text/plain; charset=utf-8")
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     # App icons browsers and iOS look for at the root, and the web app manifest (site_icons.py).
@@ -63,9 +68,8 @@ urlpatterns = [
     # Bot API: the token pages (Trading nav "Bot API") and the token-authenticated JSON API.
     path("bot-api/", include("albright_bot_api.urls")),
     # The site-wide Admin area (superusers only; separate from Django's /admin/).
-    # Public resume + employer chatbot (no login). Its management pages live in the Admin area.
-    path("resume/", include("albright_resume.urls")),
-    path("control/resume/", include("albright_resume.admin_urls")),
+    # The public resume was removed for good: /resume/ (and anything under it) is 410 Gone, so search engines drop it.
+    re_path(r"^resume/", gone, name="resume_gone"),
     path("control/labs/", include("albright_labs.admin_urls")),
     path("control/assistant/", include("albright_assistant.admin_urls")),
     path("control/", include("albright_control.urls")),

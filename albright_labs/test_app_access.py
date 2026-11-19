@@ -20,7 +20,7 @@ from . import apps_registry
 from .testing import current_tiles, home_tiles, launcher_tiles, with_apps
 from .models import UserPreference
 from .templatetags.nav_icons import nav_icon
-from .tests import OUTLOOK, resume_site
+from .tests import OUTLOOK
 
 PASSWORD = "pw-not-real-12345"
 
@@ -138,8 +138,7 @@ class AccessTests(Base):
         self.assertEqual(home_tiles(self.page(reverse("labs:hub"))), ["resell", "opps"])
 
     def test_public_pages_bot_api_and_sign_in_are_unaffected(self):
-        resume_site()
-        for url in ("/", reverse("albright_resume:page"), reverse("labs:hub"), reverse("labs:account"),
+        for url in ("/", reverse("labs:privacy"), reverse("labs:hub"), reverse("labs:account"),
                     reverse("user_logout")):
             with self.subTest(url=url):
                 self.assertNotEqual(self.client.get(url).status_code, 404)

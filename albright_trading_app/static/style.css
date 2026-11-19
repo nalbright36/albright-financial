@@ -275,7 +275,8 @@ body[data-app="admin"] {
 /* Albright Labs (the hub, "/" and /home/): neutral teal #14B8A6. Text: the
    lighter #2DD4BF in dark mode, the deeper #0F766E in light mode (#14B8A6 is
    only ~2.5:1 on white); white-text fills use #0F766E (5.5:1). */
-body[data-app="labs"] {
+body[data-app="labs"],
+body[data-app="account"] {
   --accent-rgb: 20, 184, 166;
   --accent: #2DD4BF;
   --accent-hover: #5EEAD4;
@@ -342,7 +343,8 @@ body[data-app="money"] {
   --accent: #475569;
   --accent-hover: #334155;
 }
-[data-theme="light"] body[data-app="labs"] {
+[data-theme="light"] body[data-app="labs"],
+[data-theme="light"] body[data-app="account"] {
   --accent: #0F766E;
   --accent-hover: #115E59;
 }
@@ -1797,15 +1799,6 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-picker__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 @media (prefers-reduced-motion: reduce) { .labs-pick__link, .labs-pick__pin { transition: none; } .labs-pick__link:hover { transform: none !important; } }
 
-/* ===== Resume chat transcripts (Admin > Resume > Conversations) ===== */
-.transcript-msg { padding: var(--space-3) 0; border-top: 1px solid var(--border); }
-.transcript-msg:first-child { border-top: none; padding-top: 0; }
-.transcript-msg__meta { font-size: var(--text-xs); color: var(--text-secondary); margin-bottom: 4px; display: flex;
-  flex-wrap: wrap; gap: 4px; align-items: center; }
-.transcript-msg__text { font-size: var(--text-sm); overflow-wrap: anywhere; }
-.transcript-msg--visitor .transcript-msg__text { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
-  background: var(--accent-soft); }
-
 /* ---------- App navigation (albright_labs: the app registry) ---------- */
 /* The header's app launcher itself: albright_labs/static/labs/launcher.css. */
 /* Phones: tighter gaps, and the account menu shows just its icon. */
@@ -1937,6 +1930,13 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
     padding-right: max(var(--space-3), env(safe-area-inset-right, 0px));
   }
 }
+
+/* "Archived app - hidden from everyone else": a superuser on an archived app's page (albright_labs.archive). */
+.archived-banner {
+  padding: 8px var(--space-4); font-size: var(--text-sm); text-align: center; color: var(--text-primary);
+  background: var(--warning-soft, rgba(250, 204, 21, 0.14)); border-bottom: 1px solid var(--border);
+}
+.archived-banner a { font-weight: 600; }
 
 /* "Hidden from your nav · Show it" on a page of an app the user has hidden. */
 .nav-hidden-note {

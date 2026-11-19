@@ -5,16 +5,13 @@ cookie - used only by the "Last used app" landing setting
 """
 from django.conf import settings
 
-from albright_labs import apps_registry
+from albright_labs import apps_registry, archive
 
 LAST_APP_COOKIE = "last_app"
 LAST_APP_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
-# URL namespace -> the app's cookie value, from the app registry ("reseller",
-# "opportunities", "admin"); anything else is the trading app's "trading".
-APP_COOKIE_VALUES = {ns: app.last_app_cookie for ns, app in apps_registry.BY_NAMESPACE.items() if ns}
-# Not an app at all (the Labs hub, the public resume) - never recorded.
-_EXCLUDED_APP_NAMES = {"labs", "albright_resume"}
+# Not an app at all (the Labs hub) - never recorded.
+_EXCLUDED_APP_NAMES = {"labs"}
 # Cookie values that mean the Opportunities app - "crypto" is what it was
 # called before the rename, still in returning users' browsers.
 OPPORTUNITIES_COOKIE_VALUES = ("opportunities", "crypto")
@@ -26,9 +23,9 @@ _EXCLUDED_URL_NAMES = {"user_login", "user_logout"}
 
 class LastAppMiddleware:
     """For every successful (200) GET HTML page request from a logged-in
-    user, records "reseller" (albright_reselling_app URLs), "opportunities"
-    (albright_crypto_app URLs) or "trading" (everything else) in the
-    last_app cookie. Skips static/media files,
+    user, records the app it belongs to (by URL namespace, or the view's
+    package for the trading app) in the last_app cookie - never for Home,
+    account pages or anything that isn't an app. Skips static/media files,
     non-HTML responses (API/AJAX - these never represent navigating to a
     page), POSTs, /admin/, and the login/logout views themselves."""
 
@@ -59,7 +56,12 @@ class LastAppMiddleware:
         if resolver_match.app_name in _EXCLUDED_APP_NAMES:
             return
 
-        app = APP_COOKIE_VALUES.get(resolver_match.app_name, apps_registry.DEFAULT_APP.last_app_cookie)
+        if apps_registry.is_account_page(resolver_match):
+            return   # your account isn't an app
+        found = archive.app_for_view(resolver_match)      # by namespace, or the view's package (trading has no namespace)
+        if found is None or archive.is_app_archived(found.key):
+            return   # no app (Home, the Bot API pages...), or an archived one (a superuser looking at old data)
+        app = found.last_app_cookie
         response.set_cookie(
             LAST_APP_COOKIE, app, max_age=LAST_APP_COOKIE_MAX_AGE, httponly=True, samesite="Lax",
         )

@@ -8,8 +8,11 @@ owner's. On top of the token's own scopes, every request checks the owner right 
     activity:read works for anyone allowed keys (OPEN_SCOPES - it only shows what they can see). Everything else
     (trading, reseller, opportunities, ideas, site suggestions) is admin-only - superusers. So taking an app away
     from someone stops their key working for that app at once (403 naming the scope).
+  - An archived app (albright_labs.archive): its scopes (ARCHIVABLE) are allowed to no one - not offered on the key
+    forms, left out of the docs, OpenAPI and MCP tools - and its endpoints answer 404 (auth.bot_endpoint). Keys keep
+    the scopes they hold, so they work again when the app is restored.
 """
-from albright_labs import app_access, apps_registry
+from albright_labs import app_access, apps_registry, archive
 
 from .models import SCOPE_KEYS, SCOPES
 
@@ -33,6 +36,20 @@ PLAIN = {
 }
 # Scopes anyone allowed API keys can use (not tied to one app).
 OPEN_SCOPES = {"activity:read"}
+# The admin-only scopes that belong to an app that can be archived (albright_labs.archive).
+ADMIN_APP_SCOPES = {"trading:notes": "trade", "reseller:read": "resell", "reseller:suggest": "resell",
+                    "opportunities:read": "opps", "opportunities:suggest": "opps", "opportunities:write": "opps"}
+
+
+def scope_app(scope):
+    """The app (registry key) a scope belongs to, or None (notifications, ideas, site suggestions)."""
+    return APP_SCOPES.get(scope) or ADMIN_APP_SCOPES.get(scope)
+
+
+def is_archived(scope):
+    """Whether this scope's app is archived - then nobody can use it, and it's never shown."""
+    app = scope_app(scope)
+    return app is not None and archive.is_app_archived(app)
 
 
 def _pref(user):
@@ -49,7 +66,7 @@ def keys_allowed(user):
 
 def allowed(user, scope):
     """Whether this person can use this scope now: admin-only scopes need a superuser, app scopes the app."""
-    if not (user and user.is_active) or scope not in SCOPE_KEYS:
+    if not (user and user.is_active) or scope not in SCOPE_KEYS or is_archived(scope):
         return False
     if user.is_superuser:
         return True
@@ -133,7 +150,9 @@ def access_of(user, scope_list):
 
 
 def summary(user, scope_list):
-    """One line for the key list: "Full access", "Read only", or "Planner (read and change), Meals (read)"."""
+    """One line for the key list: "Full access", "Read only", or "Planner (read and change), Meals (read)". An
+    archived app's scopes (kept on the key) aren't mentioned."""
+    scope_list = [key for key in scope_list if not is_archived(key)]
     access = access_of(user, scope_list)
     if access == FULL:
         return "Full access"
@@ -146,6 +165,8 @@ def by_app(scope_list):
     """[(app label, "read" | "change" | "read and change")] - for the key list and GET me."""
     kinds_by_app = {}
     for key in scope_list:
+        if is_archived(key):
+            continue
         app = APP_SCOPES.get(key)
         name = apps_registry.BY_KEY[app].label if app in apps_registry.BY_KEY else (
             "Notifications" if key in OPEN_SCOPES else "Admin")

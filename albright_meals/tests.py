@@ -78,7 +78,7 @@ class MealsOnlyAccountTests(Base):
         for url in (reverse("trading_home"), reverse("grok_bot"), reverse("albright_reselling_app:dashboard"),
                     reverse("albright_reselling_app:watchlist_summary"), reverse("albright_crypto_app:inbox"),
                     reverse("albright_control:overview"), reverse("albright_control:users"),
-                    reverse("albright_resume_admin:overview"), reverse("labs:tile", args=["trade"])):
+                    reverse("albright_control:audit"), reverse("labs:tile", args=["trade"])):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 404)
         for name in ("groceries", "ideas", "recipes"):

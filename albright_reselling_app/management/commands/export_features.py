@@ -19,6 +19,7 @@ from datetime import datetime
 from django.core.management.base import BaseCommand, CommandError
 
 from albright_reselling_app.scanner_models import SourcedLot
+from albright_labs.archive import skip_if_archived
 
 CORE_FIELDS = [
     "source", "category", "title", "final_price", "melt_value", "expected_sale", "max_bid",
@@ -49,6 +50,7 @@ def _row(lot, feature_keys):
     return row
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Export a CSV of closed lots plus their listing features, for offline analysis."
 

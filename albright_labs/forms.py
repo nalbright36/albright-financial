@@ -64,7 +64,9 @@ class CreateUserForm(forms.Form):
 
 
 def _app_choices():
-    return [(app.key, app.label) for app in apps_registry.APPS if not app.superuser_only]
+    """Apps a person can be given - never an archived one (albright_labs.archive)."""
+    from .archive import live_apps
+    return [(app.key, app.label) for app in live_apps() if not app.superuser_only]
 
 
 def _email_taken(email):

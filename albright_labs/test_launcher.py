@@ -335,10 +335,10 @@ class LauncherRenderingTests(Base):
             self.assertRegex(listing, rf"(Copying|Pretending to copy|Skipping) .*{re.escape(path)}")
 
     def test_csp_allows_the_launcher(self):
-        """App pages send no Content-Security-Policy; the strict one (public resume and
-        landing pages, which have no header) allows same-origin scripts and styles - and
+        """App pages send no Content-Security-Policy; the strict one (the public home
+        and footer pages, which have no header) allows same-origin scripts and styles - and
         the launcher is only same-origin files, with no inline script or style of its own."""
-        from albright_resume.security import CSP
+        from albright_labs.security import CSP
         for url in self.app_pages():
             with self.subTest(url=url):
                 csp = self.client.get(url).get("Content-Security-Policy")

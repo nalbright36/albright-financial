@@ -16,11 +16,11 @@ from . import app_access, apps_registry
 
 # Shared pages and areas that are never any app's last page: Home and My account (/home/... - account, Circles,
 # People, Activity, Notifications), the notification panel, circle invites, share links, sign-up, sign in/out and
-# password reset, the offline page, Django's admin, the Bot API, the public resume, static files, and the old
-# Opportunities prefixes (they only redirect).
+# password reset, the offline page, Django's admin, the Bot API, static files, and the old Opportunities prefixes
+# (they only redirect).
 SHARED_PREFIXES = ("/home/", "/notifications/", "/circles/", "/share/", "/join/", "/user_login/", "/user_logout/",
-                   "/reset_password/", "/reset/", "/offline/", "/admin/", "/bot-api/", "/api/", "/resume/",
-                   "/static/", "/crypto/", "/albright_crypto_app/")
+                   "/reset_password/", "/reset/", "/offline/", "/admin/", "/bot-api/", "/api/", "/static/",
+                   "/crypto/", "/albright_crypto_app/")
 
 # Old pages inside an app that now only redirect somewhere else - never kept, and dropped if already saved.
 RETIRED_URL_NAMES = ("albright_money:household",)

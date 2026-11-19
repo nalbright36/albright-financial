@@ -80,7 +80,7 @@ class AdminGroupTests(Base):
             "system": [("albright_control:health", "System health"), ("albright_control:integrations", "Integrations"),
                        ("albright_control:ai_usage", "AI usage"), ("albright_control:data", "Data"),
                        ("albright_control:storage", "Storage"), ("albright_control:audit", "Audit log")],
-            "site": [("albright_resume_admin:overview", "Resume"), ("labs_admin:invite_requests", "Invite requests"),
+            "site": [("labs_admin:invite_requests", "Invite requests"),
                      ("albright_control:users", "Users")],
         }
         for key, items in expected.items():
@@ -98,7 +98,6 @@ class AdminGroupTests(Base):
             reverse("albright_control:bot_activity"): ("bot", "Bot API"),
             reverse("albright_control:health"): ("system", "System health"),
             reverse("albright_control:audit"): ("system", "Audit log"),
-            reverse("albright_resume_admin:conversations"): ("site", "Resume"),
             reverse("labs_admin:invite_requests"): ("site", "Invite requests"),
             reverse("albright_control:users"): ("site", "Users"),
         }
@@ -148,7 +147,7 @@ class AccountMenuTests(Base):
             urls = [reverse("labs:hub"), reverse("trading_home"), reverse("albright_reselling_app:dashboard"),
                     reverse("albright_crypto_app:inbox"), reverse("labs:account")]
             if user.is_superuser:
-                urls += [reverse("albright_control:overview"), reverse("albright_resume_admin:overview")]
+                urls += [reverse("albright_control:overview"), reverse("labs_admin:invite_requests")]
             for url in urls:
                 with self.subTest(user=user.username, url=url):
                     content = self.page(url)

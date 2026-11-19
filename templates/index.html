@@ -14,7 +14,7 @@
         {# The floating AI assistant (albright_assistant: only for people with "Can use AI assistant"). #}
         {% if assistant_widget %}<link rel="stylesheet" href="{% static_version 'assistant/assistant.css' %}">{% endif %}
         {% block app_head %}{% endblock %}
-        <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Trading" }}</title>
+        <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Labs" }}</title>
         {% include "_head_icons.html" %}
         <script>
             // Runs before paint so there's no flash of the wrong theme.
@@ -38,12 +38,12 @@
         </script>
     </head>
 
-    <body data-app="{{ current_app|default:"trading" }}">
+    <body data-app="{{ current_app|default:"labs" }}">
 
         <nav class="navbar">
             <div class="navbar__main-row">
                 {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). Under 640px the chip shows only the app's icon (style.css); the name stays its label and tooltip. #}
-                <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand" aria-label="Albright - {{ app_label|default:"Trading" }}"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__chip" title="{{ app_label|default:"Trading" }}">{% include "_app_icon.html" with key=current_app_key %}<span class="navbar__chip-name">{{ app_label|default:"Trading" }}</span></span></a>
+                <a href="{% if user.is_authenticated %}{{ home_url }}{% else %}{% url 'labs:root' %}{% endif %}" class="navbar__brand" aria-label="Albright - {{ app_label|default:"Labs" }}"><img src="{% static 'icons/logo-mark-white.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-dark"><img src="{% static 'icons/logo-mark-dark.png' %}" alt="Albright" width="121" height="60" class="navbar__logo navbar__logo--on-light"><span class="navbar__chip" title="{{ app_label|default:"Labs" }}">{% include "_app_icon.html" with key=current_app_key %}<span class="navbar__chip-name">{{ app_label|default:"Labs" }}</span></span></a>
 
                 {# Shown only when the links don't fit on one line (the script below, plus a phone breakpoint): "Menu ▾", a hamburger on phones. #}
                 <button type="button" class="navbar__toggle" id="nav-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="navbar-links" aria-label="Menu">
@@ -53,7 +53,7 @@
 
                 <div class="navbar__links" id="navbar-links">
                     {# Phones only: the app these pages belong to - its icon and name in its accent (style.css). #}
-                    <p class="navbar__menu-app"><span class="navbar__menu-app-pill">{% include "_app_icon.html" with key=current_app_key %}<span>{{ app_label|default:"Trading" }}</span></span></p>
+                    <p class="navbar__menu-app"><span class="navbar__menu-app-pill">{% include "_app_icon.html" with key=current_app_key %}<span>{{ app_label|default:"Labs" }}</span></span></p>
                     {% if user.is_authenticated %}
                         {% if in_reselling_app %}
                         <a href="{% url 'albright_reselling_app:watchlist' %}" id="nav-watchlist-link"
@@ -95,7 +95,15 @@
                         {% endif %}{% endfor %}
                         {% elif in_labs %}
                         <a href="{{ home_url }}">{% nav_icon "home" %}Home</a>
-                        <a href="{% url 'albright_resume:page' %}">{% nav_icon "file-text" %}Resume</a>
+                        {% elif in_account %}
+                        {# Your account (apps_registry.ACCOUNT_PAGES) - no app's nav, the Account sub-nav instead. #}
+                        <a href="{% url 'labs:account' %}"{% if request.resolver_match.url_name == 'account' %} class="active" aria-current="page"{% endif %}>{% nav_icon "user" %}My account</a>
+                        {% if assistant_widget %}<a href="{% url 'assistant:setup' %}"{% if request.resolver_match.app_name == 'assistant' %} class="active" aria-current="page"{% endif %}>{% nav_icon "message" %}Your AI assistant</a>{% endif %}
+                        <a href="{% url 'labs:api_keys' %}"{% if request.resolver_match.url_name in 'api_keys api_key_scopes api_key_rename api_key_rotate api_key_revoke api_key_authorize' %} class="active" aria-current="page"{% endif %}>{% nav_icon "key" %}API keys</a>
+                        <a href="{% url 'labs:circles' %}"{% if request.resolver_match.url_name in 'circles circle circle_invite sharing_defaults shared_with_me household' %} class="active" aria-current="page"{% endif %}>{% nav_icon "circles" %}Circles</a>
+                        <a href="{% url 'labs:people' %}"{% if request.resolver_match.url_name in 'people people_search people_remove' %} class="active" aria-current="page"{% endif %}>{% nav_icon "users" %}People</a>
+                        <a href="{% url 'labs:notification_settings' %}"{% if request.resolver_match.url_name in 'activity notification_settings' %} class="active" aria-current="page"{% endif %}>{% nav_icon "bell" %}Notifications</a>
+                        <a href="{% url 'labs:account' %}#storage">{% nav_icon "database" %}Storage</a>
                         {% elif in_meals_app %}
                         <a href="{% url 'albright_meals:week' %}"{% if request.resolver_match.url_name in 'week plan_entry' %} class="active" aria-current="page"{% endif %}>{% nav_icon "calendar-week" %}This week</a>
                         <a href="{% url 'albright_meals:groceries' %}"{% if request.resolver_match.url_name == 'groceries' %} class="active" aria-current="page"{% endif %}>{% nav_icon "cart" %}Groceries</a>
@@ -324,6 +332,10 @@
         </div>
         {% endif %}
 
+        {% if archived_app %}
+        {# A superuser on a page of an archived app (albright_labs.archive) - everyone else gets a 404. #}
+        <div class="archived-banner" id="archived-banner" role="status"><strong>Archived app - hidden from everyone else</strong> &middot; {{ archived_app.label }} is switched off; its data is kept. <a href="{{ home_url }}">Home</a></div>
+        {% endif %}
         {% if nav_hidden_app %}
         {# A page of an app this user can open but has hidden from their nav (My account). #}
         <div class="nav-hidden-note" id="nav-hidden-note">

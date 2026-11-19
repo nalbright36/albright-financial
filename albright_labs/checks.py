@@ -5,7 +5,7 @@ With DEBUG off (production, and this project's default), the site's CSS/JS
 are served from STATIC_ROOT - the copy `collectstatic` makes. A file added
 since the last collectstatic (e.g. a new app's stylesheet) is a silent 404,
 and the browser drops it (nosniff), so the page renders with no styling. That
-is exactly what happened to /resume/ - this check names the missing files.
+is exactly what once happened to a public page - this check names the missing files.
 
 A file CHANGED since the last collectstatic is quieter still: the page links
 the new version (cache_bust's ?v= comes from the source file), but the server

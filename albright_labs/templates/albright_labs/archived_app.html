@@ -1,0 +1,4 @@
+{% extends "errors/_layout.html" %}
+{% comment %}An archived app's page (albright_labs.archive.blocked_response): HTTP 404 for everyone but superusers. A
+superuser only sees it (200) when the page needed the app's saved credentials, which aren't used while it's archived.{% endcomment %}
+{% block buttons %}<a class="err__btn err__btn--primary" href="{{ home_url }}" id="error-home">Home</a>{% endblock %}

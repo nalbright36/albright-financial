@@ -34,10 +34,13 @@ class App:
     script: str = ""
     # Pages in its namespace that stay open to anyone (sign in, password reset).
     ungated_url_names: frozenset = field(default_factory=frozenset)
+    # Its Python package - which views belong to it when its URLs have no namespace (the trading app), for
+    # archiving (albright_labs.archive).
+    package: str = ""
 
 
 APPS = (
-    App(key="trade", label="Trading", short_label="Trade", brand="Albright Trading", accent="trading",
+    App(key="trade", package="albright_trading_app", label="Trading", short_label="Trade", brand="Albright Trading", accent="trading",
         color="#38BDF8", landing_url_name="trading_home", namespaces=("",),
         description="Algorithmic trading on Alpaca - strategies, positions, the Grok bot.",
         last_app_cookie="trading", tile="trade",
@@ -51,7 +54,7 @@ APPS = (
         # the old /crypto/ prefixes' redirect (the Opportunities check applies where it lands).
         ungated_url_names=frozenset({"user_login", "user_logout", "opportunities_legacy_redirect", "password_reset", "password_reset_done",
                                      "password_reset_confirm", "password_reset_complete"})),
-    App(key="resell", label="Reselling", short_label="Resell", brand="Albright Reselling", accent="reselling",
+    App(key="resell", package="albright_reselling_app", label="Reselling", short_label="Resell", brand="Albright Reselling", accent="reselling",
         color="#60A5FA", landing_url_name="albright_reselling_app:dashboard", namespaces=("albright_reselling_app",),
         description="Auction scanning, the watchlist, and the resale ledger.",
         last_app_cookie="reseller", tile="resell",
@@ -61,7 +64,7 @@ APPS = (
                ("resell:review", "Review", "albright_reselling_app:review_queue"),
                ("resell:ledger", "Ledger", "albright_reselling_app:ledger"),
                ("resell:calculator", "Calculator", "albright_reselling_app:calculator"))),
-    App(key="opps", label="Opportunities", short_label="Opps", brand="Albright Opportunities",
+    App(key="opps", package="albright_crypto_app", label="Opportunities", short_label="Opps", brand="Albright Opportunities",
         accent="opportunities", color="#A78BFA", landing_url_name="albright_crypto_app:inbox",
         namespaces=("albright_crypto_app",),
         description="Jobs, freelance work, bounties and crypto - triaged in one Inbox.",
@@ -69,7 +72,7 @@ APPS = (
         pages=(("opps:inbox", "Inbox", "albright_crypto_app:inbox"),
                ("opps:pipeline", "Pipeline", "albright_crypto_app:pipeline"),
                ("opps:earnings", "Earnings", "albright_crypto_app:earnings"))),
-    App(key="meals", label="Meals", short_label="Meals", brand="Albright Meals", accent="meals",
+    App(key="meals", package="albright_meals", label="Meals", short_label="Meals", brand="Albright Meals", accent="meals",
         color="#F97316", landing_url_name="albright_meals:week", namespaces=("albright_meals",),
         description="This week's meals, the shared grocery list, meal ideas, recipes, and nearby places to eat.",
         last_app_cookie="meals", tile="meals",
@@ -78,20 +81,20 @@ APPS = (
                ("meals:ideas", "Ideas", "albright_meals:ideas"),
                ("meals:recipes", "Recipes", "albright_meals:recipes"),
                ("meals:eatout", "Eat out", "albright_meals:eat_out"))),
-    App(key="notes", label="Notes", short_label="Notes", brand="Albright Notes", accent="notes",
+    App(key="notes", package="albright_notes", label="Notes", short_label="Notes", brand="Albright Notes", accent="notes",
         color="#EC4899", landing_url_name="albright_notes:list", namespaces=("albright_notes",),
         description="Private Markdown notes and checklists - share one, link it to a recipe, lot or strategy.",
         last_app_cookie="notes", tile="notes",
         pages=(("notes:list", "Notes", "albright_notes:list"),),
         stylesheet="albright_notes/notes.css", script="albright_notes/notes.js"),
-    App(key="planner", label="Planner", short_label="Plan", brand="Albright Planner", accent="planner",
+    App(key="planner", package="albright_planner", label="Planner", short_label="Plan", brand="Albright Planner", accent="planner",
         color="#84CC16", landing_url_name="albright_planner:home", namespaces=("albright_planner",),
         description="Tasks and events - repeating items, check-off, and Day, Week and Month views.",
         last_app_cookie="planner", tile="planner",
         pages=(("planner:day", "Day", "albright_planner:day"), ("planner:week", "Week", "albright_planner:week"),
                ("planner:month", "Month", "albright_planner:month")),
         stylesheet="albright_planner/planner.css", script="albright_planner/planner.js"),
-    App(key="money", label="Money", short_label="Money", brand="Albright Money", accent="money",
+    App(key="money", package="albright_money", label="Money", short_label="Money", brand="Albright Money", accent="money",
         color="#34D399", landing_url_name="albright_money:dashboard", namespaces=("albright_money",),
         description="Accounts, transactions, monthly budgets and bank CSV import - yours and your circles'.",
         last_app_cookie="money", tile="money",
@@ -100,7 +103,7 @@ APPS = (
                ("money:budget", "Budget", "albright_money:budget"),
                ("money:accounts", "Accounts", "albright_money:accounts")),
         stylesheet="albright_money/money.css", script="albright_money/money.js"),
-    App(key="fitness", label="Fitness", short_label="Fitness", brand="Albright Fitness", accent="fitness",
+    App(key="fitness", package="albright_fitness", label="Fitness", short_label="Fitness", brand="Albright Fitness", accent="fitness",
         color="#FACC15", landing_url_name="albright_fitness:dashboard", namespaces=("albright_fitness",),
         description="Log workouts at the gym, track personal records, and follow a program on your Planner.",
         last_app_cookie="fitness", tile="fitness",
@@ -113,15 +116,15 @@ APPS = (
                ("fitness:exercises", "Exercises", "albright_fitness:exercises"),
                ("fitness:challenges", "Challenges", "albright_fitness:challenges")),
         stylesheet="albright_fitness/fitness.css", script="albright_fitness/fitness.js"),
-    App(key="weather", label="Weather", short_label="Weather", brand="Albright Weather", accent="weather",
+    App(key="weather", package="albright_weather", label="Weather", short_label="Weather", brand="Albright Weather", accent="weather",
         color="#22D3EE", landing_url_name="albright_weather:home", namespaces=("albright_weather",),
         description="Current conditions, hourly and 16-day forecasts, alerts, and saved places.",
         last_app_cookie="weather", tile="weather",
         pages=(("weather:home", "Forecast", "albright_weather:home"),),
         stylesheet="albright_weather/weather.css", script="albright_weather/weather.js"),
-    App(key="admin", label="Admin", short_label="Admin", brand="Albright Admin", accent="admin",
+    App(key="admin", package="albright_control", label="Admin", short_label="Admin", brand="Albright Admin", accent="admin",
         color="#94A3B8", landing_url_name="albright_control:overview",
-        namespaces=("albright_control", "albright_resume_admin", "labs_admin"),
+        namespaces=("albright_control", "labs_admin"),
         description="System health, integrations, AI spend, ideas and the audit log.",
         last_app_cookie="admin", tile="admin", superuser_only=True, stylesheet="albright_control/inbox.css",
         pages=(("admin:overview", "Overview", "albright_control:overview"),
@@ -138,9 +141,26 @@ PAGES = {key: (app, label, url_name) for app in APPS for key, label, url_name in
 # Home (the Labs hub) - not an app, but it has a brand and accent of its own.
 HOME_NAMESPACE, HOME_ACCENT, HOME_BRAND = "labs", "labs", "Albright Labs"
 HOME_LABEL = "Labs"                     # the header's name beside the logo on Home and the landing page
-# Pages with no app of their own (the public resume, Django's /admin/, the Bot API pages):
-# the header shows them as the trading app, as it always has.
-DEFAULT_APP = BY_KEY["trade"]
+# Account-level pages (yours, not any app's): the header shows a neutral "Account" chip with the user icon, the Labs
+# accent and the Account sub-nav (templates/index.html) - never an app. {URL namespace: url names, or None = all}.
+ACCOUNT_KEY, ACCOUNT_LABEL, ACCOUNT_BRAND = "account", "Account", "Albright Labs"
+ACCOUNT_PAGES = {
+    "labs": frozenset({"account", "api_keys", "api_key_scopes", "api_key_rename", "api_key_rotate", "api_key_revoke",
+                       "api_key_authorize", "circles", "circle", "circle_invite", "people", "people_search",
+                       "people_remove", "sharing_defaults", "shared_with_me", "household", "activity",
+                       "notification_settings", "push_subscribe", "push_unsubscribe", "push_remove"}),
+    "assistant": None,
+}
+# There is NO default app: a page that belongs to no app and isn't an account page (Django's /admin/, the Bot API
+# pages, sign-in) shows as Home (albright_trading_app.context_processors.app_key_for).
+
+
+def is_account_page(match):
+    """Whether a resolved view (ResolverMatch) is an account-level page."""
+    if match is None or match.app_name not in ACCOUNT_PAGES:
+        return False
+    names = ACCOUNT_PAGES[match.app_name]
+    return names is None or match.url_name in names
 
 
 def grantable_keys():
@@ -153,5 +173,5 @@ def all_keys():
 
 
 def app_for_namespace(namespace):
-    """The app a URL namespace belongs to, or None (Home, the public resume, the Bot API...)."""
+    """The app a URL namespace belongs to, or None (Home, the public pages, the Bot API...)."""
     return BY_NAMESPACE.get(namespace)

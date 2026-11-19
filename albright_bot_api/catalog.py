@@ -793,8 +793,18 @@ NOT_OPERATIONS = ("mcp",)
 
 # --- who can use what ------------------------------------------------------------------------------------------------
 
+def archived(op):
+    """An operation of an archived app (albright_labs.archive): every scope it takes is archived. Left out of the docs,
+    the OpenAPI spec and the MCP tools; its endpoint answers 404."""
+    return bool(op.scopes) and all(scope_rules.is_archived(s) for s in op.scopes)
+
+
+def live_ops():
+    return [op for op in OPS if not archived(op)]
+
+
 def usable_by(op, token):
-    return not op.scopes or any(scope_rules.usable(token, s) for s in op.scopes)
+    return not archived(op) and (not op.scopes or any(scope_rules.usable(token, s) for s in op.scopes))
 
 
 def for_token(token):
@@ -843,13 +853,17 @@ def _scope_line(op):
 
 def markdown(base, token=None):
     """The guide for an AI. base: https://<site>/api/bot/v1. With a token: only the endpoints it can call."""
-    ops = for_token(token) if token else OPS
+    ops = for_token(token) if token else live_ops()
     base_path = API_PREFIX
+    from albright_labs.archive import is_app_archived
+    admin_tools = ", ".join(name for slug, name in (("trade", "Trading"), ("resell", "Reselling"),
+                                                     ("opps", "Opportunities")) if not is_app_archived(slug))
+    admin_tools = f"{admin_tools}, Ideas" if admin_tools else "Ideas"
     out = [f"""# Albright Labs API - a guide for AI assistants
 
 Albright Labs is a small private website where a family and their friends keep a **Planner** (tasks and events),
 **Meals** (meal plan, grocery list, recipes), **Notes**, and **Fitness** (workouts, a food diary, weigh-ins). The site
-owner also has admin-only tools (Trading, Reselling, Opportunities, Ideas). An API key belongs to one person: you act
+owner also has admin-only tools ({admin_tools}). An API key belongs to one person: you act
 as them, see only what they can see, and what you add is theirs.
 
 ## Start here
@@ -980,7 +994,7 @@ def _operation(op, tag):
 
 def openapi(base, ops=None, title="Albright Labs API"):
     paths = {}
-    for op in ops or OPS:
+    for op in ops or live_ops():
         tag = SECTION_BY_KEY[op.section].title.split(" (")[0].title()
         paths.setdefault("/" + op.path, {})[op.method.lower()] = _operation(op, tag)
     return {
@@ -1024,4 +1038,4 @@ def tool(op):
 
 
 def tools(token=None):
-    return [tool(op) for op in (for_token(token) if token else OPS) if op.tool]
+    return [tool(op) for op in (for_token(token) if token else live_ops()) if op.tool]

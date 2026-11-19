@@ -72,7 +72,7 @@ INSTALLED_APPS = [
     'albright_crypto_app',
     'albright_bot_api',
     'albright_control',
-    'albright_resume',
+    'albright_resume',          # retired - only its migrations and export_resume_data are left (apps.py)
     'albright_labs',
     'albright_meals',
     'albright_notes',
@@ -421,22 +421,12 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 
+# Archived apps (albright_labs.archive, docs/ARCHIVED_APPS.md): hidden from everyone (superusers can still open them,
+# with a banner), their URLs 404, their scheduled commands skip, their Bot API scopes hide - but nothing in the database
+# changes and the code stays. Comma-separated slugs ("trading", "reselling", ...); set ARCHIVED_APPS= (empty) in .env
+# to restore every app. Restoring one = take it out and redeploy.
+ARCHIVED_APPS = [slug.strip() for slug in os.environ.get("ARCHIVED_APPS", "trading,reselling").split(",") if slug.strip()]
+
 # Bot API (albright_bot_api): token requests must arrive over HTTPS whenever DEBUG is off.
 BOT_API_REQUIRE_HTTPS = not DEBUG
 
-# Public resume page + employer chatbot (albright_resume, /resume/). The AI key is
-# the existing ANTHROPIC_API_KEY env var, read only in albright_resume/ai.py.
-# Spend cap, rate limits, starter questions and off-limits topics are edited in
-# Admin > Resume > Chatbot; these are the provider/model knobs.
-RESUME_AI = {
-    "MODEL": os.environ.get("RESUME_AI_MODEL", "claude-haiku-5-5"),
-    "EFFORT": "low",
-    "DISABLE_THINKING": True,
-    # USD per million tokens (Haiku 5.5, prompts up to 100k tokens). Update if you change model.
-    "PRICE_INPUT_PER_MTOK": "0.10",
-    "PRICE_OUTPUT_PER_MTOK": "0.50",
-    "PRICE_CACHE_WRITE_PER_MTOK": "0.125",
-    "PRICE_CACHE_READ_PER_MTOK": "0.01",
-}
-# PythonAnywhere's front-end proxy puts the visitor's IP in X-Real-IP (REMOTE_ADDR is the proxy).
-RESUME_CLIENT_IP_HEADER = "HTTP_X_REAL_IP"

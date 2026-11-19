@@ -6,15 +6,20 @@ app list in apps_registry.
   - Access: AppAccessMiddleware 404s every view of an app the user can't
     open (pages, AJAX and JSON alike), as if it didn't exist. Superusers can
     open everything. Anonymous visitors are left to each view (sign in first).
-    Home, the public pages ("/", /resume/) and the Bot API belong to no app,
+    Home, the public pages ("/") and the Bot API belong to no app,
     so they're never checked here.
+  - Archived apps (albright_labs.archive, settings.ARCHIVED_APPS) are never
+    in allowed_keys - not even a superuser's - so nothing lists or links them;
+    their pages are a 404 "This app is archived" page for everyone but
+    superusers, who still open them (with a banner). The stored allowed_apps
+    entries stay, so restoring the app brings each person's access back.
   - Visibility only changes the header buttons and Home's tiles: a hidden app
     still opens by URL (with a "Hidden from your nav · Show it" note).
 """
 from django.conf import settings
 from django.http import Http404
 
-from . import apps_registry
+from . import apps_registry, archive
 
 _CACHE_ATTR = "_labs_preference"
 
@@ -36,13 +41,13 @@ def forget(request):
 
 
 def allowed_keys(user, pref):
-    """Apps this user may open, in registry order."""
+    """Apps this user may open, in registry order - never an archived one (archive.py)."""
     if not (user and user.is_authenticated and user.is_active):
         return []
     if user.is_superuser:
-        return apps_registry.all_keys()
+        return archive.live_keys(apps_registry.all_keys())
     granted = set(pref.allowed_apps or [])
-    return [app.key for app in apps_registry.APPS if not app.superuser_only and app.key in granted]
+    return archive.live_keys([app.key for app in apps_registry.APPS if not app.superuser_only and app.key in granted])
 
 
 def can_use(user, pref, key):
@@ -85,8 +90,10 @@ def clean_nav(user, pref, visible, order):
 
 
 def grant(pref, keys):
-    """Set a user's allowed apps (Admin > Users). A newly granted app shows in their nav."""
-    keys = [key for key in apps_registry.grantable_keys() if key in set(keys)]
+    """Set a user's allowed apps (Admin > Users). A newly granted app shows in their nav. Archived apps aren't on
+    the form, so the ones this person already had are kept - restoring the app brings their access back."""
+    kept = [key for key in (pref.allowed_apps or []) if key in archive.archived_keys()]
+    keys = [key for key in apps_registry.grantable_keys() if key in set(keys) | set(kept)]
     added = [key for key in keys if key not in (pref.allowed_apps or [])]
     pref.allowed_apps = keys
     pref.visible_apps = list(pref.visible_apps or []) + [k for k in added if k not in (pref.visible_apps or [])]
@@ -109,14 +116,10 @@ def new_user_preference(user, keys):
 
 
 def app_for_request(request):
-    """The registry app the resolved view belongs to, or None (Home, public pages, the Bot API)."""
-    match = getattr(request, "resolver_match", None)
-    if match is None:
-        return None
-    app = apps_registry.app_for_namespace(match.app_name)
-    if app is None or match.url_name in app.ungated_url_names:
-        return None
-    return app
+    """The registry app the resolved view belongs to, or None (Home, public pages, the Bot API): by its URL namespace,
+    or - for views with none, like the trading app's - by the package its view is in (so the icons, service worker and
+    password pages, which have no namespace either, never count as Trading). archive.app_for_view."""
+    return archive.app_for_view(getattr(request, "resolver_match", None))
 
 
 class AppAccessMiddleware:
@@ -130,14 +133,28 @@ class AppAccessMiddleware:
         return self.get_response(request)
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        user = getattr(request, "user", None)
-        if user is None or not user.is_authenticated:
-            return None
         if request.path.startswith(settings.STATIC_URL) or request.path.startswith(settings.MEDIA_URL):
+            return None
+        user = getattr(request, "user", None)
+        archived = archive.archived_app_for(request)
+        if archived is not None:
+            # Everyone - signed in or not - gets "This app is archived" (404); superusers still open it, with a banner.
+            if user is not None and user.is_authenticated and user.is_active and user.is_superuser:
+                request.archived_app = archived
+                return None
+            return archive.blocked_response(request, archived)
+        if user is None or not user.is_authenticated:
             return None
         app = app_for_request(request)
         if app is not None and not can_use(user, preference(request), app.key):
             raise Http404
+        return None
+
+    def process_exception(self, request, exception):
+        # A superuser on an archived app's page that tried to use its saved credentials (AlpacaCredentials raise
+        # ArchivedAppError): say so instead of a server error. Nothing was decrypted or sent.
+        if isinstance(exception, archive.ArchivedAppError):
+            return archive.blocked_response(request, exception.app, status=200, needs_secrets=True)
         return None
 
 

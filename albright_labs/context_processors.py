@@ -14,9 +14,10 @@ def app_nav(request):
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
         return {"launcher_apps": [], "show_launcher": False, "nav_hidden_app": None, "home_url": landing.home_url(),
+                "archived_app": None,
                 "circle_invites": 0, "notification_count": 0, "notification_count_label": ""}
     resolved = getattr(request, "resolver_match", None)
-    current = app_key_for(resolved.app_name if resolved else None)
+    current = app_key_for(resolved.app_name if resolved else None, resolved)
     pref = app_access.preference(request)
     items = launcher.launcher_items(user, pref, current)
     hidden = None
@@ -31,4 +32,6 @@ def app_nav(request):
     return {"launcher_apps": items, "show_launcher": launcher.shows_launcher(user, pref), "nav_hidden_app": hidden,
             "home_url": landing.home_url(), "circle_invites": pending_count(user), "notification_count": unread,
             "notification_count_label": "99+" if unread > 99 else str(unread),
-            "nav_resume_rules": resume_rules(user, pref)}
+            "nav_resume_rules": resume_rules(user, pref),
+            # A superuser on a page of an archived app (albright_labs.archive) - index.html's "Archived app" banner.
+            "archived_app": getattr(request, "archived_app", None)}

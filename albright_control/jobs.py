@@ -106,7 +106,7 @@ def job_run_events(queryset):
 
 INTERVALS = {   # expected hours between runs; settings.CONTROL_JOB_INTERVALS_HOURS can override any of these
     "watchlist_alerts": 1, "track_closed": 24, "fetch_spot_prices": 24, "alert_digest": 24,
-    "calibrate": 24 * 7, "prune_lots": 24 * 7, "prune_resume_chats": 24, "prune_activity": 24,
+    "calibrate": 24 * 7, "prune_lots": 24 * 7, "prune_activity": 24,
     "send_activity_digest": 24,
 }
 
@@ -115,26 +115,34 @@ def interval_for(job):
     return timedelta(hours={**INTERVALS, **getattr(settings, "CONTROL_JOB_INTERVALS_HOURS", {})}.get(job, 24))
 
 
+# The Reselling app's jobs - left out while it's archived (albright_labs.archive): they skip, so they'd only ever
+# show as "late".
+RESELLING_JOBS = (("watchlist_alerts", "Watchlist alerts"), ("track_closed", "Track closed lots"),
+                  ("fetch_spot_prices", "Fetch spot prices"), ("alert_digest", "Daily digest"),
+                  ("calibrate", "Calibrate max bids"), ("prune_lots", "Prune old lots"))
+SITE_JOBS = (("prune_activity", "Prune old activity"), ("send_activity_digest", "Activity digest emails"))
+
+
 def health_rows(now=None):
-    from albright_reselling_app.scanner.dashboard import _expected_interval_hours, _source_display
-    from albright_reselling_app.scanner_models import ScanRun, SourcedLot, SpotPrice
+    from albright_labs.archive import is_app_archived
 
     now = now or timezone.now()
     rows = []
-    # Reseller scans, one row per configured source (ScanRun is their own history).
-    for source in settings.RESELLING_SCANNER["SOURCES"]:
-        events, running = job_run_events(JobRun.objects.filter(job=f"scan_lots:{source}"))
-        events += [(r.started_at, not r.error, r.error) for r in ScanRun.objects.filter(source=source)
-                   .exclude(finished_at=None).order_by("-started_at")[:50]]
-        rows.append(summarize(f"scan_lots:{source}", f"Reseller scan - {_source_display(source)}",
-                              timedelta(hours=_expected_interval_hours(source)), events, running, now=now))
+    jobs = SITE_JOBS
+    if not is_app_archived("reselling"):
+        from albright_reselling_app.scanner.dashboard import _expected_interval_hours, _source_display
+        from albright_reselling_app.scanner_models import ScanRun, SourcedLot, SpotPrice
+        # Reseller scans, one row per configured source (ScanRun is their own history).
+        for source in settings.RESELLING_SCANNER["SOURCES"]:
+            events, running = job_run_events(JobRun.objects.filter(job=f"scan_lots:{source}"))
+            events += [(r.started_at, not r.error, r.error) for r in ScanRun.objects.filter(source=source)
+                       .exclude(finished_at=None).order_by("-started_at")[:50]]
+            rows.append(summarize(f"scan_lots:{source}", f"Reseller scan - {_source_display(source)}",
+                                  timedelta(hours=_expected_interval_hours(source)), events, running, now=now))
+        jobs = RESELLING_JOBS + SITE_JOBS
     # watchlist_alerts, alert_digest, calibrate, prune_lots: JobRun only.
     # track_closed / fetch_spot_prices: plus what they already leave behind.
-    for job, label in (("watchlist_alerts", "Watchlist alerts"), ("track_closed", "Track closed lots"),
-                       ("fetch_spot_prices", "Fetch spot prices"), ("alert_digest", "Daily digest"),
-                       ("calibrate", "Calibrate max bids"), ("prune_lots", "Prune old lots"),
-                       ("prune_resume_chats", "Prune resume chats"), ("prune_activity", "Prune old activity"),
-                       ("send_activity_digest", "Activity digest emails")):
+    for job, label in jobs:
         events, running = job_run_events(JobRun.objects.filter(job__startswith=job))
         if job == "track_closed":
             last = SourcedLot.objects.exclude(final_checked_at=None).order_by("-final_checked_at").values_list(

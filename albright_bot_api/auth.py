@@ -122,6 +122,9 @@ def bot_endpoint(scope=None, methods=("GET",)):
         def wrapper(request, **kwargs):
             token = None
             try:
+                if wanted and all(scopes.is_archived(s) for s in wanted):
+                    # An archived app's endpoint (albright_labs.archive): gone, as if it never existed.
+                    raise ApiError(404, "Not found.", "rejected: app archived")
                 token = authenticate(request)
                 if request.method not in methods:
                     raise ApiError(405, f"Method not allowed - use {' or '.join(methods)}.", f"rejected: {request.method}")

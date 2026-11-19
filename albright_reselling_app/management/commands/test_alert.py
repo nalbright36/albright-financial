@@ -7,8 +7,10 @@ TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID are set correctly end to end.
 from django.core.management.base import BaseCommand
 
 from albright_reselling_app.scanner.alerts import send_telegram
+from albright_labs.archive import skip_if_archived
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Send a test Telegram message to confirm the alert setup works."
 

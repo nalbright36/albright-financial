@@ -17,6 +17,7 @@ from albright_reselling_app.scanner.bid_watch import resolve_watches
 from albright_reselling_app.scanner.pipeline import run_scan
 from albright_reselling_app.scanner_models import ScanRun
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 
 def _format_remaining(delta):
@@ -75,6 +76,7 @@ def _stopped_early(keywords_requested, failed_keywords):
     return idx < len(keywords_requested) - 1  # keywords were left unattempted
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Scan auction sources for lots under max bid, and for games/cards/jewelry leads"
 

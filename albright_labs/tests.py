@@ -14,7 +14,6 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from albright_resume.models import ResumeSettings
 from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import tiles
@@ -24,13 +23,6 @@ from .models import UserPreference
 
 OUTLOOK = "albright_trading_app.views.get_market_outlook"
 CLIENT = "alpaca.trading.client.TradingClient"
-
-
-def resume_site(enabled=True, name="Pat Example"):
-    site = ResumeSettings.objects.get_or_create(pk=1)[0]
-    site.page_enabled, site.full_name = enabled, name
-    site.save()
-    return site
 
 
 class HomeTests(TestCase):
@@ -198,18 +190,17 @@ class HeaderTests(TestCase):
 
 
 @override_settings(DEBUG=False)
-class ResumeStylesheetTests(TestCase):
-    def test_resume_page_links_its_stylesheet_and_the_csp_allows_it(self):
-        resume_site(enabled=True)
-        response = self.client.get(reverse("albright_resume:page"))
+class PublicStylesheetTests(TestCase):
+    def test_public_home_links_its_stylesheets_and_the_csp_allows_them(self):
+        with mock.patch(OUTLOOK):
+            response = self.client.get("/")
         page = response.content.decode()
-        self.assertIn('<link rel="stylesheet" href="/static/resume/resume.css">', page)
-        self.assertIn('<script src="/static/labs/theme.js"></script>', page)
+        self.assertIn('<link rel="stylesheet" href="/static/css/public.css">', page)
         csp = dict(part.strip().split(" ", 1) for part in response["Content-Security-Policy"].split(";"))
-        self.assertEqual(csp["style-src"], "'self'")          # same-origin /static/ is 'self'
+        self.assertIn("'self'", csp["style-src"])             # same-origin /static/ is 'self'
         self.assertEqual(csp["script-src"], "'self'")
         self.assertIn("'self'", csp["font-src"])
-        self.assertTrue(finders.find("resume/resume.css"))     # collectstatic picks it up
+        self.assertTrue(finders.find("css/public.css"))        # collectstatic picks it up
         self.assertTrue(finders.find("labs/theme.js"))
 
     def test_check_warns_about_uncollected_static_files(self):
@@ -221,24 +212,21 @@ class ResumeStylesheetTests(TestCase):
                 self.assertIn("collectstatic", warnings[0].hint)
                 call_command("collectstatic", interactive=False, verbosity=0)
                 self.assertEqual(static_files_collected(), [])
-                os.remove(os.path.join(root, "resume", "resume.css"))
-                self.assertIn("resume/resume.css", static_files_collected()[0].msg)
+                os.remove(os.path.join(root, "css", "public.css"))
+                self.assertIn("css/public.css", static_files_collected()[0].msg)
 
 
 class SecurityHeaderScopeTests(TestCase):
-    """The strict CSP is only on the public pages ("/" for visitors, /resume/),
+    """The strict CSP is only on the public pages ("/" for visitors and its footer pages),
     and those pages have nothing inline for it to block; the signed-in apps
     send no CSP (as before), so their own assets - inline theme script, Google
     Fonts, chart library - keep working."""
 
     PUBLIC_INLINE = r"<script(?![^>]*\bsrc=)[^>]*>|<style\b|\sstyle=\"|\son[a-z]+=\""
 
-    def setUp(self):
-        resume_site(enabled=True)
-
     def test_public_pages_get_the_strict_csp_and_have_nothing_inline(self):
         import re
-        for url in ("/", reverse("albright_resume:page")):
+        for url in ("/", reverse("labs:privacy")):
             with self.subTest(url=url):
                 with mock.patch(OUTLOOK):
                     response = self.client.get(url)
@@ -253,7 +241,7 @@ class SecurityHeaderScopeTests(TestCase):
         with mock.patch(OUTLOOK, return_value=None):
             for url in ("/", reverse("labs:hub"), reverse("trading_home"), reverse("albright_reselling_app:dashboard"),
                         reverse("albright_crypto_app:inbox"), reverse("albright_control:overview"),
-                        reverse("albright_resume_admin:overview"), reverse("user_login")):
+                        reverse("user_login")):
                 with self.subTest(url=url):
                     response = self.client.get(url)
                     self.assertEqual(response.status_code, 200)
@@ -267,7 +255,7 @@ class SecurityHeaderScopeTests(TestCase):
                      "icon-512.png", "icon-maskable-512.png"):
             self.assertTrue(finders.find(f"icons/{name}"), name)
         with mock.patch(OUTLOOK):
-            for url in ("/", reverse("albright_resume:page"), reverse("user_login")):
+            for url in ("/", reverse("labs:privacy"), reverse("user_login")):
                 html = self.client.get(url).content.decode()
                 for href in ("/static/icons/favicon-32.png", "/static/icons/favicon-16.png",
                              "/static/icons/favicon.ico", "/static/icons/apple-touch-icon.png", "/site.webmanifest"):
@@ -294,7 +282,7 @@ class SecurityHeaderScopeTests(TestCase):
             self.assertTrue(b"".join(response.streaming_content))
 
     def test_strict_csp_allows_the_manifest_and_icons(self):
-        from albright_resume.security import CSP
+        from albright_labs.security import CSP
         self.assertIn("manifest-src 'self'", CSP)
         self.assertIn("img-src 'self'", CSP)
         self.assertIn("worker-src 'self'", CSP)

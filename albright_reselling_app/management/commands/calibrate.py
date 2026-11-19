@@ -15,8 +15,10 @@ from django.core.management.base import BaseCommand
 
 from albright_reselling_app.scanner.insights import build_calibration_suggestions
 from albright_control.jobs import tracked_job
+from albright_labs.archive import skip_if_archived
 
 
+@skip_if_archived("reselling")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = "Compare real outcomes to settings.py's calibration values and suggest adjustments."
 

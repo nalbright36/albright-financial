@@ -24,6 +24,7 @@ from albright_trading_app.options_trading import (
     get_current_option_prices,
     MINIMUM_DTE_BEFORE_FORCE_CLOSE,
 )
+from albright_labs.archive import skip_if_archived
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ CHECK_INTERVAL_SECONDS = 300
 MARKET_CLOSED_SLEEP_SECONDS = 900
 
 
+@skip_if_archived("trading")   # archived (docs/ARCHIVED_APPS.md): "app archived, skipping", nothing runs
 class Command(BaseCommand):
     help = (
         "Always-on strategy engine. Evaluates active stock strategies and "

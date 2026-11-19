@@ -133,10 +133,16 @@ class AlpacaCredentials(models.Model):
         self.encrypted_api_key = fernet.encrypt(api_key.encode()).decode()
         self.encrypted_secret_key = fernet.encrypt(secret_key.encode()).decode()
 
+    # While Trading is archived (albright_labs.archive) the saved keys stay encrypted here but are never decrypted or
+    # used: these raise ArchivedAppError (a superuser looking at an archived page sees a note - AppAccessMiddleware).
     def get_api_key(self):
+        from albright_labs.archive import refuse_if_archived
+        refuse_if_archived("trade")
         return get_fernet().decrypt(self.encrypted_api_key.encode()).decode()
 
     def get_secret_key(self):
+        from albright_labs.archive import refuse_if_archived
+        refuse_if_archived("trade")
         return get_fernet().decrypt(self.encrypted_secret_key.encode()).decode()
 
     def __str__(self):

@@ -49,7 +49,8 @@ def open_event(request, pk):
     if event is None:
         raise Http404
     activity.mark_read(request.user, event)
-    target = event.url
+    from .archive import is_app_archived
+    target = "" if is_app_archived(event.app) else event.url      # an archived app's item: no link to follow
     if not target or not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()},
                                                          require_https=request.is_secure()):
         target = "labs:activity"

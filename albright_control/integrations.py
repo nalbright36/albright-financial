@@ -41,20 +41,23 @@ def integration_rows():
         {"key": "telegram", "name": "Telegram", "used_for": "Alerts and the daily digest",
          "configured": _env("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"), "test": True,
          "setting": "TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID"},
-        {"key": "goldapi", "name": "goldapi.io", "used_for": "Daily silver/gold spot prices (90 calls/month)",
+        {"key": "goldapi", "app": "resell", "name": "goldapi.io", "used_for": "Daily silver/gold spot prices (90 calls/month)",
          "configured": _env("GOLDAPI_KEY"), "failing": bool(spot_run and not spot_run.ok),
          "failing_why": "the last fetch_spot_prices run failed", "setting": "GOLDAPI_KEY",
          "note": "No test button - every call uses the monthly quota."},
-        {"key": "alpaca", "name": "Alpaca", "used_for": "Market data (site key) and each user's own trading account",
+        {"key": "alpaca", "app": "trade", "name": "Alpaca", "used_for": "Market data (site key) and each user's own trading account",
          "configured": _env("ALPACA_API_KEY"), "setting": "ALPACA_API_KEY",
          "note": f"{AlpacaCredentials.objects.count()} user account(s) connected (keys stored encrypted)"},
-        {"key": "ebay", "name": "eBay", "used_for": "Reseller sold-price lookups",
+        {"key": "ebay", "app": "resell", "name": "eBay", "used_for": "Reseller sold-price lookups",
          "configured": _env("EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET"), "setting": "EBAY_CLIENT_ID, EBAY_CLIENT_SECRET"},
         {"key": "email", "name": "Email", "used_for": "Invites and password setup/reset links (Gmail SMTP)",
          "configured": settings.EMAIL_CONFIGURED, "test": True,
          "setting": "EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL",
          "note": "" if settings.EMAIL_CONFIGURED else "Without it, invite and password links are shown in Admin to send yourself."},
     ]
+    # An archived app's integrations aren't used (albright_labs.archive) - not listed, so never "missing".
+    from albright_labs.archive import is_app_archived
+    rows = [row for row in rows if not (row.get("app") and is_app_archived(row["app"]))]
     for row in rows:
         check = _latest_check(row["key"])
         row["last_check"] = check
