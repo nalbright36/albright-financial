@@ -205,8 +205,8 @@
         document.querySelectorAll(".app-launcher__tile[data-app-key]").forEach(function (tile) {
             point(tile, tile.getAttribute("data-app-key"));
         });
-        document.querySelectorAll(".labs-pick[data-key] [data-pick-link]").forEach(function (link) {
-            point(link, link.closest(".labs-pick").getAttribute("data-key"));
+        document.querySelectorAll(".ht[data-app-tile] [data-tile-link]").forEach(function (link) {
+            point(link, link.closest(".ht").getAttribute("data-key"));
         });
     }
     function run() {

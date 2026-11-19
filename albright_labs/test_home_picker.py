@@ -1,5 +1,5 @@
-"""Home as an app picker: a greeting and the allowed + shown apps' tiles in the user's order (Favorites first,
-Admin last); Edit mode saves the order, pins and visibility; "Open after sign-in" (the picker, the last app, an
+"""Home: a greeting and the user's tiles - first seeded from the allowed + shown apps in their order (Admin last);
+Edit mode's save (save_picker) keeps the app order and visibility; "Open after sign-in" (the picker, the last app, an
 app or one of its pages) after signing in and on "/", with "next" still winning; "/?picker=1" always the picker
 and every Home link using it; single-app users skipping the picker; visitors getting the public landing; and the
 Today panel off by default."""
@@ -15,7 +15,7 @@ from albright_trading_proj.middleware import LAST_APP_COOKIE
 
 from . import views
 from .models import UserPreference
-from .testing import favorite_tiles, home_tiles, launcher_links, with_apps
+from .testing import home_tiles, launcher_links, with_apps
 from .tests import OUTLOOK
 from albright_labs.templatetags.nav_icons import nav_icon
 
@@ -66,14 +66,13 @@ class PickerTests(Base):
         self.assertEqual(views.greeting(User(username="sam"), timezone.make_aware(datetime(2026, 11, 2, 9), tz)),
                          "Good morning, sam")
 
-    def test_each_tile_has_icon_name_and_a_line_filled_in_later(self):
+    def test_each_tile_has_icon_and_label(self):
         page = self.page()
         tile = page.split('data-key="meals"', 1)[1].split("</li>", 1)[0]
         self.assertIn(f'href="{reverse("albright_meals:week")}"', tile)
-        self.assertIn('class="labs-pick__icon"', tile)
-        self.assertIn('<span class="labs-pick__name">Meals</span>', tile)
-        self.assertIn('<span class="labs-pick__line" data-line-for="meals"></span>', tile)   # empty until hub.js
-        self.assertIn(f'data-lines-url="{reverse("labs:launcher_lines")}"', page)
+        self.assertIn('class="ht__icon"', tile)
+        self.assertIn('<span class="ht__label">Meals</span>', tile)
+        self.assertIn('aria-label="Remove Meals"', tile)
         self.assertIn('data-app-accent="meals"', page)
 
     def test_only_allowed_and_shown_apps_in_their_order(self):
@@ -81,25 +80,14 @@ class PickerTests(Base):
                   app_order=["notes", "meals", "opps", "trade"])
         page = self.page()
         self.assertEqual(home_tiles(page), ["notes", "meals", "trade"])
-        self.assertEqual(home_tiles(page, include_hidden=True), ["notes", "meals", "opps", "trade"])  # for Edit mode
-        self.assertNotIn('data-key="resell"', page)
-
-    def test_favorites_first(self):
-        self.pref(pinned_apps=["planner", "resell"])
-        page = self.page()
-        self.assertEqual(favorite_tiles(page), ["resell", "planner"])            # in their order
-        self.assertEqual(home_tiles(page), ["resell", "planner", "trade", "opps", "meals", "notes", "money", "fitness", "weather"])
-        self.assertIn(">Favorites</h2>", page)
-        self.assertNotIn('id="picker-favorites" hidden', page)
-
-    def test_no_favorites_row_until_something_is_pinned(self):
-        self.assertIn('id="picker-favorites" hidden', self.page())
+        self.assertNotIn('data-key="resell"', page.split('id="tile-sheet"', 1)[0])
 
     def test_admin_last_for_superusers_only(self):
         self.assertNotIn("admin", home_tiles(self.page()))
         self.user.is_superuser = True
         self.user.save()
         self.pref(app_order=["admin", "opps", "trade", "resell", "meals", "notes", "planner"])
+        self.user.home_tiles.all().delete()           # tiles are seeded once - start again as a superuser
         self.assertEqual(home_tiles(self.page())[-1], "admin")
 
     def test_visitors_get_the_public_landing_never_tiles(self):
@@ -118,8 +106,7 @@ class EditModeTests(Base):
         self.assertNotIn("labs-picker is-editing", page)
         page = self.page(PICKER + "&edit=1")
         self.assertIn("labs-picker is-editing", page)
-        self.assertIn('name="visible" value="trade" checked', page)
-        self.assertIn('name="move" value="up:trade"', page)
+        self.assertIn('name="tile" value="trade"', page)
         self.assertIn('id="open-after"', page)
         self.assertIn('id="show-today"', page)
 
@@ -143,17 +130,6 @@ class EditModeTests(Base):
         response = self.client.post(reverse("labs:save_picker"), {"order": ALL_APPS, "open_after": "home"}, follow=True)
         self.assertContains(response, "Keep at least one app in your navigation.")
         self.assertEqual(home_tiles(self.page()), ALL_APPS)
-
-    def test_pins_save_at_once(self):
-        response = self.client.post(reverse("labs:toggle_pin"), {"key": "meals"}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertEqual(response.json(), {"ok": True, "key": "meals", "pinned": True})
-        self.assertEqual(favorite_tiles(self.page()), ["meals"])
-        response = self.client.post(reverse("labs:toggle_pin"), {"key": "meals"})        # without JS
-        self.assertRedirects(response, PICKER, fetch_redirect_response=False)
-        self.assertEqual(UserPreference.objects.get(user=self.user).pinned_apps, [])
-        self.client.post(reverse("labs:toggle_pin"), {"key": "notes", "editing": "1"})
-        self.assertEqual(favorite_tiles(self.page()), ["notes"])
-        self.assertEqual(self.client.post(reverse("labs:toggle_pin"), {"key": "admin"}).status_code, 404)   # not theirs
 
     def test_edit_mode_sets_open_after_and_the_today_panel(self):
         self.client.post(reverse("labs:save_picker"), {"order": ALL_APPS, "visible": ALL_APPS,

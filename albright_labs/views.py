@@ -5,11 +5,10 @@
                Signed in: their "Open after sign-in" app if set, else Home (the
                app picker). "/?picker=1" always shows the picker (labs.landing).
                Someone who can open just one app goes straight to it.
-  "/home/"   - Home, the app picker: a greeting and a tile per app (allowed and
-               shown, in their order, Favorites first), each with one live line
-               from the launcher's endpoint (launcher_lines). Its Edit mode
-               reorders, pins, hides/shows, and sets "Open after sign-in" and
-               the Today panel (save_picker, toggle_pin).
+  "/home/"   - Home: a greeting, the Today panel and "My tiles" - any page from
+               any app, or a whole app (home_tiles; toggle_tile adds/removes).
+               Its Edit mode removes and reorders tiles, and sets "Open after
+               sign-in" and the Today panel (save_picker).
                Someone who can't open any app yet (a new account) sees only
                "access pending" there.
   "/home/account/" - My account (linked from the header): the same settings as forms.
@@ -21,13 +20,14 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
+from django.template.loader import render_to_string
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import app_access, apps_registry, landing, launcher, public_views, tiles
+from . import app_access, apps_registry, home_tiles, landing, launcher, public_views, tiles
 
 log = logging.getLogger(__name__)
 
@@ -77,18 +77,6 @@ def greeting(user, now=None):
     return f"Good {part}, {(user.first_name or user.get_username()).strip()}"
 
 
-def picker_tiles(user, pref):
-    """Every app this user can open, in their order with Admin last: (favorites, the rest). Each tile says if it's
-    shown (hidden ones appear only in Edit mode) and pinned."""
-    shown, pinned = set(app_access.nav_keys(user, pref)), set(pref.pinned_apps or [])
-    keys = app_access.ordered_keys(user, pref)
-    keys = [k for k in keys if k != "admin"] + [k for k in keys if k == "admin"]
-    tiles = [{"key": key, "label": app.label, "accent": app.accent, "color": app.color,
-              "url_name": app.landing_url_name, "shown": key in shown, "pinned": key in pinned}
-             for key, app in ((key, apps_registry.BY_KEY[key]) for key in keys)]
-    return [t for t in tiles if t["pinned"]], [t for t in tiles if not t["pinned"]]
-
-
 @login_required
 @never_cache
 def hub(request):
@@ -100,9 +88,14 @@ def hub(request):
     single = landing.single_app_url(request)
     if single:
         return redirect(single)
-    favorites, others = picker_tiles(request.user, pref)
+    mine = home_tiles.user_tiles(request.user, pref)
+    counts = home_tiles.badges(request.user, mine)
+    added = {t.key for t in mine}
     return render(request, "albright_labs/hub.html", {
-        "greeting": greeting(request.user), "favorites": favorites, "others": others,
+        "greeting": greeting(request.user), "home_tiles": [(t, counts.get(t.key, 0)) for t in mine],
+        "tile_catalog": [(app, [(t, t.key in added) for t in group])
+                         for app, group in home_tiles.visible_catalog(request.user, pref)],
+        "adding": request.GET.get("add") == "1",
         "editing": request.GET.get("edit") == "1", "home_url": landing.home_url(),
         "planner_today": _planner_today(request, pref) if pref.show_today_panel else None,
         **_settings_context(request)})
@@ -208,16 +201,22 @@ def save_picker(request):
     back to Edit mode."""
     pref = app_access.preference(request)
     move = request.POST.get("move", "")
-    order = _apply_move(request.POST.getlist("order"), move)
-    try:
-        pref.visible_apps, pref.app_order = app_access.clean_nav(request.user, pref, request.POST.getlist("visible"),
-                                                                 order)
-    except ValueError as exc:
-        messages.error(request, str(exc))
-        return redirect(landing.home_url() + "&edit=1")
+    if "order" in request.POST:          # the app order and Show boxes (no longer on Home; kept for old forms)
+        order = _apply_move(request.POST.getlist("order"), move)
+        try:
+            pref.visible_apps, pref.app_order = app_access.clean_nav(request.user, pref,
+                                                                     request.POST.getlist("visible"), order)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(landing.home_url() + "&edit=1")
+    if "tile" in request.POST:           # Home's tiles, in the order shown
+        home_tiles.reorder(request.user, request.POST.getlist("tile"))
     ok = _set_open_after(request, pref, reset=True)
     pref.save()
     app_access.forget(request)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "note": "Saved." if ok else
+                             "Saved - that app is hidden now, so the app picker opens after you sign in."})
     if move:
         return redirect(landing.home_url() + "&edit=1")
     if ok:
@@ -225,6 +224,38 @@ def save_picker(request):
     else:
         messages.warning(request, "Saved - that app is hidden now, so the app picker opens after you sign in.")
     return redirect(landing.home_url())
+
+
+@login_required
+@require_POST
+def toggle_tile(request):
+    """The Add sheet's + / check, and a tile's remove (x): add the tile at the end, or take it off Home. JSON for
+    hub.js (with the new tile's HTML); a plain post comes back to Home."""
+    key = request.POST.get("key", "")
+    pref = app_access.preference(request)
+    if not home_tiles.can_add(request.user, key, pref):
+        raise Http404
+    home_tiles.user_tiles(request.user, pref)            # seeds a first-time user, so adding never empties Home
+    want = request.POST.get("want")
+    present = request.user.home_tiles.filter(key=key).exists()
+    add = (want == "add") if want in ("add", "remove") else not present
+    if add:
+        home_tiles.add(request.user, key)
+    else:
+        home_tiles.remove(request.user, key)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        html = ""
+        if add:
+            tile = home_tiles.catalog()[key]
+            html = render_to_string("albright_labs/_home_tile.html", {
+                "t": tile, "count": home_tiles.badges(request.user, [tile]).get(key, 0)}, request=request)
+        return JsonResponse({"ok": True, "key": key, "added": add, "html": html})
+    back = landing.home_url()
+    if request.POST.get("from") == "sheet":
+        back += "&add=1#tile-sheet"
+    elif request.POST.get("editing") == "1":
+        back += "&edit=1"
+    return redirect(back)
 
 
 @login_required

@@ -191,6 +191,8 @@ class UserPreference(models.Model):
     assistant_allowed = models.BooleanField("Can use AI assistant", default=False)
     # The space each app last showed (Meals and Money's switcher): {"meals": space id, ...} - checked on every use.
     current_spaces = models.JSONField(default=dict, blank=True)
+    # When they last opened the Opportunities Inbox - Home's "New opps" tile counts what arrived since.
+    opps_seen_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -598,3 +600,18 @@ class UserStorage(models.Model):
 
     def __str__(self):
         return f"{self.user} storage"
+
+
+class HomeTile(models.Model):
+    """One of a user's tiles on Home ("My tiles"): a key from albright_labs.home_tiles.catalog() - a page or a whole
+    app - in their order. Rows for an app the user can't open now are kept, just not shown."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="home_tiles")
+    key = models.CharField(max_length=64)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "pk"]
+        constraints = [models.UniqueConstraint(fields=["user", "key"], name="labs_hometile_unique_user_key")]
+
+    def __str__(self):
+        return f"{self.user}: {self.key}"

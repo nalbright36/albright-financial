@@ -86,7 +86,7 @@ class RegistryTests(Base):
         self.assertEqual(buttons(hub), [("labs", "Home"), ("trading", "Trade"), ("reselling", "Resell"),
                                         ("opportunities", "Opps"), ("meals", "Meals"), ("notes", "Notes"), ("planner", "Plan"),
                                         ("money", "Money"), ("fitness", "Fitness"), ("weather", "Weather"), ("garden", "Garden")])
-        self.assertIn('style="--app-dot: var(--app-garden, #F59E0B);"', hub)
+        self.assertIn('style="--tile-c: var(--app-garden, #F59E0B);"', hub)
         self.assertIn("garden", home_tiles(hub))
         groups = dict(self.client.get(reverse("labs:hub")).context["open_after_groups"])
         self.assertEqual(groups["Garden"], [("app:garden", "Garden (its main page)"), ("page:garden:plan", "Garden › Plan")])

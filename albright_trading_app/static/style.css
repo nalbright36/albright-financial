@@ -1735,69 +1735,95 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-picker:not(.is-editing) [data-edit-only] { display: none; }
 .labs-picker__default { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .labs-picker__hint { margin: 0 0 var(--space-4); font-size: var(--text-sm); color: var(--text-secondary); }
-.labs-picker__group + .labs-picker__group { margin-top: var(--space-6, 24px); }
 .labs-picker__label { margin: 0 0 10px; font-size: 0.75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
   color: var(--text-secondary); }
-.labs-picks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-@media (min-width: 720px) { .labs-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 1080px) { .labs-picks { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Home's "My tiles" (albright_labs/_home_tile.html; Option B of docs/design/home_tiles_options.html): phone-style
+   icons, 4 per row (3 under 360px, 6 on desktop), each tinted in its app's color (--tile-c, set inline). */
+.ht-section { margin-top: var(--space-5, 20px); }
+.ht-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: 12px; }
+.ht-head__label { margin: 0; }
+.ht-head__add { font-size: var(--text-sm); font-weight: 500; color: var(--accent); }
+.ht-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 8px; }
+@media (max-width: 359.98px) { .ht-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .ht-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 20px 12px; } }
+.ht { --tile-c: var(--accent); position: relative; min-width: 0; }
+.ht__link { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 2px; border-radius: 14px;
+  color: var(--text-primary); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.ht__link:hover, .ht__link:focus { text-decoration: none; color: var(--text-primary); }
+.ht__link:focus-visible { outline: 2px solid var(--tile-c); outline-offset: 2px; }
+.ht__icon { position: relative; width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--tile-c) 16%, transparent); color: var(--tile-c);
+  border: 1px solid color-mix(in srgb, var(--tile-c) 10%, var(--border)); transition: transform .15s ease; }
+.ht__icon svg { width: 22px; height: 22px; display: block; fill: none; stroke: currentColor; }
+@media (hover: hover) { .ht__link:hover .ht__icon { transform: translateY(-2px); } }
+.ht__label { max-width: 100%; font-size: 0.75rem; line-height: 1.25; text-align: center; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ht__badge { position: absolute; top: -5px; left: calc(50% + 15px); min-width: 19px; height: 19px; padding: 0 5px;
+  border-radius: 10px; display: grid; place-items: center; font-size: 0.625rem; font-weight: 700; line-height: 1;
+  background: var(--tile-c); color: #07090C; box-shadow: 0 0 0 2px var(--bg); }
+.ht--add .ht__icon { background: var(--surface); color: var(--text-secondary); border: 1px dashed var(--border-strong); }
+.ht--add .ht__label { color: var(--text-secondary); }
+.ht__remove { position: absolute; top: -6px; left: calc(50% - 35px); width: 24px; height: 24px; padding: 0; display: none;
+  place-items: center; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface-raised);
+  color: var(--text-primary); cursor: pointer; z-index: 2; box-shadow: var(--shadow-sm); }
+.ht__remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.labs-picker.is-editing .ht__remove { display: grid; }
+.labs-picker.is-editing .ht:not([data-fixed]) { touch-action: pinch-zoom; cursor: grab; user-select: none; -webkit-user-select: none; }
+.labs-picker.is-editing .ht:not([data-fixed]) .ht__icon { animation: ht-wiggle .9s ease-in-out infinite alternate; }
+.labs-picker.is-editing .ht__badge { display: none; }
+.ht.is-dragging { z-index: 5; cursor: grabbing; }
+.ht.is-dragging .ht__icon { animation: none; transform: scale(1.08); box-shadow: var(--shadow-lg); }
+@keyframes ht-wiggle { from { transform: rotate(-1.5deg); } to { transform: rotate(1.5deg); } }
 
-.labs-pick { --pick-color: var(--app-dot, var(--accent)); position: relative; display: flex; flex-direction: column; }
-.labs-pick[data-app-accent="trading"] { --pick-color: var(--app-trading); }
-.labs-pick[data-app-accent="reselling"] { --pick-color: var(--app-reselling); }
-.labs-pick[data-app-accent="opportunities"] { --pick-color: var(--app-opportunities); }
-.labs-pick[data-app-accent="meals"] { --pick-color: var(--app-meals); }
-.labs-pick[data-app-accent="notes"] { --pick-color: var(--app-notes); }
-.labs-pick[data-app-accent="planner"] { --pick-color: var(--app-planner); }
-.labs-pick[data-app-accent="money"] { --pick-color: var(--app-money); }
-.labs-pick[data-app-accent="fitness"] { --pick-color: var(--app-fitness); }
-.labs-pick[data-app-accent="weather"] { --pick-color: var(--app-weather); }
-.labs-pick[data-app-accent="admin"] { --pick-color: var(--app-admin); }
-.labs-pick__link { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 148px; padding: var(--space-5);
-  border-radius: var(--radius-card, 14px); border: 1px solid var(--border); background: var(--glass-bg, var(--surface));
-  -webkit-backdrop-filter: blur(var(--glass-blur, 14px)); backdrop-filter: blur(var(--glass-blur, 14px));
-  box-shadow: var(--shadow-sm); color: inherit; text-decoration: none;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-.labs-pick__link:hover, .labs-pick__link:focus { text-decoration: none; color: inherit; }
-/* Hover only where there's a real pointer, and it never shows or hides anything: on a touch screen a tap that
-   changes what's displayed is taken as a hover, and the app wouldn't open until a second tap. */
-@media (hover: hover) {
-  .labs-pick__link:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--pick-color) 55%, transparent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--pick-color) 35%, transparent), 0 8px 28px color-mix(in srgb, var(--pick-color) 22%, transparent); }
+/* The Add sheet: a bottom sheet on phones, a centered modal from 720px. */
+.ht-sheet { padding: 0; border: 0; background: transparent; color: var(--text-primary); max-width: none; max-height: none;
+  width: 100%; margin: auto 0 0; }
+.ht-sheet:not([open]) { display: none; }
+.ht-sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
+.ht-sheet__panel { display: flex; flex-direction: column; gap: 10px; max-height: 85vh; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+  background: var(--bg-elevated); border: 1px solid var(--border); border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: var(--shadow-lg); }
+.ht-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 0 auto 2px; }
+.ht-sheet__head { display: flex; align-items: center; justify-content: space-between; }
+.ht-sheet__title { margin: 0; font-size: 1.0625rem; font-weight: 700; }
+.ht-sheet__close { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--text-secondary); }
+.ht-sheet__close:hover { color: var(--text-primary); background: var(--surface-hover); }
+@media (min-width: 720px) {
+  .ht-sheet { width: min(520px, calc(100% - 32px)); margin: auto; }
+  .ht-sheet__panel { border-radius: 18px; border-bottom: 1px solid var(--border); max-height: min(680px, 85vh); padding-bottom: 16px; }
+  .ht-sheet__grab { display: none; }
 }
-.labs-pick__link:focus-visible { outline: 2px solid var(--pick-color); outline-offset: 2px;
-  border-color: color-mix(in srgb, var(--pick-color) 55%, transparent); }
-.labs-pick__icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0;
-  color: var(--pick-color); background: color-mix(in srgb, var(--pick-color) 18%, transparent); }
-.labs-pick__icon svg { width: 24px; height: 24px; display: block; }
-.labs-pick__name { font-weight: 700; font-size: 1.125rem; color: var(--text-primary); margin-top: auto; }
-.labs-pick__line { min-height: 1.3em; font-size: var(--text-sm); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* The pin button: Edit mode only (outside it, nothing sits on top of the tile's link). */
-.labs-pick__pin { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: none; place-items: center;
-  border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
-  cursor: pointer; transition: color .15s ease, border-color .15s ease; }
-.labs-picker.is-editing .labs-pick__pin { display: grid; }
-@media (hover: hover) { .labs-pick__pin:hover { color: var(--pick-color); border-color: var(--pick-color); } }
-.labs-pick__pin:focus-visible { color: var(--pick-color); border-color: var(--pick-color); }
-.labs-pick.is-pinned .labs-pick__pin { color: var(--pick-color); background: color-mix(in srgb, var(--pick-color) 16%, var(--surface)); }
-.labs-pick.is-pinned .labs-pick__pin svg { fill: currentColor; }
-
-/* Edit mode */
-.labs-pick.is-off { display: none; }
-.labs-picker.is-editing .labs-pick.is-off { display: flex; }
-.labs-picker.is-editing .labs-pick.is-off .labs-pick__link { opacity: .5; border-style: dashed; }
-.labs-picker.is-editing .labs-pick__link { cursor: grab; }
-.labs-picker.is-editing .labs-pick[data-fixed] .labs-pick__link { cursor: default; }
-.labs-pick.is-dragging { opacity: .4; }
-.labs-pick__edit { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 0; }
-.labs-pick__move { display: inline-flex; gap: 4px; }
-.labs-pick__move .btn { min-width: 40px; min-height: 36px; justify-content: center; }
+.ht-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--text-secondary); margin: 0; }
+.ht-search svg { fill: none; stroke: currentColor; flex: none; }
+.ht-search input { flex: 1; min-width: 0; padding: 10px 0; border: 0; background: transparent; color: var(--text-primary); font: inherit; outline: none; }
+.ht-search:focus-within { border-color: var(--accent); }
+.ht-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.ht-chip { --tile-c: var(--accent); flex: none; font: inherit; font-size: 0.75rem; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid transparent; background: var(--surface-hover); color: var(--text-secondary); }
+.ht-chip.is-on { background: color-mix(in srgb, var(--tile-c) 16%, transparent); color: var(--tile-c); border-color: color-mix(in srgb, var(--tile-c) 30%, transparent); }
+.ht-chip:focus-visible { outline: 2px solid var(--tile-c); outline-offset: 1px; }
+.ht-sheet__list { overflow-y: auto; margin: 0 -4px; padding: 0 4px; min-height: 0; flex: 1; }
+.ht-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ht-row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+.ht-row[hidden] { display: none; }
+.ht-row__icon { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--tile-c) 14%, transparent); color: var(--tile-c); }
+.ht-row__icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; }
+.ht-row__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ht-row__name { font-size: var(--text-sm); color: var(--text-primary); }
+.ht-row__desc { font-size: 0.75rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ht-row__add { width: 32px; height: 32px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 9px; cursor: pointer;
+  border: 0; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.ht-row__add svg { fill: none; stroke: currentColor; }
+.ht-row__add.is-added { background: var(--accent); color: var(--bg); }
+.ht-row__add:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ht-row__add:disabled { opacity: .6; }
+.ht-rows__empty { margin: 12px 0; text-align: center; font-size: var(--text-sm); color: var(--text-secondary); }
 .labs-picker__settings { margin-top: var(--space-6, 24px); display: flex; flex-direction: column; gap: var(--space-3); }
 .labs-picker__field { margin: 0; max-width: 420px; }
 .labs-picker__note { font-size: 0.75rem; color: var(--text-secondary); }
 .labs-picker__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-@media (prefers-reduced-motion: reduce) { .labs-pick__link, .labs-pick__pin { transition: none; } .labs-pick__link:hover { transform: none !important; } }
+@media (prefers-reduced-motion: reduce) { .ht__icon { transition: none; animation: none !important; } .ht__link:hover .ht__icon { transform: none; } }
 
 /* ---------- App navigation (albright_labs: the app registry) ---------- */
 /* The header's app launcher itself: albright_labs/static/labs/launcher.css. */

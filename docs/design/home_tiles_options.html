@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home Tiles Options</title>
+<style>
+:root{--bg:#090c10;--card:#10141a;--card2:#151a21;--line:#252c36;--txt:#e8eaed;--mut:#8b94a1;
+--planner:#a3e635;--meals:#fb923c;--fit:#facc15;--money:#34d399;--notes:#f472b6;--opps:#a78bfa;--labs:#2dd4bf}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05070a;color:var(--txt);font:15px/1.35 Inter,-apple-system,system-ui,sans-serif;padding:28px 16px}
+h1{font-size:22px;text-align:center;margin-bottom:6px}.sub{color:var(--mut);text-align:center;margin-bottom:28px;font-size:14px}
+.grid{display:flex;flex-wrap:wrap;gap:26px;justify-content:center}
+.opt{width:330px}.opt h2{font-size:17px;margin-bottom:4px}.opt h2 b{color:var(--labs)}
+.opt p{color:var(--mut);font-size:13px;margin-bottom:12px;min-height:72px}
+.phone{width:330px;height:760px;border-radius:38px;border:8px solid #1d222a;background:linear-gradient(#0e1d1f 0,#090c10 220px);overflow:hidden;display:flex;flex-direction:column;position:relative}
+.top{height:54px;display:flex;align-items:center;gap:10px;padding:0 14px;flex:none}
+.top .lg{width:40px;height:22px}.homechip{width:34px;height:30px;border-radius:15px;background:rgba(45,212,191,.16);color:var(--labs);display:grid;place-items:center}
+.sp{flex:1}.ib{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);display:grid;place-items:center;color:#c9cfd6}
+.body{padding:6px 14px 14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.hi{font-size:20px;font-weight:700;display:flex;align-items:center}.hi .ed{margin-left:auto;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid var(--line);border-radius:9px}
+svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* today panel (existing, condensed) */
+.today{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px}
+.today .h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}.today .h b{font-size:15px}.today .h span{font-size:11px;color:var(--mut)}.today .h a{margin-left:auto;color:var(--labs);font-size:12px}
+.trow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:11px;background:var(--card2);border:1px solid var(--line);font-size:13px;margin-top:6px;box-shadow:inset 3px 0 var(--c)}
+.cb{width:16px;height:16px;border-radius:5px;border:2px solid var(--c);flex:none}
+.trow small{margin-left:auto;color:var(--c);font-size:11px;font-weight:600}
+.seclbl{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.seclbl a{color:var(--labs);text-transform:none;letter-spacing:0;font-weight:500;font-size:12px}
+.ic{border-radius:11px;display:grid;place-items:center}
+/* A big 2-col */
+.ga{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ta{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:112px;position:relative}
+.ta .ic{width:36px;height:36px}.ta .t{font-weight:600;font-size:14px}.ta .m{font-size:12px;color:var(--mut)}
+.ta .app{position:absolute;top:12px;right:12px;font-size:10px;font-weight:600}
+/* B 4-col icons */
+.gb{display:grid;grid-template-columns:repeat(4,1fr);gap:14px 8px}
+.tb{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;text-align:center;color:#d3d8de;position:relative}
+.tb .ic{width:54px;height:54px;border-radius:16px;border:1px solid rgba(255,255,255,.05)}
+.tb .ic svg{width:22px;height:22px}
+.bdg{position:absolute;top:-5px;right:6px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;font-size:10px;font-weight:700;display:grid;place-items:center;color:#07090c}
+.adot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:1px}
+/* C bento */
+.gc{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;min-height:86px}
+.tc.w{grid-column:span 2}.tc .ic{width:30px;height:30px;border-radius:9px}.tc .ic svg{width:16px;height:16px}
+.tc .t{font-size:13px;font-weight:600}.tc .m{font-size:11px;color:var(--mut)}
+.pill{font-size:11px;padding:3px 8px;border-radius:999px;background:#1c222b;color:#c9cfd6}
+/* D list */
+.gd{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.td{display:flex;align-items:center;gap:12px;padding:11px 12px;border-top:1px solid #1c222b}
+.td:first-child{border-top:none}.td .ic{width:34px;height:34px;border-radius:10px}
+.td .t{font-size:14px;font-weight:500}.td .m{font-size:11px;color:var(--mut)}
+.td .r{margin-left:auto;display:flex;align-items:center;gap:6px;color:#4b5563}
+/* picker */
+.sheet{position:absolute;left:0;right:0;bottom:0;top:110px;background:#121720;border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:10px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -20px 60px rgba(0,0,0,.6)}
+.grab{width:40px;height:4px;border-radius:2px;background:#3a4351;margin:0 auto 4px}
+.search{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:#0b0e12;border:1px solid var(--line);color:var(--mut);font-size:13px}
+.tabs{display:flex;gap:6px;overflow:hidden}.tab{flex:none;font-size:12px;padding:6px 10px;border-radius:999px;background:#1a2029;color:#aab2bd}
+.tab.on{background:rgba(251,146,60,.16);color:var(--meals)}
+.prow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:13px}
+.prow .ic{width:30px;height:30px;border-radius:9px}.prow .m{font-size:11px;color:var(--mut)}
+.add{margin-left:auto;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:rgba(45,212,191,.14);color:var(--labs)}
+.add.done{background:var(--labs);color:#07090c}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.fab{position:absolute;right:14px;bottom:14px;width:50px;height:50px;border-radius:50%;background:#0f766e;display:grid;place-items:center;box-shadow:0 0 0 6px rgba(45,212,191,.12)}
+</style></head><body>
+<h1>Home: custom tiles below Today</h1>
+<div class="sub">The Today panel stays as it is. The grid below becomes tiles you choose: any page from any app, not just the app itself.</div>
+
+<svg style="display:none">
+<symbol id="cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.5 12h11L21 7H6"/></symbol>
+<symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M9 15l2 2 4-4"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="note" viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></symbol>
+<symbol id="fork" viewBox="0 0 24 24"><path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 2c-2 2-3 5-3 8h3v12"/></symbol>
+<symbol id="book" viewBox="0 0 24 24"><path d="M4 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4z"/><path d="M20 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z"/></symbol>
+<symbol id="dumb" viewBox="0 0 24 24"><path d="M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12"/></symbol>
+<symbol id="card" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/></symbol>
+<symbol id="star" viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></symbol>
+<symbol id="scale" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 10a4 4 0 0 1 8 0"/><path d="M12 10l2-2"/></symbol>
+<symbol id="food" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 0 18 0z"/><path d="M8 8c0-2 1-3 2-4M12 8c0-2 1-3 2-4"/></symbol>
+<symbol id="pin" viewBox="0 0 24 24"><path d="M12 22s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+<symbol id="trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/></symbol>
+<symbol id="cv" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+<symbol id="grip" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="3"/></symbol>
+<symbol id="srch" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+<symbol id="chk" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+<symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+<symbol id="dots" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="19" cy="5" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/><circle cx="5" cy="19" r="1.6"/><circle cx="12" cy="19" r="1.6"/><circle cx="19" cy="19" r="1.6"/></g></symbol>
+<symbol id="spark" viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></symbol>
+<symbol id="lg" viewBox="0 0 48 26"><path d="M4 24C10 6 38 6 44 24" stroke="#fff" stroke-width="2"/><path d="M17 23l7-15 7 15" stroke="#e5e7eb" stroke-width="2.4"/><path d="M2 25C14 17 28 15 42 15" stroke="#fff" stroke-width="1.4"/><circle cx="42" cy="15" r="2" fill="#fff" stroke="none"/></symbol>
+</svg>
+
+<div class="grid">
+
+<!-- A -->
+<div class="opt"><h2><b>A</b> · Same tiles, any page</h2>
+<p>Closest to what you have now: two big tiles per row, each with a live line underneath. A tile can be a page (Grocery list, Recipes, Log food) or a whole app. A small app label in the corner shows where it goes.</p>
+<div class="phone">
+<div class="top"><svg class="lg"><use href="#lg"/></svg><span class="homechip"><svg><use href="#home"/></svg></span><div class="sp"></div><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span></div>
+<div class="body">
+<div class="hi">Good afternoon, Nathan<span class="ed">Edit</span></div>
+<div class="today"><div class="h"><b>Today</b><span>Thu, Nov 19</span><a>Open Planner →</a></div>
+<div class="trow" style="--c:var(--meals)">Breakfast for Dinner<small>Dinner</small></div>
+<div class="trow" style="--c:var(--fit)"><span class="cb"></span>Walk<small>Start</small></div>
+<div class="trow" style="--c:var(--labs)"><span class="cb"></span>Walk Brutus</div></div>
+<div class="seclbl">My tiles <a>+ Add tile</a></div>
+<div class="ga">
+<div class="ta"><span class="app" style="color:var(--meals)">Meals</span><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#cart"/></svg></span><div class="t">Grocery list</div><div class="m">12 items left</div></div>
+<div class="ta"><span class="app" style="color:var(--fit)">Fitness</span><span class="ic" style="background:rgba(250,204,21,.14);color:var(--fit)"><svg><use href="#food"/></svg></span><div class="t">Log food</div><div class="m">1,450 / 2,200 kcal</div></div>
+<div class="ta"><span class="app" style="color:var(--meals)">Meals</span><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#book"/></svg></span><div class="t">Recipes</div><div class="m">48 saved</div></div>
+<div class="ta"><span class="app" style="color:var(--planner)">App</span><span class="ic" style="background:rgba(163,230,53,.14);color:var(--planner)"><svg><use href="#cal"/></svg></span><div class="t">Planner</div><div class="m">2 tasks today</div></div>
+</div>
+</div>
+<div class="fab"><svg><use href="#spark"/></svg></div>
+</div></div>
+
+<!-- B -->
+<div class="opt"><h2><b>B</b> · Phone-style icons</h2>
+<p>Small rounded icons, four per row, like your phone's home screen. Fits 12+ tiles without scrolling. Count badges show what needs attention; the icon color shows which app it belongs to.</p>
+<div class="phone">
+<div class="top"><svg class="lg"><use href="#lg"/></svg><span class="homechip"><svg><use href="#home"/></svg></span><div class="sp"></div><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span></div>
+<div class="body">
+<div class="hi">Good afternoon, Nathan<span class="ed">Edit</span></div>
+<div class="today"><div class="h"><b>Today</b><span>Thu, Nov 19</span><a>Open Planner →</a></div>
+<div class="trow" style="--c:var(--meals)">Breakfast for Dinner<small>Dinner</small></div>
+<div class="trow" style="--c:var(--fit)"><span class="cb"></span>Walk<small>Start</small></div>
+<div class="trow" style="--c:var(--labs)"><span class="cb"></span>Walk Brutus</div></div>
+<div class="seclbl">My tiles <a>+ Add</a></div>
+<div class="gb">
+<div class="tb"><span class="bdg" style="background:var(--meals)">12</span><span class="ic" style="background:rgba(251,146,60,.16);color:var(--meals)"><svg><use href="#cart"/></svg></span>Groceries</div>
+<div class="tb"><span class="ic" style="background:rgba(250,204,21,.16);color:var(--fit)"><svg><use href="#food"/></svg></span>Log food</div>
+<div class="tb"><span class="ic" style="background:rgba(250,204,21,.16);color:var(--fit)"><svg><use href="#scale"/></svg></span>Weight</div>
+<div class="tb"><span class="ic" style="background:rgba(251,146,60,.16);color:var(--meals)"><svg><use href="#book"/></svg></span>Recipes</div>
+<div class="tb"><span class="bdg" style="background:var(--planner)">2</span><span class="ic" style="background:rgba(163,230,53,.16);color:var(--planner)"><svg><use href="#cal"/></svg></span>Planner</div>
+<div class="tb"><span class="ic" style="background:rgba(244,114,182,.16);color:var(--notes)"><svg><use href="#plus"/></svg></span>New note</div>
+<div class="tb"><span class="ic" style="background:rgba(251,146,60,.16);color:var(--meals)"><svg><use href="#pin"/></svg></span>Eat Out</div>
+<div class="tb"><span class="ic" style="background:rgba(250,204,21,.16);color:var(--fit)"><svg><use href="#trophy"/></svg></span>Challenges</div>
+<div class="tb"><span class="ic" style="background:rgba(52,211,153,.16);color:var(--money)"><svg><use href="#card"/></svg></span>Money</div>
+<div class="tb"><span class="ic" style="background:rgba(244,114,182,.16);color:var(--notes)"><svg><use href="#note"/></svg></span>Notes</div>
+<div class="tb"><span class="bdg" style="background:var(--opps)">3</span><span class="ic" style="background:rgba(167,139,250,.16);color:var(--opps)"><svg><use href="#star"/></svg></span>New opps</div>
+<div class="tb"><span class="ic" style="background:#151a21;color:var(--mut);border:1px dashed #3a4351"><svg><use href="#plus"/></svg></span>Add</div>
+</div>
+</div>
+<div class="fab"><svg><use href="#spark"/></svg></div>
+</div></div>
+
+<!-- C -->
+<div class="opt"><h2><b>C</b> · Bento: small + wide tiles</h2>
+<p>Each tile can be small or wide. Wide tiles show more of what's inside (next grocery items, macros). Good for a couple of "main" pages plus quick links. Size is picked when you add or edit a tile.</p>
+<div class="phone">
+<div class="top"><svg class="lg"><use href="#lg"/></svg><span class="homechip"><svg><use href="#home"/></svg></span><div class="sp"></div><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span></div>
+<div class="body">
+<div class="hi">Good afternoon, Nathan<span class="ed">Edit</span></div>
+<div class="today"><div class="h"><b>Today</b><span>Thu, Nov 19</span><a>Open Planner →</a></div>
+<div class="trow" style="--c:var(--meals)">Breakfast for Dinner<small>Dinner</small></div>
+<div class="trow" style="--c:var(--fit)"><span class="cb"></span>Walk<small>Start</small></div>
+<div class="trow" style="--c:var(--labs)"><span class="cb"></span>Walk Brutus</div></div>
+<div class="seclbl">My tiles <a>+ Add tile</a></div>
+<div class="gc">
+<div class="tc w"><div style="display:flex;align-items:center;gap:8px"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#cart"/></svg></span><span class="t">Grocery list</span><span style="margin-left:auto;font-weight:700">12</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">Milk</span><span class="pill">Eggs</span><span class="pill">Garlic</span><span class="pill">+9 more</span></div></div>
+<div class="tc"><span class="ic" style="background:rgba(250,204,21,.14);color:var(--fit)"><svg><use href="#food"/></svg></span><div class="t">Log food</div><div class="m">750 kcal left</div></div>
+<div class="tc"><span class="ic" style="background:rgba(244,114,182,.14);color:var(--notes)"><svg><use href="#plus"/></svg></span><div class="t">New note</div><div class="m">Notes</div></div>
+<div class="tc w"><div style="display:flex;align-items:center;gap:8px"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#fork"/></svg></span><span class="t">This week's meals</span></div>
+<div style="display:flex;gap:6px;font-size:11px;color:#c9cfd6"><span class="pill">Thu · Pancakes</span><span class="pill">Fri · Salmon</span><span class="pill">Sat · Out</span></div></div>
+</div>
+</div>
+<div class="fab"><svg><use href="#spark"/></svg></div>
+</div></div>
+
+<!-- D -->
+<div class="opt"><h2><b>D</b> · Compact list</h2>
+<p>One tidy list instead of a grid. Easy to scan, fits long names, and shows a status on the right. Least "app-like" but the fastest to read on a phone.</p>
+<div class="phone">
+<div class="top"><svg class="lg"><use href="#lg"/></svg><span class="homechip"><svg><use href="#home"/></svg></span><div class="sp"></div><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span></div>
+<div class="body">
+<div class="hi">Good afternoon, Nathan<span class="ed">Edit</span></div>
+<div class="today"><div class="h"><b>Today</b><span>Thu, Nov 19</span><a>Open Planner →</a></div>
+<div class="trow" style="--c:var(--meals)">Breakfast for Dinner<small>Dinner</small></div>
+<div class="trow" style="--c:var(--fit)"><span class="cb"></span>Walk<small>Start</small></div>
+<div class="trow" style="--c:var(--labs)"><span class="cb"></span>Walk Brutus</div></div>
+<div class="seclbl">My tiles <a>+ Add</a></div>
+<div class="gd">
+<div class="td"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#cart"/></svg></span><div><div class="t">Grocery list</div><div class="m">Meals</div></div><span class="r"><span style="color:#e8eaed;font-size:13px">12</span><svg><use href="#cv"/></svg></span></div>
+<div class="td"><span class="ic" style="background:rgba(250,204,21,.14);color:var(--fit)"><svg><use href="#food"/></svg></span><div><div class="t">Log food</div><div class="m">Fitness</div></div><span class="r"><span style="color:#aab2bd;font-size:12px">750 left</span><svg><use href="#cv"/></svg></span></div>
+<div class="td"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#book"/></svg></span><div><div class="t">Recipes</div><div class="m">Meals</div></div><span class="r"><svg><use href="#cv"/></svg></span></div>
+<div class="td"><span class="ic" style="background:rgba(250,204,21,.14);color:var(--fit)"><svg><use href="#scale"/></svg></span><div><div class="t">Log weight</div><div class="m">Fitness</div></div><span class="r"><span style="color:#aab2bd;font-size:12px">182.0 lb</span><svg><use href="#cv"/></svg></span></div>
+<div class="td"><span class="ic" style="background:rgba(244,114,182,.14);color:var(--notes)"><svg><use href="#plus"/></svg></span><div><div class="t">New note</div><div class="m">Notes</div></div><span class="r"><svg><use href="#cv"/></svg></span></div>
+</div>
+</div>
+<div class="fab"><svg><use href="#spark"/></svg></div>
+</div></div>
+
+<!-- Picker -->
+<div class="opt"><h2><b>Add a tile</b> · same for every option</h2>
+<p>Tap "+ Add tile": search, or browse by app. Every page in your apps is listed. Tap + to add it; it goes to the end and you can drag it in Edit mode.</p>
+<div class="phone">
+<div class="top"><svg class="lg"><use href="#lg"/></svg><span class="homechip"><svg><use href="#home"/></svg></span><div class="sp"></div></div>
+<div class="dim"></div>
+<div class="sheet">
+<div class="grab"></div>
+<div style="font-weight:700;font-size:17px">Add a tile</div>
+<div class="search"><svg><use href="#srch"/></svg>Search pages…</div>
+<div class="tabs"><span class="tab">All</span><span class="tab on">Meals</span><span class="tab">Fitness</span><span class="tab">Planner</span><span class="tab">Notes</span></div>
+<div class="prow"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#cart"/></svg></span><div><div>Grocery list</div><div class="m">Shows items left</div></div><span class="add done"><svg><use href="#chk"/></svg></span></div>
+<div class="prow"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#book"/></svg></span><div><div>Recipes</div><div class="m">Your recipe book</div></div><span class="add done"><svg><use href="#chk"/></svg></span></div>
+<div class="prow"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#fork"/></svg></span><div><div>This week's meals</div><div class="m">Meal plan</div></div><span class="add"><svg><use href="#plus"/></svg></span></div>
+<div class="prow"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#plus"/></svg></span><div><div>Add recipe</div><div class="m">Paste a link or type it in</div></div><span class="add"><svg><use href="#plus"/></svg></span></div>
+<div class="prow"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#pin"/></svg></span><div><div>Eat Out</div><div class="m">Find a restaurant</div></div><span class="add"><svg><use href="#plus"/></svg></span></div>
+<div class="prow"><span class="ic" style="background:rgba(251,146,60,.14);color:var(--meals)"><svg><use href="#fork"/></svg></span><div><div>Meals (whole app)</div><div class="m">App home</div></div><span class="add"><svg><use href="#plus"/></svg></span></div>
+</div>
+</div></div>
+
+</div></body></html>

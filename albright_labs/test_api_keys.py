@@ -47,9 +47,9 @@ class PageTests(Base):
 
     def test_renders_in_the_account_layout_without_trading(self):
         response = self.client.get(reverse("labs:api_keys"))
-        self.assertEqual((response.context["current_app"], response.context["app_label"]), ("labs", "Labs"))
+        self.assertEqual((response.context["current_app"], response.context["app_label"]), ("account", "Account"))
         page = response.content.decode()
-        self.assertIn('data-app="labs"', page)
+        self.assertIn('data-app="account"', page)
         self.assertNotIn('data-app="trading"', page)
         self.assertIn("&larr; My account", page)
         for tab in ("ChatGPT", "Claude", "Grok", "Gemini", "Other / any AI"):

@@ -169,7 +169,7 @@ class ReturnChipTests(Base):
         self.assertTrue(tiles)
         self.assertTrue(all("data-no-return" in tile for tile in tiles))
         hub = self.page(reverse("labs:hub"))
-        picks = re.findall(r'<a [^>]*data-pick-link[^>]*>', hub)
+        picks = re.findall(r'<a [^>]*data-tile-link[^>]*>', hub)
         self.assertTrue(picks)
         self.assertTrue(all("data-no-return" in pick for pick in picks))
 
@@ -194,12 +194,12 @@ class ResumeTests(Base):
     def test_tiles_resume_the_last_page(self):
         js = static("js/app_nav.js")
         self.assertIn('".app-launcher__tile[data-app-key]"', js)          # the launcher's tiles
-        self.assertIn('".labs-pick[data-key] [data-pick-link]"', js)      # Home's tiles
+        self.assertIn('".ht[data-app-tile] [data-tile-link]"', js)       # Home's whole-app tiles
         self.assertIn('key !== KEY && key !== "home" && sameSite(url)', js)
         self.assertIn('LAST = "nav_last:" + user', js)                    # kept per user
         self.assertNotIn("showRecent", js)
         hub = self.page(reverse("labs:hub"))
-        self.assertRegex(hub, r'<li class="labs-pick[^"]*" data-key="planner"')
+        self.assertRegex(hub, r'<li class="ht" data-key="planner" data-app-tile')
 
     def test_nothing_blocks_the_ios_edge_swipe(self):
         for path in ("js/app_nav.js", "labs/launcher.js", "albright_planner/planner.js", "albright_notes/notes.js",

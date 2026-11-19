@@ -554,3 +554,15 @@
         });
     }
 })();
+
+/* Home's "New note" tile links here with ?start=new (albright_labs.home_tiles): press "+ New note" for them, once
+   (the parameter is dropped first, so Back or a reload doesn't make another). */
+(function () {
+    "use strict";
+    var url = new URL(window.location.href);
+    if (url.searchParams.get("start") !== "new") return;
+    url.searchParams.delete("start");
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
+    var button = document.getElementById("nt-new");
+    if (button) button.click();
+})();

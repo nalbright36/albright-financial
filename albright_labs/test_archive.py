@@ -122,7 +122,7 @@ class HiddenTests(TestCase):
                 client.force_login(self.pat)
                 response = client.get(reverse("labs:root"))
                 self.assertEqual(response.status_code, 200)              # the Home picker, not a redirect
-                self.assertIn('class="labs-pick', response.content.decode())
+                self.assertIn('id="ht-grid"', response.content.decode())
         UserPreference.objects.filter(user=self.pat).update(landing="last_app", landing_page="")
         client = Client()
         client.force_login(self.pat)

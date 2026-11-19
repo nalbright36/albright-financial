@@ -28,20 +28,13 @@ def current_tiles(content):
     return [target for _href, cls, _key, target, _label in TILE.findall(launcher_panel(content)) if "is-current" in cls]
 
 
-PICK = re.compile(r'<li class="labs-pick([^"]*)" data-key="(\w+)"')
+PICK = re.compile(r'<li class="ht([^"]*)" data-key="(\w+)" data-app-tile')
 
 
 def home_tiles(content, include_hidden=False):
-    """The app keys of Home's (the app picker's) tiles, in page order - Favorites first. Hidden apps' tiles are
-    in the page for Edit mode; they're left out unless include_hidden."""
-    return [key for cls, key in PICK.findall(content) if include_hidden or "is-off" not in cls]
-
-
-def favorite_tiles(content):
-    """The app keys in Home's Favorites row."""
-    if 'data-list="favorites"' not in content:
-        return []
-    return home_tiles(content.split('data-list="favorites"', 1)[1].split('data-list="others"', 1)[0])
+    """The app keys of Home's whole-app tiles, in page order (page tiles like "meals.groceries" are left out).
+    include_hidden is kept for old callers - Home has no hidden tiles now."""
+    return [key for _cls, key in PICK.findall(content)]
 
 
 def allow_api_keys(user, on=True):

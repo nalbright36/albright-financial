@@ -150,6 +150,7 @@ def card(opp):
 @login_required
 def inbox(request):
     relevance.expire_stale(user=request.user)   # cheap - so nothing stale is ever shown
+    _mark_inbox_seen(request.user)
     type_key = _type_key(request)
     queue = [card(o) for o in inbox_queryset(request.user, type_key)[:300]]
     return render(request, "albright_crypto_app/inbox.html", {
@@ -159,6 +160,16 @@ def inbox(request):
         "shortcuts": SHORTCUTS, "skip_reasons": SKIP_REASON_KEYS,
         "pending_fit": inbox_queryset(request.user, type_key).filter(fit_method="", work_type__in=relevance.JOB_WORK_TYPES).count(),
     })
+
+
+def _mark_inbox_seen(user):
+    """Home's "New opps" tile counts Inbox items found after this (albright_labs.home_tiles.opps_new)."""
+    from albright_labs import home_tiles
+    from albright_labs.models import UserPreference
+    now = timezone.now()
+    if not UserPreference.objects.filter(user=user).update(opps_seen_at=now):
+        UserPreference.objects.get_or_create(user=user, defaults={"opps_seen_at": now})
+    home_tiles.forget_badges(user)
 
 
 @login_required
