@@ -1,6 +1,7 @@
 {% extends "index.html" %}
 {% load cache_bust %}
 {% block page_title %}{% if recipe %}Edit {{ recipe.title }}{% else %}New recipe{% endif %} · {% endblock %}
+{% block fab_items %}{% include "albright_meals/_converter_fab.html" %}{% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
     <a href="{% if recipe %}{% url 'albright_meals:recipe' recipe.pk %}{% else %}{% url 'albright_meals:recipes' %}{% endif %}" class="meals-back">&larr; {% if recipe %}{{ recipe.title }}{% else %}Recipes{% endif %}</a>

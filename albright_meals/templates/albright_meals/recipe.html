@@ -1,6 +1,7 @@
 {% extends "index.html" %}
 {% load cache_bust %}
 {% block page_title %}{{ recipe.title }} · {% endblock %}
+{% block fab_items %}{% include "albright_meals/_converter_fab.html" %}{% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
     <a href="{% url 'albright_meals:recipes' %}{% if not owned %}?tab={% if shared_grant %}shared{% else %}library{% endif %}{% endif %}" class="meals-back">&larr; Recipes</a>

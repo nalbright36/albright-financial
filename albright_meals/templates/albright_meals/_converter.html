@@ -1,14 +1,10 @@
 {% load cache_bust %}
 {% comment %}
-Convert (static/meals/converter.js + convert_math.js; front-end only): the floating button (bottom right; "C" on a
-desktop) and its dialog - a centered dialog on desktop, a bottom sheet on phones. Volume / Weight / Temperature,
+Convert (static/meals/converter.js + convert_math.js; front-end only): its dialog (the floating button is
+_converter_fab.html, in the page's {% block fab_items %}; "C" on a desktop) - a centered dialog on desktop, a bottom sheet on phones. Volume / Weight / Temperature,
 fractions in and out, a multiplier, and approximate ingredient weights. Any element with data-convert-open opens it
 (the icon by each ingredient passes data-convert-qty / -unit / -name).
 {% endcomment %}
-<button type="button" class="meals-convert-fab" id="meals-convert-open" data-convert-open aria-haspopup="dialog" aria-controls="meals-converter" title="Convert measurements (C)">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v18M5 21h14M6 7h12M6 7l-3 7a3 3 0 0 0 6 0L6 7zM18 7l-3 7a3 3 0 0 0 6 0l-3-7z"/></svg>
-    <span>Convert</span>
-</button>
 
 <dialog class="meals-converter" id="meals-converter" aria-labelledby="meals-converter-h">
     <div class="meals-converter__grip" data-convert-grip aria-hidden="true"><span></span></div>

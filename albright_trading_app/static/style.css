@@ -2527,16 +2527,32 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .meals-nut-manual__form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); margin-top: var(--space-3); }
 .meals-nut-manual__form .btn { grid-column: 1 / -1; justify-self: start; }
 
-/* ---------- Meals: Convert (albright_meals/_converter.html, static/meals/converter.js) ---------- */
-/* The floating button: Meals orange, bottom right, above the iPhone's home indicator. */
+/* ---------- The floating dock (templates/index.html, js/fab_dock.js) ---------- */
+/* Every floating button in one fixed row, bottom right, above the iPhone's home indicator and lifted over any fixed
+   bottom bar (--dock-lift). A page's own buttons ({% block fab_items %}) come first; the AI assistant's is always last,
+   so it's the rightmost - and without it, the next one takes the corner. Items never position themselves. */
+.fab-dock {
+  position: fixed; z-index: 95;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px) + 12px) + var(--dock-lift, 0px));
+  display: flex; flex-direction: row; align-items: center; gap: 12px;
+  transition: bottom .2s ease;
+}
+.fab-dock:empty { display: none; }
+
+/* ---------- Meals: Convert (albright_meals/_converter.html, _converter_fab.html, static/meals/converter.js) ---------- */
+/* Its dock button: a Meals-orange pill, 56px tall like the AI button; an icon-only circle under 480px. */
 .meals-convert-fab {
-  position: fixed; z-index: 90; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px));
-  display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 56px; padding: 0 20px; border: 0; border-radius: 999px;
   background: var(--accent-solid); color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--glow-accent, 0 8px 24px rgba(0, 0, 0, .3));
 }
 .meals-convert-fab:hover { filter: brightness(1.06); }
 .meals-convert-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.meals-convert-fab svg { width: 20px; height: 20px; }
+.meals-convert-fab svg { width: 20px; height: 20px; flex-shrink: 0; }
+@media (max-width: 479.98px) {
+  .meals-convert-fab { width: 56px; padding: 0; }
+  .meals-convert-fab__label { display: none; }
+}
 .meals-page { padding-bottom: 96px; }                       /* room for the button under the last line */
 /* The icon by each ingredient line. */
 .meals-ingredient-line { display: list-item; }

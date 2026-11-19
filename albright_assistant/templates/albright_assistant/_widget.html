@@ -1,9 +1,9 @@
 {% comment %}
 The floating AI assistant (templates/index.html, every signed-in app page - only for people with "Can use AI
-assistant": context_processors.assistant). The round button bottom-right in the app's accent, lifted above any fixed
-bottom bar (static/assistant/assistant.js). Not connected: the button opens a short "Connect your AI" card. Connected:
+assistant": context_processors.assistant). Not connected: the button opens a short "Connect your AI" card. Connected:
 a drawer on the right (a full-screen sheet on phones) - the chat, past chats, starter chips, the composer. Every
-answer is fetched by polling /assistant/runs/<id>/ (albright_assistant.runner).
+answer is fetched by polling /assistant/runs/<id>/ (albright_assistant.runner). The round button itself is
+_widget_fab.html, the last item in the floating dock (index.html .fab-dock); this is everything it opens.
 {% endcomment %}
 {% with w=assistant_widget %}
 <div class="as-widget" id="assistant" data-connected="{{ w.connected|yesno:'1,0' }}"
@@ -14,11 +14,6 @@ answer is fetched by polling /assistant/runs/<id>/ (albright_assistant.runner).
      data-undo-url="{% url 'assistant:action_undo' 0 %}" data-setup-url="{% url 'assistant:setup' %}">
     {{ w.page|json_script:"assistant-page" }}
     <input type="hidden" id="assistant-csrf" value="{{ csrf_token }}">
-    <button type="button" class="as-fab" id="assistant-fab" aria-expanded="false"
-            aria-controls="{% if w.connected %}assistant-panel{% else %}assistant-connect-card{% endif %}"
-            aria-label="{% if w.connected %}Open the AI assistant{% else %}Set up the AI assistant{% endif %}">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
-    </button>
 
     {% if not w.connected %}
     <section class="as-connect" id="assistant-connect-card" role="dialog" aria-labelledby="assistant-connect-title" hidden>

@@ -479,6 +479,11 @@
         {# The current app's own script (apps_registry.App.script), then anything else a page adds. #}
         {% if app_script %}<script src="{% static_version app_script %}"></script>{% endif %}
         {% block app_scripts %}{% endblock %}
+        {% comment %}The floating dock: every floating button in one fixed row at the bottom right (style.css .fab-dock,
+        js/fab_dock.js lifts it above fixed bottom bars) - the page's own ({% block fab_items %}, e.g. Meals' Convert)
+        on the left, the AI assistant's always last. Empty, it renders as an empty element that takes no space.{% endcomment %}
+        {% if user.is_authenticated %}{% spaceless %}<div class="fab-dock" id="fab-dock">{% block fab_items %}{% endblock %}{% if assistant_widget %}{% include "albright_assistant/_widget_fab.html" %}{% endif %}</div>{% endspaceless %}
+        <script src="{% static_version 'js/fab_dock.js' %}" defer></script>{% endif %}
         {% if assistant_widget %}{% include "albright_assistant/_widget.html" %}<script src="{% static_version 'assistant/assistant.js' %}" defer></script>{% endif %}
     </body>
 </html>

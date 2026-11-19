@@ -11,31 +11,7 @@
     var target = document.getElementById(connected ? "assistant-panel" : "assistant-connect-card");
     var POLL_MS = 1000;
 
-    // ---------- lift the button above fixed bottom bars ----------
-    var AVOID = ".fx-bar, .fx-setup__bar, .mn-actions--sticky, .meals-convert-fab, .wi-panel.is-open, [data-assistant-avoid]";
-    var lifting = false;
-    function lift() {
-        lifting = false;
-        var vh = window.innerHeight, need = 0;
-        Array.prototype.forEach.call(document.querySelectorAll(AVOID), function (el) {
-            if (root.contains(el) || !el.offsetParent && getComputedStyle(el).position !== "fixed") return;
-            var r = el.getBoundingClientRect();
-            if (r.height === 0 || r.width === 0 || r.top >= vh || r.bottom < vh - 4) return;   // not at the bottom
-            if (r.right < window.innerWidth - 120) return;                                     // not under the button
-            need = Math.max(need, vh - r.top + 4);
-        });
-        root.style.setProperty("--as-lift", Math.round(need) + "px");
-        fab.style.setProperty("--as-lift", Math.round(need) + "px");
-        if (target) target.style.setProperty("--as-lift", Math.round(need) + "px");
-    }
-    function queueLift() { if (!lifting) { lifting = true; window.requestAnimationFrame(lift); } }
-    window.addEventListener("resize", queueLift);
-    window.addEventListener("scroll", queueLift, { passive: true });
-    if ("MutationObserver" in window) {
-        new MutationObserver(queueLift).observe(document.body, { childList: true, subtree: true, attributes: true,
-                                                                 attributeFilter: ["class", "hidden", "style"] });
-    }
-    lift();
+    // The button sits in the floating dock (index.html); js/fab_dock.js lifts the dock over fixed bottom bars.
 
     // ---------- open / close ----------
     function isOpen() { return target && !target.hidden; }

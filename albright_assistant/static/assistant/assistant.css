@@ -1,28 +1,25 @@
 /* The AI assistant: the floating button and its drawer (albright_assistant/_widget.html, assistant.js), and the
    Your AI assistant setup page (setup.html). App tokens from style.css, so it's in the current app's accent and
-   follows light/dark. --as-lift: how far the button rises to clear a fixed bottom bar (set by assistant.js). */
+   follows light/dark. The button lives in the floating dock (index.html .fab-dock, style.css) - it has no position of its
+   own; --dock-lift (js/fab_dock.js) is how far the dock rises to clear a fixed bottom bar. */
 
 /* ---------- The button ---------- */
 .as-fab {
-  position: fixed; z-index: 95;
-  right: max(16px, env(safe-area-inset-right, 0px));
-  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px) + 12px) + var(--as-lift, 0px));
-  width: 56px; height: 56px; border-radius: 50%; border: 0; padding: 0;
+  flex-shrink: 0; width: 56px; height: 56px; border-radius: 50%; border: 0; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent-solid); color: var(--on-accent, #fff); cursor: pointer;
   box-shadow: var(--glow-primary, 0 8px 24px rgba(0, 0, 0, .3));
-  transition: bottom .2s ease, transform .15s ease;
+  transition: transform .15s ease;
 }
 .as-fab:hover { transform: translateY(-1px); filter: brightness(1.06); }
 .as-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .as-fab[aria-expanded="true"] { transform: scale(.94); }
-.as-widget.is-open .as-fab { visibility: hidden; }
-@media (max-width: 640px) { .as-widget.is-open .as-fab { display: none; } }
+.as-fab[aria-expanded="true"] { visibility: hidden; }      /* its drawer / card is open above the dock */
 
 /* ---------- Connect card (not connected yet) ---------- */
 .as-connect {
   position: fixed; z-index: 1100; right: max(16px, env(safe-area-inset-right, 0px));
-  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px) + 12px) + var(--as-lift, 0px) + 68px);
+  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px) + 12px) + var(--dock-lift, 0px) + 68px);   /* above the dock */
   width: min(340px, calc(100vw - 32px)); box-sizing: border-box; padding: 18px 18px 16px;
   background: var(--surface-raised, var(--surface)); color: var(--text-primary); border: 1px solid var(--border);
   border-radius: 16px; box-shadow: var(--shadow-lg, 0 20px 50px rgba(0, 0, 0, .35));

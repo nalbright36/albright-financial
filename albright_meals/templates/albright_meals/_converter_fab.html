@@ -1,0 +1,7 @@
+{% comment %}Meals' Convert button, in the floating dock left of the AI assistant (the page's {% block fab_items %} -
+templates/index.html .fab-dock). A pill with the icon and "Convert"; an icon-only 56px circle under 480px. It opens
+_converter.html's dialog.{% endcomment %}
+<button type="button" class="meals-convert-fab" id="meals-convert-open" data-convert-open aria-haspopup="dialog" aria-controls="meals-converter" title="Convert measurements (C)" aria-label="Measurement converter">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v18M5 21h14M6 7h12M6 7l-3 7a3 3 0 0 0 6 0L6 7zM18 7l-3 7a3 3 0 0 0 6 0l-3-7z"/></svg>
+    <span class="meals-convert-fab__label" aria-hidden="true">Convert</span>
+</button>
