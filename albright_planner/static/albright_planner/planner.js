@@ -153,21 +153,32 @@
             return was || !open ? "task" : askSubtasks(open, form);
         }).then(function (choice) {
             if (!choice) return;
-            var body = new FormData(form);
-            if (choice === "all") body.append("all_subtasks", "1");
-            show(!was);
-            return post(form.action, body).then(function (res) {
-                if (!res.ok) { show(was); return; }
-                show(res.data.done);
-                withTwins(item).forEach(function (el) {
-                    showTask(el, res.data.done);
-                    if (choice === "all") { setRows(el, true); el.dataset.openSubtasks = "0"; }
-                    showProgress(el, res.data);
-                    if (res.data.note) weighInNote(el, res.data.note);
-                    else el.querySelectorAll(".pl-kept-note").forEach(function (n) { n.remove(); });
-                    if (todayBox && todayBox.contains(el)) { todayChecked(el, res.data.done); return; }
-                    if (res.data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
-                });
+            var want = !was;
+            show(want);
+            if (!window.QuickSave) return;
+            // The state is sent (checked=1/0), not "flip it", so a retry or a second tap can't undo the first. Per
+            // occurrence only the latest tap is sent, one request at a time; a failure puts the box back and offers
+            // "Couldn't save - tap to retry" (labs/quicksave.js).
+            QuickSave.set("task:" + form.action + ":" + (form.querySelector("[name=date]") || {}).value, want, function (state) {
+                var body = new FormData(form);
+                body.set("checked", state ? "1" : "0");
+                if (state && choice === "all") body.append("all_subtasks", "1");
+                return QuickSave.request(form.action, {body: body});
+            }, {
+                initial: was, apply: show,
+                revert: function (state) { show(state); },
+                done: function (data, state, latest) {
+                    if (!latest) return;                              // another tap is on its way: wait for it
+                    withTwins(item).forEach(function (el) {
+                        showTask(el, data.done);
+                        if (data.done && choice === "all") { setRows(el, true); el.dataset.openSubtasks = "0"; }
+                        showProgress(el, data);
+                        if (data.note) weighInNote(el, data.note);
+                        else el.querySelectorAll(".pl-kept-note").forEach(function (n) { n.remove(); });
+                        if (todayBox && todayBox.contains(el)) { todayChecked(el, data.done); return; }
+                        if (data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
+                    });
+                },
             });
         }).catch(function () { show(was); });
     });
@@ -348,7 +359,9 @@
             showTask(d.el, false);
             todayCount({open: 1, overdue: d.overdue ? 1 : 0});
             todayEmpty(d.list);
-            post(form.action, new FormData(form)).then(function (res) {      // the box toggles it back to open
+            var undoBody = new FormData(form);
+            undoBody.set("checked", "0");                                     // back to open, whatever the server has
+            (window.QuickSave ? QuickSave.request(form.action, {body: undoBody}) : post(form.action, undoBody)).then(function (res) {
                 if (res.ok && !res.data.done) return;
                 throw new Error("not undone");
             }).catch(function () {
@@ -367,35 +380,43 @@
         if (!form.matches || !form.matches("[data-checklist-toggle]") || !window.fetch) return;
         event.preventDefault();
         var row = form.closest(".pl-cl__row"), box = form.querySelector(".pl-cl__check");
-        var was = box.getAttribute("aria-checked") === "true";
+        var was = box.getAttribute("aria-checked") === "true", want = !was;
         var show = function (checked) {
             box.setAttribute("aria-checked", checked ? "true" : "false");
             row.classList.toggle("is-done", checked);
         };
-        show(!was);
-        post(form.action, new FormData(form)).then(function (res) {
-            if (!res.ok) { show(was); return; }
-            show(res.data.checked);
-            var item = form.closest(".pl-item, .pl-view");
-            if (!item) {                                              // the edit page's list
-                showProgress(document, res.data);
-                var by = row.querySelector("[data-cl-by]");
-                if (by) by.textContent = res.data.done_by ? "Done by " + res.data.done_by : "";
-                return;
-            }
-            withTwins(item).forEach(function (el) {
-                el.querySelectorAll('.pl-cl__row[data-row="' + row.dataset.row + '"]').forEach(function (r) {
-                    r.classList.toggle("is-done", !!res.data.checked);
-                    var b = r.querySelector(".pl-cl__check");
-                    if (b) b.setAttribute("aria-checked", res.data.checked ? "true" : "false");
-                    var by = r.querySelector("[data-cl-by]");
-                    if (by) by.textContent = res.data.done_by ? "Done by " + res.data.done_by : "";   // shared tasks only
+        show(want);
+        if (!window.QuickSave) return;
+        QuickSave.set("subtask:" + form.action + ":" + (form.querySelector("[name=date]") || {}).value, want, function (state) {
+            var body = new FormData(form);
+            body.set("checked", state ? "1" : "0");                  // the state, not "flip it"
+            return QuickSave.request(form.action, {body: body});
+        }, {
+            initial: was, apply: show,
+            revert: function (state) { show(state); },
+            done: function (data, state, latest) {
+                if (!latest) return;
+                var item = form.closest(".pl-item, .pl-view");
+                if (!item) {                                              // the edit page's list
+                    showProgress(document, data);
+                    var by = row.querySelector("[data-cl-by]");
+                    if (by) by.textContent = data.done_by ? "Done by " + data.done_by : "";
+                    return;
+                }
+                withTwins(item).forEach(function (el) {
+                    el.querySelectorAll('.pl-cl__row[data-row="' + row.dataset.row + '"]').forEach(function (r) {
+                        r.classList.toggle("is-done", !!data.checked);
+                        var b = r.querySelector(".pl-cl__check");
+                        if (b) b.setAttribute("aria-checked", data.checked ? "true" : "false");
+                        var by = r.querySelector("[data-cl-by]");
+                        if (by) by.textContent = data.done_by ? "Done by " + data.done_by : "";   // shared tasks only
+                    });
+                    showProgress(el, data);
+                    el.dataset.openSubtasks = String(data.open);
+                    showTask(el, data.task_done);
                 });
-                showProgress(el, res.data);
-                el.dataset.openSubtasks = String(res.data.open);
-                showTask(el, res.data.task_done);
-            });
-        }).catch(function () { show(was); });
+            },
+        });
     });
 
     // ---------- Forms that ask first (Delete) ----------
@@ -471,26 +492,41 @@
         event.preventDefault();
         openView(link.getAttribute("href"), link);
     });
-    // The linked note's checklist (the panel shows the whole note): a box ticks that "- [ ]" line in the note
-    // itself - Notes' check endpoint, with the version the panel shows - and the note's fresh HTML comes back. If
-    // someone changed the note meanwhile, their version shows and nothing is overwritten.
+    // The linked note's checklist (the panel shows the whole note): a box ticks that one "- [ ]" line in the note
+    // itself - Notes' check endpoint, by the item's stable id (data-item-id), on the note's latest text - so someone
+    // else's edit meanwhile is never overwritten. The box flips at once; per item only the latest tap is sent
+    // (labs/quicksave.js). When the note had changed, its fresh HTML comes back and replaces the panel's copy.
     document.addEventListener("change", function (event) {
         var box = event.target;
-        var note = box.matches && box.matches("input.nt-check[data-task]") && box.closest("[data-note-check-url]");
-        if (!note) return;
-        var status = note.parentNode.querySelector(".pl-view__note-status"), item = box.closest("li"), checked = box.checked;
+        var note = box.matches && box.matches("input.nt-check[data-item-id]") && box.closest("[data-note-check-url]");
+        if (!note || !window.QuickSave) return;
+        var status = note.parentNode.querySelector(".pl-view__note-status"), id = box.dataset.itemId, checked = box.checked;
         function say(text) { if (status) status.textContent = text; }
-        function undo(text) { box.checked = !checked; if (item) item.classList.toggle("done", !checked); say(text); }
-        if (item) item.classList.toggle("done", checked);
-        say("Saving…");
-        post(note.dataset.noteCheckUrl, {index: parseInt(box.dataset.task, 10), checked: checked,
-                                         version: parseInt(note.dataset.noteVersion, 10)}, true).then(function (res) {
-            var d = res.data || {};
-            if (typeof d.html === "string" && d.version) { note.innerHTML = d.html; note.dataset.noteVersion = d.version; }
-            if (res.ok) say("Saved to the note");
-            else if (d.conflict) say("The note was changed elsewhere – this is the latest. Tick again if you still need to.");
-            else undo("Not saved – try again.");
-        }).catch(function () { undo("Offline – not saved."); });
+        function show(state) {
+            var b = note.querySelector('input.nt-check[data-item-id="' + id + '"]'), li = b && b.closest("li");
+            if (b) b.checked = state;
+            if (li) li.classList.toggle("done", state);
+        }
+        show(checked);
+        QuickSave.set("note:" + note.dataset.noteCheckUrl + ":" + id, checked, function (state) {
+            return QuickSave.request(note.dataset.noteCheckUrl, {json: true, body: {item_id: id, checked: state,
+                version: parseInt(note.dataset.noteVersion, 10)}});
+        }, {
+            initial: !checked, apply: show,
+            done: function (d) {
+                if (typeof d.html === "string") note.innerHTML = d.html;
+                if (d.version) note.dataset.noteVersion = d.version;
+                say("Saved to the note");
+            },
+            revert: function (state, d) {
+                show(state);
+                if (d && d.missing && typeof d.html === "string") {
+                    note.innerHTML = d.html;
+                    note.dataset.noteVersion = d.version;
+                    say("That item was changed elsewhere – this is the latest.");
+                }
+            },
+        });
     });
     document.addEventListener("click", function (event) {                            // a menu closes on a click outside it
         document.querySelectorAll(".pl-menu[open]:not([data-menu])").forEach(function (menu) {   // data-menu ones: js/menu.js

@@ -164,7 +164,7 @@ class SharingTests(Base):
     def test_others_get_404_for_every_page_and_action(self):
         note = self.note()
         stranger = self.as_user(self.stranger)
-        self.assertEqual(stranger.get(url("note", note.pk)).status_code, 404)
+        self.assertEqual(stranger.get(url("note", note.pk)).status_code, 302)
         for name in ("pin", "archive", "delete", "link_add"):
             with self.subTest(name=name):
                 self.assertEqual(stranger.post(url(name, note.pk)).status_code, 404)
@@ -214,7 +214,7 @@ class SharingTests(Base):
         self.assertEqual(grants_of(note), [(self.wife.pk, "view")])
         self.client.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "remove", "grant": grant.pk})
         self.assertEqual(grants_of(note), [])
-        self.assertEqual(self.as_user(self.wife).get(url("note", note.pk)).status_code, 404)
+        self.assertEqual(self.as_user(self.wife).get(url("note", note.pk)).status_code, 302)
 
 
 class MarkdownTests(Base):
@@ -253,8 +253,11 @@ class ChecklistTests(Base):
 
     def test_checklist_renders_as_checkboxes_in_order(self):
         html = str(render.render(self.BODY, editable=True))
-        boxes = re.findall(r'<input type="checkbox" class="nt-check" data-task="(\d)"( checked)?', html)
+        boxes = re.findall(r'<input type="checkbox" class="nt-check" data-task="(\d)" data-item-id="[0-9a-f]{10}-0"( checked)?', html)
         self.assertEqual(boxes, [("0", ""), ("1", " checked"), ("2", "")])
+        # Each item's id is its own text's: typing a new line above doesn't change the others'.
+        ids = render.item_ids(self.BODY)
+        self.assertEqual(render.item_ids("- [ ] new first\n" + self.BODY)[1:], ids)
         self.assertIn("- [ ] not a task", html)                       # code blocks stay text
         self.assertNotIn("data-task", str(render.render(self.BODY, editable=False)))
 
@@ -268,8 +271,19 @@ class ChecklistTests(Base):
         note.refresh_from_db()
         self.assertIn("- [ ] eggs", note.body)
         self.assertIn("- [ ] not a task", note.body)
-        self.assertEqual(self.post_json(url("check", note.pk), {"index": 9, "checked": True, "version": 3}).status_code, 400)
-        self.assertEqual(self.post_json(url("check", note.pk), {"index": 0, "checked": True, "version": 1}).status_code, 409)
+        self.assertEqual(self.post_json(url("check", note.pk), {"index": 9, "checked": True, "version": 3}).status_code, 409)
+        # Sent from an older version: still just that one line, on the latest text (nothing else is overwritten).
+        stale = self.post_json(url("check", note.pk), {"index": 0, "checked": True, "version": 1})
+        self.assertEqual(stale.status_code, 200)
+        note.refresh_from_db()
+        self.assertIn("- [x] milk", note.body)
+        self.assertIn("- [ ] eggs", note.body)
+        # By stable id (what the editor sends).
+        bread = render.item_ids(note.body)[2]
+        self.assertEqual(self.post_json(url("check", note.pk), {"item_id": bread, "checked": False,
+                                                                "version": note.version}).json()["checked"], False)
+        note.refresh_from_db()
+        self.assertIn("* [ ] bread", note.body)
 
 
 class LinkTests(Base):

@@ -74,7 +74,7 @@ class IsolationTests(Base):
     def test_pages_404_and_lists_are_empty(self):
         kim = self.kim_client
         for path in (url("recipe", self.meatballs.pk), url("recipe_edit", self.meatballs.pk), url("plan_entry", self.entry.pk)):
-            self.assertEqual(kim.get(path).status_code, 404, path)
+            self.assertEqual(kim.get(path).status_code, 302, path)       # back to Meals with a note (item_page)
         for path, data in ((url("plan_move", self.entry.pk), {"date": self.today, "slot": "lunch"}),
                            (url("plan_delete", self.entry.pk), {}), (url("plan_status", self.entry.pk), {"status": "cooked"}),
                            (url("grocery_toggle", self.milk.pk), {}), (url("grocery_delete", self.milk.pk), {}),
@@ -151,14 +151,14 @@ class LibraryTests(Base):
     def test_library_is_read_only_for_everyone_with_meals(self):
         meatballs = self.recipe(source_url="https://example.com/meatballs")
         kim = self.as_user(self.kim)
-        self.assertEqual(kim.get(url("recipe", meatballs.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("recipe", meatballs.pk)).status_code, 302)
         self.client.post(url("recipe_visibility", meatballs.pk), {"visibility": "library"})
         library = kim.get(url("recipes") + "?tab=library").content.decode()
         self.assertIn("Family Meatballs", library)
         page = kim.get(url("recipe", meatballs.pk)).content.decode()
         self.assertIn("Save to my recipes", page)
         self.assertNotIn(url("recipe_edit", meatballs.pk), page)
-        self.assertEqual(kim.get(url("recipe_edit", meatballs.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("recipe_edit", meatballs.pk)).status_code, 302)
         self.assertEqual(kim.post(url("recipe_visibility", meatballs.pk), {"visibility": "household"}).status_code, 404)
         self.assertNotIn("Family Meatballs", kim.get(url("recipes")).content.decode())     # not in her own recipes
 
@@ -175,7 +175,7 @@ class LibraryTests(Base):
         self.assertIn("Saved from Albrights", page)
         self.assertIn(url("recipe_edit", copy.pk), page)                   # hers to edit, rate, plan
         self.client.post(url("recipe_visibility", meatballs.pk), {"visibility": "household"})
-        self.assertEqual(kim.get(url("recipe", meatballs.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("recipe", meatballs.pk)).status_code, 302)
         self.assertEqual(kim.get(url("recipe", copy.pk)).status_code, 200)
 
 
@@ -222,7 +222,7 @@ class ShareTests(Base):
         self.assertIn("shared this with you", page)
         self.assertIn("read-only", page)
         self.assertNotIn(url("recipe_edit", self.meatballs.pk), page)
-        self.assertEqual(kim.get(url("recipe_edit", self.meatballs.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("recipe_edit", self.meatballs.pk)).status_code, 302)
         self.assertEqual(self.share("nate", client=kim).status_code, 400)        # can't reshare
         grant.refresh_from_db()
         self.assertIsNotNone(grant.seen_at)                                     # opening it clears the notice
@@ -249,7 +249,7 @@ class ShareTests(Base):
         kim.post(url("recipe_save_copy", self.meatballs.pk))
         grant = ShareGrant.objects.get()
         self.client.post(reverse("labs:share", args=["albright_meals.Recipe", self.meatballs.pk]), {"action": "remove", "grant": grant.pk})
-        self.assertEqual(kim.get(url("recipe", self.meatballs.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("recipe", self.meatballs.pk)).status_code, 302)
         self.assertNotIn("Family Meatballs", kim.get(url("recipes") + "?tab=shared").content.decode()
                          .split('id="recipe-list"', 1)[1])
         self.assertTrue(Recipe.objects.filter(space=self.theirs).exists())

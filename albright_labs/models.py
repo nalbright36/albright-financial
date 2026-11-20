@@ -200,8 +200,10 @@ class UserPreference(models.Model):
 
     @classmethod
     def for_user(cls, user):
-        """The saved preference, or an unsaved default (the app picker) - never creates a row just by reading."""
-        return cls.objects.filter(user=user).first() or cls(user=user)
+        """The saved preference, or an unsaved default (the app picker) - never creates a row just by reading.
+        Read once per request (albright_labs.request_cache)."""
+        from .request_cache import get
+        return get(("pref", getattr(user, "pk", None)), lambda: cls.objects.filter(user=user).first() or cls(user=user))
 
 
 class InviteRequest(models.Model):

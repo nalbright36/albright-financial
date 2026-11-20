@@ -14,3 +14,5 @@ class AlbrightLabsConfig(AppConfig):
         connect_signals()            # deleting a shared thing deletes its ShareGrants
         connect_connection_signals()  # joining a circle restores hidden shares with its members
         connect_attachment_signals()  # deleting a task or note deletes its attachments
+        from .request_cache import connect as connect_request_cache
+        connect_request_cache()      # a preference / circle / space change clears the per-request memo

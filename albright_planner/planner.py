@@ -48,7 +48,8 @@ def user_zone(user):
     """The zone `user` sees the Planner in (PlannerSettings.timezone; no settings row yet: the default)."""
     name = None
     if user is not None and getattr(user, "is_authenticated", False):
-        name = PlannerSettings.objects.filter(user=user).values_list("timezone", flat=True).first()
+        row = PlannerSettings.row(user)
+        name = row.timezone if row is not None else None
     return zone(name)
 
 
@@ -403,7 +404,7 @@ def toggle(item, occurrence_date, user, done=None):
     change shows in others' activity."""
     was_done = ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).exists()
     now_done = _toggle_one_at_a_time(item, occurrence_date, user, done) if item.one_at_a_time \
-        else _toggle(item, occurrence_date, user, done)
+        else _toggle(item, occurrence_date, user, done, was_done)
     if now_done is not None and now_done != was_done:
         _record_toggle(item, occurrence_date, now_done, user)
         if item.source_app == "fitness":               # one done state: the workout / weigh-in in Fitness follows
@@ -430,16 +431,15 @@ def _record_toggle(item, occurrence_date, done, user):
                                  plural="reopened {n} items")
 
 
-def _toggle(item, occurrence_date, user, done):
+def _toggle(item, occurrence_date, user, done, was_done):
     if not recurrence.is_scheduled(item, occurrence_date):
         return None
-    existing = ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date)
-    want = (not existing.exists()) if done is None else done
-    if want:
+    want = (not was_done) if done is None else done
+    if want and not was_done:
         ItemCompletion.objects.get_or_create(item=item, occurrence_date=occurrence_date,
                                              defaults={"completed_by": user})
-    else:
-        existing.delete()
+    elif not want and was_done:
+        ItemCompletion.objects.filter(item=item, occurrence_date=occurrence_date).delete()
     return want
 
 

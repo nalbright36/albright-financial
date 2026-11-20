@@ -142,7 +142,8 @@ def catalog(user=None):
     gets its tile without being listed here), then - for a user - their Visuals."""
     tiles = [t for t in [_app_tile(app) for app in apps_registry.APPS] + list(PAGES) if t.app in apps_registry.BY_KEY]
     if user is not None and getattr(user, "is_authenticated", False):
-        tiles += visual_tiles(user)
+        from .request_cache import get
+        tiles += get(("visual-tiles", user.pk), lambda: visual_tiles(user))     # Home asks twice: once per request
     return {t.key: t for t in tiles}
 
 

@@ -8,3 +8,7 @@ class AlbrightPlannerConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401 - grocery lines in task checklists
+        from albright_labs.request_cache import watch
+
+        from .models import PlannerSettings
+        watch(PlannerSettings)   # PlannerSettings.row / for_user are read once per request

@@ -52,29 +52,41 @@ class LinkedNoteTests(Base):
         section = note_section(self.panel(self.task))
         self.assertIn(f'data-note-check-url="/notes/{self.note.pk}/check/"', section)
         self.assertIn(f'data-note-version="{self.note.version}"', section)
-        self.assertIn('class="nt-check" data-task="0"', section)
-        self.assertIn('class="nt-check" data-task="1" checked', section)
-        # The panel's box posts here (planner.js) - Notes' own endpoint.
+        self.assertRegex(section, r'class="nt-check" data-task="0" data-item-id="[0-9a-f]{10}-0" aria-label')
+        self.assertRegex(section, r'class="nt-check" data-task="1" data-item-id="[0-9a-f]{10}-0" checked')
+        # The panel's box posts here (planner.js) - Notes' own endpoint, by the item's stable id: a tiny reply.
+        stove = re.search(r'data-task="0" data-item-id="([^"]+)"', section).group(1)
         response = self.client.post(f"/notes/{self.note.pk}/check/", data=json.dumps(
-            {"index": 0, "checked": True, "version": self.note.version}), content_type="application/json")
+            {"item_id": stove, "checked": True, "version": self.note.version}), content_type="application/json")
         self.assertEqual(response.status_code, 200)
         self.note.refresh_from_db()
         self.assertIn("- [x] stove", self.note.body)
-        self.assertIn('data-task="0" checked', response.json()["html"])
+        self.assertEqual(response.json(), {"ok": True, "version": self.note.version, "checked": True})
         # ...and the panel shows it ticked, at the new version.
         section = note_section(self.panel(self.task))
-        self.assertIn('class="nt-check" data-task="0" checked', section)
+        self.assertRegex(section, r'class="nt-check" data-task="0" data-item-id="[^"]+" checked')
         self.assertIn(f'data-note-version="{self.note.version}"', section)
 
-    def test_a_stale_tick_is_a_conflict_not_an_overwrite(self):
+    def test_a_stale_tick_changes_only_its_own_line(self):
+        from albright_notes.render import item_ids
+        stove, matches = item_ids(self.note.body)
         version = self.note.version
-        self.client.post(f"/notes/{self.note.pk}/check/", data=json.dumps({"index": 0, "checked": True, "version": version}),
+        self.client.post(f"/notes/{self.note.pk}/check/", data=json.dumps({"item_id": stove, "checked": True, "version": version}),
                          content_type="application/json")
+        # A tap sent from the older version: applied to the latest text - the other tick stays - and the reply
+        # carries the latest note so the panel catches up.
         stale = self.client.post(f"/notes/{self.note.pk}/check/", data=json.dumps(
-            {"index": 1, "checked": False, "version": version}), content_type="application/json")
-        self.assertEqual(stale.status_code, 409)
+            {"item_id": matches, "checked": False, "version": version}), content_type="application/json")
+        self.assertEqual(stale.status_code, 200)
         self.note.refresh_from_db()
-        self.assertIn("- [x] matches", self.note.body)
+        self.assertIn("- [x] stove", self.note.body)
+        self.assertIn("- [ ] matches", self.note.body)
+        self.assertIn("html", stale.json())
+        # An item whose text was edited since: 409, nothing changed.
+        gone = self.client.post(f"/notes/{self.note.pk}/check/", data=json.dumps(
+            {"item_id": "0000000000-0", "checked": True, "version": self.note.version}), content_type="application/json")
+        self.assertEqual(gone.status_code, 409)
+        self.assertTrue(gone.json()["missing"])
 
     def test_view_only_note_is_read_only_here(self):
         sam = self.wife

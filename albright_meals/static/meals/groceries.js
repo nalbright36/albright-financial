@@ -109,14 +109,44 @@
         }).finally(function () { busy -= 1; });
     }
 
+    // Check off: the row flips at once and the state (checked=1/0) goes in the background - per line only the latest
+    // tap, one request at a time; a failure flips it back with "Couldn't save - tap to retry" (labs/quicksave.js).
+    // The reply is tiny (the counts); the 20-second refresh waits until nothing is in flight.
+    function showChecked(id, checked) {
+        var row = list.querySelector('.meals-item[data-item="' + id + '"]');
+        if (!row) return;
+        row.classList.toggle("is-checked", checked);
+        var button = row.querySelector("[data-item-button]");
+        if (button) button.setAttribute("aria-pressed", checked ? "true" : "false");
+    }
+    function checkOff(form, row) {
+        var id = row.dataset.item, was = row.classList.contains("is-checked"), want = !was;
+        showChecked(id, want);
+        QuickSave.set("grocery:" + id, want, function (state) {
+            var body = new FormData(form);
+            body.set("checked", state ? "1" : "0");
+            busy += 1;
+            return QuickSave.request(form.action, {body: body}).then(function (res) { busy -= 1; return res; },
+                                                                      function (err) { busy -= 1; throw err; });
+        }, {
+            initial: was,
+            apply: function (state) { showChecked(id, state); },
+            revert: function (state) { showChecked(id, state); },
+            done: function (data) {
+                if (count && typeof data.unchecked === "number") count.textContent = data.unchecked;
+                if (clearButton && typeof data.checked === "number") clearButton.disabled = data.checked === 0;
+            },
+        });
+    }
+
     // Check off / remove: one listener for every row, including rows added later.
     list.addEventListener("submit", function (e) {
         var form = e.target.closest("form[data-list-action]");
         if (!form) return;
         e.preventDefault();
         var row = form.closest(".meals-item");
-        if (row && form.classList.contains("meals-item__toggle-form")) row.classList.toggle("is-checked");  // instant feedback
-        post(form).then(show).catch(function () { form.submit(); });   // fall back to a normal post
+        if (row && form.classList.contains("meals-item__toggle-form") && window.QuickSave) { checkOff(form, row); return; }
+        post(form).then(show).catch(function () { form.submit(); });   // remove / merge: fall back to a normal post
     });
 
     if (addForm && input) {

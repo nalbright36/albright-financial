@@ -90,6 +90,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Request time / DB queries / DB time for DEBUG or a superuser's ?_timing=1 (albright_trading_proj.timing).
+    'albright_trading_proj.timing.TimingMiddleware',
+    # Per-request memo of the user's preference and spaces (albright_labs.request_cache).
+    'albright_labs.request_cache.RequestCacheMiddleware',
     # Brands empty-bodied 4xx responses (require_POST's 405...) - albright_trading_proj.errors.
     'albright_trading_proj.errors.ErrorPageMiddleware',
     # 404 for any view of an app the user can't open (Admin > Users).
@@ -147,6 +151,11 @@ DATABASES = {
         'PASSWORD': required_env("DB_PASSWORD"),
         'HOST': required_env("DB_HOST"),
         'PORT': required_env("DB_PORT"),
+        # The database is DigitalOcean Postgres and the site runs on PythonAnywhere: every new connection is a
+        # network round trip plus an SSL handshake. Keep connections for a minute and reuse them across requests
+        # (checked before reuse, so a dropped one is replaced instead of failing the request).
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 

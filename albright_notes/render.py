@@ -15,6 +15,7 @@ Checklist lines ("- [ ] item" / "- [x] item") become checkboxes AFTER
 sanitizing (the sanitizer never lets an <input> through); the Nth checkbox
 is the Nth checklist line of the Markdown, so ticking one rewrites exactly
 that line (toggle())."""
+import hashlib
 import re
 from urllib.parse import quote
 
@@ -101,6 +102,30 @@ def toggle(body, index, checked):
     return "\n".join(lines)
 
 
+def item_ids(body):
+    """A stable id per checklist item, in order: a hash of the item's own text, plus which copy of that text it is
+    ("milk" twice: ...-0, ...-1). Adding, removing or reordering other lines - typing elsewhere in the note, or
+    someone else's edit - never changes an item's id, so ticking one by id (toggle_id) can't tick the wrong line.
+    Worked out from the Markdown, so every note has them without storing anything."""
+    lines, seen, out = (body or "").split("\n"), {}, []
+    for number, _checked in checklist_lines(body):
+        text = CHECK_LINE.sub("", lines[number], count=1).strip()
+        digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
+        n = seen.get(digest, 0)
+        seen[digest] = n + 1
+        out.append(f"{digest}-{n}")
+    return out
+
+
+def toggle_id(body, item_id, checked):
+    """The body with the checklist item `item_id` (item_ids) ticked or unticked; None when no item has that id
+    (its text was edited since). Only that one line changes."""
+    ids = item_ids(body)
+    if item_id not in ids:
+        return None
+    return toggle(body, ids.index(item_id), checked)
+
+
 def _lists_start_anywhere(body):
     """People type "Shopping:" then "- milk" on the next line - Markdown needs a blank line before a list
     that follows a paragraph, so add one (outside code blocks). Only for rendering; the saved Markdown is
@@ -124,11 +149,12 @@ def render(body, editable=False):
     expected = len(checklist_lines(body))
     live = editable and len(CHECK_HTML.findall(html)) == expected
     count = iter(range(10 ** 6))
+    ids = item_ids(body) if live else []
 
     def box(match):
         n = next(count)
         state = " checked" if match.group(2) != " " else ""
-        attrs = f' data-task="{n}"' if live else " disabled"
+        attrs = f' data-task="{n}" data-item-id="{ids[n]}"' if live else " disabled"
         done = " done" if state else ""
         return f'<li class="nt-task{done}">{match.group(1) or ""}<input type="checkbox" class="nt-check"{attrs}{state} ' \
                f'aria-label="Done"> '

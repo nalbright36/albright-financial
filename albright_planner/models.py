@@ -275,8 +275,15 @@ class PlannerSettings(models.Model):
     show_weather = models.BooleanField(default=True)
 
     @classmethod
+    def row(cls, user):
+        """The saved row or None (nothing is written by reading) - read once per request (albright_labs.request_cache:
+        the zone, the weather and the day view all ask)."""
+        from albright_labs.request_cache import get
+        return get(("planner-settings", getattr(user, "pk", None)), lambda: cls.objects.filter(user=user).first())
+
+    @classmethod
     def for_user(cls, user):
-        return cls.objects.get_or_create(user=user)[0]
+        return cls.row(user) or cls.objects.get_or_create(user=user)[0]
 
     def source_on(self, key):
         return key in (self.sources_on or [])

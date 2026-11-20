@@ -30,7 +30,7 @@ def _record(space_id, verb, summary, actor=None, group="", plural="", url="", co
 
 def _before(sender, instance, **kwargs):
     """Remember what a row was, so post_save can tell what changed."""
-    if instance.pk and not kwargs.get("raw"):
+    if instance.pk and not kwargs.get("raw") and not hasattr(instance, "_activity_before"):   # set by the caller
         instance._activity_before = sender.objects.filter(pk=instance.pk).values().first()
 
 

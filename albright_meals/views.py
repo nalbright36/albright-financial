@@ -263,14 +263,24 @@ def grocery_list(request):
 @scope.space_required
 @require_POST
 def grocery_toggle(request, pk):
+    """Check a line off (or back on): POST checked=1 / 0 - the state wanted, so a retry or a second tap can't flip it
+    back (groceries.js sends it); without it (the no-JS form) it toggles. JSON: a tiny reply - the line's state and
+    the list's counts - not the re-rendered list (the 20-second refresh brings anyone else's changes)."""
     item = _item(request, pk)
-    item.checked = not item.checked
-    item.checked_by = request.user if item.checked else None
-    item.checked_by_bot = False
-    item.checked_at = timezone.now() if item.checked else None
-    item.save()
+    want = {"1": True, "true": True, "0": False, "false": False}.get(request.POST.get("checked"))
+    want = (not item.checked) if want is None else want
+    if want != item.checked:
+        item._activity_before = {"checked": item.checked, "archived_at": item.archived_at}   # signals: no re-read
+        item.checked = want
+        item.checked_by = request.user if want else None
+        item.checked_by_bot = False
+        item.checked_at = timezone.now() if want else None
+        item.save(update_fields=["checked", "checked_by", "checked_by_bot", "checked_at", "updated_at"])
     if _wants_json(request):
-        return JsonResponse({"ok": True, **_list_payload(request)})
+        from django.db.models import Count, Q
+        counts = GroceryItem.objects.active().filter(space_id=item.space_id).aggregate(
+            unchecked=Count("pk", filter=Q(checked=False)), checked=Count("pk", filter=Q(checked=True)))
+        return JsonResponse({"ok": True, "id": item.pk, "item_checked": item.checked, **counts})
     return redirect("albright_meals:groceries")
 
 

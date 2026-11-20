@@ -56,6 +56,13 @@ def _wants_json(request):
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
+def _checked(request):
+    """POST checked=1 / 0: the state the person wants (planner.js sends it, so a retry or a second tap never flips it
+    back); None when missing - the no-JS form, which toggles."""
+    value = request.POST.get("checked")
+    return {"1": True, "true": True, "0": False, "false": False}.get(value)
+
+
 def _json(request):
     try:
         data = json.loads(request.body or b"{}")
@@ -549,10 +556,11 @@ def _then(request, item, occurrence):
 @login_required
 @require_POST
 def toggle(request, pk):
-    """Check off (or undo) one occurrence: POST date=<the occurrence's scheduled date>."""
+    """Check off (or undo) one occurrence: POST date=<the occurrence's scheduled date>, checked=1/0 (else it toggles)."""
     item = _editable(request, pk)
     occurrence = _day(request.POST.get("date"))
-    if occurrence and request.POST.get("all_subtasks") == "1" and planner.valid_occurrence(item, occurrence) \
+    want = _checked(request)
+    if occurrence and request.POST.get("all_subtasks") == "1" and want is not False and planner.valid_occurrence(item, occurrence) \
             and not item.completions.filter(occurrence_date=occurrence).exists():
         # "Mark all subtasks done too?" - Yes (a grocery row needs Meals, as checking it anywhere does)
         groceries_ok = all(_can_check_grocery(request.user, row.grocery_item)
@@ -560,7 +568,7 @@ def toggle(request, pk):
         if groceries_ok:
             checklist.mark_all(item, occurrence, request.user)
     done = planner.toggle(item, occurrence, request.user, done=True if request.POST.get("all_subtasks") == "1"
-                          else None) if occurrence else None
+                          and want is not False else want) if occurrence else None
     if done is None:
         if _wants_json(request):
             return JsonResponse({"ok": False, "error": "Not scheduled that day."}, status=400)
@@ -574,7 +582,7 @@ def toggle(request, pk):
         from albright_fitness import workout_sync
         note = workout_sync.kept_note(item, occurrence)
     if _wants_json(request):
-        rows = checklist.occurrence_rows(item, occurrence)
+        rows = checklist.occurrence_rows(item, occurrence) if item.checklist.exists() else []
         shown = checklist.progress(rows) if rows else None
         return JsonResponse({"ok": True, "done": done, **({"progress": shown["label"], "progress_title": shown["title"]}
                                                            if shown else {}), **({"note": note} if note else {})})
@@ -628,23 +636,28 @@ def _can_check_grocery(user, line):
 @require_POST
 def checklist_toggle(request, pk, row_id):
     """Tick or untick one subtask on one occurrence (task editors): POST date=<the occurrence's scheduled date>
-    (default: a one-off task's date / a one-at-a-time task's current one). A grocery row checks the line on the
-    grocery list itself, so it also needs Meals."""
+    (default: a one-off task's date / a one-at-a-time task's current one), checked=1/0 (else it toggles). A grocery
+    row checks the line on the grocery list itself, so it also needs Meals."""
     item = _editable(request, pk)
     row = get_object_or_404(item.checklist.select_related("grocery_item"), pk=row_id)
     occurrence = _day(request.POST.get("date")) or planner.current_or_first(item)
     if (row.grocery_item_id and not _can_check_grocery(request.user, row.grocery_item)) \
             or not row.applies_to(occurrence) or not planner.valid_occurrence(item, occurrence):
         raise Http404
-    before = {r.pk: r.checked for r in checklist.occurrence_rows(item, occurrence)}
-    checklist.set_checked(row, occurrence, not before.get(row.pk), request.user)
+    want = _checked(request)
+    if want is None:
+        want = not {r.pk: r.checked for r in checklist.occurrence_rows(item, occurrence)}.get(row.pk)
+    checklist.set_checked(row, occurrence, want, request.user)
     if _wants_json(request):
         rows = checklist.occurrence_rows(item, occurrence)
         now = next(r for r in rows if r.pk == row.pk)
-        shared = item.owner_id != request.user.pk or bool(planner.shared_names(item))   # "Done by <name>" only then
-        return JsonResponse({"ok": True, "checked": now.checked, "progress": checklist.progress(rows)["label"],
-                             "open": checklist.progress(rows)["open"], "progress_title": checklist.progress(rows)["title"],
-                             "done_by": planner.person(now.done_by) if now.checked and now.done_by and shared else "",
+        shown = checklist.progress(rows)
+        done_by = ""
+        if now.checked and now.done_by:                   # "Done by <name>" only on a shared task
+            if item.owner_id != request.user.pk or planner.shared_names(item):
+                done_by = planner.person(now.done_by)
+        return JsonResponse({"ok": True, "checked": now.checked, "progress": shown["label"], "open": shown["open"],
+                             "progress_title": shown["title"], "done_by": done_by,
                              "task_done": item.completions.filter(occurrence_date=occurrence).exists()})
     return redirect(_next(request))
 

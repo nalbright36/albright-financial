@@ -6,7 +6,7 @@ import re
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import transaction
-from django.db.models import F, Q, TextField
+from django.db.models import Q, TextField
 from django.db.models.functions import Cast
 
 from .models import MAX_BODY, MAX_TAG_LENGTH, MAX_TAGS, ME, Note
@@ -72,13 +72,38 @@ def save(note, by, base_version=None, **fields):
             current.body = (fields["body"] or "")[:MAX_BODY]
         if "tags" in fields:
             current.tags = clean_tags(fields["tags"])
-        current.version = F("version") + 1
+        current.version += 1                         # the row is locked: no one else can bump it meanwhile
         current.updated_by = by[:150]
         current.save()
-        current.refresh_from_db()
     if (current.title, current.body, current.tags) != before:
-        _record_edit(current)
+        _record_edit(current)                        # after the lock is released
     return current
+
+
+class NoSuchItem(Exception):
+    """The checklist item isn't in the note any more (its text was edited or it was removed)."""
+
+
+def set_checked(note, by, checked, item_id=None, index=None):
+    """Tick or untick ONE checklist item, by its stable id (render.item_ids) - or, for older callers, its position.
+    Always applied to the latest saved text under a row lock, so it never needs the editor's version and never
+    overwrites anyone's newer edits: only that one "- [ ]" line changes. Returns (note, version it was before)."""
+    from . import render
+    with transaction.atomic():
+        current = Note.objects.select_for_update().get(pk=note.pk)
+        before = current.version
+        body = render.toggle_id(current.body, item_id, checked) if item_id else             render.toggle(current.body, index, checked) if isinstance(index, int) else None
+        if body is None:
+            raise NoSuchItem()
+        changed = body != current.body
+        if changed:
+            current.body = body
+            current.version += 1
+            current.updated_by = by[:150]
+            current.save(update_fields=["body", "version", "updated_by", "updated_at"])
+    if changed:
+        _record_edit(current)
+    return current, before
 
 
 def _record_edit(note):

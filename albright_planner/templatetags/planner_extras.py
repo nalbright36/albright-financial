@@ -45,10 +45,10 @@ def planner_zone(context):
     user = getattr(request, "user", None)
     row = None
     if user is not None and user.is_authenticated:
-        row = PlannerSettings.objects.filter(user=user).values("timezone", "auto_timezone").first()
+        row = PlannerSettings.row(user)
     if row is None:
         return {"name": DEFAULT_TIMEZONE, "auto": True}
-    return {"name": row["timezone"], "auto": row["auto_timezone"]}
+    return {"name": row.timezone, "auto": row.auto_timezone}
 
 
 @register.simple_tag(takes_context=True)
@@ -63,10 +63,10 @@ def planner_wx(context):
     auto = True
     show = True
     if user is not None and user.is_authenticated:
-        row = PlannerSettings.objects.filter(user=user).values("weather_auto", "show_weather").first()
+        row = PlannerSettings.row(user)
         if row is not None:
-            auto = row["weather_auto"]
-            show = row["show_weather"]
+            auto = row.weather_auto
+            show = row.show_weather
     return {"auto": auto and show, "show": show}
 
 

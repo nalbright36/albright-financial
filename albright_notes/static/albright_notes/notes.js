@@ -11,7 +11,11 @@
  *   autosave       title, body and tags save as you type (debounced): "Saving…" / "Saved ✓". Each save
  *                  sends the version it started from; a 409 means someone else changed the note meanwhile
  *                  and the warning offers "Load their version" or "Keep mine (overwrite)"
- *   checklist      ticking a box in the rendered note rewrites that "- [ ]" line on the server
+ *   checklist      ticking a box flips it at once; that one "- [ ]" line is rewritten on the server by the item's
+ *                  stable id (data-item-id) - never the whole note - one request at a time per item, the latest
+ *                  tap winning (labs/quicksave.js); a failure puts the box back with "Couldn't save - tap to retry"
+ *   saving         one save at a time (checks included); a failed save keeps its changes and retries
+ *                  ("Offline - will save"); leaving the page sends what's unsaved with fetch keepalive
  *   word count     the footer's count follows the text
  *   images         Insert image, or paste / drop one on the note: it's attached to the note and goes in the
  *                  Markdown at the cursor as ![name](/attachments/<id>/) (labs/attachments.js uploads it)
@@ -107,6 +111,9 @@
         var n = countWords(fields.body.value);
         words.textContent = n + " word" + (n === 1 ? "" : "s");
     }
+
+    var wordsTimer = null;
+    function wordsSoon() { clearTimeout(wordsTimer); wordsTimer = setTimeout(showWords, 400); }
 
     // ---------- Rendered note <-> Markdown ----------
     function setMode(mode) {
@@ -405,6 +412,13 @@
         showSaved("Not saved", true);
     }
 
+    var retryTimer = null;
+    function retryLater() {                    // offline or the server failed: try again in a bit (and when back online)
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(function () { save(false); }, 5000);
+    }
+    window.addEventListener("online", function () { if (Object.keys(dirty).length) save(false); });
+
     function save(force) {
         var keys = Object.keys(dirty);
         if (!keys.length || inFlight || (conflict && !force)) return inFlight || Promise.resolve();
@@ -413,7 +427,9 @@
         if (force) body.force = true;
         dirty = {};
         showSaved("Saving…");
-        inFlight = postJson(root.dataset.saveUrl, body).then(function (res) {
+        var send = window.QuickSave ? QuickSave.request(root.dataset.saveUrl, {body: body, json: true})
+            : postJson(root.dataset.saveUrl, body);
+        inFlight = send.then(function (res) {
             inFlight = null;
             if (res.status === 409) {
                 keys.forEach(function (k) { dirty[k] = true; });
@@ -422,18 +438,44 @@
             }
             if (!res.ok) {
                 keys.forEach(function (k) { dirty[k] = true; });
-                showSaved("Couldn't save - retrying when you type", true);
+                showSaved("Couldn't save - will retry", true);
+                retryLater();
                 return;
             }
             applyState(res.data, false);
-            showSaved("Saved ✓");
+            // Typed meanwhile: keep what's in the boxes (applyState only changed the version and the preview).
+            showSaved(Object.keys(dirty).length ? "Unsaved changes" : "Saved ✓");
             if (Object.keys(dirty).length) schedule();
         }).catch(function () {
             inFlight = null;
             keys.forEach(function (k) { dirty[k] = true; });
-            showSaved("Offline - not saved", true);
+            showSaved("Offline - will save", true);
+            retryLater();
         });
         return inFlight;
+    }
+
+    // Leaving (closing the tab, switching apps on a phone): send what's unsaved now, with keepalive so the request
+    // outlives the page. sendBeacon can't carry the CSRF header; fetch keepalive can.
+    function saveOnLeave() {
+        var keys = Object.keys(dirty);
+        if (!keys.length || inFlight || conflict || !window.fetch) return;
+        var body = values(keys);
+        body.version = version;
+        var text = JSON.stringify(body);
+        if (text.length > 60000) { flush(); return; }          // keepalive bodies are capped at 64 KB
+        clearTimeout(timer);
+        dirty = {};
+        inFlight = fetch(root.dataset.saveUrl, {method: "POST", credentials: "same-origin", keepalive: true, body: text,
+            headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    inFlight = null;
+                    if (r.ok) { applyState(data, false); showSaved("Saved ✓"); return; }
+                    keys.forEach(function (k) { dirty[k] = true; });
+                    if (r.status === 409) showConflict(data); else retryLater();
+                });
+            }).catch(function () { inFlight = null; keys.forEach(function (k) { dirty[k] = true; }); retryLater(); });
     }
 
     function schedule() {
@@ -452,7 +494,7 @@
             input.addEventListener("input", function () {
                 dirty[key] = true;
                 showSaved("Unsaved changes");
-                if (key === "body") showWords();
+                if (key === "body") wordsSoon();      // a long note isn't re-counted on every key
                 schedule();
             });
             if (key !== "body") input.addEventListener("blur", flush);
@@ -461,10 +503,12 @@
         if (fields.title) fields.title.addEventListener("keydown", function (event) {
             if (event.key === "Enter") { event.preventDefault(); setMode("write"); }
         });
-        // Leaving with unsaved changes: save now, and ask the browser to wait.
+        // Leaving: pagehide / hidden send what's unsaved (keepalive); with a save still unfinished the browser asks.
+        window.addEventListener("pagehide", saveOnLeave);
+        document.addEventListener("visibilitychange", function () { if (document.hidden) saveOnLeave(); });
         window.addEventListener("beforeunload", function (event) {
-            if (Object.keys(dirty).length || inFlight) {
-                flush();
+            saveOnLeave();
+            if (Object.keys(dirty).length) {
                 event.preventDefault();
                 event.returnValue = "";
             }
@@ -487,25 +531,64 @@
     }
 
     // ---------- Checklist: tick a box in the rendered note ----------
+    // The box flips at once; the server rewrites just that line, found by the item's stable id (data-item-id), on the
+    // latest saved text. Per item only the latest tap is sent, one request at a time (labs/quicksave.js). Note writes
+    // go one at a time (the autosave waits for a check and a check for the autosave), so versions stay in step:
+    // after a check the Markdown box gets the same one-line change locally and the new version.
+    function showBox(id, checked) {
+        var box = preview.querySelector('input.nt-check[data-item-id="' + id + '"]');
+        if (!box) return;
+        box.checked = checked;
+        var li = box.closest("li");
+        if (li) li.classList.toggle("done", checked);
+    }
+    function patchLine(id, checked) {          // the same one-line change in the Markdown box
+        var box = preview.querySelector('input.nt-check[data-item-id="' + id + '"]');
+        if (!box || !fields.body) return;
+        var lines = fields.body.value.split("\n"), number = taskLines(fields.body.value)[parseInt(box.dataset.task, 10)];
+        if (number == null) return;
+        lines[number] = lines[number].replace(TASK_LINE, function (m, prefix) { return prefix + "[" + (checked ? "x" : " ") + "]"; });
+        fields.body.value = lines.join("\n");
+    }
+    function sendCheck(id, checked) {
+        flush();
+        var run = (inFlight || Promise.resolve()).catch(function () {}).then(function () {
+            if (conflict) return {ok: false, status: 409, data: {}};
+            return QuickSave.request(root.dataset.checkUrl, {json: true, body: {item_id: id, checked: checked, version: version}});
+        });
+        inFlight = run.then(function (res) {
+            inFlight = null;
+            if (res.ok) {
+                if (res.data.body != null) {                       // changed elsewhere meanwhile: catch up
+                    applyState(res.data, false);
+                    if (fields.body && !dirty.body) fields.body.value = res.data.body;
+                } else {
+                    patchLine(id, checked);
+                    version = res.data.version;
+                    root.dataset.version = String(version);
+                }
+                showWords();
+                showSaved(Object.keys(dirty).length ? "Unsaved changes" : "Saved ✓");
+            } else if (res.data && res.data.missing) {
+                applyState(res.data, !Object.keys(dirty).length);
+                showSaved("That item was changed elsewhere - this is the latest");
+            }
+            if (Object.keys(dirty).length) schedule();
+            return res;
+        }, function (err) { inFlight = null; throw err; });
+        return inFlight;
+    }
     preview.addEventListener("change", function (event) {
         var box = event.target;
-        if (!box.matches || !box.matches("input.nt-check[data-task]")) return;
-        var index = parseInt(box.dataset.task, 10), checked = box.checked;
-        var item = box.closest("li");
-        if (item) item.classList.toggle("done", checked);
-        var undo = function () { box.checked = !checked; if (item) item.classList.toggle("done", !checked); };
-        flush();
-        (inFlight || Promise.resolve()).then(function () {
-            if (conflict) { undo(); return; }
-            return postJson(root.dataset.checkUrl, {index: index, checked: checked, version: version}).then(function (res) {
-                if (res.status === 409) { undo(); showConflict(res.data); return; }
-                if (!res.ok) { undo(); showSaved("Couldn't save", true); return; }
-                applyState(res.data, false);
-                if (fields.body && !dirty.body) fields.body.value = res.data.body;
-                showWords();
-                showSaved("Saved ✓");
-            });
-        }).catch(function () { undo(); showSaved("Offline - not saved", true); });
+        if (!box.matches || !box.matches("input.nt-check[data-item-id]")) return;
+        var id = box.dataset.itemId, checked = box.checked;
+        showBox(id, checked);
+        if (!window.QuickSave) return;
+        QuickSave.set("note:" + root.dataset.noteId + ":" + id, checked, function (state) { return sendCheck(id, state); }, {
+            initial: !checked,
+            apply: function (state) { showBox(id, state); },
+            revert: function (state) { showBox(id, state); },
+        });
     });
 
     // ---------- Link record: search the apps you can open ----------

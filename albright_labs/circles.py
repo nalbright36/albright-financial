@@ -54,14 +54,26 @@ def personal_space(user):
 
 
 def _shared_memberships(user, app):
-    if app in ALWAYS_ON:
-        return CircleMembership.objects.filter(user=user, status=ACTIVE).select_related("circle")
-    return (CircleMembership.objects.filter(user=user, status=ACTIVE, apps__contains=[app], circle__enabled_apps__contains=[app])
-            .select_related("circle"))
+    """[CircleMembership] whose circles count for this person in this app - read once per request
+    (albright_labs.request_cache; sharing asks for every item on a page)."""
+    from .request_cache import get
+
+    def read():
+        if app in ALWAYS_ON:
+            return list(CircleMembership.objects.filter(user=user, status=ACTIVE).select_related("circle"))
+        return list(CircleMembership.objects.filter(user=user, status=ACTIVE, apps__contains=[app],
+                                                    circle__enabled_apps__contains=[app]).select_related("circle"))
+    return list(get(("memberships", getattr(user, "pk", None), app), read))
 
 
 def visible_spaces(user, app):
-    """[Space] this person sees in this app: Personal first, then each circle that passes every rule, by name."""
+    """[Space] this person sees in this app: Personal first, then each circle that passes every rule, by name.
+    Worked out once per request (albright_labs.request_cache)."""
+    from .request_cache import get
+    return list(get(("spaces", getattr(user, "pk", None), app), lambda: _visible_spaces(user, app)))
+
+
+def _visible_spaces(user, app):
     if not can_use_app(user, app):
         return []
     circles = [m.circle for m in _shared_memberships(user, app)]
@@ -82,7 +94,7 @@ def can_see(user, app, space):
         return False
     if space.user_id:
         return space.user_id == user.pk
-    return _shared_memberships(user, app).filter(circle_id=space.circle_id).exists()
+    return any(s.circle_id == space.circle_id for s in visible_spaces(user, app) if s.circle_id)
 
 
 def space_members(space, app):
@@ -103,8 +115,8 @@ def current_space(user, app, requested=None):
     if not spaces:
         return None
     by_id = {s.pk: s for s in spaces}
-    pref = UserPreference.objects.filter(user=user).first()
-    remembered = (pref.current_spaces or {}).get(app) if pref else None
+    pref = UserPreference.for_user(user)
+    remembered = (pref.current_spaces or {}).get(app)
     for candidate in (requested, remembered):
         try:
             key = int(candidate)

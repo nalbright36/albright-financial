@@ -224,7 +224,8 @@ class GroceryPageTests(Base):
         apples.refresh_from_db()
         self.assertTrue(apples.checked)
         self.assertEqual(apples.checked_by, self.owner)
-        html = response.json()["html"]
+        self.assertEqual(response.json()["item_checked"], True)                 # a tiny reply: the list comes on refresh
+        html = self.client.get(reverse("albright_meals:grocery_list")).json()["html"]
         produce = html.split('data-aisle="produce"')[1].split("</section>")[0]
         self.assertLess(produce.index("bananas"), produce.index("apples"))
         self.assertIn(f'class="meals-item is-checked" data-item="{apples.pk}"', produce)

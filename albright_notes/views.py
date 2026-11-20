@@ -258,21 +258,25 @@ def note_save(request, pk):
 @login_required
 @require_POST
 def note_check(request, pk):
-    """Tick or untick checklist item `index` (JSON {index, checked, version}) - rewrites that Markdown line."""
+    """Tick or untick ONE checklist item: JSON {item_id (data-item-id), checked, version} - index instead of item_id
+    still works. Only that Markdown line changes, on the latest saved text (notes.set_checked), so it never needs the
+    version to match. Tiny reply: {ok, version, checked}; when the note had changed since `version` (someone else's
+    edit), also the new body and html so the editor catches up. 409 {missing} when the item's text was edited since."""
     note = _editable(request, pk)
     data = _json(request)
-    index, checked, version = data.get("index"), data.get("checked"), data.get("version")
-    if not isinstance(index, int) or isinstance(index, bool) or not isinstance(checked, bool):
+    item_id, index, checked, version = data.get("item_id"), data.get("index"), data.get("checked"), data.get("version")
+    if isinstance(index, bool) or not isinstance(checked, bool) or not (isinstance(item_id, str) or isinstance(index, int)):
         return JsonResponse({"ok": False, "error": "bad request"}, status=400)
-    body = md.toggle(note.body, index, checked)
-    if body is None:
-        return JsonResponse({"ok": False, "error": "no such checklist item"}, status=400)
     try:
-        note = notes.save(note, notes.user_label(request.user),
-                          base_version=version if isinstance(version, int) else None, body=body)
-    except notes.Conflict as conflict:
-        return JsonResponse({"ok": False, "conflict": True, **_state(conflict.note, request.user)}, status=409)
-    return JsonResponse(_state(note, request.user))
+        note, before = notes.set_checked(note, notes.user_label(request.user), checked,
+                                         item_id=item_id if isinstance(item_id, str) else None, index=index)
+    except notes.NoSuchItem:
+        fresh = Note.objects.get(pk=note.pk)
+        return JsonResponse({"ok": False, "missing": True, **_state(fresh, request.user)}, status=409)
+    out = {"ok": True, "version": note.version, "checked": checked}
+    if not isinstance(version, int) or before != version:       # changed elsewhere meanwhile: send the latest
+        out.update(_state(note, request.user))
+    return JsonResponse(out)
 
 
 @login_required

@@ -158,3 +158,11 @@
   }
   .notif-panel__head { border-radius: 0; }
 }
+
+/* QuickSave (labs/quicksave.js): a check-off that couldn't be saved - tap to send it again. */
+.quicksave-retry {
+    position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    z-index: 2000; max-width: calc(100vw - 32px); min-height: 44px; padding: 10px 16px; border: 0; border-radius: 999px;
+    background: #B91C1C; color: #fff; font: inherit; font-size: 0.9rem; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); cursor: pointer;
+}
+.quicksave-retry[hidden] { display: none; }

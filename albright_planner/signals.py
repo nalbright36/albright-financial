@@ -16,6 +16,9 @@ from .models import ScheduleItem, TaskChecklistItem, idea_path
 def grocery_saved(sender, instance, raw=False, **kwargs):
     if raw:
         return
+    before = getattr(instance, "_activity_before", None)          # albright_meals.signals._before
+    if before is not None and before.get("checked") == instance.checked:
+        return                                                    # renamed / moved aisle: no task to re-check
     for row in TaskChecklistItem.objects.filter(grocery_item=instance).select_related("task__owner"):
         checklist.reevaluate(row.task, checklist.occurrence_for_groceries(row.task), instance.checked_by)
 
