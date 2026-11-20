@@ -85,7 +85,7 @@ class SharedItemsEverywhereTests(SharedBase):
     def test_not_shared_still_404s(self):
         private = self.item(title="Hers alone", owner=self.wife)
         self.assertNotIn("Hers alone", self.page("day"))
-        self.assertEqual(self.client.get(url("edit", private.pk)).status_code, 404)
+        self.assertEqual(self.client.get(url("edit", private.pk)).status_code, 302)
         self.assertEqual(self.client.post(url("toggle", private.pk), {"date": TODAY.isoformat()}).status_code, 404)
 
 

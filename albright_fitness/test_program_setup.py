@@ -183,5 +183,5 @@ class GuidedSetupTests(Base):
         self.assertIn(url("program_setup", draft.pk), page)
         theirs = programs.copy_template(self.friend, "running")
         for name in ("program", "program_setup", "program_setup_exercises", "program_setup_schedule"):
-            self.assertEqual(self.client.get(url(name, theirs.pk)).status_code, 404, name)
+            self.assertEqual(self.client.get(url(name, theirs.pk)).status_code, 302, name)
         self.assertEqual(self.client.post(url("program", theirs.pk), {"action": "pause"}).status_code, 404)

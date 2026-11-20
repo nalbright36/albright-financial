@@ -294,14 +294,14 @@ class ViewTests(Base):
         self.assertIn("Pay rent", page.split('data-date="2026-12-01"', 1)[1].split('role="gridcell"', 1)[0])   # next month's first week
         self.assertEqual(len(re.findall(r'role="gridcell"', page)), 42)              # Mon Oct 26 - Sun Dec 6: 6 weeks
 
-    def test_day_timeline_and_last_view_remembered(self):
+    def test_day_timeline_and_home_is_always_day(self):
         self.item(title="Breakfast", start_time=time(7, 30), kind="event", checkable=False)
         self.item(title="Groceries")
         page = self.client.get(url("day")).content.decode()
         self.assertIn("Groceries", page.split('id="pl-allday"', 1)[1].split("</ul>", 1)[0])
         self.assertIn("Breakfast", page.split('data-hour="7"', 1)[1].split("</li>\n", 1)[0])
         self.client.get(url("month"))
-        self.assertRedirects(self.client.get(url("home")), url("month"), fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(url("home")), url("day"), fetch_redirect_response=False)   # always Day
 
     def test_filters(self):
         self.item(title="A task")
@@ -358,7 +358,7 @@ class SharingTests(Base):
     def test_private_items_404_for_others(self):
         item = self.item(title="Private")
         stranger = self.as_user(self.stranger)
-        self.assertEqual(stranger.get(url("edit", item.pk)).status_code, 404)
+        self.assertEqual(stranger.get(url("edit", item.pk)).status_code, 302)
         for name, data in (("toggle", {"date": TODAY.isoformat()}), ("remove", {"date": TODAY.isoformat()})):
             with self.subTest(name=name):
                 self.assertEqual(stranger.post(url(name, item.pk), data).status_code, 404)

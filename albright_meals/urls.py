@@ -1,5 +1,7 @@
 from django.urls import path
 
+from albright_labs.items import item_page
+
 from . import eatout_views, views
 
 app_name = "albright_meals"
@@ -8,7 +10,7 @@ urlpatterns = [
     path("", views.week, name="week"),
     path("notices/seen/", views.notices_seen, name="notices_seen"),
     path("plan/add/", views.plan_add, name="plan_add"),
-    path("plan/<int:pk>/", views.plan_entry, name="plan_entry"),
+    path("plan/<int:pk>/", item_page(views.plan_entry), name="plan_entry"),
     path("plan/<int:pk>/move/", views.plan_move, name="plan_move"),
     path("plan/<int:pk>/status/", views.plan_status, name="plan_status"),
     path("plan/<int:pk>/delete/", views.plan_delete, name="plan_delete"),
@@ -33,8 +35,8 @@ urlpatterns = [
     path("recipes/new/", views.recipe_edit, name="recipe_add"),
     path("recipes/import/", views.recipe_import, name="recipe_import"),
     path("recipes/import/save/", views.recipe_import_save, name="recipe_import_save"),
-    path("recipes/<int:pk>/", views.recipe, name="recipe"),
-    path("recipes/<int:pk>/edit/", views.recipe_edit, name="recipe_edit"),
+    path("recipes/<int:pk>/", item_page(views.recipe), name="recipe"),
+    path("recipes/<int:pk>/edit/", item_page(views.recipe_edit), name="recipe_edit"),
     path("recipes/<int:pk>/plan/", views.recipe_plan, name="recipe_plan"),
     path("recipes/<int:pk>/rate/", views.recipe_rate, name="recipe_rate"),
     path("recipes/<int:pk>/save-copy/", views.recipe_save_copy, name="recipe_save_copy"),
@@ -42,7 +44,7 @@ urlpatterns = [
     path("recipes/<int:pk>/move/", views.recipe_move, name="recipe_move"),
     path("recipes/<int:pk>/groceries/", views.recipe_groceries, name="recipe_groceries"),
     path("recipes/<int:pk>/reimport/", views.recipe_reimport, name="recipe_reimport"),
-    path("recipes/<int:pk>/nutrition/", views.recipe_nutrition_page, name="recipe_nutrition"),
+    path("recipes/<int:pk>/nutrition/", item_page(views.recipe_nutrition_page), name="recipe_nutrition"),
     path("recipes/<int:pk>/nutrition/calculate/", views.recipe_nutrition_calculate, name="recipe_nutrition_calculate"),
     path("recipes/<int:pk>/nutrition/lines/<int:line_id>/", views.recipe_nutrition_line, name="recipe_nutrition_line"),
     path("recipes/<int:pk>/nutrition/confirm/", views.recipe_nutrition_confirm, name="recipe_nutrition_confirm"),

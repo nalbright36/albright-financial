@@ -428,15 +428,15 @@ class RecipeNutritionTests(Base):
         stranger = with_apps(User.objects.create_user(username="kim", password=PASSWORD), ["meals", "fitness"])
         kitchen(stranger, name="Elsewhere")
         kim = self.as_user(stranger)
-        self.assertEqual(kim.get(reverse("albright_meals:recipe", args=[self.recipe.pk])).status_code, 404)
-        self.assertEqual(kim.get(reverse("albright_meals:recipe_nutrition", args=[self.recipe.pk])).status_code, 404)
+        self.assertEqual(kim.get(reverse("albright_meals:recipe", args=[self.recipe.pk])).status_code, 302)
+        self.assertEqual(kim.get(reverse("albright_meals:recipe_nutrition", args=[self.recipe.pk])).status_code, 302)
         self.assertEqual(kim.post(reverse("albright_meals:recipe_nutrition_calculate", args=[self.recipe.pk])).status_code, 404)
         self.assertEqual(kim.post(url("food_log"), {"kind": "recipe", "recipe": self.recipe.pk}).status_code, 404)
         Recipe.objects.filter(pk=self.recipe.pk).update(visibility=Recipe.LIBRARY)
         library_page = kim.get(reverse("albright_meals:recipe", args=[self.recipe.pk])).content.decode()
         self.assertIn('id="recipe-per-serving"', library_page)                               # it follows the recipe
         self.assertNotIn(reverse("albright_meals:recipe_nutrition", args=[self.recipe.pk]), library_page)   # read-only
-        self.assertEqual(kim.get(reverse("albright_meals:recipe_nutrition", args=[self.recipe.pk])).status_code, 404)
+        self.assertEqual(kim.get(reverse("albright_meals:recipe_nutrition", args=[self.recipe.pk])).status_code, 302)
 
     @override_settings(USDA_API_KEY="")
     def test_without_a_key_you_can_still_type_it_in(self):

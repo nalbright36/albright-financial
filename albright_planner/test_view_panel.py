@@ -86,7 +86,7 @@ class OpeningTests(Fixtures):
 
     def test_strangers_get_404(self):
         item = self.item("Private")
-        self.assertEqual(self.as_user(self.stranger).get(view(item)).status_code, 404)
+        self.assertEqual(self.as_user(self.stranger).get(view(item)).status_code, 302)
 
     def test_a_moved_occurrence_shows_its_new_day(self):
         item = self.item("Standup", recurrence="FREQ=DAILY", recurrence_count=10)

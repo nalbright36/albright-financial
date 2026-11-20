@@ -160,7 +160,7 @@ class LibraryTests(Base):
                                             "primary": ["shoulders"]})
         mine = Exercise.objects.get(name="Landmine Press")
         self.assertEqual((mine.owner, mine.primary_muscles), (self.me, ["shoulders"]))
-        self.assertEqual(self.as_user(self.friend).get(url("exercise", mine.pk)).status_code, 404)   # mine only
+        self.assertEqual(self.as_user(self.friend).get(url("exercise", mine.pk)).status_code, 302)   # mine only
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ class PrivacyTests(Base):
         w = self.workout(sets=[(225, 5)], name="Leg day")
         kim = self.as_user(self.friend)
         for path in (url("workout", w.pk), url("summary", w.pk)):
-            self.assertEqual(kim.get(path).status_code, 404)
+            self.assertEqual(kim.get(path).status_code, 302)
         self.assertNotIn("Leg day", kim.get(url("history")).content.decode())
         self.client.post(reverse("labs:share", args=["albright_fitness.Workout", w.pk]), {"action": "add", "target": "person", "who": self.friend.username})
         self.assertEqual(grants_of(w), [(self.friend.pk, "view")])
@@ -395,12 +395,12 @@ class PrivacyTests(Base):
         self.assertEqual(kim.post(url("delete_workout", w.pk)).status_code, 404)
         self.assertIn("Leg day", kim.get(url("history")).content.decode())
         self.client.post(reverse("labs:share", args=["albright_fitness.Workout", w.pk]), {"action": "remove", "grant": grants_of_ids(w)[0]})
-        self.assertEqual(kim.get(url("workout", w.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("workout", w.pk)).status_code, 302)
 
     def test_programs_and_records_are_never_shared(self):
         program = programs.copy_template(self.me, "full_body")
         kim = self.as_user(self.friend)
-        self.assertEqual(kim.get(url("program", program.pk)).status_code, 404)
+        self.assertEqual(kim.get(url("program", program.pk)).status_code, 302)
         self.assertEqual(kim.post(url("start"), {"day": program.days.first().pk}).status_code, 404)
         self.workout(day=self.today - timedelta(days=7), sets=[(225, 5)])
         programs.finish(self.workout(sets=[(235, 5)]))

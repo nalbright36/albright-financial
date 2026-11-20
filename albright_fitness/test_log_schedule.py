@@ -270,7 +270,7 @@ class ScheduleTests(Base):
         self.schedule("exercise", self.ex("Barbell Bench Press").pk)
         session = ScheduledSession.objects.get()
         self.client.force_login(self.friend)
-        self.assertEqual(self.client.get(url("schedule_edit", session.pk)).status_code, 404)
+        self.assertEqual(self.client.get(url("schedule_edit", session.pk)).status_code, 302)
         self.assertEqual(self.client.post(url("schedule_remove", session.pk)).status_code, 404)
         program = programs.copy_template(self.me, "full_body")
         self.assertEqual(self.schedule("program", program.pk).status_code, 404)

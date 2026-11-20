@@ -1,5 +1,7 @@
 from django.urls import path
 
+from albright_labs.items import item_page
+
 from . import inbox_views, views
 
 app_name = "albright_crypto_app"  # the Opportunities app - namespace kept with the package name
@@ -18,7 +20,7 @@ urlpatterns = [
     # The old Crypto / Income pages -> the Inbox (?tab=blocked/excluded -> Hidden, doing/submitted -> Pipeline).
     path("crypto/", inbox_views.old_crypto, name="old_crypto"),
     path("income/", inbox_views.old_income, name="old_income"),
-    path("opportunity/<int:pk>/", views.opportunity_detail, name="opportunity"),
+    path("opportunity/<int:pk>/", item_page(views.opportunity_detail), name="opportunity"),
     path("opportunity/<int:pk>/step/<int:step_id>/toggle/", views.toggle_step, name="toggle_step"),
     path("add/", views.add_opportunity, name="add"),
     path("earnings/", views.earnings, name="earnings"),

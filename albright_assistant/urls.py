@@ -1,6 +1,8 @@
 """/account/assistant/ (Your AI assistant - setup) and /assistant/... (the chat's JSON endpoints). See views.py."""
 from django.urls import path
 
+from albright_labs.items import item_page
+
 from . import views
 from .visuals import views as visual_views
 
@@ -26,7 +28,7 @@ urlpatterns = [
     path("assistant/visuals/<int:pk>/data/", visual_views.data, name="visual_data"),
     path("assistant/visuals/<int:pk>/save/", visual_views.save, name="visual_save"),
     path("account/visuals/", visual_views.index, name="visuals"),
-    path("account/visuals/<int:pk>/", visual_views.detail, name="visual"),
+    path("account/visuals/<int:pk>/", item_page(visual_views.detail, fallback="assistant:visuals"), name="visual"),
     path("account/visuals/<int:pk>/rename/", visual_views.rename, name="visual_rename"),
     path("account/visuals/<int:pk>/delete/", visual_views.delete, name="visual_delete"),
 ]

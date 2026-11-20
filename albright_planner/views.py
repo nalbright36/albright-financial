@@ -34,7 +34,7 @@ from .models import NOTES_MAX, PlannerSettings, ScheduleItem, home_zone
 log = logging.getLogger(__name__)
 
 VIEWS = ("day", "week", "month")
-VIEW_COOKIE = "planner_view"
+VIEW_COOKIE = "planner_view"                     # retired: cleared by home(), never read
 FIRST_HOUR, LAST_HOUR = 7, 20
 
 
@@ -211,18 +211,15 @@ def _default_sharing(user):
     return {"default_sharing": text, "quick_share_label": "Only me" if text == "Only me" else f"Shared with {text}"}
 
 
-def _remember(response, view):
-    response.set_cookie(VIEW_COOKIE, view, max_age=365 * 24 * 3600, samesite="Lax")
-    return response
-
-
 @login_required
 def home(request):
-    """/planner/: the view you used last (Day the first time)."""
-    view = request.COOKIES.get(VIEW_COOKIE)
-    target = reverse(f"albright_planner:{view if view in VIEWS else 'day'}")
+    """/planner/: the Planner's home - always the Day view (never the view used last)."""
+    target = reverse("albright_planner:day")
     query = request.META.get("QUERY_STRING", "")
-    return redirect(f"{target}?{query}" if query else target)
+    response = redirect(f"{target}?{query}" if query else target)
+    if VIEW_COOKIE in request.COOKIES:                 # the old "view used last" cookie - no longer read
+        response.delete_cookie(VIEW_COOKIE)
+    return response
 
 
 def _split(occs):
@@ -263,7 +260,7 @@ def day_view(request):
                     "empty": not (occs or overdue or meals),
                     "day_weather": wx, "weather_place": weather.home_label(request.user),
                     "day_hours": day_hours})
-    return _remember(render(request, "albright_planner/day.html", context), "day")
+    return render(request, "albright_planner/day.html", context)
 
 
 @login_required
@@ -297,7 +294,7 @@ def week_view(request):
     title = f"{start:%b} {start.day} – " + (f"{end.day}" if end.month == start.month else f"{end:%b} {end.day}") + f", {end.year}"
     context = _frame(request, "week", day, day - timedelta(days=7), day + timedelta(days=7), title)
     context["days"] = days
-    return _remember(render(request, "albright_planner/week.html", context), "week")
+    return render(request, "albright_planner/week.html", context)
 
 
 def _add_months(day, n):
@@ -327,7 +324,7 @@ def month_view(request):
             d += timedelta(days=1)
         weeks.append(week)
     context.update({"weeks": weeks, "weekdays": recurrence.DAY_NAMES})
-    return _remember(render(request, "albright_planner/month.html", context), "month")
+    return render(request, "albright_planner/month.html", context)
 
 
 # ---------------------------------------------------------------------------
@@ -800,8 +797,8 @@ def view_options(request):
     day = _day(request.POST.get("date"), planner.today(request.user))
     target = reverse(f"albright_planner:{view}") + ("" if day == planner.today(request.user) else f"?date={day.isoformat()}")
     if _wants_json(request):
-        return _remember(JsonResponse({"ok": True, "url": target}), view)
-    return _remember(redirect(target), view)
+        return JsonResponse({"ok": True, "url": target})
+    return redirect(target)
 
 
 @login_required

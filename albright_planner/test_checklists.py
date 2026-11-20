@@ -188,7 +188,8 @@ class PermissionTests(Fixtures):
 
     def test_the_task_stays_private(self):
         cook = self.as_user(self.cook)
-        self.assertEqual(cook.get(url("edit", self.task_obj.pk)).status_code, 404)
+        self.assertRedirects(cook.get(url("edit", self.task_obj.pk)), reverse("albright_planner:home"),
+                             fetch_redirect_response=False)                  # not theirs: the app's home
         self.assertEqual(self.toggle_row(self.row, client=cook).status_code, 404)
         html = cook.get(reverse("albright_meals:grocery_list")).json()["html"]
         self.assertNotIn("In task:", html)                                   # someone else's task: no chip

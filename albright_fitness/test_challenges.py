@@ -92,7 +92,7 @@ class AccessTests(Base):
     def test_outsider_gets_404(self):
         challenge = self.challenge()
         other = self.as_user(self.outsider)
-        self.assertEqual(other.get(url("challenge", challenge.pk)).status_code, 404)
+        self.assertEqual(other.get(url("challenge", challenge.pk)).status_code, 302)
         self.assertEqual(other.post(url("challenge_log", challenge.pk), {
             "date": self.today.isoformat(), "activity": "steps", "amount": "1000"}).status_code, 404)
         self.assertNotContains(self.as_user(self.outsider).get(url("challenges")), "December steps")
@@ -100,7 +100,7 @@ class AccessTests(Base):
     def test_opted_out_member_gets_404(self):
         challenge = self.challenge()
         circles.set_participation(self.sister, self.circle, "fitness", False)
-        self.assertEqual(self.as_user(self.sister).get(url("challenge", challenge.pk)).status_code, 404)
+        self.assertEqual(self.as_user(self.sister).get(url("challenge", challenge.pk)).status_code, 302)
 
     def test_participant_can_open_the_page_and_see_the_board(self):
         challenge = self.challenge()

@@ -27,11 +27,9 @@ def app_nav(request):
         hidden = page_app
     from .activity import unread_count
     from .circles import pending_count
-    from .resume_nav import rules as resume_rules
     unread = unread_count(user)
     return {"launcher_apps": items, "show_launcher": launcher.shows_launcher(user, pref), "nav_hidden_app": hidden,
             "home_url": landing.home_url(), "circle_invites": pending_count(user), "notification_count": unread,
             "notification_count_label": "99+" if unread > 99 else str(unread),
-            "nav_resume_rules": resume_rules(user, pref),
             # A superuser on a page of an archived app (albright_labs.archive) - index.html's "Archived app" banner.
             "archived_app": getattr(request, "archived_app", None)}

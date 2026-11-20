@@ -1,5 +1,7 @@
 from django.urls import path
 
+from albright_labs.items import item_page
+
 from . import views
 
 app_name = "albright_planner"
@@ -18,13 +20,13 @@ urlpatterns = [
     path("meals/", views.toggle_meals, name="toggle_meals"),
     path("view-options/", views.view_options, name="view_options"),
     path("from-note/<int:note_id>/", views.from_note, name="from_note"),
-    path("item/<int:pk>/", views.view_item, name="item"),
-    path("<int:pk>/", views.edit_item, name="edit"),
+    path("item/<int:pk>/", item_page(views.view_item), name="item"),
+    path("<int:pk>/", item_page(views.edit_item), name="edit"),
     path("<int:pk>/duplicate/", views.duplicate, name="duplicate"),
     path("<int:pk>/toggle/", views.toggle, name="toggle"),
     path("<int:pk>/move/", views.move, name="move"),
     path("<int:pk>/remove/", views.remove, name="remove"),
-    path("<int:pk>/note/", views.item_note, name="item_note"),
+    path("<int:pk>/note/", item_page(views.item_note), name="item_note"),
     path("<int:pk>/checklist/<int:row_id>/", views.checklist_toggle, name="checklist_toggle"),
     path("<int:pk>/checklist/add/", views.checklist_add, name="checklist_add"),
     path("from-groceries/", views.from_groceries, name="from_groceries"),

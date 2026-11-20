@@ -9,14 +9,13 @@
  *                 - otherwise "← Back" (phones and the home screen app - style.css): back when the previous page
  *                   was on this site, else this app's main page (its href); hidden on one of the app's main pages
  *                   when there's nothing of this site to go back to.
- *   resume        the launcher's tiles and Home's app tiles open each app at the last page you visited in it - only
- *                 a page that really belongs to that app (albright_labs.resume_nav's rules, carried by the page):
- *                 checked when saved, when a tile uses it, and on every load (failures are deleted); a tile that
- *                 still lands in another app drops the entry and opens the app's main page.
+ *   landing       app links (the launcher, Home's tiles, the header chip) always open the app's home page - the
+ *                 server renders them from the app registry and nothing here rewrites them. The old "resume where
+ *                 you left off" entries (localStorage nav_last:* / nav_recent:*, sessionStorage nav_resumed) are
+ *                 deleted on load, so an old value can never send anyone to a deleted item.
  *
  * Only same-site URLs ("/path", never "//host" or another origin) are stored or followed. sessionStorage (this
- * tab): the trail of pages and the return chip; localStorage (kept per signed-in user, so someone else signing
- * in on this device never sees yours): the last page per app. Every read and write is wrapped -
+ * tab): the trail of pages and the return chip. Every read and write is wrapped -
  * private browsing just goes without. Nothing here touches touch events, so iOS's edge swipe back still works.
  */
 (function () {
@@ -26,7 +25,6 @@
     var user = root.getAttribute("data-nav-user");
     if (!user) return;                                             // signed out
     var KEY = root.getAttribute("data-app-key") || "", LABEL = root.getAttribute("data-app-label") || "";
-    var LAST = "nav_last:" + user;
     var FROM_FRESH_MS = 10 * 60 * 1000;
 
     function sameSite(url) {
@@ -123,98 +121,22 @@
         showBack(null);                                             // plain "← Back" again
     });
 
-    // ---------- Resume each app where you were ----------
-    // What counts as an app's last page (albright_labs.resume_nav - the page carries the rules): on this site, in
-    // that app (its URL prefix; Trading: no other app's), not a shared page (My account, Circles, Notifications,
-    // Activity, sign in...), not an old page that only redirects, and an app this user can still open.
-    var RULES = null;
-    try { RULES = JSON.parse(document.getElementById("nav-resume-rules").textContent); } catch (e) { RULES = null; }
-    function startsWithAny(path, prefixes) {
-        for (var i = 0; i < (prefixes || []).length; i++) if (path.indexOf(prefixes[i]) === 0) return true;
-        return false;
-    }
-    function valid(key, url) {                                      // resume_nav.belongs(), line for line
-        if (!RULES || !sameSite(url)) return false;
-        var app = RULES.apps && RULES.apps[key];
-        if (!app) return false;                                     // Home, unknown, or no longer allowed
-        var path = url.split("#")[0].split("?")[0];
-        if (path === "/" || (RULES.retired || []).indexOf(path) >= 0) return false;
-        if (startsWithAny(path, RULES.shared)) return false;
-        if (app.prefixes && app.prefixes.length) return startsWithAny(path, app.prefixes);
-        return !startsWithAny(path, RULES.claimed);                 // Trading: nobody else's page
-    }
-    function loadLast() {
-        var last = read("localStorage", LAST, {});
-        return (last && typeof last === "object" && !Array.isArray(last)) ? last : {};
-    }
-    function remember() {
-        var last = loadLast();
-        if (!RULES) return last;                                    // no rules on this page: change nothing
-        Object.keys(last).forEach(function (key) {                  // tidy away anything that fails the check
-            if (!valid(key, last[key])) delete last[key];
-        });
-        if (KEY && KEY !== "home" && valid(KEY, here())) last[KEY] = here();
-        write("localStorage", LAST, last);
-        write("localStorage", "nav_recent:" + user, null);         // the old Recent list (removed) - tidy it away
-        return last;
-    }
-    function forget(key) {
-        var last = loadLast();
-        delete last[key];
-        write("localStorage", LAST, last);
-    }
-    // A tile that followed a saved page and landed in another app (an old URL that now redirects): drop that entry
-    // and open the app's main page instead. Only for the page that click led to - fresh, and arrived at from the
-    // page the tile was on.
-    var RESUMED_FRESH_MS = 60 * 1000;
-    function referrerPath() {
+    // ---------- Clean up the old "resume where you left off" keys (one-time; harmless every load) ----------
+    function forgetOldResume() {
         try {
-            var ref = new URL(document.referrer);
-            return ref.origin === window.location.origin ? ref.pathname + ref.search : "";
-        } catch (e) { return ""; }
-    }
-    function checkResumed() {
-        var resumed = read("sessionStorage", "nav_resumed", null);
-        write("sessionStorage", "nav_resumed", null);
-        if (!resumed || !resumed.key || resumed.key === KEY) return false;
-        if (Date.now() - (resumed.at || 0) > RESUMED_FRESH_MS || referrerPath() !== resumed.from) return false;
-        forget(resumed.key);
-        var main = RULES && RULES.apps && RULES.apps[resumed.key] && RULES.apps[resumed.key].main;
-        if (sameSite(main)) { window.location.replace(main); return true; }
-        return false;
-    }
-    document.addEventListener("click", function (event) {
-        var link = event.target.closest && event.target.closest("a[data-resume-key]");
-        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        write("sessionStorage", "nav_resumed", {key: link.getAttribute("data-resume-key"), from: here(), at: Date.now()});
-    }, true);
-    function resumeLinks(last) {
-        // The launcher's tiles and Home's tiles: each app at its last page - not the app you're in (its tile
-        // goes to its main page) and not Home (one page). A saved page that fails the check is deleted, and the
-        // tile keeps the app's main page.
-        function point(link, key) {
-            var url = last[key];
-            if (url === undefined) return;
-            if (key && key !== KEY && key !== "home" && sameSite(url) && valid(key, url)) {
-                link.setAttribute("href", url);
-                link.setAttribute("data-resume-key", key);
-            } else if (RULES && !valid(key, url)) {
-                forget(key);
+            for (var i = window.localStorage.length - 1; i >= 0; i--) {
+                var name = window.localStorage.key(i);
+                if (name && (name.indexOf("nav_last") === 0 || name.indexOf("nav_recent") === 0)) window.localStorage.removeItem(name);
             }
-        }
-        document.querySelectorAll(".app-launcher__tile[data-app-key]").forEach(function (tile) {
-            point(tile, tile.getAttribute("data-app-key"));
-        });
-        document.querySelectorAll(".ht[data-app-tile] [data-tile-link]").forEach(function (link) {
-            point(link, link.closest(".ht").getAttribute("data-key"));
-        });
+        } catch (e) { /* storage off */ }
+        write("sessionStorage", "nav_resumed", null);
     }
+
     function run() {
-        if (checkResumed()) return;                                 // on the way to the app's main page
         visit();
         showBack(returnTo());
-        resumeLinks(remember());
     }
+    forgetOldResume();
     run();
     // Back / Forward from the back-forward cache: the page wasn't reloaded, so bring it up to date.
     window.addEventListener("pageshow", function (event) { if (event.persisted) run(); });

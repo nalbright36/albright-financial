@@ -1,7 +1,6 @@
 """Getting around without browser buttons (the iPhone home screen app): the header's Back button (its fallback is
-the app's main page; it hides on a main page with no history), the "Back to <app>" return chip, the launcher's
-tiles that resume each app's last page (js/app_nav.js - same-site URLs only, kept per user) and its fit on screen
-(no Recent row), and
+the app's main page; it hides on a main page with no history), the "Back to <app>" return chip, app links that always open the app's home page (no "resume where you left
+off" - js/app_nav.js only clears its old keys), the launcher's fit on screen (no Recent row), and
 the header collapsing into the hamburger the same way on every page - Planner Day, Week and Month included."""
 import pathlib
 import re
@@ -191,15 +190,15 @@ class ResumeTests(Base):
         self.assertLess(page.index("labs/launcher.js"), page.index("js/app_nav.js"))
         self.assertLess(page.index("js/app_nav.js"), page.index("albright_planner/planner.js"))
 
-    def test_tiles_resume_the_last_page(self):
+    def test_app_links_always_open_the_app_home(self):
         js = static("js/app_nav.js")
-        self.assertIn('".app-launcher__tile[data-app-key]"', js)          # the launcher's tiles
-        self.assertIn('".ht[data-app-tile] [data-tile-link]"', js)       # Home's whole-app tiles
-        self.assertIn('key !== KEY && key !== "home" && sameSite(url)', js)
-        self.assertIn('LAST = "nav_last:" + user', js)                    # kept per user
-        self.assertNotIn("showRecent", js)
+        for gone in ("data-resume-key", "resumeLinks", "nav-resume-rules", "setAttribute(\"href\", url)"):
+            self.assertNotIn(gone, js)                                      # nothing rewrites app links
+        self.assertIn('name.indexOf("nav_last") === 0', js)                # the old keys are cleared
         hub = self.page(reverse("labs:hub"))
-        self.assertRegex(hub, r'<li class="ht" data-key="planner" data-app-tile')
+        self.assertNotIn("nav-resume-rules", hub)
+        tile = hub.split('<li class="ht" data-key="planner" data-app-tile', 1)[1].split("</li>", 1)[0]
+        self.assertIn(f'href="{reverse("albright_planner:home")}"', tile)
 
     def test_nothing_blocks_the_ios_edge_swipe(self):
         for path in ("js/app_nav.js", "labs/launcher.js", "albright_planner/planner.js", "albright_notes/notes.js",

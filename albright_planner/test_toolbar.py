@@ -131,7 +131,7 @@ class ViewOptionsSaveTests(Base):
         prefs = PlannerSettings.for_user(self.me)
         self.assertEqual((prefs.filter_kind, prefs.hide_done, prefs.filter_who, prefs.show_meals), ("task", True, "mine", False))
         self.assertRedirects(response, url("week"), fetch_redirect_response=False)   # the chosen view, today
-        self.assertEqual(response.cookies["planner_view"].value, "week")          # /planner/ opens it next time
+        self.assertNotIn("planner_view", response.cookies)          # Day / Week / Month aren't remembered
 
     def test_saved_choices_apply_on_reload_and_on_another_device(self):
         self.save(hide_done="1", kind="task", show_meals="1")
@@ -314,10 +314,9 @@ class ViewSwitchTests(Base):
         self.assertIn('href="/planner/month/?date=2026-11-12"', nav)
         self.assertIn('href="/planner/day/?date=2026-11-12"', nav)
         response = self.client.get(url("week") + "?date=2026-11-12")
-        self.assertEqual(response.cookies["planner_view"].value, "week")
         page = response.content.decode()
         self.assertIn('id="pl-title">Nov 9 – 15, 2026</h1>', page)          # the week that contains Nov 12
-        self.assertRedirects(self.client.get(url("home")), url("week"), fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(url("home")), url("day"), fetch_redirect_response=False)   # always Day
         month = self.client.get(url("month") + "?date=2026-11-12").content.decode()
         self.assertIn('id="pl-title">November 2026</h1>', month)
 
