@@ -1,6 +1,6 @@
 {% comment %}One of Home's tiles (hub.html "My tiles"; albright_labs.home_tiles): a real link - the icon in its app's tinted
 color, the label, and a count badge (hidden at 0, 99+ above 99). The remove (x) and the hidden order input are for
-Edit mode; the x is a sibling of the link, never inside it. t = a home_tiles.Tile, count = its badge.{% endcomment %}
+Edit mode, as are the move left/right buttons (keyboard users); they're siblings of the link, never inside it. t = a home_tiles.Tile, count = its badge.{% endcomment %}
 <li class="ht" data-key="{{ t.key }}"{% if t.icon == "app" %} data-app-tile{% endif %} data-app-accent="{{ t.accent }}" style="--tile-c: var(--app-{{ t.accent }}, {{ t.color }});">
     <input type="hidden" name="tile" value="{{ t.key }}">
     <a href="{{ t.url }}" class="ht__link" data-tile-link data-no-return title="{{ t.label }}">
@@ -8,6 +8,10 @@ Edit mode; the x is a sibling of the link, never inside it. t = a home_tiles.Til
         <span class="ht__label">{{ t.label }}</span>
         {% if count %}<span class="ht__badge" data-badge>{% if count > 99 %}99+{% else %}{{ count }}{% endif %}<span class="visually-hidden"> waiting</span></span>{% endif %}
     </a>
+    <span class="ht__moves" data-edit-only>
+        <button type="submit" formaction="{% url 'labs:save_tile_order' %}" name="move" value="up:{{ t.key }}" class="ht__move" data-tile-move="up" aria-label="Move {{ t.label }} left">&lsaquo;</button>
+        <button type="submit" formaction="{% url 'labs:save_tile_order' %}" name="move" value="down:{{ t.key }}" class="ht__move" data-tile-move="down" aria-label="Move {{ t.label }} right">&rsaquo;</button>
+    </span>
     <button type="submit" formaction="{% url 'labs:toggle_tile' %}" name="key" value="{{ t.key }}" class="ht__remove" data-tile-remove aria-label="Remove {{ t.label }}" title="Remove">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>

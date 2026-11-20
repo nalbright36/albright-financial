@@ -15,9 +15,10 @@ fetch (labs:save_picker). Without JS the buttons submit the forms and "+ Add" op
 {% endcomment %}
 {% include "albright_labs/_tile_icons.html" %}
 <div class="container labs-picker{% if editing %} is-editing{% endif %}" id="labs-picker">
-    <div class="labs-picker__head">
+    <div class="labs-picker__head" data-order-url="{% url 'labs:save_tile_order' %}">
         <h1 class="labs-greeting" id="labs-greeting">{{ greeting }}</h1>
-        <a href="{{ home_url }}&amp;edit=1" class="btn btn-secondary btn-sm labs-picker__edit" id="picker-edit" data-view-only>Edit</a>
+        {# Edit toggles Edit mode; while editing it reads Done (hub.js; without JS, ?edit=1 renders the Done button). #}
+        {% if editing %}<button type="submit" form="picker-form" class="btn btn-primary btn-sm labs-picker__edit" id="picker-edit">Done</button>{% else %}<a href="{{ home_url }}&amp;edit=1" class="btn btn-secondary btn-sm labs-picker__edit" id="picker-edit" data-view-only>Edit</a>{% endif %}
     </div>
 
     {% if planner_today %}{% include "albright_planner/_today_panel.html" %}{% endif %}
@@ -33,7 +34,8 @@ fetch (labs:save_picker). Without JS the buttons submit the forms and "+ Add" op
                 <h2 class="labs-picker__label ht-head__label" id="ht-title">My tiles</h2>
                 <a href="{{ home_url }}&amp;add=1#tile-sheet" class="ht-head__add" data-open-sheet>+ Add</a>
             </div>
-            <p class="labs-picker__hint" data-edit-only>Drag tiles to reorder (or focus one and use the arrow keys), and tap &times; to remove one. Press <strong>Done</strong> to keep the order.</p>
+            <p class="labs-picker__hint" data-edit-only>Press and drag a tile to move it (or use its arrows), and tap &times; to remove one. Changes save as you go.</p>
+            <p class="ht-error" id="ht-error" role="alert" hidden></p>
             <ol class="ht-grid" id="ht-grid">
                 {% for t, count in home_tiles %}{% include "albright_labs/_home_tile.html" %}{% endfor %}
                 <li class="ht ht--add" data-fixed>
@@ -81,7 +83,7 @@ fetch (labs:save_picker). Without JS the buttons submit the forms and "+ Add" op
             <label class="ht-search">
                 <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ht-search"/></svg>
                 <span class="visually-hidden">Search pages</span>
-                <input type="search" id="ht-search" placeholder="Search pages…" autocomplete="off">
+                <input type="search" id="ht-sheet-search" placeholder="Search pages…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
             </label>
             <div class="ht-chips" role="group" aria-label="Filter by app">
                 <button type="button" class="ht-chip is-on" data-chip="" aria-pressed="true">All</button>

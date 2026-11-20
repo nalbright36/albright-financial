@@ -2,11 +2,14 @@
  * Home (albright_labs/hub.html): "My tiles" (albright_labs.home_tiles). Vanilla JS; the page works without it
  * (every button submits, "+ Add" opens the sheet as a section).
  *  - Outside Edit mode a tile is just its link: no click is ever prevented, so one tap opens the page.
- *  - "+ Add" / the Add tile open the Add sheet (a <dialog>): search, app chips, and a + per page that adds it at
- *    once (labs:toggle_tile, by fetch) - it turns into a check; tap again to remove. New tiles go to the end.
- *  - Edit mode (the Edit button, or ?edit=1): a remove (x) per tile (saved at once), drag to reorder with pointer
- *    events (mouse and touch), arrow keys on a focused tile; Done saves the order and the settings by fetch
- *    (labs:save_picker) and leaves Edit mode without a reload. Cancel reloads (the saved order comes back).
+ *  - "+ Add" / the Add tile open the Add sheet (a <dialog>): search (label + description + app, every word
+ *    anywhere, with the app chip), and a + per page that adds it at once (labs:toggle_tile) - it turns into a
+ *    check; tap again to remove. New tiles go to the end. Closing the sheet clears the search.
+ *  - Edit mode (the Edit button, which then reads Done; or ?edit=1): tiles wiggle; each gets a remove (x) and
+ *    move left/right buttons; a press-and-drag moves a tile (pointer events - one path for mouse, pen and touch;
+ *    touch waits ~200ms so a swipe still scrolls). The other tiles slide aside to show where it lands, the page
+ *    auto-scrolls near the top/bottom edge, and the drop saves the order (labs:save_tile_order) - on failure the
+ *    tiles go back and a short error shows. Done saves the settings too (labs:save_picker), without a reload.
  */
 (function () {
     "use strict";
@@ -16,18 +19,30 @@
     var form = document.getElementById("picker-form");
     var grid = document.getElementById("ht-grid");
     var note = document.getElementById("picker-note");
+    var errorBox = document.getElementById("ht-error");
     var editingInput = document.getElementById("picker-editing");
     var sheet = document.getElementById("tile-sheet");
     var sheetForm = document.getElementById("ht-sheet-form");
+    var orderUrl = (root.querySelector("[data-order-url]") || {dataset: {}}).dataset.orderUrl;
     var csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
+    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     // "Show completed tasks" only while "Show Today panel" is ticked.
     var showToday = document.getElementById("show-today"), todaySub = document.getElementById("show-completed-row");
     if (showToday && todaySub) showToday.addEventListener("change", function () { todaySub.hidden = !showToday.checked; });
 
     function say(text) { if (note) note.textContent = text; }
+    var errorTimer = null;
+    function showError(text) {
+        if (!errorBox) { say(text); return; }
+        errorBox.textContent = text;
+        errorBox.hidden = false;
+        clearTimeout(errorTimer);
+        errorTimer = setTimeout(function () { errorBox.hidden = true; }, 5000);
+    }
     function editing() { return root.classList.contains("is-editing"); }
     function tiles() { return Array.prototype.slice.call(grid.querySelectorAll(".ht:not([data-fixed])")); }
+    function keys() { return tiles().map(function (li) { return li.dataset.key; }); }
     function addTile() { return grid.querySelector(".ht--add"); }
 
     function post(url, body) {
@@ -35,6 +50,23 @@
         return fetch(url, {method: "POST", body: body, credentials: "same-origin",
                            headers: {"X-Requested-With": "XMLHttpRequest"}})
             .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+    }
+
+    // Order: save it; on failure put the tiles back as they were. ---------------------------------------------
+    function restore(order) {
+        var byKey = {};
+        tiles().forEach(function (li) { byKey[li.dataset.key] = li; });
+        order.forEach(function (key) { if (byKey[key]) grid.insertBefore(byKey[key], addTile()); });
+    }
+    function saveOrder(before) {
+        var now = keys();
+        if (before && before.join("|") === now.join("|")) return;
+        var body = new FormData();
+        now.forEach(function (key) { body.append("tile", key); });
+        post(orderUrl, body).then(function () { say("Order saved."); }).catch(function () {
+            if (before) restore(before);
+            showError("Couldn't save the new order - the tiles are back where they were.");
+        });
     }
 
     // Add / remove -------------------------------------------------------------------------------------------
@@ -70,26 +102,36 @@
     }
 
     // The Add sheet ------------------------------------------------------------------------------------------
-    var search = document.getElementById("ht-search");
+    var search = document.getElementById("ht-sheet-search");
+    var empty = document.getElementById("ht-rows-empty");
     var chip = "";
+    function words(text) { return (text || "").toLowerCase().replace(/\s+/g, " ").trim(); }
     function filterRows() {
-        var q = (search.value || "").trim().toLowerCase(), shown = 0;
+        if (!sheet) return;
+        var terms = words(search && search.value).split(" ").filter(Boolean), shown = 0;
         sheet.querySelectorAll(".ht-row").forEach(function (row) {
-            var ok = (!chip || row.dataset.app === chip) && (!q || row.dataset.search.indexOf(q) !== -1);
+            var hay = words(row.getAttribute("data-search"));
+            var ok = (!chip || row.getAttribute("data-app") === chip) &&
+                     terms.every(function (term) { return hay.indexOf(term) !== -1; });
             row.hidden = !ok;
             if (ok) shown += 1;
         });
-        document.getElementById("ht-rows-empty").hidden = shown > 0;
+        if (empty) empty.hidden = shown > 0;
     }
     function openSheet() {
         if (!sheet) return;
         if (sheet.open) sheet.close();
         if (typeof sheet.showModal === "function") sheet.showModal(); else sheet.setAttribute("open", "");
+        filterRows();
         if (search && window.matchMedia("(min-width: 720px)").matches) search.focus();
     }
     function closeSheet() {
         if (!sheet) return;
-        if (typeof sheet.close === "function") sheet.close(); else sheet.removeAttribute("open");
+        if (typeof sheet.close === "function" && sheet.open) sheet.close(); else { sheet.removeAttribute("open"); onSheetClosed(); }
+    }
+    function onSheetClosed() {
+        if (search) search.value = "";
+        filterRows();
     }
     if (sheet) {
         if (sheet.hasAttribute("open")) {                 // opened as ?add=1 - make it the real modal
@@ -99,13 +141,20 @@
             history.replaceState(null, "", clean.pathname + clean.search);
             openSheet();
         }
-        search.addEventListener("input", filterRows);
+        sheet.addEventListener("close", onSheetClosed);
+        if (search) {
+            // "input" covers typing, paste, dictation and iOS's clear button; "search"/"keyup" are belt and braces
+            // for older Safari, which can skip "input" on the clear (x) button.
+            ["input", "search", "keyup", "change"].forEach(function (type) { search.addEventListener(type, filterRows); });
+            // Enter (iOS "Search") must not submit the sheet's form - that would add the first page.
+            search.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); search.blur(); } });
+        }
         sheet.addEventListener("click", function (e) {
             if (e.target === sheet) { closeSheet(); return; }           // the backdrop
             if (e.target.closest("[data-close-sheet]")) { e.preventDefault(); closeSheet(); return; }
             var c = e.target.closest("[data-chip]");
             if (c) {
-                chip = c.dataset.chip;
+                chip = c.getAttribute("data-chip");
                 sheet.querySelectorAll("[data-chip]").forEach(function (b) {
                     b.classList.toggle("is-on", b === c);
                     b.setAttribute("aria-pressed", b === c ? "true" : "false");
@@ -119,7 +168,7 @@
                 if (t.disabled) return;
                 t.disabled = true;
                 toggle(t.value, t.classList.contains("is-added") ? "remove" : "add")
-                    .catch(function () { say("Couldn't save that - try again."); })
+                    .catch(function () { showError("Couldn't save that - try again."); })
                     .then(function () { t.disabled = false; t.focus(); });
             }
         });
@@ -129,7 +178,7 @@
         if (opener && sheet) { e.preventDefault(); openSheet(); }
     });
 
-    // Edit mode ----------------------------------------------------------------------------------------------
+    // Edit mode: remove, move buttons ------------------------------------------------------------------------
     var justDragged = false;
     function onEditClick(e) {
         if (!editing()) return;
@@ -141,79 +190,182 @@
             var label = li.querySelector(".ht__label").textContent;
             toggle(li.dataset.key, "remove").then(function () {
                 say("Removed " + label + ".");
-                var focus = next && next.querySelector("[data-tile-remove]") || next && next.querySelector("a");
+                var focus = next && (next.querySelector("[data-tile-remove]") || next.querySelector("a"));
                 if (focus) focus.focus();
-            }).catch(function () { say("Couldn't remove that - try again."); });
+            }).catch(function () { showError("Couldn't remove that - try again."); });
+            return;
+        }
+        var move = e.target.closest("[data-tile-move]");
+        if (move) {
+            e.preventDefault();
+            var tile = move.closest(".ht"), before = keys();
+            var dir = move.getAttribute("data-tile-move");
+            animateMove(function () {
+                if (dir === "up" && tile.previousElementSibling) grid.insertBefore(tile, tile.previousElementSibling);
+                var after = tile.nextElementSibling;
+                if (dir === "down" && after && !after.hasAttribute("data-fixed")) grid.insertBefore(after, tile);
+            });
+            move.focus();
+            saveOrder(before);
             return;
         }
         // In Edit mode a tile is something to arrange, not a link (the Add tile still opens the sheet).
         if (e.target.closest("[data-tile-link]")) e.preventDefault();
     }
 
-    function onKey(e) {
-        if (!editing() || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-        var li = e.target.closest(".ht:not([data-fixed])");
-        if (!li || !e.target.matches("[data-tile-link]")) return;
-        e.preventDefault();
-        if (e.key === "ArrowLeft" && li.previousElementSibling) grid.insertBefore(li, li.previousElementSibling);
-        if (e.key === "ArrowRight" && li.nextElementSibling && !li.nextElementSibling.hasAttribute("data-fixed")) {
-            grid.insertBefore(li.nextElementSibling, li);
-        }
-        e.target.focus();
-        say("Moved - press Done to keep this order.");
+    // The other tiles slide to their new places (FLIP: measure, change the DOM, animate from the old spot).
+    function animateMove(change, skip) {
+        var others = tiles().filter(function (li) { return li !== skip; });
+        var first = others.map(function (li) { return li.getBoundingClientRect(); });
+        change();
+        if (reduceMotion) return;
+        others.forEach(function (li, i) {
+            var last = li.getBoundingClientRect();
+            var dx = first[i].left - last.left, dy = first[i].top - last.top;
+            if (!dx && !dy) return;
+            li.classList.remove("is-sliding");
+            li.style.transform = "translate(" + dx + "px," + dy + "px)";
+            li.getBoundingClientRect();                         // apply that before animating back
+            li.classList.add("is-sliding");
+            li.style.transform = "";
+        });
     }
 
-    // Drag to reorder: pointer events, so mouse, pen and touch work the same.
+    // Drag to reorder ----------------------------------------------------------------------------------------
+    var HOLD_MS = 200, SLOP = 8, EDGE = 60;
     var drag = null;
+
     function onPointerDown(e) {
-        if (!editing() || e.button > 0 || e.target.closest("[data-tile-remove]")) return;
+        if (!editing() || drag || (e.pointerType === "mouse" && e.button !== 0)) return;
+        if (e.target.closest("[data-tile-remove], [data-tile-move]")) return;        // those stay buttons
         var li = e.target.closest(".ht:not([data-fixed])");
         if (!li) return;
-        drag = {li: li, id: e.pointerId, x: e.clientX, y: e.clientY, moving: false};
+        drag = {li: li, id: e.pointerId, type: e.pointerType, startX: e.clientX, startY: e.clientY,
+                x: e.clientX, y: e.clientY, lastY: e.clientY, active: false, before: keys(), timer: null, raf: 0};
+        if (e.pointerType === "mouse") return;                 // a mouse starts on movement
+        drag.timer = setTimeout(function () { if (drag && !drag.active) begin(); }, HOLD_MS);
     }
+
+    function begin() {
+        drag.active = true;
+        clearTimeout(drag.timer);
+        var rect = drag.li.getBoundingClientRect();
+        drag.offsetX = drag.x - rect.left;                     // where the finger is on the tile
+        drag.offsetY = drag.y - rect.top;
+        drag.originLeft = rect.left;
+        drag.originTop = rect.top;
+        drag.li.classList.remove("is-sliding", "is-settling");
+        try { drag.li.setPointerCapture(drag.id); } catch (err) { /* still works without capture */ }
+        drag.li.classList.add("is-dragging");
+        root.classList.add("is-dragging-tile");
+        if (navigator.vibrate && drag.type === "touch") navigator.vibrate(10);
+        follow();
+        drag.raf = requestAnimationFrame(autoScroll);
+    }
+
+    // The tile sits under the finger: its translate is from where its slot is now to where the finger is.
+    function follow() {
+        var li = drag.li;
+        li.style.transform = "";
+        var slot = li.getBoundingClientRect();
+        var dx = drag.x - drag.offsetX - slot.left, dy = drag.y - drag.offsetY - slot.top;
+        li.style.transform = "translate(" + dx + "px," + dy + "px) scale(1.08)";
+    }
+
+    function place() {
+        var li = drag.li;
+        li.style.visibility = "hidden";                         // see what's under the finger, not the tile
+        var under = document.elementFromPoint(drag.x, drag.y);
+        li.style.visibility = "";
+        var over = under && under.closest(".ht");
+        if (!over || over === li || over.parentNode !== grid) return;
+        var target;
+        if (over.hasAttribute("data-fixed")) {
+            target = over;                                     // over the Add tile: go last
+        } else {
+            var rect = over.getBoundingClientRect();
+            var after = drag.x > rect.left + rect.width / 2;
+            target = after ? over.nextElementSibling : over;
+        }
+        if (target === li || target === li.nextElementSibling) return;
+        animateMove(function () { grid.insertBefore(li, target); }, li);
+    }
+
     function onPointerMove(e) {
         if (!drag || e.pointerId !== drag.id) return;
-        var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-        if (!drag.moving) {
-            if (Math.abs(dx) + Math.abs(dy) < 6) return;
-            drag.moving = true;
-            drag.li.classList.add("is-dragging");
-            try { drag.li.setPointerCapture(e.pointerId); } catch (err) { /* not capturable - still works */ }
+        var dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+        if (!drag.active) {
+            if (drag.type === "mouse") {
+                drag.x = e.clientX; drag.y = e.clientY;
+                if (Math.abs(dx) + Math.abs(dy) >= SLOP) begin();
+                return;
+            }
+            // Touch before the hold: a swipe. Tiles have touch-action: none in Edit mode, so scroll the page
+            // ourselves - normal scrolling still works - and don't start a drag.
+            if (Math.abs(dx) + Math.abs(dy) >= SLOP) {
+                clearTimeout(drag.timer);
+                window.scrollBy(0, drag.lastY - e.clientY);
+                drag.lastY = e.clientY;
+                drag.scrolling = true;
+            }
+            return;
         }
         e.preventDefault();
-        drag.li.style.transform = "translate(" + dx + "px," + dy + "px)";
-        drag.li.style.pointerEvents = "none";
-        var under = document.elementFromPoint(e.clientX, e.clientY);
-        drag.li.style.pointerEvents = "";
-        var over = under && under.closest(".ht:not([data-fixed])");
-        if (!over || over === drag.li || over.parentNode !== grid) return;
-        var before = drag.li.getBoundingClientRect();
-        var rect = over.getBoundingClientRect();
-        var sameRow = e.clientY >= rect.top && e.clientY <= rect.bottom;
-        var after = sameRow ? e.clientX > rect.left + rect.width / 2 : e.clientY > rect.top + rect.height / 2;
-        grid.insertBefore(drag.li, after ? over.nextElementSibling : over);
-        // Keep the tile under the finger after it moved in the grid.
-        var moved = drag.li.getBoundingClientRect();
-        drag.x += moved.left - before.left;
-        drag.y += moved.top - before.top;
-        drag.li.style.transform = "translate(" + (e.clientX - drag.x) + "px," + (e.clientY - drag.y) + "px)";
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        place();
+        follow();
     }
+
+    function autoScroll() {
+        if (!drag || !drag.active) return;
+        var speed = 0, vh = window.innerHeight;
+        if (drag.y < EDGE) speed = -Math.ceil((EDGE - drag.y) / 4);
+        else if (drag.y > vh - EDGE) speed = Math.ceil((drag.y - (vh - EDGE)) / 4);
+        if (speed) {
+            window.scrollBy(0, speed);
+            place();
+            follow();
+        }
+        drag.raf = requestAnimationFrame(autoScroll);
+    }
+
     function onPointerUp(e) {
         if (!drag || e.pointerId !== drag.id) return;
-        var li = drag.li, moved = drag.moving;
+        var d = drag;
         drag = null;
-        li.classList.remove("is-dragging");
-        li.style.transform = "";
-        if (moved) {
-            say("Moved - press Done to keep this order.");
-            justDragged = true;                      // the click that follows pointerup isn't a tap
-            setTimeout(function () { justDragged = false; }, 0);
-        }
+        clearTimeout(d.timer);
+        cancelAnimationFrame(d.raf);
+        if (d.scrolling) { justDragged = true; setTimeout(function () { justDragged = false; }, 0); }
+        if (!d.active) return;
+        root.classList.remove("is-dragging-tile");
+        // Settle into the slot, then drop the lifted look.
+        d.li.classList.add("is-settling");
+        d.li.style.transform = "";
+        d.li.classList.remove("is-dragging");
+        setTimeout(function () { d.li.classList.remove("is-settling"); }, 200);
+        justDragged = true;                                    // the click after pointerup isn't a tap
+        setTimeout(function () { justDragged = false; }, 0);
+        if (e.type === "pointercancel") { restore(d.before); return; }
+        saveOrder(d.before);
+    }
+
+    // Edit mode on / off -------------------------------------------------------------------------------------
+    var editButton = document.getElementById("picker-edit");
+    var done = document.getElementById("picker-done");
+
+    function setEditButton(on) {
+        if (!editButton) return;
+        editButton.textContent = on ? "Done" : "Edit";
+        editButton.classList.toggle("btn-primary", on);
+        editButton.classList.toggle("btn-secondary", !on);
+        editButton.setAttribute("aria-pressed", on ? "true" : "false");
     }
 
     function startEditing() {
         root.classList.add("is-editing");
         if (editingInput) editingInput.value = "1";
+        setEditButton(true);
         var url = new URL(window.location.href);
         url.searchParams.set("picker", "1");
         url.searchParams.set("edit", "1");
@@ -221,12 +373,12 @@
         if (!root.dataset.editReady) {
             root.dataset.editReady = "1";
             grid.addEventListener("click", onEditClick);
-            grid.addEventListener("keydown", onKey);
             grid.addEventListener("pointerdown", onPointerDown);
-            grid.addEventListener("pointermove", onPointerMove);
-            grid.addEventListener("pointerup", onPointerUp);
-            grid.addEventListener("pointercancel", onPointerUp);
-            grid.addEventListener("dragstart", function (e) { if (editing()) e.preventDefault(); });
+            window.addEventListener("pointermove", onPointerMove, {passive: false});
+            window.addEventListener("pointerup", onPointerUp);
+            window.addEventListener("pointercancel", onPointerUp);
+            grid.addEventListener("dragstart", function (e) { if (editing()) e.preventDefault(); });   // no native drag
+            grid.addEventListener("contextmenu", function (e) { if (editing() && e.target.closest(".ht")) e.preventDefault(); });
         }
         say("");
     }
@@ -234,38 +386,40 @@
     function stopEditing() {
         root.classList.remove("is-editing");
         if (editingInput) editingInput.value = "";
+        setEditButton(false);
         var url = new URL(window.location.href);
         url.searchParams.delete("edit");
         history.replaceState(null, "", url.pathname + url.search);
     }
 
-    var editButton = document.getElementById("picker-edit");
+    function saveAndStop() {
+        if (done) done.disabled = true;
+        var body = new FormData(form);
+        body.delete("csrfmiddlewaretoken");
+        return post(form.getAttribute("action"), body).then(function (data) {
+            stopEditing();
+            say(data.note || "Saved.");
+            if (editButton) editButton.focus();
+        }).catch(function () {
+            showError("Couldn't save - try again.");
+        }).then(function () { if (done) done.disabled = false; });
+    }
+
     if (editButton) {
         editButton.addEventListener("click", function (e) {
             e.preventDefault();
+            if (editing()) { saveAndStop(); return; }
             startEditing();
             var first = grid.querySelector("[data-tile-remove]");
             if (first) first.focus();
         });
     }
 
-    var done = document.getElementById("picker-done");
-    if (done) {
-        form.addEventListener("submit", function (e) {
-            if (!editing() || (e.submitter && e.submitter.hasAttribute("formaction"))) return;
-            e.preventDefault();
-            done.disabled = true;
-            var body = new FormData(form);
-            body.delete("csrfmiddlewaretoken");
-            post(form.getAttribute("action"), body).then(function (data) {
-                stopEditing();
-                say(data.note || "Saved.");
-                if (editButton) editButton.focus();
-            }).catch(function () {
-                say("Couldn't save - try again.");
-            }).then(function () { done.disabled = false; });
-        });
-    }
+    form.addEventListener("submit", function (e) {
+        if (!editing() || (e.submitter && e.submitter.hasAttribute("formaction"))) return;
+        e.preventDefault();
+        saveAndStop();
+    });
 
     if (editing()) startEditing();      // opened as ?edit=1
 })();

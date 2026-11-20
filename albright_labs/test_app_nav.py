@@ -209,7 +209,10 @@ class ResumeTests(Base):
                 self.assertNotIn(blocker, source, path)
         page = self.page(reverse("albright_planner:day"))
         self.assertNotIn("touchstart", page)
-        self.assertNotIn("touch-action: none", static("style.css"))
+        # touch-action: none only on Home's tiles in Edit mode (press-and-drag), never on the page or an edge.
+        css = static("style.css")
+        for rule in re.findall(r"([^{}]+)\{[^{}]*touch-action:\s*none", css):
+            self.assertIn(".labs-picker.is-editing .ht", rule.strip())
         self.assertNotIn("overscroll-behavior-x", static("style.css"))
 
 

@@ -57,6 +57,7 @@ urlpatterns = [
     path("home/nav/", views.save_nav, name="save_nav"),
     path("home/picker/", views.save_picker, name="save_picker"),
     path("home/my-tiles/toggle/", views.toggle_tile, name="toggle_tile"),
+    path("home/my-tiles/order/", views.save_tile_order, name="save_tile_order"),
     path("home/pin/", views.toggle_pin, name="toggle_pin"),
     path("home/nav/show/<slug:key>/", views.show_app, name="show_app"),
     # An invite link: the only way to make an account yourself (404 without a usable invite).

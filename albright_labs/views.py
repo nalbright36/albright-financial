@@ -260,6 +260,18 @@ def toggle_tile(request):
 
 @login_required
 @require_POST
+def save_tile_order(request):
+    """Home's tiles in a new order: after a drag (hub.js, JSON) or a tile's move left/right button (move=up:<key>,
+    which works without JS and comes back to Edit mode)."""
+    order = _apply_move(request.POST.getlist("tile"), request.POST.get("move", ""))
+    home_tiles.reorder(request.user, order)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": True})
+    return redirect(landing.home_url() + "&edit=1")
+
+
+@login_required
+@require_POST
 def toggle_pin(request):
     """A tile's pin: in or out of Home's Favorites row. JSON for hub.js; a plain post comes back to Home."""
     pref = app_access.preference(request)
