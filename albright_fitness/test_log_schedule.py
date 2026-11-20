@@ -392,7 +392,8 @@ class HomeTodayTests(Base):
         self.assertIn("Running", work_box)
         self.assertIn("pl-check-form", work_box)
         self.assertIn("is-fitness", work_box)
-        self.assertIn(">Start</a>", work_box)
+        self.assertNotIn(">Start</a>", work_box)            # starting is in Fitness and on the task's view page
+        self.assertIn(">Skip</summary>", work_box)
         self.assertNotIn("Running", panel[tasks:])                                       # not listed twice
         self.assertIn("Call dentist", panel[tasks:])
         self.assertIn("2 open today", panel)

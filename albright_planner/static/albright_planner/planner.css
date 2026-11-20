@@ -433,7 +433,6 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
 .pl-today__sec--meals .pl-label .pl-meal-icon { color: var(--app-meals); }
 .pl-today__sec--workouts .pl-label .pl-fit-icon { color: var(--app-fitness); }
 .pl-today__sec--workouts .pl-item:has(.wi) { overflow: visible; }
-.pl-today__start { flex-shrink: 0; margin-left: auto; }
 /* An item another app keeps up to date: a small link back to its record. */
 .pl-src { flex-shrink: 0; align-self: center; padding: 2px 6px; border-radius: 6px; color: var(--pl-muted); text-decoration: none; }
 .pl-src:hover { color: var(--accent); background: var(--accent-soft); }
@@ -591,7 +590,9 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
 .pl-item.is-skipped .pl-item__title, .pl-view.is-skipped .pl-view__title { color: var(--pl-muted); font-weight: 500; text-decoration: none; }
 .pl-skip-label { display: inline-flex; align-items: center; gap: 4px; color: var(--pl-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; max-width: 14em; }
 .pl-view__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pl-today__skip { flex-shrink: 0; }
+/* Home's Today rows: Skip sits right after the title (which takes the rest of the line) - compact, never squeezed. */
+.pl-item > .skip-pop { flex-shrink: 0; }
+.pl .pl-item .pl-today__skip { min-height: 32px; padding: 4px 10px; font-size: 0.8125rem; }
 
 /* A shared workout (a program people joined): everyone's avatar with a small done / skipped / open mark. */
 .pl-parts { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
@@ -601,3 +602,16 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
   place-items: center; font-size: 8px; line-height: 1; color: #fff; background: var(--pl-muted); border: 1px solid var(--surface); }
 .pl-part__mark:empty { display: none; }
 .pl-part.is-done .pl-part__mark { background: var(--gain, #16A34A); }
+
+/* Home's Today panel on a phone: tighter spacing so the title keeps the room (checkbox, icon, title, repeats, Skip,
+   checklist count and open-arrow stay on one line at 375px). */
+@media (max-width: 480px) {
+  .pl-today { padding: 12px; }
+  .pl-today .pl-item { column-gap: 6px; padding: 0 6px 0 8px; }
+  .pl-today .pl-item__body { gap: 5px; }
+  .pl-today .pl-ind { gap: 5px; }
+  .pl .pl-today .pl-item .pl-today__skip { padding: 4px 8px; }
+  .pl-today .pl .pl-cl-toggle, .pl.pl-today .pl-cl-toggle { padding: 0 3px; gap: 2px; }
+  .pl-today .pl-src { padding: 2px 3px; }
+  .pl-today .pl-item .pl-fit-icon { margin-right: -1px; }       /* the tighter gap already: don't touch the title */
+}
