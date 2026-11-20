@@ -7,7 +7,8 @@ only appear for superusers (the token only holds the scopes the person can use -
 Approvals (enforced here, not just asked of the model in the prompt):
   - safe, run at once: reads, adding things, logging food / weight / workouts, checking tasks off (and back on)
   - wait for Approve: deleting anything, sharing with someone, changing settings (pausing/resuming a program),
-    and editing more than EDIT_LIMIT items in one go
+    and editing more than EDIT_LIMIT items in one go; and saving a recipe read from a photo (the card previews it -
+    title, servings, ingredients, steps - with a "Save recipe" button)
 Undo (UNDO_MINUTES): an action chip can be undone when the change is reversible - by the API operation that reverses
 it (check off <-> un-check, pause <-> resume, a program -> delete it), or by deleting the rows it created (only rows
 this assistant made, or the person's own fitness log rows).
@@ -54,8 +55,12 @@ def section_notes(token):
 
 # --- approvals ---------------------------------------------------------------------------------------------------------
 
-def needs_approval(calls):
-    """{call id: reason} for the calls in one reply that must wait for Approve."""
+PHOTO_APPROVAL_OPS = {"saveRecipe"}
+
+
+def needs_approval(calls, from_photo=False):
+    """{call id: reason} for the calls in one reply that must wait for Approve. from_photo: the person's message had
+    photos - what the model read from them (a recipe) is shown for a check before it's saved."""
     reasons = {}
     edits = [c for c in calls if c.name in EDIT_OPS]
     for call in calls:
@@ -70,7 +75,32 @@ def needs_approval(calls):
             reasons[call.id] = "Changes a setting"
         elif call.name in EDIT_OPS and len(edits) > EDIT_LIMIT:
             reasons[call.id] = f"Edits {len(edits)} items at once"
+        elif from_photo and call.name in PHOTO_APPROVAL_OPS:
+            reasons[call.id] = "Read from your photo - check it first"
     return reasons
+
+
+def _ingredient(row):
+    if isinstance(row, str):
+        return row
+    if isinstance(row, dict):
+        parts = [str(row.get(k) or "").strip() for k in ("quantity", "unit", "name")]
+        line = " ".join(p for p in parts if p)
+        return f"{line} ({row['note']})" if row.get("note") else line
+    return str(row)
+
+
+def preview(call):
+    """Extra fields for the approval card: a recipe's preview and the button's label ({} for other calls)."""
+    if call.name != "saveRecipe":
+        return {}
+    a = call.arguments
+    servings = a.get("servings")
+    return {"approve_label": "Save recipe", "preview": {
+        "kind": "recipe", "title": str(a.get("title") or "")[:200],
+        "servings": servings if isinstance(servings, int) else None,
+        "ingredients": [_ingredient(r)[:200] for r in (a.get("ingredients") or [])[:100]],
+        "steps": [str(s)[:2000] for s in (a.get("steps") or [])[:100]]}}
 
 
 def describe(call):

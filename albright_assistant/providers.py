@@ -14,12 +14,24 @@ Built from each provider's official docs as checked in November 2026:
                                  "x-goog-api-key" (still supported; the newer Interactions API isn't needed); a model
                                  part's thoughtSignature is sent back in the same part (required for function calling)
 
-Interface: Provider.list_models(key) -> [{"id", "label", "created", "price_in", "price_out"}] (also how a key is
-validated - the cheapest call there is), default_model(models), chat(key, model, system, messages, tools, timeout)
--> Reply. Messages are the assistant's own neutral form:
-  {"role": "user", "text"} | {"role": "assistant", "text", "tool_calls": [{"id", "name", "arguments"}], "native"}
+Interface: Provider.list_models(key) -> [{"id", "label", "created", "price_in", "price_out", "vision"}] (also how a
+key is validated - the cheapest call there is), default_model(models), chat(key, model, system, messages, tools,
+timeout) -> Reply. Messages are the assistant's own neutral form:
+  {"role": "user", "text", "images": [{"mime", "data" (base64)}]}
+  | {"role": "assistant", "text", "tool_calls": [{"id", "name", "arguments"}], "native"}
   | {"role": "tool", "call_id", "name", "text", "is_error"}
-Tools: [{"name", "description", "parameters": JSON Schema}]. Any failure is a ProviderError with a kind (see
+Tools: [{"name", "description", "parameters": JSON Schema}].
+
+Images (photos in the person's message, as checked in each provider's docs in November 2026) - "vision" is whether
+the model reads them, from the model list where the provider says (supports_images):
+  OpenAI / OpenRouter  content parts [{"type": "text"}, {"type": "image_url", "image_url": {"url": "data:..."}}];
+                       OpenRouter's list: architecture.input_modalities has "image"; OpenAI's list doesn't say, so
+                       its current chat models (GPT-4o and later, o1/o3/o4) are taken as reading images
+  Anthropic            {"type": "image", "source": {"type": "base64", "media_type", "data"}}; its list:
+                       capabilities.image_input.supported
+  xAI                  {"type": "input_image", "image_url": "data:...", "detail": "high"} with "input_text";
+                       its list (/v1/language-models): input_modalities has "image"; jpg/png only
+  Gemini               {"inline_data": {"mime_type", "data"}} parts; every Gemini model reads images Any failure is a ProviderError with a kind (see
 MESSAGES) - never the key, never the provider's raw body.
 """
 import json
@@ -223,14 +235,21 @@ class OpenAIChat(Provider):
             mid = str(row.get("id") or "")
             if mid and (mid.startswith("gpt-") or re.match(r"^o\d", mid) or mid.startswith("chatgpt-")) \
                     and not any(w in mid for w in NOT_CHAT):
-                out.append({"id": mid, "label": mid, "created": row.get("created") or 0})
+                out.append({"id": mid, "label": mid, "created": row.get("created") or 0,
+                            "vision": openai_vision(mid)})
         return sorted(out, key=lambda m: -m["created"])
 
     def to_native(self, system, messages):
         out = [{"role": "system", "content": system}]
         for m in messages:
             if m["role"] == "user":
-                out.append({"role": "user", "content": m["text"]})
+                if m.get("images"):
+                    parts = [{"type": "text", "text": m["text"]}] if m.get("text") else []
+                    parts += [{"type": "image_url", "image_url": {"url": f"data:{i['mime']};base64,{i['data']}"}}
+                              for i in m["images"]]
+                    out.append({"role": "user", "content": parts})
+                else:
+                    out.append({"role": "user", "content": m["text"]})
             elif m["role"] == "assistant":
                 row = {"role": "assistant", "content": m.get("text") or None}
                 if m.get("tool_calls"):
@@ -287,8 +306,10 @@ class OpenRouter(OpenAIChat):
             if not mid:
                 continue
             price = row.get("pricing") or {}
+            modalities = (row.get("architecture") or {}).get("input_modalities") or []
             out.append({"id": mid, "label": row.get("name") or mid, "created": row.get("created") or 0,
-                        "price_in": _per_million(price.get("prompt")), "price_out": _per_million(price.get("completion"))})
+                        "price_in": _per_million(price.get("prompt")), "price_out": _per_million(price.get("completion")),
+                        "vision": "image" in modalities})
         return sorted(out, key=lambda m: -m["created"])
 
     def default_model(self, models):
@@ -332,8 +353,9 @@ class Anthropic(Provider):
         for row in body.get("data") or []:
             if row.get("lifecycle", "active") != "active" or not row.get("id"):
                 continue
+            image = ((row.get("capabilities") or {}).get("image_input") or {}).get("supported")
             out.append({"id": row["id"], "label": row.get("display_name") or row["id"], "line": row.get("line") or "",
-                        "created": row.get("created_at") or ""})
+                        "created": row.get("created_at") or "", "vision": True if image is None else bool(image)})
         return sorted(out, key=lambda m: m["created"], reverse=True)
 
     def default_model(self, models):
@@ -352,7 +374,11 @@ class Anthropic(Provider):
 
         for m in messages:
             if m["role"] == "user":
-                add("user", [{"type": "text", "text": m["text"]}])
+                blocks = [{"type": "image", "source": {"type": "base64", "media_type": i["mime"], "data": i["data"]}}
+                          for i in m.get("images") or []]
+                if m.get("text") or not blocks:
+                    blocks.append({"type": "text", "text": m.get("text") or ""})
+                add("user", blocks)
             elif m["role"] == "assistant":
                 native = m.get("native")
                 if m.get("provider") == self.key and isinstance(native, list) and native:
@@ -408,14 +434,23 @@ class XAI(Provider):
             mid = str(row.get("id") or "")
             outputs = row.get("output_modalities") or ["text"]
             if mid and "text" in outputs and not any(w in mid for w in ("image", "video", "imagine")):
-                out.append({"id": mid, "label": mid, "created": row.get("created") or 0})
+                inputs = row.get("input_modalities")
+                out.append({"id": mid, "label": mid, "created": row.get("created") or 0,
+                            "vision": "image" in inputs if isinstance(inputs, list) else None})
         return sorted(out, key=lambda m: -m["created"])
 
     def to_native(self, messages):
         items = []
         for m in messages:
             if m["role"] == "user":
-                items.append({"role": "user", "content": m["text"]})
+                if m.get("images"):
+                    parts = [{"type": "input_image", "image_url": f"data:{i['mime']};base64,{i['data']}", "detail": "high"}
+                             for i in m["images"]]
+                    if m.get("text"):
+                        parts.append({"type": "input_text", "text": m["text"]})
+                    items.append({"role": "user", "content": parts})
+                else:
+                    items.append({"role": "user", "content": m["text"]})
             elif m["role"] == "assistant":
                 if m.get("text"):
                     items.append({"role": "assistant", "content": m["text"]})
@@ -501,7 +536,7 @@ class Gemini(Provider):
                 continue
             if any(w in mid for w in ("embedding", "aqa", "image", "tts", "live", "audio", "robotics", "veo", "imagen")):
                 continue
-            out.append({"id": mid, "label": row.get("displayName") or mid, "created": 0})
+            out.append({"id": mid, "label": row.get("displayName") or mid, "created": 0, "vision": True})
         return sorted(out, key=lambda m: _version_key(m["id"]), reverse=True)
 
     def default_model(self, models):
@@ -523,7 +558,10 @@ class Gemini(Provider):
 
         for m in messages:
             if m["role"] == "user":
-                add("user", [{"text": m["text"]}])
+                parts = [{"inline_data": {"mime_type": i["mime"], "data": i["data"]}} for i in m.get("images") or []]
+                if m.get("text") or not parts:
+                    parts.append({"text": m.get("text") or ""})
+                add("user", parts)
             elif m["role"] == "assistant":
                 native = m.get("native")
                 if m.get("provider") == self.key and isinstance(native, list) and native:
@@ -576,6 +614,37 @@ class Gemini(Provider):
         return Reply(text="".join(texts).strip(), tool_calls=calls, tokens_in=int(usage.get("promptTokenCount") or 0),
                      tokens_out=int(usage.get("candidatesTokenCount") or 0) + int(usage.get("thoughtsTokenCount") or 0),
                      native=parts)
+
+
+# --- which models read images ------------------------------------------------------------------------------------------
+
+def openai_vision(model_id):
+    """OpenAI's model list doesn't say: GPT-4o and every later chat model read images; GPT-3.5, the original GPT-4 and
+    the o1/o3 "mini" text-only reasoning models don't (OpenAI's model pages)."""
+    mid = model_id.lower()
+    if mid.startswith("gpt-3.5") or mid in ("gpt-4", "gpt-4-0613", "gpt-4-0314") or mid.startswith("gpt-4-32k"):
+        return False
+    if re.match(r"^o1-(mini|preview)", mid) or re.match(r"^o3-mini", mid):
+        return False
+    return True
+
+
+def supports_images(provider_key, model_id, models_cache=()):
+    """Whether this model reads images: the model list's "vision" when it said, else by provider (for a list saved
+    before "vision" was recorded - "Refresh the model list" makes it exact)."""
+    row = next((m for m in models_cache or [] if m.get("id") == model_id), {})
+    if isinstance(row.get("vision"), bool):
+        return row["vision"]
+    mid = (model_id or "").lower()
+    if not mid:
+        return False
+    if provider_key == "openai":
+        return openai_vision(mid)
+    if provider_key in ("anthropic", "gemini"):
+        return True
+    if provider_key == "xai":
+        return "vision" in mid or bool(re.match(r"^grok-([4-9]|\d\d)", mid))
+    return False                                      # OpenRouter: unknown until its list says
 
 
 PROVIDERS = [OpenAIChat(), Anthropic(), XAI(), Gemini(), OpenRouter()]

@@ -11,7 +11,8 @@ _widget_fab.html, the last item in the floating dock (index.html .fab-dock); thi
      data-chat-url="{% url 'assistant:chat' 0 %}" data-chat-delete-url="{% url 'assistant:chat_delete' 0 %}"
      data-delete-all-url="{% url 'assistant:chats_delete_all' %}" data-run-url="{% url 'assistant:run' 0 %}"
      data-approve-url="{% url 'assistant:run_approve' 0 %}" data-cancel-url="{% url 'assistant:run_cancel' 0 %}"
-     data-undo-url="{% url 'assistant:action_undo' 0 %}" data-setup-url="{% url 'assistant:setup' %}">
+     data-undo-url="{% url 'assistant:action_undo' 0 %}" data-setup-url="{% url 'assistant:setup' %}"
+     data-vision="{{ w.vision|yesno:'1,0' }}" data-no-vision="Your current model can't read images - switch models in AI assistant settings.">
     {{ w.page|json_script:"assistant-page" }}
     <input type="hidden" id="assistant-csrf" value="{{ csrf_token }}">
 
@@ -53,17 +54,26 @@ _widget_fab.html, the last item in the floating dock (index.html .fab-dock); thi
             <p class="as-empty" id="assistant-empty">Ask about your plans, meals, workouts or notes - or ask it to add or change something.</p>
         </div>
         <div class="as-chips" id="assistant-chips">{% for chip in w.chips %}<button type="button" class="as-chip" data-chip="{{ chip }}">{{ chip }}</button>{% endfor %}</div>
+        <div class="as-tray" id="assistant-photos" aria-label="Photos to send" hidden></div>
+        <p class="as-photo-note" id="assistant-photo-note" role="status" hidden></p>
         <form class="as-compose" id="assistant-form">
+            {# Photos: on a phone "image/*" (no capture attribute) offers Take photo and Photo library. #}
+            <input type="file" id="assistant-photo-input" accept="image/*,.heic,.heif" multiple hidden>
             <label class="visually-hidden" for="assistant-input">Message the assistant</label>
             <textarea id="assistant-input" rows="1" maxlength="4000" placeholder="Ask anything…" autocomplete="off"></textarea>
             <button type="button" class="as-icon-btn as-mic" id="assistant-mic" aria-label="Speak your message" aria-pressed="false" hidden>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
             </button>
+            <span class="as-photo-wrap" id="assistant-photo-wrap" title="{% if w.vision %}Add photos{% else %}Your current model can't read images - switch models in AI assistant settings.{% endif %}">
+                <button type="button" class="as-icon-btn as-photo" id="assistant-photo" aria-label="{% if w.vision %}Add photos (camera or library){% else %}Add photos - your current model can't read images{% endif %}"{% if not w.vision %} disabled aria-disabled="true"{% endif %}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
+                </button>
+            </span>
             <button type="submit" class="as-send" id="assistant-send" aria-label="Send">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
         </form>
-        <p class="as-foot">Your messages, and what it reads to answer, are sent to {{ w.provider }}.</p>
+        <p class="as-foot">Your messages and photos, and what it reads to answer, are sent to {{ w.provider }}.</p>
     </section>
     {% endif %}
 </div>

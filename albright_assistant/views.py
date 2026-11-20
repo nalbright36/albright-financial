@@ -8,6 +8,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -15,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from . import access, providers, runner, tools
+from . import access, photos, providers, runner, tools
 from .models import Action, Chat, Connection, Message, Run
 from .render import href, markdown_html
 
@@ -190,7 +191,8 @@ def _json_body(request):
 def _header(user, chat=None):
     conn = access.connection(user)
     out = {"connected": bool(conn and not conn.disabled), "provider": conn.provider_label if conn else "",
-           "model": conn.model_label if conn else "", "setup_url": reverse("assistant:setup")}
+           "model": conn.model_label if conn else "", "setup_url": reverse("assistant:setup"),
+           "vision": bool(conn and providers.supports_images(conn.provider, conn.model, conn.models_cache))}
     if chat is not None:
         out.update({"chat": chat.pk, "title": chat.title or "New chat", "tokens_in": chat.tokens_in,
                     "tokens_out": chat.tokens_out,
@@ -204,10 +206,11 @@ def _action_json(action):
             "undo_until": action.undo_until.isoformat() if action.undo_until else None}
 
 
-def _message_json(m, actions):
+def _message_json(m, actions, pictures=None):
     out = {"id": m.pk, "role": m.role}
     if m.role == Message.USER:
         out["text"] = m.text
+        out["images"] = [photos.describe(a) for a in (pictures or {}).get(m.pk, [])]
     elif m.role == Message.ASSISTANT:
         out["html"] = markdown_html(m.text) if m.text else ""
         out["thinking"] = bool(m.data.get("tool_calls")) and not m.text
@@ -224,14 +227,17 @@ def _messages(chat, after=0):
     actions = {}
     for a in Action.objects.filter(chat=chat, message_id__in=[m.pk for m in rows]):
         actions.setdefault(a.message_id, []).append(a)
-    return [_message_json(m, actions) for m in rows if m.role != Message.TOOL or actions.get(m.pk) or m.data.get("is_error")]
+    pictures = photos.of_messages([m for m in rows if m.role == Message.USER and m.data.get("photos")])
+    return [_message_json(m, actions, pictures) for m in rows
+            if m.role != Message.TOOL or actions.get(m.pk) or m.data.get("is_error")]
 
 
 def _run_json(run):
     if run is None:
         return None
     return {"id": run.pk, "status": run.status, "steps": run.steps, "changed": run.changed,
-            "pending": [{"id": p["id"], "description": p.get("description", ""), "reason": p.get("reason", "")}
+            "pending": [{"id": p["id"], "description": p.get("description", ""), "reason": p.get("reason", ""),
+                         "approve_label": p.get("approve_label", ""), "preview": p.get("preview")}
                         for p in run.pending] if run.status == Run.WAITING else []}
 
 
@@ -270,9 +276,23 @@ def chats_delete_all(request):
 @require_POST
 @assistant_required
 def send(request):
-    data = _json_body(request)
+    """A message: JSON {"chat", "text", "page"}, or - with photos - multipart form data with the same fields ("page"
+    as JSON text) and up to photos.MAX_PHOTOS files named "photos"."""
+    files = []
+    if request.content_type == "multipart/form-data":
+        data = {"chat": request.POST.get("chat") or None, "text": request.POST.get("text", "")}
+        try:
+            data["page"] = json.loads(request.POST.get("page") or "{}")
+        except ValueError:
+            data["page"] = {}
+        try:
+            files = photos.check(request.FILES.getlist("photos"))
+        except photos.PhotoError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+    else:
+        data = _json_body(request)
     text = str(data.get("text") or "").strip()
-    if not text:
+    if not text and not files:
         return JsonResponse({"error": "Type a message first."}, status=400)
     if len(text) > MAX_TEXT:
         return JsonResponse({"error": f"Keep it under {MAX_TEXT} characters."}, status=400)
@@ -285,13 +305,16 @@ def send(request):
         chat = None
     try:
         runner.check(request.user)
-        chat = chat or runner.new_chat(request.user)
-        if chat.runs.filter(status__in=(Run.QUEUED, Run.RUNNING)).exists():
+        if chat is not None and chat.runs.filter(status__in=(Run.QUEUED, Run.RUNNING)).exists():
             return JsonResponse({"error": "Wait for the answer to finish first."}, status=409)
-        after = chat.messages.order_by("-pk").values_list("pk", flat=True).first() or 0
-        run = runner.start(request.user, chat, text, data.get("page"))
+        after = chat.messages.order_by("-pk").values_list("pk", flat=True).first() or 0 if chat else 0
+        with transaction.atomic():                     # a photo that fails leaves no message (or new chat) behind
+            chat = chat or runner.new_chat(request.user)
+            run = runner.start(request.user, chat, text, data.get("page"), files)
     except runner.Refused as exc:
         return JsonResponse({"error": str(exc)}, status=403)
+    except photos.PhotoError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
     return JsonResponse({**_header(request.user, chat), "run": _run_json(run), "messages": _messages(chat, after)})
 
 

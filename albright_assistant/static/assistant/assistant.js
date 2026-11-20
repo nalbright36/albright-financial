@@ -1,7 +1,10 @@
 /* The floating AI assistant (albright_assistant/_widget.html). Sends a message (POST /assistant/send/), then polls
    /assistant/runs/<id>/ about once a second - each poll advances the run one step on the server (runner.py) and
    returns the new messages, action chips and any approval card. Assistant replies arrive as sanitized HTML from the
-   server; everything else goes in as text. Close with X, Esc, or a swipe down on a phone. */
+   server; everything else goes in as text. Close with X, Esc, or a swipe down on a phone.
+   Photos (the camera button; drag-and-drop or paste on a computer): up to 4 per message, each shrunk here to 2048px
+   on the long side and re-encoded as JPEG - which also drops EXIF/GPS - before upload (the server checks again:
+   albright_assistant/photos.py). Disabled when the model can't read images. */
 (function () {
     "use strict";
     var root = document.getElementById("assistant");
@@ -102,6 +105,7 @@
         }
         costEl.textContent = parts.join(" · ");
         costEl.title = data.cost ? "An estimate from the provider's token counts - your provider's bill is what counts." : "";
+        if (typeof data.vision === "boolean") setVision(data.vision);
     }
 
     // ---------- rendering ----------
@@ -131,7 +135,23 @@
     function render(m) {
         if (state.lastId < m.id) state.lastId = m.id;
         if (empty) { empty.remove(); empty = null; }
-        if (m.role === "user") { log.appendChild(el("div", "as-msg as-msg--user", m.text)); }
+        if (m.role === "user") {
+            if (m.images && m.images.length) {
+                var pics = el("div", "as-pics");
+                m.images.forEach(function (p) {
+                    var b = el("button", "as-pics__btn");
+                    b.type = "button";
+                    b.setAttribute("aria-label", "View photo full size");
+                    var img = el("img");
+                    img.src = p.thumb; img.alt = ""; img.loading = "lazy";
+                    b.appendChild(img);
+                    b.addEventListener("click", function () { viewPhoto(p.url); });
+                    pics.appendChild(b);
+                });
+                log.appendChild(pics);
+            }
+            if (m.text) log.appendChild(el("div", "as-msg as-msg--user", m.text));
+        }
         else if (m.role === "assistant") {
             if (!m.html) return;
             var box = el("div", "as-msg as-msg--assistant");
@@ -159,14 +179,17 @@
         approveCard.setAttribute("aria-label", "Needs your OK");
         approveCard.appendChild(el("p", "as-approve__title", "Needs your OK"));
         var ul = el("ul");
+        var label = "Approve";
         run.pending.forEach(function (p) {
             var li = el("li", null, p.description + " ");
             li.appendChild(el("span", "as-approve__why", "(" + p.reason + ")"));
+            if (p.preview && p.preview.kind === "recipe") li.appendChild(recipePreview(p.preview));
+            if (p.approve_label && run.pending.length === 1) label = p.approve_label;
             ul.appendChild(li);
         });
         approveCard.appendChild(ul);
         var row = el("div", "as-approve__buttons");
-        var ok = el("button", "btn btn-primary btn-sm", "Approve"), no = el("button", "btn btn-secondary btn-sm", "Cancel");
+        var ok = el("button", "btn btn-primary btn-sm", label), no = el("button", "btn btn-secondary btn-sm", "Cancel");
         ok.type = no.type = "button";
         ok.addEventListener("click", function () { decide(run, "approve"); });
         no.addEventListener("click", function () { decide(run, "cancel"); });
@@ -175,6 +198,42 @@
         log.appendChild(approveCard);
         scrollDown();
         ok.focus();
+    }
+    function recipePreview(r) {
+        var card = el("div", "as-recipe");
+        card.appendChild(el("p", "as-recipe__title", r.title || "Untitled recipe"));
+        if (r.servings) card.appendChild(el("p", "as-recipe__meta", "Serves " + r.servings));
+        if (r.ingredients && r.ingredients.length) {
+            card.appendChild(el("p", "as-recipe__h", "Ingredients"));
+            var ing = el("ul");
+            r.ingredients.forEach(function (t) { ing.appendChild(el("li", null, t)); });
+            card.appendChild(ing);
+        }
+        if (r.steps && r.steps.length) {
+            card.appendChild(el("p", "as-recipe__h", "Steps"));
+            var steps = el("ol");
+            r.steps.forEach(function (t) { steps.appendChild(el("li", null, t)); });
+            card.appendChild(steps);
+        }
+        return card;
+    }
+    var viewer = null;
+    function viewPhoto(src) {
+        if (!viewer) {
+            viewer = el("dialog", "as-viewer");
+            viewer.setAttribute("aria-label", "Photo");
+            var img = el("img");
+            img.alt = "Your photo, full size";
+            var shut = el("button", "as-icon-btn as-viewer__close", "×");
+            shut.type = "button";
+            shut.setAttribute("aria-label", "Close photo");
+            shut.addEventListener("click", function () { viewer.close(); });
+            viewer.addEventListener("click", function (e) { if (e.target === viewer || e.target.tagName === "IMG") viewer.close(); });
+            viewer.appendChild(img); viewer.appendChild(shut);
+            document.body.appendChild(viewer);
+        }
+        viewer.querySelector("img").src = src;
+        if (typeof viewer.showModal === "function") viewer.showModal(); else window.open(src, "_blank", "noopener");
     }
     function changed(apps) {
         if (!apps || !apps.length) return;
@@ -202,6 +261,7 @@
         costEl.textContent = "";
         refreshBox.hidden = true;
         if (approveCard) { approveCard.remove(); approveCard = null; }
+        clearPhotos();
     }
     function loadChat(id) {
         return api("GET", url("chatUrl", id)).then(function (data) {
@@ -310,11 +370,24 @@
     }
     function submit(text) {
         text = (text || "").trim();
-        if (!text || state.busy) return;
+        if ((!text && !photos.length) || state.busy || preparing) return;
         setBusy(true);
         chips.hidden = true;
         refreshBox.hidden = true;
-        api("POST", root.dataset.sendUrl, { chat: state.chat, text: text, page: pageContext() }).then(function (data) {
+        var request;
+        if (photos.length) {
+            var fd = new FormData();
+            if (state.chat) fd.append("chat", state.chat);
+            fd.append("text", text);
+            fd.append("page", JSON.stringify(pageContext()));
+            photos.forEach(function (p, i) { fd.append("photos", p.blob, p.name || ("photo-" + (i + 1) + ".jpg")); });
+            request = fetch(root.dataset.sendUrl, { method: "POST", credentials: "same-origin", body: fd,
+                                                    headers: { "Accept": "application/json", "X-CSRFToken": csrf } })
+                .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { d._status = r.status; return d; }); });
+        } else {
+            request = api("POST", root.dataset.sendUrl, { chat: state.chat, text: text, page: pageContext() });
+        }
+        request.then(function (data) {
             if (data._status !== 200) {
                 setBusy(false);
                 var n = el("div", "as-msg as-msg--notice as-msg--error", data.error || "Couldn't send that. Try again.");
@@ -326,6 +399,7 @@
             }
             input.value = "";
             grow();
+            clearPhotos();
             state.chat = data.chat; remember();
             header(data);
             if (approveCard) { approveCard.remove(); approveCard = null; }
@@ -349,6 +423,133 @@
             else submit(text);
         });
     });
+
+    // ---------- photos ----------
+    var MAX_PHOTOS = 4, MAX_SIDE = 2048, MAX_BYTES = 5 * 1024 * 1024, NO_VISION = root.dataset.noVision || "";
+    var photoBtn = document.getElementById("assistant-photo"), photoInput = document.getElementById("assistant-photo-input");
+    var photoWrap = document.getElementById("assistant-photo-wrap"), tray = document.getElementById("assistant-photos");
+    var photoNote = document.getElementById("assistant-photo-note");
+    var photos = [], preparing = 0, vision = root.dataset.vision === "1";
+
+    function sayPhoto(text) { if (photoNote) { photoNote.textContent = text || ""; photoNote.hidden = !text; } }
+    function setVision(on) {
+        vision = !!on;
+        if (!photoBtn) return;
+        photoBtn.disabled = !vision;
+        photoBtn.setAttribute("aria-disabled", vision ? "false" : "true");
+        if (photoWrap) photoWrap.title = vision ? "Add photos" : NO_VISION;
+        photoBtn.setAttribute("aria-label", vision ? "Add photos (camera or library)" : "Add photos - " + NO_VISION);
+        if (!vision && photos.length) { clearPhotos(); sayPhoto(NO_VISION); }
+    }
+    function drawTray() {
+        if (!tray) return;
+        tray.textContent = "";
+        tray.hidden = !photos.length && !preparing;
+        photos.forEach(function (p, i) {
+            var item = el("div", "as-tray__item");
+            var img = el("img");
+            img.src = p.url; img.alt = "Photo " + (i + 1);
+            var x = el("button", "as-tray__remove", "×");
+            x.type = "button";
+            x.setAttribute("aria-label", "Remove photo " + (i + 1));
+            x.addEventListener("click", function () {
+                URL.revokeObjectURL(p.url);
+                photos.splice(photos.indexOf(p), 1);
+                drawTray();
+                input.focus();
+            });
+            item.appendChild(img); item.appendChild(x);
+            tray.appendChild(item);
+        });
+        for (var n = 0; n < preparing; n++) tray.appendChild(el("div", "as-tray__item is-loading"));
+    }
+    function clearPhotos() {
+        photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
+        photos = [];
+        sayPhoto("");
+        drawTray();
+    }
+    function decode(file) {
+        // createImageBitmap honours the EXIF rotation (so the photo comes out upright); an <img> is the fallback.
+        if (window.createImageBitmap) {
+            return createImageBitmap(file, { imageOrientation: "from-image" }).catch(function () { return viaImg(file); });
+        }
+        return viaImg(file);
+    }
+    function viaImg(file) {
+        return new Promise(function (resolve, reject) {
+            var img = new Image(), src = URL.createObjectURL(file);
+            img.onload = function () { URL.revokeObjectURL(src); resolve(img); };
+            img.onerror = function () { URL.revokeObjectURL(src); reject(new Error("decode")); };
+            img.src = src;
+        });
+    }
+    function shrink(file) {
+        return decode(file).then(function (pic) {
+            var w = pic.width, h = pic.height, scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+            var canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(w * scale));
+            canvas.height = Math.max(1, Math.round(h * scale));
+            var ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#fff";                      // a transparent PNG gets a white background, not black
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(pic, 0, 0, canvas.width, canvas.height);
+            if (pic.close) pic.close();
+            return new Promise(function (resolve, reject) {
+                canvas.toBlob(function (blob) { blob ? resolve(blob) : reject(new Error("encode")); }, "image/jpeg", 0.85);
+            });
+        }, function () {
+            // This browser can't open it (HEIC outside Safari): send it as it is - the server converts HEIC.
+            if (file.size > MAX_BYTES) throw new Error("That photo is too big to send (over 5 MB) and this browser can't shrink it.");
+            return file;
+        });
+    }
+    function addFiles(list) {
+        if (!vision) { sayPhoto(NO_VISION); return; }
+        var files = Array.prototype.filter.call(list || [], function (f) {
+            return /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name || "");
+        });
+        if (!files.length) { if (list && list.length) sayPhoto("Only photos can be added."); return; }
+        sayPhoto("");
+        var room = MAX_PHOTOS - photos.length - preparing;
+        if (files.length > room) sayPhoto("Up to " + MAX_PHOTOS + " photos per message.");
+        files.slice(0, Math.max(0, room)).forEach(function (file) {
+            preparing += 1;
+            drawTray();
+            shrink(file).then(function (blob) {
+                var name = blob === file ? file.name : (file.name || "photo").replace(/\.[^.]*$/, "") + ".jpg";
+                photos.push({ blob: blob, name: name, url: URL.createObjectURL(blob) });
+            }, function (err) {
+                sayPhoto(err && err.message && err.message.length > 12 ? err.message : "Couldn't read that photo.");
+            }).then(function () { preparing -= 1; drawTray(); });
+        });
+    }
+    if (photoBtn && photoInput) {
+        photoBtn.addEventListener("click", function () { if (vision) photoInput.click(); });
+        photoInput.addEventListener("change", function () { addFiles(photoInput.files); photoInput.value = ""; });
+        // Paste a screenshot or copied image (desktop).
+        input.addEventListener("paste", function (e) {
+            var items = (e.clipboardData && e.clipboardData.files) || [];
+            if (items.length && Array.prototype.some.call(items, function (f) { return /^image\//.test(f.type); })) {
+                e.preventDefault();
+                addFiles(items);
+            }
+        });
+        // Drag and drop onto the panel (desktop).
+        var panel = document.getElementById("assistant-panel"), depth = 0;
+        function hasFiles(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") !== -1; }
+        panel.addEventListener("dragenter", function (e) { if (!hasFiles(e)) return; e.preventDefault(); depth += 1; panel.classList.add("is-dropping"); });
+        panel.addEventListener("dragover", function (e) { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = vision ? "copy" : "none"; } });
+        panel.addEventListener("dragleave", function () { depth = Math.max(0, depth - 1); if (!depth) panel.classList.remove("is-dropping"); });
+        panel.addEventListener("drop", function (e) {
+            if (!hasFiles(e)) return;
+            e.preventDefault();
+            depth = 0;
+            panel.classList.remove("is-dropping");
+            addFiles(e.dataTransfer.files);
+        });
+        setVision(vision);
+    }
 
     // ---------- speech to text, where the browser has it ----------
     var Speech = window.SpeechRecognition || window.webkitSpeechRecognition;

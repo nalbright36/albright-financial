@@ -19,7 +19,11 @@ upload that would take them over; a deleted attachment gives its bytes back (pos
 note goes).
 
 Deleting a task or note deletes its attachments (connect_signals: post_delete); a fork of a repeating task or a
-duplicate doesn't copy them (albright_planner.planner)."""
+duplicate doesn't copy them (albright_planner.planner).
+
+The AI assistant's photos (albright_assistant.photos) are attachments too, on the person's chat message: only the
+chat's owner sees them, they're added only with the message (never through the upload form - can_edit is False),
+and they go when the message or its chat is deleted."""
 import hashlib
 import io
 import os
@@ -57,7 +61,8 @@ THUMB_SIDE = 400
 JPEG_QUALITY = 88
 
 # The two kinds of parent: the apps_registry key in the upload form -> the model label.
-PARENTS = {"planner": "albright_planner.ScheduleItem", "notes": "albright_notes.Note"}
+PARENTS = {"planner": "albright_planner.ScheduleItem", "notes": "albright_notes.Note",
+           "assistant": "albright_assistant.Message"}
 
 IMAGE_TYPES = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "gif": "GIF", "webp": "WEBP", "heic": "HEIF", "heif": "HEIF"}
 OUTPUT = {"JPEG": ("jpg", "image/jpeg"), "HEIF": ("jpg", "image/jpeg"), "PNG": ("png", "image/png"),
@@ -108,13 +113,22 @@ def _ct(model_or_obj):
     return ContentType.objects.get_for_model(model_or_obj)
 
 
+def _is_chat_message(parent):
+    return parent is not None and parent._meta.label == PARENTS["assistant"]
+
+
 def can_view(user, parent):
     from . import sharing
+    if _is_chat_message(parent):                       # an assistant photo: the chat's owner only
+        return bool(user and user.is_authenticated and parent.chat.user_id == user.pk)
     return parent is not None and sharing.can_view(user, parent)
 
 
 def can_edit(user, parent):
-    """Edit access to the task or note (a Planner item another app keeps up to date is locked: no one edits it)."""
+    """Edit access to the task or note (a Planner item another app keeps up to date is locked: no one edits it).
+    Never for an assistant message - its photos come only with the message."""
+    if _is_chat_message(parent):
+        return False
     return parent is not None and can_view(user, parent) and parent.can_edit(user)
 
 
@@ -290,8 +304,8 @@ def add(user, parent, upload):
     """Check, process and store one upload on `parent` (the caller has checked edit access). Returns the
     Attachment, or raises AttachmentError."""
     if for_parent(parent).count() >= max_per_parent():
-        raise AttachmentError(f"A {'note' if parent._meta.label == PARENTS['notes'] else 'task'} can have at most "
-                              f"{max_per_parent()} attachments.")
+        noun = {PARENTS["notes"]: "note", PARENTS["assistant"]: "message"}.get(parent._meta.label, "task")
+        raise AttachmentError(f"A {noun} can have at most {max_per_parent()} attachments.")
     usage = storage.get_storage_usage(user)
     if usage["full"]:                                   # already full: say so before any processing
         raise AttachmentError(storage.full_message(usage["used_bytes"], usage["limit_bytes"]))

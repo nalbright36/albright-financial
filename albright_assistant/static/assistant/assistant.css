@@ -133,12 +133,48 @@
 .as-send:disabled { opacity: .5; cursor: default; }
 .as-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .as-mic.is-listening { color: var(--red); }
+/* Photos: the camera button (disabled - with its tooltip on the wrapper - when the model can't read images), the
+   tray of thumbnails above the composer, the photos in the chat, and the full-size viewer. */
+.as-photo-wrap { display: inline-flex; flex: none; }
+.as-photo:disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+.as-tray { display: flex; gap: 8px; margin: 0 12px 8px; overflow-x: auto; }
+.as-tray[hidden] { display: none; }
+.as-tray__item { position: relative; width: 64px; height: 64px; flex: none; border-radius: 10px; overflow: visible;
+  border: 1px solid var(--border); background: var(--surface); }
+.as-tray__item img { width: 100%; height: 100%; object-fit: cover; border-radius: 9px; display: block; }
+.as-tray__item.is-loading { background: linear-gradient(90deg, var(--surface), var(--surface-hover, var(--border)), var(--surface));
+  background-size: 200% 100%; animation: as-shimmer 1.2s linear infinite; }
+@keyframes as-shimmer { to { background-position: -200% 0; } }
+.as-tray__remove { position: absolute; top: -7px; right: -7px; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--border-strong, var(--border)); background: var(--surface-raised, var(--surface)); color: var(--text-primary);
+  font-size: 15px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.as-tray__remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.as-photo-note { margin: 0 16px 6px; font-size: .75rem; color: var(--text-secondary); }
+.as-photo-note[hidden] { display: none; }
+.as-panel.is-dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.as-pics { align-self: flex-end; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 85%; }
+.as-pics__btn { width: 96px; height: 96px; padding: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  background: var(--surface); cursor: zoom-in; }
+.as-pics__btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.as-pics__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.as-viewer { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 92vh; overflow: visible; }
+.as-viewer::backdrop { background: rgba(0, 0, 0, .8); }
+.as-viewer img { display: block; max-width: 96vw; max-height: 92vh; border-radius: 10px; cursor: zoom-out; }
+.as-viewer__close { position: absolute; top: 8px; right: 8px; background: rgba(0, 0, 0, .55); color: #fff; border-radius: 50%; }
+/* The approval card's recipe preview (a recipe read from a photo, before "Save recipe"). */
+.as-recipe { margin: 8px 0 4px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+  max-height: 260px; overflow-y: auto; font-size: .8125rem; }
+.as-recipe__title { margin: 0; font-weight: 700; font-size: .9375rem; color: var(--text-primary); }
+.as-recipe__meta { margin: 2px 0 0; color: var(--text-secondary); }
+.as-recipe__h { margin: 8px 0 2px; font-weight: 600; }
+.as-recipe ul, .as-recipe ol { margin: 0; padding-left: 20px; }
 .as-foot { margin: 6px 16px 10px; font-size: .6875rem; color: var(--text-tertiary, var(--text-secondary)); }
 
 @media (prefers-reduced-motion: reduce) {
   .as-fab { transition: none; }
   .as-fab:hover { transform: none; }
   .as-typing span { animation: none; opacity: .7; }
+  .as-tray__item.is-loading { animation: none; }
 }
 
 /* ---------- Setup page ---------- */

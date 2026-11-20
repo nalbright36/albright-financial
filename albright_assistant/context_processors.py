@@ -1,6 +1,6 @@
 """assistant: what templates/index.html needs for the floating assistant button - only for people with "Can use AI
 assistant" (none for anyone else, so no button). Two small queries per page, signed-in pages only."""
-from . import access, prompt
+from . import access, prompt, providers
 
 # Starter chips per app (the open app's, else Home's). "item" chips only on a page showing that kind of item.
 CHIPS = {
@@ -33,4 +33,6 @@ def assistant(request):
         "disabled": bool(conn and conn.disabled),
         "provider": conn.provider_label if conn else "", "model": conn.model_label if conn else "",
         "page": page, "chips": chips[:3],
+        # Photos: only for a model that reads images (providers.supports_images) - else the button is disabled.
+        "vision": bool(conn and providers.supports_images(conn.provider, conn.model, conn.models_cache)),
     }}

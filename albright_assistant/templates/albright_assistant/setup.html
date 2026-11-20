@@ -22,7 +22,7 @@ so they work without JavaScript.
             <div class="field">
                 <label for="as-model">Model</label>
                 <select id="as-model" name="model" class="ledger-input" aria-describedby="as-model-help">
-                    {% for m in models %}<option value="{{ m.id }}"{% if m.id == conn.model %} selected{% endif %}>{{ m.label }}{% if m.price_in %} - ${{ m.price_in }} / ${{ m.price_out }} per million tokens{% endif %}</option>{% endfor %}
+                    {% for m in models %}<option value="{{ m.id }}"{% if m.id == conn.model %} selected{% endif %}>{{ m.label }}{% if m.vision %} · reads photos{% endif %}{% if m.price_in %} - ${{ m.price_in }} / ${{ m.price_out }} per million tokens{% endif %}</option>{% endfor %}
                 </select>
                 <small id="as-model-help" class="as-muted">From {{ conn.provider_label }}'s own list for your key. The one picked when you connected is a good everyday choice for chatting and using tools.</small>
             </div>
@@ -53,7 +53,7 @@ so they work without JavaScript.
             <form method="post" action="{% url 'assistant:refresh_models' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Refresh model list</button></form>
             <form method="post" action="{% url 'assistant:disconnect' %}" data-confirm="Disconnect {{ conn.provider_label }}? Your key is deleted from this site. Your past chats stay until you delete them.">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm" id="assistant-disconnect">Disconnect</button></form>
         </div>
-        <p class="as-privacy" id="assistant-privacy">Your messages, and the parts of your account the assistant reads to answer, are sent to {{ conn.provider_label }}.</p>
+        <p class="as-privacy" id="assistant-privacy">Your messages, and the parts of your account the assistant reads to answer, are sent to {{ conn.provider_label }}. <strong>Photos you add are sent to {{ conn.provider_label }} too</strong> (kept here with the chat, in your storage, until you delete the chat).</p>
     </section>
     {% endif %}
 
@@ -75,7 +75,7 @@ so they work without JavaScript.
             <button type="submit" class="btn btn-primary">Connect</button>
             <p class="as-muted">We check the key with one free call that lists your models, then store it encrypted. It's never shown again (only its last 4 characters).</p>
         </form>
-        <p class="as-privacy">Your messages, and the parts of your account the assistant reads to answer, are sent to {{ provider.label }}.</p>
+        <p class="as-privacy">Your messages, and the parts of your account the assistant reads to answer, are sent to {{ provider.label }}. Photos you add are sent to {{ provider.label }} too.</p>
     </section>
 </div>
 {% endblock %}
