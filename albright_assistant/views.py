@@ -17,7 +17,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from . import access, photos, providers, runner, tools
-from .models import Action, Chat, Connection, Message, Run
+from .models import Action, Chat, Connection, Message, Run, Visual
 from .render import href, markdown_html
 
 log = logging.getLogger(__name__)
@@ -217,6 +217,11 @@ def _message_json(m, actions, pictures=None):
     elif m.role == Message.TOOL:
         out["actions"] = [_action_json(a) for a in actions.get(m.pk, [])]
         out["error"] = bool(m.data.get("is_error"))
+        if m.data.get("visual"):
+            from .visuals import render as vrender
+            visual = Visual.objects.filter(pk=m.data["visual"], owner=m.chat.user).first()
+            if visual is not None:
+                out["visual"] = vrender.card(visual, m.chat.user)
     elif m.role == Message.NOTICE:
         out["text"], out["kind"] = m.text, m.data.get("kind", "")
     return out
@@ -229,7 +234,7 @@ def _messages(chat, after=0):
         actions.setdefault(a.message_id, []).append(a)
     pictures = photos.of_messages([m for m in rows if m.role == Message.USER and m.data.get("photos")])
     return [_message_json(m, actions, pictures) for m in rows
-            if m.role != Message.TOOL or actions.get(m.pk) or m.data.get("is_error")]
+            if m.role != Message.TOOL or actions.get(m.pk) or m.data.get("is_error") or m.data.get("visual")]
 
 
 def _run_json(run):

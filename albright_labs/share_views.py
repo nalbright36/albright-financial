@@ -76,8 +76,8 @@ def share(request, label, pk):
 def defaults(request):
     """What new items in each app are shared with - Only me, one of my circles, or specific people (View / Edit)."""
     user = request.user
-    from .circles import can_use_app, find_person
-    apps = [a for a in sharing.APPS if can_use_app(user, a)]
+    from .circles import ALWAYS_ON, can_use_app, find_person
+    apps = [a for a in sharing.APPS if a not in ALWAYS_ON and can_use_app(user, a)]     # Visuals have no "new" form
     if request.method == "POST":
         app = request.POST.get("app")
         if app in apps:
@@ -112,7 +112,7 @@ def defaults(request):
             by_id = User.objects.in_bulk([int(k) for k in d.people if str(k).isdigit()])
             people = [{"key": k, "name": sharing.person_name(by_id[int(k)]), "permission": v}
                       for k, v in d.people.items() if str(k).isdigit() and int(k) in by_id]
-        rows.append({"app": app, "label": "Recipes" if app == "meals" else apps_registry.BY_KEY[app].label,
+        rows.append({"app": app, "label": sharing.app_label(app),
                      "noun": sharing.APPS[app].noun, "default": d, "people": people,
                      "circles": sharing.shareable_circles(user, app), "text": sharing.default_text(user, app)})
     return render(request, "albright_labs/sharing_defaults.html", {"rows": rows})
@@ -127,7 +127,7 @@ def shared_with_me(request):
     rows = sharing.shared_with_me(request.user, app, circle)
     return render(request, "albright_labs/shared_with_me.html", {
         "rows": rows, "app": app, "circle": int(circle) if circle else None,
-        "apps": [(a, "Recipes" if a == "meals" else apps_registry.BY_KEY[a].label) for a in sharing.APPS],
+        "apps": [(a, sharing.app_label(a)) for a in sharing.APPS],
         "circles": sharing.circles_for_filter(request.user)})
 
 

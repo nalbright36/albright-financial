@@ -33,6 +33,12 @@ ASSISTANT_RULES = [
     "servings. If a portion can't be judged from the photo (and they didn't say), ask ONE short question first and "
     "log nothing yet. Then log everything in one logFood call (set confidence honestly; put \"from a photo\" in notes) "
     "and reply in two lines at most: what you logged, and the day's new total calories from logFood's totals.",
+    # Visuals (albright_assistant.visuals).
+    "Charts (\"show my weight next to my calories\", \"is X related to Y\"): call list_metrics, then get_stats for "
+    "any relationship or trend, then show_visual with a Vega-Lite spec that names datasets (never data or code). "
+    "Quote only get_stats' numbers. When you mention a correlation, say how many days it's based on (paired_days) "
+    "and that a correlation doesn't prove one thing causes the other. To change a chart (\"make it weekly\", \"add "
+    "carbs\"), call show_visual again with replaces = its visual_id.",
     "A grocery list (handwritten or printed): call listGroceries, then addGroceries with every item you can read "
     "(quantities when written). Then say what you added, and name any that were already on the list (merged into the "
     "existing line) and any words you couldn't read.",

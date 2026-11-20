@@ -1,0 +1,32 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}{{ visual.title }} · Visuals · {% endblock %}
+{% block app_head %}<link rel="stylesheet" href="{% static_version 'assistant/visuals.css' %}">{% endblock %}
+{% block app_scripts %}<script src="{% static_version 'assistant/visuals.js' %}" defer></script>{% endblock %}
+{% block content %}
+{% comment %}
+One saved Visual, big (albright_assistant.visuals.views.detail) - drawn from today's data each time it opens. Its
+owner can rename, delete and share it (the one Share control, albright_labs.sharing): people it's shared with see
+this chart drawn from the owner's data - only this chart.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px; max-width: 1100px;">
+    <a href="{% url 'assistant:visuals' %}" style="font-size: 0.875rem;">&larr; Visuals</a>
+    <div style="margin-top: 12px;">
+        <div data-visual-url="{{ card.data_url }}" data-visual-page data-visual-height="420" data-visual-info="{{ info }}"></div>
+    </div>
+    {% if mine %}
+    <div class="vz-item__tools" style="margin-top: 16px;">
+        <form method="post" action="{% url 'assistant:visual_rename' visual.pk %}">{% csrf_token %}
+            <label class="visually-hidden" for="visual-title">Name</label>
+            <input type="text" id="visual-title" name="title" value="{{ visual.title }}" maxlength="120" class="ledger-input">
+            <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+        </form>
+        <form method="post" action="{% url 'assistant:visual_delete' visual.pk %}" data-confirm="Delete this visual?">{% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
+        </form>
+    </div>
+    <p class="as-muted" style="margin-top: 12px;">Sharing shows people this chart drawn from <strong>your</strong> data (including weight or food, if it charts them) - only this chart, updated each time they open it.</p>
+    {% endif %}
+</div>
+{% if mine %}{% include "albright_labs/_share.html" %}{% endif %}
+{% endblock %}

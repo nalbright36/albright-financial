@@ -10,6 +10,7 @@
     var root = document.getElementById("assistant");
     if (!root) return;
     var fab = document.getElementById("assistant-fab");
+    var VISUALS_JS = document.currentScript && document.currentScript.getAttribute("data-visuals-js");
     var connected = root.dataset.connected === "1";
     var target = document.getElementById(connected ? "assistant-panel" : "assistant-connect-card");
     var POLL_MS = 1000;
@@ -158,6 +159,11 @@
             box.innerHTML = m.html;                      // sanitized on the server (albright_assistant/render.py)
             log.appendChild(box);
         } else if (m.role === "tool") {
+            if (m.visual) {
+                var slot = el("div", "as-visual");
+                log.appendChild(slot);
+                visualCard(m.visual, slot);
+            }
             if (m.actions && m.actions.length) {
                 var list = el("div", "as-actions");
                 m.actions.forEach(function (a) { list.appendChild(actionChip(a)); });
@@ -198,6 +204,21 @@
         log.appendChild(approveCard);
         scrollDown();
         ok.focus();
+    }
+    // A Visual (a chart from their data): visuals.js draws it - loaded the first time one is shown.
+    var visualsReady = null;
+    function visualCard(info, slot) {
+        if (!visualsReady) {
+            visualsReady = window.AlbrightVisuals ? Promise.resolve() : new Promise(function (resolve, reject) {
+                var s = document.createElement("script");
+                s.src = VISUALS_JS; s.onload = resolve; s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        }
+        visualsReady.then(function () {
+            slot.appendChild(window.AlbrightVisuals.card(info, { height: 220 }));
+            scrollDown();
+        }, function () { slot.textContent = "Couldn't load the chart."; });
     }
     function recipePreview(r) {
         var card = el("div", "as-recipe");

@@ -134,3 +134,29 @@ class Action(models.Model):
     def can_undo(self):
         return bool(self.undo) and self.undone_at is None and self.undo_until is not None \
             and self.undo_until > timezone.now()
+
+
+class Visual(models.Model):
+    """A chart the assistant made from the person's data (albright_assistant.visuals). spec: the checked Vega-Lite
+    spec WITHOUT data (visuals.spec.clean); queries: {dataset name: get_series query} - re-run every time it's drawn,
+    so it's always current. A chat's versions are drafts (saved=False, chat set; "make it weekly" makes a new one with
+    previous set); Save copies one into a saved Visual (saved=True, no chat) - or replaces the one it came from
+    (saved_as). Saved ones are Account > Visuals, can be Home tiles, and can be shared (albright_labs.sharing)."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="visuals")
+    title = models.CharField(max_length=120)
+    summary = models.TextField(blank=True)
+    spec = models.JSONField(default=dict)
+    queries = models.JSONField(default=dict)
+    saved = models.BooleanField(default=False, db_index=True)
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, null=True, blank=True, related_name="visuals")
+    previous = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    saved_as = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="drafts")
+    version = models.PositiveSmallIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-pk"]
+
+    def __str__(self):
+        return self.title

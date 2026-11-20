@@ -246,7 +246,7 @@ def toggle_tile(request):
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         html = ""
         if add:
-            tile = home_tiles.catalog()[key]
+            tile = home_tiles.catalog(request.user)[key]
             html = render_to_string("albright_labs/_home_tile.html", {
                 "t": tile, "count": home_tiles.badges(request.user, [tile]).get(key, 0)}, request=request)
         return JsonResponse({"ok": True, "key": key, "added": add, "html": html})

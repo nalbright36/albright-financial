@@ -16,6 +16,7 @@ from django.utils import timezone
 from albright_bot_api import catalog
 
 from . import access, photos, prompt, providers, tools
+from .visuals import tools as visual_tools
 from .models import Chat, Message, Run
 
 CALL_SECONDS = 60
@@ -172,7 +173,7 @@ def _step(request, run):
         reply = provider.chat(access.decrypt(conn.key_encrypted), conn.model, prompt.system(run.user, run.page, token),
                               history(run.chat, providers.supports_images(conn.provider, conn.model,
                                                                           conn.models_cache)),
-                              tools.definitions(token),
+                              tools.definitions(token) + visual_tools.definitions(run.user),
                               timeout=max(5, min(CALL_SECONDS, RUN_SECONDS - elapsed)))
     except providers.ProviderError as exc:
         return _fail(run, conn, exc.kind, exc.message)
@@ -210,6 +211,11 @@ def _step(request, run):
 
 
 def _execute(request, run, token, call):
+    if call.name in visual_tools.NAMES:                 # Visuals: local tools, run as the person (no API call)
+        text, extra, is_error = visual_tools.run(run, call)
+        Message.objects.create(chat=run.chat, run=run, role=Message.TOOL, text=text,
+                               data={"call_id": call.id, "name": call.name, "is_error": is_error, **(extra or {})})
+        return
     text, data, is_error = tools.run(request, token, call)
     message = Message.objects.create(chat=run.chat, run=run, role=Message.TOOL, text=text,
                                      data={"call_id": call.id, "name": call.name, "is_error": is_error})

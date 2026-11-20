@@ -224,6 +224,7 @@ MEDIA_URL ='/images/'
 # (AttachmentBlob, via albright_labs.attachment_storage) and only ever served through a view that checks access:
 # there is no public media mapping for them.
 ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024        # per file
+VISUALS_MAX_SAVED = 20                          # saved Visuals per person (albright_assistant.visuals)
 ATTACHMENT_MAX_PER_PARENT = 20                 # per task or note
 
 STATICFILES_DIRS = [

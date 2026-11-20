@@ -7,6 +7,9 @@ for 60 seconds (badges()).
 
 Only tiles for apps the user can open and that aren't archived are shown or offered (visible_catalog). A user's
 HomeTile rows for an app they lose are kept, just not shown - they come back with the app.
+
+The "Visuals" group: each saved Visual the user owns or has been shared (albright_assistant.Visual) is a tile
+("visual.<id>"), built per user (catalog(user)) - it belongs to no app, so everyone signed in has the group.
 """
 import logging
 from dataclasses import dataclass
@@ -34,10 +37,11 @@ class Tile:
     description: str      # the Add sheet's second line
     badge: str = ""       # a function below: user -> int
     suffix: str = ""      # appended to the URL - a query or #anchor
+    args: tuple = ()      # the URL's arguments (a Visual's id)
 
     @property
     def app_info(self):
-        return apps_registry.BY_KEY[self.app]
+        return apps_registry.BY_KEY.get(self.app) or VISUALS_GROUP
 
     @property
     def color(self):
@@ -50,7 +54,7 @@ class Tile:
     @property
     def url(self):
         try:
-            return reverse(self.url_name) + self.suffix
+            return reverse(self.url_name, args=self.args) + self.suffix
         except NoReverseMatch:       # an archived app's URLs can be missing in some setups
             return ""
 
@@ -111,11 +115,35 @@ def _app_tile(app):
                 badge=APP_BADGES.get(app.key, ""))
 
 
-def catalog():
+class _Group:
+    """The Visuals group: like an App to the templates (key, label, accent, color) - no app of its own."""
+    key, label, accent, color = "visuals", "Visuals", "labs", "#2DD4BF"
+
+
+VISUALS = _Group.key
+VISUALS_GROUP = _Group()
+
+
+def visual_tiles(user):
+    """A tile per saved Visual this user owns or has been shared (newest first, at most 40)."""
+    try:
+        from albright_assistant.models import Visual
+
+        from . import sharing
+    except ImportError:                                 # pragma: no cover
+        return []
+    qs = sharing.visible_queryset(user, Visual, Visual.objects.filter(saved=True)).order_by("-updated_at")[:40]
+    return [Tile(f"visual.{v.pk}", v.title[:60], "chart", VISUALS, "assistant:visual",
+                 "Your chart" if v.owner_id == user.pk else "Shared with you", args=(v.pk,)) for v in qs]
+
+
+def catalog(user=None):
     """{key: Tile} - every app's whole-app tile, then PAGES (built from the registry on each call, so a new app
-    gets its tile without being listed here)."""
-    return {t.key: t for t in [_app_tile(app) for app in apps_registry.APPS] + list(PAGES)
-            if t.app in apps_registry.BY_KEY}
+    gets its tile without being listed here), then - for a user - their Visuals."""
+    tiles = [t for t in [_app_tile(app) for app in apps_registry.APPS] + list(PAGES) if t.app in apps_registry.BY_KEY]
+    if user is not None and getattr(user, "is_authenticated", False):
+        tiles += visual_tiles(user)
+    return {t.key: t for t in tiles}
 
 
 def _pref(user):
@@ -127,17 +155,17 @@ def _openable(user, pref=None):
     """The app keys this user can open, archived ones left out (allowed_keys already does - checked again so a
     superuser, who may open archived apps, never gets their tiles)."""
     pref = pref or _pref(user)
-    return [k for k in app_access.allowed_keys(user, pref) if not is_app_archived(k)]
+    return [k for k in app_access.allowed_keys(user, pref) if not is_app_archived(k)] + [VISUALS]
 
 
 def visible_catalog(user, pref=None):
     """Every tile this user may add, grouped by app in their app order: [(App, [Tile, ...]), ...] - the app's
     whole-app tile first."""
-    groups, all_tiles = [], catalog().values()
+    groups, all_tiles = [], catalog(user).values()
     for key in _openable(user, pref):
         tiles = [t for t in all_tiles if t.app == key and t.url]
         if tiles:
-            groups.append((apps_registry.BY_KEY[key], tiles))
+            groups.append((apps_registry.BY_KEY.get(key) or VISUALS_GROUP, tiles))
     return groups
 
 
@@ -161,12 +189,12 @@ def user_tiles(user, pref=None):
         seed(user, pref)
     openable = set(_openable(user, pref))
     keys = HomeTile.objects.filter(user=user).order_by("order", "pk").values_list("key", flat=True)
-    tiles = catalog()
+    tiles = catalog(user)
     return [tiles[k] for k in keys if k in tiles and tiles[k].app in openable and tiles[k].url]
 
 
 def can_add(user, key, pref=None):
-    tile = catalog().get(key)
+    tile = catalog(user).get(key)
     return bool(tile and tile.app in _openable(user, pref) and tile.url)
 
 

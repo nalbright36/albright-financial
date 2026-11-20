@@ -7,7 +7,11 @@ Who sees a shared thing:
   - a circle's ACTIVE members who opted in to the app for that circle, while the circle has the app enabled
     (albright_labs.circles) - leaving or opting out removes access at once.
 Edit: the owner, or a grant with "edit". Only the owner shares, changes or removes shares (and deletes the thing).
-Never shareable: the food diary, targets, body metrics, weight - they aren't registered here.
+Never shareable: the food diary, targets, body metrics, weight - they aren't registered here. The one exception is
+a saved Visual (albright_assistant.Visual): sharing it shows the people it's shared with that chart drawn from the
+owner's numbers - the owner chose to share exactly that. Visuals use the sharing key "visuals" (no app of their
+own): anyone signed in can receive one, and a circle share reaches all the circle's active members
+(circles.ALWAYS_ON).
 """
 from dataclasses import dataclass
 from typing import Callable
@@ -63,12 +67,26 @@ KINDS = {
         "albright_meals.Recipe", "meals", "recipe", lambda u: Q(space_id__in=_space_ids(u)),
         lambda u, o: o.space_id in _space_ids(u), lambda o: o.created_by, lambda o: o.title,
         lambda o: reverse("albright_meals:recipe", args=[o.pk]), "edit this recipe"),
+    "albright_assistant.Visual": Kind(
+        "albright_assistant.Visual", "visuals", "visual", lambda u: Q(owner=u), lambda u, o: o.owner_id == u.pk,
+        lambda o: o.owner, lambda o: o.title, lambda o: reverse("assistant:visual", args=[o.pk]),
+        "see this chart, drawn from the owner's data"),
     "albright_fitness.Workout": Kind(
         "albright_fitness.Workout", "fitness", "workout", lambda u: Q(owner=u), lambda u, o: o.owner_id == u.pk,
         lambda o: o.owner, lambda o: o.title, lambda o: reverse("albright_fitness:summary", args=[o.pk]),
         "change this workout"),
 }
 APPS = {k.app: k for k in KINDS.values()}       # one shareable kind per app
+
+
+def app_label(app):
+    """What a sharing key is called on the sharing pages: the app's name ("Recipes" for Meals, "Visuals")."""
+    from . import apps_registry
+    if app == "meals":
+        return "Recipes"
+    if app in circles.ALWAYS_ON:
+        return app.capitalize()
+    return apps_registry.BY_KEY[app].label
 
 
 def kind_of(obj_or_model):
@@ -368,10 +386,11 @@ def initials(user):
 def explain(kind, grant):
     """"Albright Family members who use Planner can see and check off this item." - one line per grant."""
     from . import apps_registry
-    app = apps_registry.BY_KEY[kind.app].label
     verb = f"can see and {kind.can_see_verb}" if grant.permission == EDIT else f"can see this {kind.noun}"
     if grant.circle_id:
-        return f"{grant.circle.name} members who use {app} {verb}."
+        if kind.app in circles.ALWAYS_ON:
+            return f"{grant.circle.name} members {verb}."
+        return f"{grant.circle.name} members who use {apps_registry.BY_KEY[kind.app].label} {verb}."
     return f"{person_name(grant.user)} {verb}."
 
 

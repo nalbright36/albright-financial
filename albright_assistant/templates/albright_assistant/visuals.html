@@ -1,0 +1,47 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}Visuals · {% endblock %}
+{% block app_head %}<link rel="stylesheet" href="{% static_version 'assistant/visuals.css' %}">{% endblock %}
+{% block app_scripts %}<script src="{% static_version 'assistant/visuals.js' %}" defer></script>{% endblock %}
+{% block content %}
+{% comment %}
+Account > Visuals (albright_assistant.visuals.views.index): saved charts the AI assistant made, each drawn from
+today's data when the page opens (visuals.js fetches /assistant/visuals/<id>/data/). Rename and Delete for your own;
+the ones others shared with you below. A Visual is made in the assistant's chat - "Save" on its card.
+{% endcomment %}
+<div class="container" style="padding-top: 32px; padding-bottom: 48px;">
+    <h1 style="margin: 0 0 6px;">Visuals</h1>
+    <p class="as-lead">Charts the AI assistant made from your data - ask it something like "show my weigh-ins next to my calories and protein". They update every time you open them. You can keep {{ limit }}.</p>
+    <h2 class="labs-picker__label">Yours ({{ mine|length }} of {{ limit }})</h2>
+    {% if mine %}
+    <div class="vz-grid" id="visuals-mine">
+        {% for v in mine %}
+        <div class="vz-item">
+            <div data-visual-url="{{ v.data_url }}" data-visual-link data-visual-info="{{ v.info }}"></div>
+            <div class="vz-item__tools">
+                <form method="post" action="{% url 'assistant:visual_rename' v.id %}">{% csrf_token %}
+                    <input type="hidden" name="next" value="list">
+                    <label class="visually-hidden" for="rename-{{ v.id }}">New name for {{ v.title }}</label>
+                    <input type="text" id="rename-{{ v.id }}" name="title" value="{{ v.title }}" maxlength="120" class="ledger-input">
+                    <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+                </form>
+                <form method="post" action="{% url 'assistant:visual_delete' v.id %}" data-confirm="Delete this visual?">{% csrf_token %}
+                    <button type="submit" class="btn btn-secondary btn-sm" aria-label="Delete {{ v.title }}">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="vz-empty">None yet. Open the assistant (the round button) and ask for a chart, then press <strong>Save</strong> on it.</p>
+    {% endif %}
+    {% if shared %}
+    <h2 class="labs-picker__label">Shared with you</h2>
+    <div class="vz-grid" id="visuals-shared">
+        {% for v in shared %}
+        <div class="vz-item"><div data-visual-url="{{ v.data_url }}" data-visual-link data-visual-info="{{ v.info }}"></div></div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

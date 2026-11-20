@@ -32,9 +32,16 @@ class CircleError(Exception):
     pass
 
 
+# Sharing keys that aren't apps: everyone signed in has them, and every circle shares them with all its active
+# members (no opt-in) - a saved Visual (albright_labs.sharing).
+ALWAYS_ON = {"visuals"}
+
+
 def can_use_app(user, app):
     from . import app_access
-    return bool(user and user.is_authenticated and user.is_active) and app_access.can_use(user, UserPreference.for_user(user), app)
+    if not (user and user.is_authenticated and user.is_active):
+        return False
+    return app in ALWAYS_ON or app_access.can_use(user, UserPreference.for_user(user), app)
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +54,8 @@ def personal_space(user):
 
 
 def _shared_memberships(user, app):
+    if app in ALWAYS_ON:
+        return CircleMembership.objects.filter(user=user, status=ACTIVE).select_related("circle")
     return (CircleMembership.objects.filter(user=user, status=ACTIVE, apps__contains=[app], circle__enabled_apps__contains=[app])
             .select_related("circle"))
 
