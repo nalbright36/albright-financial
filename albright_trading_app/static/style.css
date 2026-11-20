@@ -1767,10 +1767,11 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   color: var(--text-primary); cursor: pointer; z-index: 2; box-shadow: var(--shadow-sm); }
 .ht__remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .labs-picker.is-editing .ht__remove { display: grid; }
-/* Edit mode only (hub.js): tiles take every touch so a press-and-drag can move them (a swipe before the ~200ms
-   hold is scrolled by hub.js) - the grid is inside the page gutter, so the iOS edge swipe is untouched. */
-.labs-picker.is-editing .ht:not([data-fixed]) { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
-  -webkit-touch-callout: none; }
+/* Dragging (hub.js, any time): no text selection, no native link drag, no iOS long-press callout - swipes still
+   scroll (hub.js stops the scroll only while a tile is held). */
+.ht:not([data-fixed]) { user-select: none; -webkit-user-select: none; }
+.ht__link { -webkit-user-drag: none; -webkit-touch-callout: none; }
+.labs-picker.is-editing .ht:not([data-fixed]) { cursor: grab; }
 .labs-picker.is-editing .ht:not([data-fixed]) .ht__icon { animation: ht-wiggle .9s ease-in-out infinite alternate; }
 .labs-picker.is-editing .ht:nth-child(2n) .ht__icon { animation-delay: -.45s; }
 .labs-picker.is-editing .ht__badge { display: none; }
@@ -1795,9 +1796,11 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   width: 100%; margin: auto 0 0; }
 .ht-sheet:not([open]) { display: none; }
 .ht-sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
-.ht-sheet__panel { display: flex; flex-direction: column; gap: 10px; max-height: 85vh; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+.ht-sheet__panel { display: flex; flex-direction: column; gap: 12px; max-height: 85vh; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
   background: var(--bg-elevated); border: 1px solid var(--border); border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: var(--shadow-lg); }
-.ht-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 0 auto 2px; }
+.ht-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 0 auto -4px; }
+/* Only the list scrolls and shrinks; everything above it keeps its full height. */
+.ht-sheet__grab, .ht-sheet__head, .ht-search, .ht-chips { flex: none; }
 .ht-sheet__head { display: flex; align-items: center; justify-content: space-between; }
 .ht-sheet__title { margin: 0; font-size: 1.0625rem; font-weight: 700; }
 .ht-sheet__close { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--text-secondary); }
@@ -1807,17 +1810,28 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   .ht-sheet__panel { border-radius: 18px; border-bottom: 1px solid var(--border); max-height: min(680px, 85vh); padding-bottom: 16px; }
   .ht-sheet__grab { display: none; }
 }
+/* One border - the wrapper's; the input has none of its own, and the focus ring is on the wrapper. */
 .ht-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: var(--surface);
   border: 1px solid var(--border); color: var(--text-secondary); margin: 0; }
 .ht-search svg { fill: none; stroke: currentColor; flex: none; }
-.ht-search input { flex: 1; min-width: 0; padding: 10px 0; border: 0; background: transparent; color: var(--text-primary); font: inherit; outline: none; }
-.ht-search:focus-within { border-color: var(--accent); }
-.ht-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-.ht-chip { --tile-c: var(--accent); flex: none; font: inherit; font-size: 0.75rem; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+.ht-search input[type="search"], .ht-search input[type="search"]:focus, .ht-search input[type="search"]:focus-visible {
+  flex: 1; min-width: 0; height: auto; margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: transparent;
+  box-shadow: none; outline: none; color: var(--text-primary); font: inherit; -webkit-appearance: none; appearance: none; }
+.ht-search input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+.ht-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.ht-chips { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.ht-chips::-webkit-scrollbar { display: none; }
+.ht-chip { --tile-c: var(--accent); flex: none; display: inline-flex; align-items: center; height: 36px; padding: 0 14px;
+  font: inherit; font-size: 0.8125rem; white-space: nowrap; border-radius: 999px; cursor: pointer;
   border: 1px solid transparent; background: var(--surface-hover); color: var(--text-secondary); }
 .ht-chip.is-on { background: color-mix(in srgb, var(--tile-c) 16%, transparent); color: var(--tile-c); border-color: color-mix(in srgb, var(--tile-c) 30%, transparent); }
 .ht-chip:focus-visible { outline: 2px solid var(--tile-c); outline-offset: 1px; }
-.ht-sheet__list { overflow-y: auto; margin: 0 -4px; padding: 0 4px; min-height: 0; flex: 1; }
+.ht-sheet__list { overflow-y: auto; margin: 0 -4px; padding: 0 4px; min-height: 0; flex: 1 1 auto;
+  scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.ht-sheet__list::-webkit-scrollbar { width: 8px; }
+.ht-sheet__list::-webkit-scrollbar-track { background: transparent; }
+.ht-sheet__list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.ht-sheet__list::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 .ht-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ht-row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
 .ht-row[hidden] { display: none; }

@@ -1,15 +1,17 @@
 /*
  * Home (albright_labs/hub.html): "My tiles" (albright_labs.home_tiles). Vanilla JS; the page works without it
  * (every button submits, "+ Add" opens the sheet as a section).
- *  - Outside Edit mode a tile is just its link: no click is ever prevented, so one tap opens the page.
+ *  - A tap or click opens the tile. Drag to reorder - any time, no Edit mode needed (pointer events only, one
+ *    path for mouse, pen and touch): a mouse drags after moving 6px; a finger holds ~300ms (a small buzz where the
+ *    phone can), so a quick tap opens and a swipe scrolls. The tile lifts and follows, the others slide aside, the
+ *    page auto-scrolls near the edges, and the drop saves the order (labs:save_tile_order) - on failure the tiles
+ *    go back and a short error shows. The click that ends a drag never opens the tile.
  *  - "+ Add" / the Add tile open the Add sheet (a <dialog>): search (label + description + app, every word
  *    anywhere, with the app chip), and a + per page that adds it at once (labs:toggle_tile) - it turns into a
  *    check; tap again to remove. New tiles go to the end. Closing the sheet clears the search.
  *  - Edit mode (the Edit button, which then reads Done; or ?edit=1): tiles wiggle; each gets a remove (x) and
- *    move left/right buttons; a press-and-drag moves a tile (pointer events - one path for mouse, pen and touch;
- *    touch waits ~200ms so a swipe still scrolls). The other tiles slide aside to show where it lands, the page
- *    auto-scrolls near the top/bottom edge, and the drop saves the order (labs:save_tile_order) - on failure the
- *    tiles go back and a short error shows. Done saves the settings too (labs:save_picker), without a reload.
+ *    move left/right buttons (keyboard users); dragging works the same. Done saves the settings too
+ *    (labs:save_picker), without a reload.
  */
 (function () {
     "use strict";
@@ -92,7 +94,9 @@
             if (data.added && !existing && data.html) {
                 var holder = document.createElement("ol");
                 holder.innerHTML = data.html.trim();
-                grid.insertBefore(holder.firstElementChild, addTile());
+                var added = holder.firstElementChild;
+                Array.prototype.forEach.call(added.querySelectorAll("a"), function (a) { a.setAttribute("draggable", "false"); });
+                grid.insertBefore(added, addTile());
             } else if (!data.added && existing) {
                 existing.parentNode.removeChild(existing);
             }
@@ -182,7 +186,6 @@
     var justDragged = false;
     function onEditClick(e) {
         if (!editing()) return;
-        if (justDragged) { e.preventDefault(); e.stopPropagation(); return; }    // the click that ends a drag
         var remove = e.target.closest("[data-tile-remove]");
         if (remove) {
             e.preventDefault();
@@ -232,11 +235,11 @@
     }
 
     // Drag to reorder ----------------------------------------------------------------------------------------
-    var HOLD_MS = 200, SLOP = 8, EDGE = 60;
+    var HOLD_MS = 300, MOUSE_SLOP = 6, TOUCH_SLOP = 10, EDGE = 60;
     var drag = null;
 
     function onPointerDown(e) {
-        if (!editing() || drag || (e.pointerType === "mouse" && e.button !== 0)) return;
+        if (drag || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
         if (e.target.closest("[data-tile-remove], [data-tile-move]")) return;        // those stay buttons
         var li = e.target.closest(".ht:not([data-fixed])");
         if (!li) return;
@@ -258,7 +261,9 @@
         try { drag.li.setPointerCapture(drag.id); } catch (err) { /* still works without capture */ }
         drag.li.classList.add("is-dragging");
         root.classList.add("is-dragging-tile");
-        if (navigator.vibrate && drag.type === "touch") navigator.vibrate(10);
+        // A small buzz - only once the page has had a tap (before that the browser refuses and logs a warning).
+        var activated = !navigator.userActivation || navigator.userActivation.hasBeenActive;
+        if (navigator.vibrate && drag.type === "touch" && activated) navigator.vibrate(10);
         follow();
         drag.raf = requestAnimationFrame(autoScroll);
     }
@@ -295,18 +300,12 @@
         if (!drag || e.pointerId !== drag.id) return;
         var dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
         if (!drag.active) {
+            drag.x = e.clientX; drag.y = e.clientY;
             if (drag.type === "mouse") {
-                drag.x = e.clientX; drag.y = e.clientY;
-                if (Math.abs(dx) + Math.abs(dy) >= SLOP) begin();
-                return;
-            }
-            // Touch before the hold: a swipe. Tiles have touch-action: none in Edit mode, so scroll the page
-            // ourselves - normal scrolling still works - and don't start a drag.
-            if (Math.abs(dx) + Math.abs(dy) >= SLOP) {
-                clearTimeout(drag.timer);
-                window.scrollBy(0, drag.lastY - e.clientY);
-                drag.lastY = e.clientY;
-                drag.scrolling = true;
+                if (Math.hypot(dx, dy) > MOUSE_SLOP) begin();
+            } else if (Math.hypot(dx, dy) > TOUCH_SLOP) {
+                clearTimeout(drag.timer);                      // moved before the hold: a swipe - the page scrolls
+                drag = null;
             }
             return;
         }
@@ -336,7 +335,6 @@
         drag = null;
         clearTimeout(d.timer);
         cancelAnimationFrame(d.raf);
-        if (d.scrolling) { justDragged = true; setTimeout(function () { justDragged = false; }, 0); }
         if (!d.active) return;
         root.classList.remove("is-dragging-tile");
         // Settle into the slot, then drop the lifted look.
@@ -345,10 +343,28 @@
         d.li.classList.remove("is-dragging");
         setTimeout(function () { d.li.classList.remove("is-settling"); }, 200);
         justDragged = true;                                    // the click after pointerup isn't a tap
-        setTimeout(function () { justDragged = false; }, 0);
+        setTimeout(function () { justDragged = false; }, 400);
         if (e.type === "pointercancel") { restore(d.before); return; }
         saveOrder(d.before);
     }
+
+    // Dragging is always on: listeners on the grid (tiles added later are covered too).
+    grid.addEventListener("click", function (e) {             // capture: before the link or Edit mode see it
+        if (justDragged) { e.preventDefault(); e.stopPropagation(); justDragged = false; }
+    }, true);
+    grid.addEventListener("click", onEditClick);
+    grid.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove, {passive: false});
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    // While a tile is held, the finger moves the tile, not the page (a non-passive touchmove is the one way to
+    // stop the scroll after the gesture has started; before the hold, swipes scroll as usual).
+    grid.addEventListener("touchmove", function (e) { if (drag && drag.active) e.preventDefault(); }, {passive: false});
+    grid.addEventListener("dragstart", function (e) { e.preventDefault(); });                 // no native link drag
+    grid.addEventListener("contextmenu", function (e) {      // no long-press menu while picking a tile up
+        if (drag || e.target.closest(".ht__link") && e.pointerType === "touch") e.preventDefault();
+    });
+    Array.prototype.forEach.call(grid.querySelectorAll("a"), function (a) { a.setAttribute("draggable", "false"); });
 
     // Edit mode on / off -------------------------------------------------------------------------------------
     var editButton = document.getElementById("picker-edit");
@@ -370,16 +386,6 @@
         url.searchParams.set("picker", "1");
         url.searchParams.set("edit", "1");
         history.replaceState(null, "", url.pathname + url.search);
-        if (!root.dataset.editReady) {
-            root.dataset.editReady = "1";
-            grid.addEventListener("click", onEditClick);
-            grid.addEventListener("pointerdown", onPointerDown);
-            window.addEventListener("pointermove", onPointerMove, {passive: false});
-            window.addEventListener("pointerup", onPointerUp);
-            window.addEventListener("pointercancel", onPointerUp);
-            grid.addEventListener("dragstart", function (e) { if (editing()) e.preventDefault(); });   // no native drag
-            grid.addEventListener("contextmenu", function (e) { if (editing() && e.target.closest(".ht")) e.preventDefault(); });
-        }
         say("");
     }
 
