@@ -30,6 +30,7 @@ urlpatterns = [
     path("scheduled/<int:pk>/edit/", item_page(log_views.schedule_edit), name="schedule_edit"),
     path("scheduled/<int:pk>/remove/", log_views.schedule_remove, name="schedule_remove"),
     path("start/", views.start, name="start"),
+    path("today/skip/", views.skip_day, name="skip_day"),
     path("quick/", views.quick, name="quick"),
     path("workouts/<int:pk>/", item_page(views.workout), name="workout"),
     path("workouts/<int:pk>/edit/", item_page(views.edit_workout), name="edit_workout"),
@@ -52,6 +53,7 @@ urlpatterns = [
     path("programs/<int:pk>/setup/schedule/", item_page(program_views.setup_schedule), name="program_setup_schedule"),
     path("programs/<int:pk>/delete/", program_views.program_delete, name="program_delete"),
     path("programs/<int:pk>/archive/", program_views.program_archive, name="program_archive"),
+    path("programs/<int:pk>/sharing/", program_views.program_share_action, name="program_share_action"),
     # Food (food_views): the diary, adding food, My foods, targets - each person's own.
     path("food/", food_views.diary, name="food"),
     path("food/day/<str:day>/", food_views.diary, name="food_day"),

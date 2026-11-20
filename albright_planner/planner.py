@@ -166,6 +166,7 @@ def occurrences(user, start, end, kind="", show_done=True, shared_only=False, wh
             occ.can_edit = item.pk in editable
             completion = completions.get(occ.occurrence_date)
             occ.done_by = completion.completed_by if completion else None
+            _mark_skip(occ, completion)
             _mark_sharing(occ, user)
             if show_done or not occ.done:
                 out.append(occ)
@@ -239,6 +240,12 @@ def current_or_first(item):
     return (current_occurrence(item) if item.one_at_a_time else None) or item.date
 
 
+def _mark_skip(occ, completion):
+    """occ.skipped / occ.skip_label: a planned workout or weigh-in skipped on purpose (skip mark, muted, no strike)."""
+    occ.skipped = bool(completion is not None and completion.skipped)
+    occ.skip_label = completion.skip_label if occ.skipped else ""
+
+
 def occurrence_for(item, day, user):
     """One occurrence for the item's view panel: after its exception (moved / retimed / retitled), whether it's
     done and by whom, overdue (an unchecked one-off or one-at-a-time task from before today), and how it's shared
@@ -247,6 +254,7 @@ def occurrence_for(item, day, user):
     completion = item.completions.select_related("completed_by").filter(occurrence_date=day).first()
     occ = to_viewer(recurrence.make(item, day, exc, completion is not None), user_zone(user))
     occ.done_by = completion.completed_by if completion else None
+    _mark_skip(occ, completion)
     occ.can_edit = item.can_edit(user)
     occ.overdue = not occ.done and item.kind == ScheduleItem.TASK and item.checkable and occ.date < today(user) and \
         (not item.recurrence or item.one_at_a_time)

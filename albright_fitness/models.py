@@ -95,6 +95,11 @@ class Program(models.Model):
     # Archived: off the Programs list (its "Archived" filter shows it, with Restore) - nothing deleted. Archiving pauses
     # it; Restore (or Resume) brings it back.
     archived_at = models.DateTimeField(null=True, blank=True)
+    # "Add to my planner" from a program shared with me (programs.copy_shared): my own copy - the owner's later
+    # changes never reach it. Shown as "Copied from Kim".
+    copied_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="copies")
+    copied_from_owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -107,6 +112,24 @@ class Program(models.Model):
     def is_draft(self):
         """Made with the guided setup and not finished yet."""
         return not self.active and self.start_date is None
+
+
+class ProgramMember(models.Model):
+    """Someone following a program shared with them ("Join as shared workout" - programs.join): they get their own
+    Planner tasks on the owner's days (source_id "day-<pk>", like the owner's), and complete, log or skip each one
+    themselves. The owner's edits reach their future tasks. Leave ends their tasks after today (past logs stay).
+    ended_at: the owner stopped sharing - they choose to keep a personal copy or remove their future tasks."""
+    program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_program_memberships")
+    joined_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["joined_at", "pk"]
+        constraints = [models.UniqueConstraint(fields=["program", "user"], name="fitness_one_program_member")]
+
+    def __str__(self):
+        return f"{self.user} in {self.program}"
 
 
 class ProgramDay(models.Model):
@@ -198,7 +221,17 @@ class WorkoutQuerySet(models.QuerySet):
         return sharing.visible_queryset(user, Workout, self)
 
 
+class WorkoutManager(models.Manager.from_queryset(WorkoutQuerySet)):
+    """Workout.objects: workouts that happened. A skipped one (a planned workout passed over - status "skipped", no
+    sets) is only in Workout.all_objects - History and the skip / undo code - so stats, volume, streaks, insights and
+    records never count it."""
+    def get_queryset(self):
+        return super().get_queryset().exclude(status=Workout.SKIPPED)
+
+
 class Workout(models.Model):
+    DONE, SKIPPED = "done", "skipped"
+    STATUSES = [(DONE, "Done"), (SKIPPED, "Skipped")]
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fitness_workouts")
     date = models.DateField()
     start_time = models.TimeField(null=True, blank=True)
@@ -218,9 +251,14 @@ class Workout(models.Model):
     # "Completed from Planner": made when its Planner task was checked off with no workout logged (workout_sync) -
     # no sets needed; unchecking the task deletes it while it still has none.
     from_planner = models.BooleanField(default=False)
+    # Skipped (workout_sync.skip_scheduled_workout): "Skipped - Rest day" in History; reasons as the Planner's.
+    status = models.CharField(max_length=8, choices=STATUSES, default=DONE)
+    skip_reason = models.CharField(max_length=8, blank=True)
+    skip_note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    objects = WorkoutQuerySet.as_manager()
+    objects = WorkoutManager()
+    all_objects = WorkoutQuerySet.as_manager()
 
     class Meta:
         ordering = ["-date", "-pk"]
@@ -241,6 +279,15 @@ class Workout(models.Model):
     @property
     def finished(self):
         return self.finished_at is not None
+
+    @property
+    def skipped(self):
+        return self.status == self.SKIPPED
+
+    @property
+    def skip_label(self):
+        from albright_planner.models import skip_label
+        return skip_label(self.skip_reason, self.skip_note)
 
 
 

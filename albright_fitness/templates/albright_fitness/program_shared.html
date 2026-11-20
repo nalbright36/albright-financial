@@ -1,0 +1,50 @@
+{% extends "albright_fitness/base.html" %}{% load fitness_extras planner_extras %}
+{% block page_title %}{{ p.name }} · {% endblock %}
+{% block fitness %}
+{% comment %}
+A program someone shared with me, or that I joined (program_views._shared_program): its plan, read-only - never the
+owner's workouts or weights. Two choices: "Add to my planner" (my own copy, to change and schedule on my own days -
+the owner's changes never reach it) or "Join as shared workout" (I follow the owner's program and schedule: my own
+Planner tasks, completed / logged / skipped by me; the owner's edits reach my future tasks). Joined: Leave. After the
+owner stopped sharing: keep a personal copy or remove my future tasks.
+{% endcomment %}
+<div class="fx-narrow">
+<div class="fx-head"><div><h1 class="fx-head__title">{{ p.name }}</h1>
+    <p class="fx-head__sub" id="fx-shared-by">Shared by {{ p.owner|person }}{% if not p.active %} &middot; Paused{% endif %}{% if ends %} &middot; until {{ ends|date:"M j" }}{% endif %}</p></div></div>
+
+<section class="card fx-card" id="fx-shared-choice" aria-labelledby="fx-shared-choice-h">
+{% if member and member.ended_at %}
+    <h2 class="fx-card__title" id="fx-shared-choice-h">{{ p.owner|person }} stopped sharing this program</h2>
+    <p class="fx-help">Your tasks for it are still on your Planner. Keep your own copy on the same days, or remove the upcoming ones - your logged workouts stay either way.</p>
+    <div class="fx-shared-acts">
+        <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}">{% csrf_token %}<input type="hidden" name="action" value="keep_copy"><button type="submit" class="btn btn-primary" id="fx-keep-copy">Keep a personal copy</button></form>
+        <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}">{% csrf_token %}<input type="hidden" name="action" value="leave"><button type="submit" class="btn btn-secondary" id="fx-remove-tasks">Remove my future tasks</button></form>
+    </div>
+{% elif member %}
+    <h2 class="fx-card__title" id="fx-shared-choice-h">You joined this shared workout</h2>
+    <p class="fx-help">Its workouts are on your Planner on {{ p.owner|person }}'s days. You complete, log or skip your own; changes {{ p.owner|person }} makes reach your upcoming ones.</p>
+    <p class="fx-participants" aria-label="Doing it">{% for u in participants %}<span class="pl-avatar" style="--pl-avatar: {{ u|avatar_color }};" title="{{ u|person }}">{{ u|initial }}</span>{% endfor %}</p>
+    {% if next_day %}<a href="{{ start_url }}" class="btn btn-primary" id="fx-program-start">Start {{ next_day.name }}</a>{% endif %}
+    <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}" data-confirm="Leave {{ p.name }}? Its upcoming workouts come off your Planner; your logged ones stay.">{% csrf_token %}<input type="hidden" name="action" value="leave"><button type="submit" class="btn btn-secondary btn-sm" id="fx-leave">Leave</button></form>
+{% else %}
+    <h2 class="fx-card__title" id="fx-shared-choice-h">Do this program</h2>
+    <div class="fx-shared-options">
+        <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}" class="fx-shared-option">{% csrf_token %}<input type="hidden" name="action" value="copy">
+            <button type="submit" class="btn btn-secondary" id="fx-copy">Add to my planner</button>
+            <p class="fx-help">Your own copy - change it and pick your own days. {{ p.owner|person }}'s changes won't affect it.{% if my_copy %} You already have one: <a href="{% url 'albright_fitness:program' my_copy.pk %}">{{ my_copy.name }}</a>.{% endif %}</p></form>
+        <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}" class="fx-shared-option">{% csrf_token %}<input type="hidden" name="action" value="join">
+            <button type="submit" class="btn btn-primary" id="fx-join">Join as shared workout</button>
+            <p class="fx-help">Follow {{ p.owner|person }}'s program and schedule together. Each of you completes, logs or skips your own workout.</p></form>
+    </div>
+{% endif %}
+</section>
+
+{% for day in days %}
+<section class="card fx-card fx-day" id="day-{{ day.pk }}" aria-labelledby="day-{{ day.pk }}-h">
+    <h2 class="fx-card__title" id="day-{{ day.pk }}-h">{{ day.name }} <span class="fx-muted fx-small">{{ day.weekdays|days|default:"no days" }}</span></h2>
+    <ul class="fx-list">{% for pe in day.exercises.all %}<li class="fx-row"><span class="fx-row__title">{{ pe.exercise.name }}</span><span class="fx-row__ind">{{ pe.target_text }}</span></li>
+    {% empty %}<li class="fx-empty">No exercises yet.</li>{% endfor %}</ul>
+</section>
+{% endfor %}
+</div>
+{% endblock %}

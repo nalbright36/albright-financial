@@ -186,16 +186,42 @@ class ScheduleItem(models.Model):
 
 
 class ItemCompletion(models.Model):
-    """One occurrence checked off (occurrence_date is the date it was scheduled for, before any move)."""
+    """One occurrence checked off (occurrence_date is the date it was scheduled for, before any move). An occurrence
+    is open (no row), done, or skipped - a planned workout or weigh-in passed over on purpose ("Skip": finished, with
+    an optional reason; shown with a skip mark, muted, not struck through). Unchecking deletes the row either way."""
+    DONE, SKIPPED = "done", "skipped"
+    STATUSES = [(DONE, "Done"), (SKIPPED, "Skipped")]
+    SKIP_REASONS = [("rest", "Rest day"), ("sick", "Sick"), ("busy", "Busy"), ("travel", "Travel"), ("other", "Other")]
     item = models.ForeignKey(ScheduleItem, on_delete=models.CASCADE, related_name="completions")
     occurrence_date = models.DateField()
     completed_at = models.DateTimeField(auto_now_add=True)
     completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="+")
+    status = models.CharField(max_length=8, choices=STATUSES, default=DONE)
+    skipped_at = models.DateTimeField(null=True, blank=True)
+    skip_reason = models.CharField(max_length=8, choices=SKIP_REASONS, blank=True)
+    skip_note = models.CharField(max_length=200, blank=True)
+
+    @property
+    def skipped(self):
+        return self.status == self.SKIPPED
+
+    @property
+    def skip_label(self):
+        """"Skipped", "Skipped - Rest day", "Skipped - Other: dentist"."""
+        return skip_label(self.skip_reason, self.skip_note)
 
     class Meta:
         ordering = ["occurrence_date"]
         constraints = [models.UniqueConstraint(fields=["item", "occurrence_date"], name="planner_one_completion")]
+
+
+def skip_label(reason, note=""):
+    """"Skipped", "Skipped - Rest day", "Skipped - Busy: work trip" (Planner tasks and Fitness History)."""
+    text = dict(ItemCompletion.SKIP_REASONS).get(reason, "")
+    if note:
+        text = f"{text}: {note}" if text else note
+    return f"Skipped - {text}" if text else "Skipped"
 
 
 class ItemException(models.Model):

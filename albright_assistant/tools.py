@@ -157,6 +157,8 @@ def summary(call, data):
         return f"Checked off: {title or 'item #' + str(a.get('id'))}"
     if n in ("uncompleteScheduleItem", "uncompleteChecklistItem"):
         return f"Un-checked: {title or 'item #' + str(a.get('id'))}"
+    if n == "skipScheduledWorkout":
+        return f"{d.get('label') or 'Skipped'}: {title or 'item #' + str(a.get('id'))}"
     if n == "addGroceries":
         return f"Added to groceries: {_names(d.get('items')) or a.get('name', '')}"
     if n in ("logFood", "logFoodByName"):
@@ -199,6 +201,7 @@ DELETE_UNDO = {
 INVERSE_OPS = {"completeScheduleItem": "uncompleteScheduleItem", "uncompleteScheduleItem": "completeScheduleItem",
                "completeChecklistItem": "uncompleteChecklistItem", "uncompleteChecklistItem": "completeChecklistItem",
                "pauseProgram": "resumeProgram", "resumeProgram": "pauseProgram"}
+SKIP_UNDO = {"skipScheduledWorkout": "uncompleteScheduleItem"}           # one way: undoing a skip reopens it
 # Who may have rows deleted by undo: rows this assistant's token made (bot_token), or the person's own (owner).
 GUARD_FIELD = {"albright_fitness.FoodLogEntry": "owner", "albright_fitness.WeightEntry": "owner",
                "albright_fitness.Workout": "owner"}
@@ -208,6 +211,9 @@ def undo_spec(call, data):
     d = data if isinstance(data, dict) else {}
     if call.name in INVERSE_OPS:
         return {"kind": "op", "op": INVERSE_OPS[call.name], "args": dict(call.arguments)}
+    if call.name in SKIP_UNDO:
+        args = {k: v for k, v in call.arguments.items() if k in ("id", "occurrence_date")}
+        return {"kind": "op", "op": SKIP_UNDO[call.name], "args": args}
     if call.name == "createProgram" and d.get("id"):
         return {"kind": "op", "op": "deleteProgram", "args": {"id": d["id"]}}
     if call.name == "updateGrocery" and isinstance(call.arguments.get("checked"), bool) and \

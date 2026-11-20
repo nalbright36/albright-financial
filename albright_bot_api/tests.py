@@ -389,10 +389,10 @@ class HardLimitTests(BotApiTestCase):
                 self.assertEqual(pattern.callback.__module__, fitness_api.__name__)
             else:
                 self.assertEqual(pattern.callback.__module__, api_views.__name__)
-        self.assertEqual(len(api_urlpatterns), 52)   # incl. search, today (overview_api), me, openapi.json, mcp, me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 5 Planner, 10 Fitness
+        self.assertEqual(len(api_urlpatterns), 53)   # incl. search, today (overview_api), me, openapi.json, mcp, me/storage, 4 AI food log (food-entries, recent, <id>, openapi.json), POST opportunities, activity, trading/strategies, site-suggestions (+ counts) and ideas (Admin), 8 Meals (+ spaces), 2 Notes, 6 Planner, 10 Fitness
         self.assertEqual(sum(str(p.pattern).startswith("meals/") for p in api_urlpatterns), 9)   # + one recipe (overview_api)
         self.assertEqual(sum(str(p.pattern).startswith("notes") for p in api_urlpatterns), 2)
-        self.assertEqual(sum(str(p.pattern).startswith("schedule") for p in api_urlpatterns), 5)   # + checklist tick / untick
+        self.assertEqual(sum(str(p.pattern).startswith("schedule") for p in api_urlpatterns), 6)   # + checklist tick / untick, skip
         self.assertEqual(sum(str(p.pattern).startswith("fitness/") for p in api_urlpatterns), 15)   # + food-entries (+ recent, <id>), openapi.json, programs, pause, resume, food entries, foods search
 
     def test_no_forbidden_side_effects(self):

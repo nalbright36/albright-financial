@@ -202,6 +202,12 @@
                     </button>
 
                     {% if user.is_authenticated %}
+                    {# Phones only (labs/launcher.css): an icon-only Home button left of the bell - always the person's Home page (labs:hub), never the default app; teal while on Home. #}
+                    {% with vn=request.resolver_match.view_name %}
+                    <a href="{% url 'labs:hub' %}" class="app-launcher__button navbar__home{% if vn == 'labs:hub' or vn == 'labs:root' %} is-active{% endif %}" aria-label="Home"{% if vn == 'labs:hub' or vn == 'labs:root' %} aria-current="page"{% endif %}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V9.5"/></svg>
+                    </a>
+                    {% endwith %}
                     {# The notification bell (labs/notifications.js, labs/launcher.css): unread count - none during quiet hours - and a panel of recent notifications, fetched when it opens (albright_labs.activity_views.panel). Left of the launcher. #}
                     <div class="notif-bell" id="notif-bell" data-panel-url="{% url 'labs:notifications_panel' %}" data-activity-url="{% url 'labs:activity' %}">
                         <button type="button" class="app-launcher__button notif-bell__button" id="notif-bell-button" aria-label="Notifications{% if notification_count %} - {{ notification_count }} unread{% endif %}" aria-haspopup="true" aria-expanded="false" aria-controls="notif-panel">

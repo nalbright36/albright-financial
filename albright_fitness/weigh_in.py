@@ -285,9 +285,15 @@ def parse(value, unit):
     return body.q(number)
 
 
-def _record(item, day, entry=None, skipped=False):
+def _record(item, day, entry=None, skipped=False, reason="", note=""):
+    """What the occurrence was: a weight, or skipped - the task's status follows (skipped: skip mark, muted)."""
+    from albright_planner import services
     WeighInLog.objects.update_or_create(item=item, occurrence_date=day,
                                         defaults={"weight_entry": entry, "skipped": skipped})
+    if skipped:
+        services.set_skipped(item, day, reason, note)
+    else:
+        services.clear_skipped(item, day)
 
 
 def _occurrence_for(item, day):
@@ -313,18 +319,18 @@ def log(item, day, value, unit, user):
     return entry
 
 
-def skip(item, day, user):
-    complete(item, day, user, skipped=True)
+def skip(item, day, user, reason="", note=""):
+    complete(item, day, user, skipped=True, reason=reason, note=note)
 
 
-def complete(item, day, user, entry=None, skipped=False):
+def complete(item, day, user, entry=None, skipped=False, reason="", note=""):
     from albright_planner import planner
 
     from .workout_sync import from_fitness
     if not item.completions.filter(occurrence_date=day).exists():
         with from_fitness():
             planner.toggle(item, day, user, done=True)
-    _record(item, day, entry, skipped)
+    _record(item, day, entry, skipped, reason, note)
 
 
 def after_weight(entry):

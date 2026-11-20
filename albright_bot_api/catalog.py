@@ -286,6 +286,21 @@ one-at-a-time task it puts it back. Returns {"item_id", "occurrence_date", "done
 Fitness."). A weigh-in keeps its weight.""",
        scopes=("schedule:write",), section="schedule", body=OCCURRENCE["properties"],
        example={"occurrence_date": "2026-11-16"}, returns={"item_id": 41, "occurrence_date": "2026-11-16", "done": False}),
+    Op("POST", "schedule/{id}/skip", "skipScheduledWorkout", "Skip one occurrence of a planned workout", """\
+Body: {"occurrence_date": YYYY-MM-DD (required for a repeating item), "reason": "rest" | "sick" | "busy" | "travel" |
+"other" (optional), "note": text (optional, up to 200)}. For a Fitness workout task (type "workout") or weigh-in
+(type "weigh_in") only - the owner's own. The occurrence counts as finished with status "skipped" (shown with a skip
+mark and "Skipped - Rest day", not struck through); for a workout a "skipped" workout with no sets is recorded for
+that date ("workout_id"), so Fitness History shows it - skips never count as workouts in stats, and the program's
+schedule doesn't change. An occurrence already done with logged sets is a 400. Undo: uncompleteScheduleItem (reopens
+it and removes the skipped record). Returns {"item_id", "occurrence_date", "done": true, "skipped": true,
+"skip_reason", "label"}.""",
+       scopes=("schedule:write",), section="schedule",
+       body={**OCCURRENCE["properties"], "reason": ENUM(["rest", "sick", "busy", "travel", "other"]),
+             "note": S(maxLength=200)},
+       example={"occurrence_date": "2026-11-16", "reason": "rest"},
+       returns={"item_id": 41, "occurrence_date": "2026-11-16", "done": True, "skipped": True, "skip_reason": "rest",
+                "label": "Skipped - Rest day", "workout_id": 88}),
     Op("POST", "schedule/{id}/checklist/{item_id}/complete", "completeChecklistItem",
        "Tick one subtask of a Planner task occurrence", """\
 Body: {"occurrence_date": YYYY-MM-DD} (required for a repeating item). Ticks one subtask ("checklist" ids from GET

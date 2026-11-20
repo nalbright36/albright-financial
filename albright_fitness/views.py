@@ -193,6 +193,28 @@ def _chart(rows):
 # ---------------------------------------------------------------------------
 
 @login_required
+@require_POST
+def skip_day(request):
+    """Fitness Today's Skip next to Start: POST day (a program day planned today), reason, note; undo=1 reopens it.
+    Same service as the Planner's Skip (workout_sync) - the Planner task follows."""
+    from . import workout_sync
+    day = get_object_or_404(ProgramDay.objects.select_related("program"), pk=request.POST.get("day"),
+                            pk__in=stats.active_days_qs(request.user))
+    today = timezone.localdate()
+    if request.POST.get("undo") == "1":
+        workout_sync.unskip_program_day(request.user, day, today)
+        messages.success(request, f"{day.name} is back on for today.")
+    else:
+        try:
+            workout_sync.skip_program_day(request.user, day, today, request.POST.get("reason", ""), request.POST.get("note", ""))
+        except workout_sync.SkipError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, f"Skipped {day.name} today.")
+    return redirect("albright_fitness:dashboard")
+
+
+@login_required
 def start(request):
     """Start a workout - from a program day (pre-filled; GET shows what's in it, POST starts it), from a scheduled
     session (?session=: its exercises and targets - the Planner's "Log now"; finishing it checks that occurrence
@@ -202,7 +224,8 @@ def start(request):
     param = lambda name: request.GET.get(name) or request.POST.get(name)  # noqa: E731
     day = session = first = None
     if param("day"):
-        day = get_object_or_404(ProgramDay.objects.select_related("program"), pk=param("day"), program__owner=user)
+        day = get_object_or_404(ProgramDay.objects.select_related("program").filter(        # mine, or joined
+            Q(program__owner=user) | Q(program__members__user=user)).distinct(), pk=param("day"))
     elif param("session"):
         session = get_object_or_404(ScheduledSession.objects.select_related("planner_item", "exercise", "program",
                                                                             "program_day__program"),
@@ -425,8 +448,9 @@ def history(request):
     except ValueError:
         month = today.replace(day=1)
     end = (month.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-    workouts = Workout.objects.visible_to(user).filter(date__gte=month - timedelta(days=7), date__lte=end + timedelta(days=7)) \
-        .select_related("owner", "program_day")
+    # My skipped planned workouts are listed too ("Skipped - Rest day") - never someone else's.
+    workouts = Workout.all_objects.visible_to(user).filter(date__gte=month - timedelta(days=7), date__lte=end + timedelta(days=7)) \
+        .exclude(~Q(owner=user), status=Workout.SKIPPED).select_related("owner", "program_day")
     by_day = {}
     for w in workouts:
         by_day.setdefault(w.date, []).append(w)

@@ -75,8 +75,16 @@ KINDS = {
         "albright_fitness.Workout", "fitness", "workout", lambda u: Q(owner=u), lambda u, o: o.owner_id == u.pk,
         lambda o: o.owner, lambda o: o.title, lambda o: reverse("albright_fitness:summary", args=[o.pk]),
         "change this workout"),
+    # A program shares its plan only (days, exercises, targets, schedule) - never the owner's workouts or weights.
+    # The recipient copies it ("Add to my planner") or joins it (albright_fitness.programs).
+    "albright_fitness.Program": Kind(
+        "albright_fitness.Program", "fitness", "program", lambda u: Q(owner=u), lambda u, o: o.owner_id == u.pk,
+        lambda o: o.owner, lambda o: o.name, lambda o: reverse("albright_fitness:program", args=[o.pk]),
+        "see this program's plan and copy or join it"),
 }
-APPS = {k.app: k for k in KINDS.values()}       # one shareable kind per app
+APPS = {}                                       # each app's main shareable kind (defaults, "New" forms): the first
+for _kind in KINDS.values():
+    APPS.setdefault(_kind.app, _kind)
 
 
 def app_label(app):

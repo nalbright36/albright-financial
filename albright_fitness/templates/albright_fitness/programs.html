@@ -19,12 +19,29 @@ Programs (program_views.program_list): mine, with New program (the guided setup)
     <h2 class="fx-card__title" id="fx-mine-h">{% if archived %}Archived{% else %}Yours{% endif %}</h2>
     {% for p, status in programs %}<div class="fx-row fx-program-row" id="program-{{ p.pk }}">
         <a href="{% if p.is_draft %}{% url 'albright_fitness:program_setup' p.pk %}{% else %}{% url 'albright_fitness:program' p.pk %}{% endif %}" class="fx-program-row__link"><span class="fx-row__title">{{ p.name }}</span>
-        <span class="fx-row__ind">{% if status %}<span class="fx-pill fx-pill--off">{{ status }}</span> {% endif %}{% if p.scheduled_from %}<span class="fx-pill">On Planner</span> {% endif %}{{ p.days.all|length }} workout{{ p.days.all|length|pluralize }}</span></a>
+        <span class="fx-row__ind">{% if p.copied_from_owner %}<span class="fx-muted fx-small">Copied from {{ p.copied_from_owner.first_name|default:p.copied_from_owner.username }}</span> {% endif %}{% if status %}<span class="fx-pill fx-pill--off">{{ status }}</span> {% endif %}{% if p.scheduled_from %}<span class="fx-pill">On Planner</span> {% endif %}{{ p.days.all|length }} workout{{ p.days.all|length|pluralize }}</span></a>
         {% if archived %}<form method="post" action="{% url 'albright_fitness:program_archive' p.pk %}">{% csrf_token %}<input type="hidden" name="restore" value="1"><button type="submit" class="btn btn-secondary btn-sm" aria-label="Restore {{ p.name }}">Restore</button></form>{% endif %}
         {% include "albright_fitness/_program_menu.html" %}
     </div>
     {% empty %}<p class="fx-empty">{% if archived %}Nothing archived.{% else %}None yet. Tap New program - it takes three short steps.{% endif %}</p>{% endfor %}
 </section>
+{% if shared_programs %}
+{# Programs shared with me (a person or a circle) or that I joined: each person chooses for themselves - nobody is added automatically. #}
+<section class="card fx-card" id="fx-shared-programs" aria-labelledby="fx-shared-h">
+    <h2 class="fx-card__title" id="fx-shared-h">Shared with you</h2>
+    {% for row in shared_programs %}{% with p=row.program m=row.member %}<div class="fx-row fx-program-row" id="shared-program-{{ p.pk }}">
+        <a href="{% url 'albright_fitness:program' p.pk %}" class="fx-program-row__link"><span class="fx-row__title">{{ p.name }} <span class="fx-muted fx-small">&middot; {{ p.owner.first_name|default:p.owner.username }}</span></span>
+        <span class="fx-row__ind">{% if m and m.ended_at %}<span class="fx-pill fx-pill--off">No longer shared</span>{% elif m %}<span class="fx-pill">Joined</span>{% elif row.copy %}<span class="fx-pill fx-pill--off">Copied</span>{% endif %} {{ p.days.all|length }} workout{{ p.days.all|length|pluralize }}</span></a>
+        <span class="fx-shared-acts">{% if m and m.ended_at %}
+            <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}">{% csrf_token %}<input type="hidden" name="action" value="keep_copy"><button type="submit" class="btn btn-primary btn-sm">Keep a copy</button></form>
+            <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}">{% csrf_token %}<input type="hidden" name="action" value="leave"><button type="submit" class="btn btn-secondary btn-sm">Remove tasks</button></form>
+        {% elif not m %}
+            <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}">{% csrf_token %}<input type="hidden" name="action" value="copy"><button type="submit" class="btn btn-secondary btn-sm">Add to my planner</button></form>
+            <form method="post" action="{% url 'albright_fitness:program_share_action' p.pk %}">{% csrf_token %}<input type="hidden" name="action" value="join"><button type="submit" class="btn btn-primary btn-sm">Join</button></form>
+        {% endif %}</span>
+    </div>{% endwith %}{% endfor %}
+</section>
+{% endif %}
 {% include "albright_fitness/_program_delete_dialog.html" %}
 </div>
 {% endblock %}

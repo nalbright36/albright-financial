@@ -438,7 +438,9 @@ def view_item(request, pk):
     can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
     rows = checklist.occurrence_rows(item, occurrence)
     shared_with = planner.shared_names(item) if is_owner else []
-    can_skip = item.repeats and can_edit
+    # A planned workout: "Skip workout" (done as skipped, with a reason) instead of "Skip this one" (drops it).
+    can_skip_workout = item.is_workout and is_owner and can_edit and not occ.done
+    can_skip = item.repeats and can_edit and not item.is_workout
     can_delete = is_owner and (can_edit or item.locked)
     template = "albright_planner/_view_panel.html" if request.GET.get("panel") == "1" else "albright_planner/item.html"
     return render(request, template, {
@@ -453,7 +455,7 @@ def view_item(request, pk):
         "can_check_groceries": sources.can_open(request.user, "meals"),
         "fitness": _fitness_panel(item, request.user, occurrence),
         "linked_note": planner.linked_note(item, request.user, full=True),
-        "can_skip": can_skip, "can_move": can_edit, "can_delete": can_delete,
+        "can_skip": can_skip, "can_skip_workout": can_skip_workout, "can_move": can_edit, "can_delete": can_delete,
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
         "subtasks": list(ScheduleItem.objects.visible_to(request.user).filter(parent=item, archived=False)
                          .order_by("date", "pk")),
@@ -578,6 +580,40 @@ def toggle(request, pk):
                                                            if shown else {}), **({"note": note} if note else {})})
     if note:
         messages.info(request, note)
+    return redirect(_next(request))
+
+
+@login_required
+@require_POST
+def skip(request, pk):
+    """Skip one occurrence of a planned workout or weigh-in: POST date, reason (Rest day / Sick / Busy / Travel /
+    Other - optional), note (optional). Checked off as "skipped" (albright_fitness.workout_sync - one service for
+    the Planner, Home, Fitness and the Bot API); unchecking it (toggle) reopens it."""
+    item = _editable(request, pk)
+    occurrence = _day(request.POST.get("date"))
+    reason, note = request.POST.get("reason", ""), request.POST.get("note", "")
+    error, done = "", None
+    if occurrence is None or not (item.is_workout or item.is_weigh_in):
+        error = "Only a planned workout or weigh-in can be skipped."
+    elif not planner.valid_occurrence(item, occurrence):
+        error = "That item isn't scheduled that day."
+    elif item.is_workout:
+        from albright_fitness import workout_sync
+        try:
+            done = workout_sync.skip_scheduled_workout(item, occurrence, request.user, reason, note)
+        except workout_sync.SkipError as exc:
+            error = str(exc)
+        else:
+            error = "" if done is not None else "That item isn't scheduled that day."
+    else:
+        from albright_fitness import weigh_in
+        weigh_in.skip(item, occurrence, request.user, reason, note)
+    if _wants_json(request):
+        return JsonResponse({"ok": False, "error": error}, status=400) if error else JsonResponse({"ok": True, "skipped": True})
+    if error:
+        messages.error(request, error)
+    else:
+        messages.success(request, f"Skipped {item.title}.")
     return redirect(_next(request))
 
 

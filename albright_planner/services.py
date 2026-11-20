@@ -212,6 +212,36 @@ def upcoming_dates(item, start, limit=3):
     return out
 
 
+def clean_skip(reason, note):
+    """(reason key or "", note) from a form / the API: an unknown reason is dropped; a note alone means Other."""
+    from .models import ItemCompletion
+    note = " ".join(str(note or "").split())[:200]
+    reason = reason if reason in dict(ItemCompletion.SKIP_REASONS) else ("other" if note else "")
+    return reason, note
+
+
+def set_skipped(item, day, reason="", note=""):
+    """Mark an already checked-off occurrence as skipped (the caller checked it off - planner.toggle)."""
+    from django.utils import timezone
+
+    from .models import ItemCompletion
+    reason, note = clean_skip(reason, note)
+    return ItemCompletion.objects.filter(item=item, occurrence_date=day).update(
+        status=ItemCompletion.SKIPPED, skipped_at=timezone.now(), skip_reason=reason, skip_note=note)
+
+
+def clear_skipped(item, day):
+    """A skipped occurrence that now really happened (a workout logged, a weight saved): plain done."""
+    from .models import ItemCompletion
+    return ItemCompletion.objects.filter(item=item, occurrence_date=day, status=ItemCompletion.SKIPPED).update(
+        status=ItemCompletion.DONE, skipped_at=None, skip_reason="", skip_note="")
+
+
+def is_skipped(item, day):
+    from .models import ItemCompletion
+    return ItemCompletion.objects.filter(item=item, occurrence_date=day, status=ItemCompletion.SKIPPED).exists()
+
+
 def is_done(item, day):
     from .models import ItemCompletion
     return ItemCompletion.objects.filter(item=item, occurrence_date=day).exists()

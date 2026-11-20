@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import training
-from .models import Exercise, Program, ProgramDay, ProgramExercise, Workout, WorkoutExercise
+from .models import Exercise, Program, ProgramDay, ProgramExercise, ProgramMember, Workout, WorkoutExercise
 
 SOURCE = "fitness"
 OPEN_WEEKS = 52
@@ -203,25 +203,186 @@ def schedule(program, start=None):
     from albright_planner import services
     today = timezone.localdate()
     start = start or (max(today, program.start_date) if program.start_date else today)
-    weeks = program.weeks or OPEN_WEEKS
-    until = start + timedelta(weeks=weeks) - timedelta(days=1)
+    until = _until(program, start)
+    placed = _place(program, program.owner, start, until)
+    program.scheduled_from = program.scheduled_from or start
+    program.on_planner = True
+    program.save(update_fields=["scheduled_from", "on_planner"])
+    sync_members(program, start)                       # people who joined it follow the same changes
+    return placed
+
+
+def _until(program, start):
+    return start + timedelta(weeks=program.weeks or OPEN_WEEKS) - timedelta(days=1)
+
+
+def _place(program, user, start, until):
+    """Put (or update) one person's repeating "day-<pk>" tasks for the program's days; days without weekdays end."""
+    from albright_planner import services
     placed, keep = 0, []
+    multi = program.days.count() > 1
     for day in program.days.prefetch_related("exercises__exercise"):
         if not day.weekdays:
             continue
         item, _created = services.upsert_weekly_source_item(
-            program.owner, SOURCE, f"day-{day.pk}", f"{day.name} ({program.name})" if program.days.count() > 1 else day.name,
+            user, SOURCE, f"day-{day.pk}", f"{day.name} ({program.name})" if multi else day.name,
             start, day.weekdays, until=until, checklist=day_checklist(day), url=start_url(day), start_time=program.planner_time)
         if item is not None:
             placed += 1
             keep.append(f"day-{day.pk}")
     stale = [f"day-{pk}" for pk in program.days.values_list("pk", flat=True) if f"day-{pk}" not in keep]
     if stale:
-        services.end_source_items(program.owner, SOURCE, stale, start - timedelta(days=1))
-    program.scheduled_from = program.scheduled_from or start
-    program.on_planner = True
-    program.save(update_fields=["scheduled_from", "on_planner"])
+        services.end_source_items(user, SOURCE, stale, start - timedelta(days=1))
     return placed
+
+
+def _end_for(program, user, last_day=None):
+    """End one person's tasks for this program after `last_day` (today; yesterday when today's isn't done)."""
+    from albright_planner import services
+    today = timezone.localdate()
+    ended = 0
+    for day in program.days.all():
+        item = services.source_item(user, SOURCE, f"day-{day.pk}")
+        if item is None:
+            continue
+        last = last_day or (today if services.is_done(item, today) else today - timedelta(days=1))
+        ended += services.end_source_items(user, SOURCE, [f"day-{day.pk}"], last)
+    return ended
+
+
+# ---------------------------------------------------------------------------
+# Sharing a program: copy it, or join it as a shared workout
+# ---------------------------------------------------------------------------
+# Programs share through albright_labs.sharing (a person or a circle, ShareGrant) - the plan only: days, exercises,
+# targets, schedule. Never the owner's workouts or weights. Nobody is added to anything automatically: each recipient
+# picks "Add to my planner" (copy_shared) or "Join as shared workout" (join) for themselves.
+
+def can_view(user, program):
+    """The owner, anyone it's shared with (a person or a circle - who can open Fitness), and anyone who joined it."""
+    from albright_labs import circles, sharing
+    if program.owner_id == user.pk:
+        return True
+    if program.members.filter(user=user).exists():
+        return True
+    return circles.can_use_app(user, "fitness") and sharing.can_view(user, program)
+
+
+def member(program, user):
+    return program.members.filter(user=user).first()
+
+
+def shared_with(user):
+    """Programs others shared with me or that I joined: [{"program", "member" (or None), "copy" (my copy or None)}]."""
+    from albright_labs import circles, sharing
+    if not circles.can_use_app(user, "fitness"):
+        return []
+    shared = set(sharing.shared_with_queryset(user, Program).exclude(owner=user).values_list("pk", flat=True))
+    memberships = {m.program_id: m for m in ProgramMember.objects.filter(user=user)}
+    rows = []
+    for p in Program.objects.filter(pk__in=shared | set(memberships)).select_related("owner").prefetch_related("days"):
+        rows.append({"program": p, "member": memberships.get(p.pk),
+                     "copy": Program.objects.filter(owner=user, copied_from=p).order_by("-pk").first()})
+    return rows
+
+
+def participants(program):
+    """Everyone doing it as a shared workout: the owner, then whoever joined (still in)."""
+    return [program.owner] + [m.user for m in program.members.filter(ended_at__isnull=True).select_related("user")]
+
+
+def _own_exercise(exercise, user):
+    """The exercise as the user may use it: built-in ones as they are; someone else's own one copied to theirs."""
+    if exercise.owner_id is None or exercise.owner_id == user.pk:
+        return exercise
+    mine = Exercise.objects.filter(owner=user, name=exercise.name).first()
+    if mine is not None:
+        return mine
+    return Exercise.objects.create(owner=user, name=exercise.name, kind=exercise.kind,
+                                   primary_muscles=exercise.primary_muscles, secondary_muscles=exercise.secondary_muscles,
+                                   equipment=exercise.equipment, instructions=exercise.instructions)
+
+
+@transaction.atomic
+def copy_shared(program, user, active=False):
+    """"Add to my planner": the user's own copy (days, exercises, targets, weekdays) - a draft by default, so they
+    pick their own days and start in the setup. Owner changes never reach it. Returns the copy."""
+    copy = Program.objects.create(owner=user, name=program.name, weeks=program.weeks, template=program.template,
+                                  active=active, start_date=timezone.localdate() if active else None,
+                                  planner_time=program.planner_time, copied_from=program, copied_from_owner=program.owner)
+    for day in program.days.prefetch_related("exercises__exercise"):
+        new_day = ProgramDay.objects.create(program=copy, order=day.order, name=day.name, weekdays=list(day.weekdays or []))
+        ProgramExercise.objects.bulk_create([
+            ProgramExercise(day=new_day, order=pe.order, exercise=_own_exercise(pe.exercise, user),
+                            target_sets=pe.target_sets, target_reps=pe.target_reps, target_seconds=pe.target_seconds,
+                            target_distance=pe.target_distance)
+            for pe in day.exercises.all()])
+    return copy
+
+
+@transaction.atomic
+def join(program, user):
+    """"Join as shared workout": follow the owner's program and schedule - their own Planner tasks on its days.
+    Returns the membership."""
+    m, _created = ProgramMember.objects.update_or_create(program=program, user=user, defaults={"ended_at": None})
+    _sync_member(program, user)
+    return m
+
+
+def _sync_member(program, user, start=None):
+    if program.active and not program.archived_at and any(d.weekdays for d in program.days.all()):
+        start = max(timezone.localdate(), start or timezone.localdate(), program.start_date or timezone.localdate())
+        _place(program, user, start, _until(program, start))
+    else:
+        _end_for(program, user)
+
+
+def sync_members(program, start=None):
+    """The owner changed the program (or paused / resumed it): everyone who joined gets the same future tasks."""
+    for m in program.members.filter(ended_at__isnull=True).select_related("user"):
+        _sync_member(program, m.user, start)
+
+
+@transaction.atomic
+def leave(program, user):
+    """Leave a shared workout: their future tasks go (after today; today's stays if done) - past logs stay."""
+    _end_for(program, user)
+    from albright_planner import services
+    services.release_source_items(user, SOURCE, [f"day-{d.pk}" for d in program.days.all()])
+    ProgramMember.objects.filter(program=program, user=user).delete()
+
+
+@transaction.atomic
+def stop_sharing(program):
+    """The owner stops sharing: every share goes; people who joined keep their tasks until they choose (Programs ->
+    Shared with you): keep a personal copy (keep_copy) or remove their future tasks (leave)."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from albright_labs.models import ShareGrant
+    ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(Program), object_id=program.pk).delete()
+    ended = list(program.members.filter(ended_at__isnull=True).select_related("user"))
+    program.members.filter(ended_at__isnull=True).update(ended_at=timezone.now())
+    from albright_labs import activity
+    for m in ended:
+        activity.record_activity("fitness", "unshared", f"stopped sharing the program {activity.quote(program.name)} - "
+                                 "keep a personal copy or remove its tasks", obj=program, actor=program.owner,
+                                 recipient=m.user, url=reverse("albright_fitness:programs"))
+    return len(ended)
+
+
+@transaction.atomic
+def keep_copy(program, user):
+    """After the owner stopped sharing: the user's own copy, on, on their Planner on the same days - their tasks for
+    the shared one end. Returns the copy."""
+    _end_for(program, user)
+    from albright_planner import services
+    services.release_source_items(user, SOURCE, [f"day-{d.pk}" for d in program.days.all()])
+    copy = copy_shared(program, user, active=True)
+    ProgramMember.objects.filter(program=program, user=user).delete()
+    if any(d.weekdays for d in copy.days.all()):
+        copy.on_planner = True
+        copy.save(update_fields=["on_planner"])
+        schedule(copy, start=timezone.localdate() + timedelta(days=1))
+    return copy
 
 
 def unschedule(program, last_day=None, forget=True):
@@ -250,6 +411,7 @@ def set_active(program, active):
         unschedule(program, forget=False)
     elif active and program.on_planner and any(d.weekdays for d in program.days.all()):
         schedule(program)
+    sync_members(program)                                  # people who joined pause / resume with it
 
 
 @transaction.atomic
@@ -311,8 +473,8 @@ def delete_program(program, remove_scheduled=True):
       - Its Planner tasks - the repeating "day-<pk>" ones and any older one-off "session-<pk>" ones - stop belonging
         to it. remove_scheduled: they end (no more occurrences after today, or after yesterday when today's isn't
         checked off) - past occurrences and check-offs stay as history; otherwise they carry on as ordinary tasks.
-      - Any shares are removed. (Programs aren't a shareable kind - albright_labs.sharing - so there are none today,
-        and with nobody else able to see it there's nothing for the activity feed.)"""
+      - Any shares are removed; people who joined it have their future tasks end (their logged workouts stay).
+        Nothing goes to the activity feed."""
     from django.contrib.contenttypes.models import ContentType
     from django.db.models import Q
 
@@ -323,8 +485,11 @@ def delete_program(program, remove_scheduled=True):
     owner = program.owner
     days = list(program.days.all())
     kept = 0
+    for member in program.members.select_related("user"):     # people who joined: their tasks end, history stays
+        _end_for(program, member.user)
+        services.release_source_items(member.user, SOURCE, [f"day-{d.pk}" for d in days])
     for day in days:
-        kept += Workout.objects.filter(program_day=day).update(program_day=None, program_name=program.name[:100],
+        kept += Workout.all_objects.filter(program_day=day).update(program_day=None, program_name=program.name[:100],
                                                                program_day_name=day.name[:60])
     sessions = ScheduledSession.objects.filter(Q(program=program) | Q(program_day__program=program))
     source_ids = [f"day-{d.pk}" for d in days] + [s.source_id for s in sessions if s.planner_item_id]

@@ -1,0 +1,19 @@
+{% comment %}"Skip" for a planned workout (Planner view panel and its menu, Home's Today rows, Fitness Today): a small
+pop-over with optional reason chips (Rest day, Sick, Busy, Travel, Other) and a note, then Skip. Works without JS
+(a <details> and a plain form post). action_url: albright_planner:skip (date + next) or albright_fitness:skip_day
+(day_pk). uid keeps the ids unique on a page; label: the summary's text (default "Skip"); btn_class: its classes.{% endcomment %}
+{% load planner_extras %}{% skip_reasons as skip_reasons %}<details class="skip-pop" data-skip-pop>
+    <summary class="{{ btn_class|default:'pl-btn' }} skip-pop__btn" id="skip-btn-{{ uid }}">{{ label|default:"Skip" }}</summary>
+    <form method="post" action="{{ action_url }}" class="skip-pop__form" aria-labelledby="skip-btn-{{ uid }}">{% csrf_token %}
+        {% if date %}<input type="hidden" name="date" value="{{ date|date:'Y-m-d' }}">{% endif %}
+        {% if day_pk %}<input type="hidden" name="day" value="{{ day_pk }}">{% endif %}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <fieldset class="skip-pop__reasons">
+            <legend class="skip-pop__legend">Why? <span class="skip-pop__opt">(optional)</span></legend>
+            {% for key, text in skip_reasons %}<label class="skip-chip"><input type="radio" name="reason" value="{{ key }}"><span>{{ text }}</span></label>{% endfor %}
+        </fieldset>
+        <label class="visually-hidden" for="skip-note-{{ uid }}">Note</label>
+        <input type="text" name="note" id="skip-note-{{ uid }}" class="skip-pop__note" maxlength="200" placeholder="Note (optional)" autocomplete="off">
+        <button type="submit" class="skip-pop__go">Skip workout</button>
+    </form>
+</details>

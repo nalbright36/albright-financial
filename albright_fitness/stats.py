@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
+from django.db.models import Q
 from django.utils import timezone
 
 from . import training
@@ -22,18 +23,28 @@ def week_start(day):
     return day - timedelta(days=day.weekday())
 
 
+def active_days_qs(user):
+    """Days of the person's active programs: their own, and ones they joined as a shared workout (ProgramMember)."""
+    return ProgramDay.objects.filter(Q(program__owner=user) | Q(program__members__user=user), program__active=True) \
+        .distinct()
+
+
 def active_days(user):
-    return list(ProgramDay.objects.filter(program__owner=user, program__active=True).select_related("program")
-                .order_by("program__name", "order"))
+    return list(active_days_qs(user).select_related("program").order_by("program__name", "order"))
 
 
 def todays(user, today=None):
-    """[(program day, finished workout or None)] planned for today."""
+    """[(program day, finished workout or None)] planned for today. A day skipped today has day.skipped (its
+    skipped Workout - "Skipped - Rest day", Undo); skips never count as done."""
     today = today or timezone.localdate()
     days = [d for d in active_days(user) if today.weekday() in (d.weekdays or [])
             and (d.program.start_date is None or d.program.start_date <= today)]
     done = {w.program_day_id: w for w in Workout.objects.filter(owner=user, date=today, finished_at__isnull=False,
                                                                    program_day__in=days)}
+    skipped = {w.program_day_id: w for w in Workout.all_objects.filter(owner=user, date=today, status=Workout.SKIPPED,
+                                                                          program_day__in=days)}
+    for d in days:
+        d.skipped = skipped.get(d.pk)
     return [(d, done.get(d.pk)) for d in days]
 
 
@@ -45,7 +56,9 @@ def status_line(user):
         from .nutrition import status_line as food_line
         return food_line(user) or "Rest day"
     names = ", ".join(d.name for d, _w in plan)
-    return f"Done today: {names}" if all(w for _d, w in plan) else f"Today: {names}"
+    if all(w or d.skipped for d, w in plan) and not any(w for _d, w in plan):
+        return f"Skipped today: {names}"
+    return f"Done today: {names}" if all(w or d.skipped for d, w in plan) else f"Today: {names}"
 
 
 def planned_in_week(user, monday, days=None):

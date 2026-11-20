@@ -5,19 +5,20 @@ calendar; item.html is the same panel as a page. Every empty section is left out
 the footer stay put and the middle (.pl-view__body) scrolls. A linked note shows in full - its checklist boxes
 tick right here (saved to the note) for someone who can edit it.
 {% endcomment %}{% load planner_extras %}
-<article class="pl-view{% if o.done %} is-done{% endif %}{% if item.source_app == 'fitness' %} is-fitness{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if item.source_app == "fitness" and fitness.start_url %} data-log-url="{{ fitness.start_url }}"{% endif %}{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
+<article class="pl-view{% if o.skipped %} is-skipped{% elif o.done %} is-done{% endif %}{% if item.source_app == 'fitness' %} is-fitness{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if item.source_app == "fitness" and fitness.start_url %} data-log-url="{{ fitness.start_url }}"{% endif %}{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
     <header class="pl-view__head">
         {% if item.checkable %}{% if can_edit %}
         <form method="post" action="{% url 'albright_planner:toggle' item.pk %}" class="pl-check-form">{% csrf_token %}
             <input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ self_url }}">
-            <button type="submit" class="pl-check pl-check--lg" id="pl-view-check" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-label="Done: {{ o.title }}"><svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button type="submit" class="pl-check pl-check--lg" id="pl-view-check" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-label="{% if o.skipped %}Skipped (tap to reopen){% else %}Done{% endif %}: {{ o.title }}">{% if o.skipped %}{% include "albright_planner/_skip_icon.html" %}{% else %}<svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}</button>
         </form>
-        {% else %}<span class="pl-check pl-check--lg is-readonly" id="pl-view-check" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-disabled="true" aria-label="Done: {{ o.title }} (view only)"><svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endif %}
+        {% else %}<span class="pl-check pl-check--lg is-readonly" id="pl-view-check" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-disabled="true" aria-label="{% if o.skipped %}Skipped{% else %}Done{% endif %}: {{ o.title }} (view only)">{% if o.skipped %}{% include "albright_planner/_skip_icon.html" %}{% else %}<svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}</span>{% endif %}
         {% else %}<span class="pl-dot pl-view__dot" aria-hidden="true"></span>{% endif %}
         <h2 class="pl-view__title" id="pl-view-title">{{ o.title }}</h2>
         <details class="pl-menu" id="pl-view-menu" data-menu data-menu-scope="pl">
             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
             <div class="pl-menu__panel" data-menu-panel>
+                {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" label="Skip workout…" btn_class="pl-menu__item" %}{% endif %}
                 {% if can_skip %}<form method="post" action="{% url 'albright_planner:remove' item.pk %}">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="this"><input type="hidden" name="next" value="{{ back }}"><button type="submit" class="pl-menu__item" id="pl-view-skip">Skip this one</button></form>{% endif %}
                 {% if can_move %}<details class="pl-menu__move">
                     <summary class="pl-menu__item">Move&hellip;</summary>
@@ -42,6 +43,7 @@ tick right here (saved to the note) for someone who can edit it.
         {% if repeat_text %}<span class="pl-view__fact" id="pl-view-repeat"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-1a5 5 0 015-5h11"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 12.5v1a5 5 0 01-5 5H4"/></svg> {{ repeat_text }}</span>{% endif %}
         {% if o.weather %}<span class="pl-view__fact" id="pl-view-weather">{% include "albright_planner/_weather.html" with wx=o.weather place=o.weather_place show_label=True show_place=True %}</span>{% endif %}
         {% if item.priority != "none" %}<span class="pl-badge pl-badge--{{ item.priority }}" id="pl-view-priority">{{ item.get_priority_display }}</span>{% endif %}
+        {% if o.skipped %}<span class="pl-view__fact pl-skip-label" id="pl-view-skipped">{% include "albright_planner/_skip_icon.html" %} {{ o.skip_label }}</span>{% endif %}
         {% if o.done and o.done_by and o.shared %}<span class="pl-view__fact pl-done-by">Done by {{ o.done_by|person }}</span>{% endif %}
         {% if item.source_href %}<a href="{{ item.source_href }}" class="pl-view__fact"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app &#x2197;</a>{% endif %}
     </p>
@@ -62,7 +64,8 @@ tick right here (saved to the note) for someone who can edit it.
     <section class="pl-view__section pl-view__fitness" id="pl-view-fitness" aria-labelledby="pl-view-fit-h">
         <h3 class="pl-view__label" id="pl-view-fit-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workout</h3>
         {% if fitness.rows %}<ul class="pl-view__rows">{% for r in fitness.rows %}<li class="pl-view__row"><span class="pl-view__row-name" title="{{ r.exercise.name }}">{{ r.exercise.name }}{% if r.last %}<span class="pl-view__last" title="Last time: {{ r.last }}">Last time: {{ r.last }}</span>{% endif %}</span>{% if r.target %}<span class="pl-view__row-ind">{{ r.target }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
-        {% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
+        {% if fitness.start_url and not o.done or can_skip_workout %}<div class="pl-view__acts">{% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
+        {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="panel" %}{% endif %}</div>{% endif %}
     </section>
     {% endif %}
     {% if subtasks %}

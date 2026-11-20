@@ -24,11 +24,14 @@ streak (weeks with every planned workout done), this week's working sets by musc
 <div class="fx-grid fx-grid--today">
 <section class="card fx-card fx-today" id="fx-today" aria-labelledby="fx-today-h">
     <h2 class="fx-card__title" id="fx-today-h">Today</h2>
-    {% for day, done in today %}
+    {% url 'albright_fitness:skip_day' as skip_day_url %}{% for day, done in today %}
     <div class="fx-row">
         <span class="fx-row__title">{{ day.name }} <span class="fx-muted fx-small">{{ day.program.name }}</span></span>
         {% if done %}<a href="{% url 'albright_fitness:summary' done.pk %}" class="fx-pill fx-pill--done" data-today-done>{% if done.from_planner %}&#x2713; Done &middot; from Planner{% else %}Done &#x2713;{% endif %}</a>
-        {% else %}<form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="btn btn-primary fx-start">Start</button></form>{% endif %}
+        {% elif day.skipped %}<span class="fx-skipped" data-today-skipped>{% include "albright_planner/_skip_icon.html" %} {{ day.skipped.skip_label }}</span>
+        <form method="post" action="{% url 'albright_fitness:skip_day' %}" class="fx-inline">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}"><input type="hidden" name="undo" value="1"><button type="submit" class="btn btn-secondary btn-sm">Undo</button></form>
+        {% else %}<span class="fx-today__acts"><form method="post" action="{% url 'albright_fitness:start' %}">{% csrf_token %}<input type="hidden" name="day" value="{{ day.pk }}"><button type="submit" class="btn btn-primary fx-start">Start</button></form>
+        {% include "albright_planner/_skip_form.html" with action_url=skip_day_url day_pk=day.pk uid=day.pk btn_class="btn btn-secondary" %}</span>{% endif %}
     </div>
     {% empty %}
     <p class="fx-empty">Rest day.{% if not programs %} <a href="{% url 'albright_fitness:programs' %}">Pick a program</a> to plan your week.{% endif %}</p>

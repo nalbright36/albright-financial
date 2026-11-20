@@ -18,12 +18,15 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Case, IntegerField, Value, When
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
+
+from albright_labs import sharing
+from albright_labs.sharing import person_name
 
 from . import programs, training
 from .models import EQUIPMENT, Exercise, Program, ProgramDay, ProgramExercise
@@ -113,10 +116,11 @@ def program_list(request):
         p = Program.objects.create(owner=request.user, name=name, active=False)
         return redirect("albright_fitness:program_setup", pk=p.pk)
     archived = request.GET.get("show") == "archived"
-    mine = Program.objects.filter(owner=request.user).prefetch_related("days")
+    mine = Program.objects.filter(owner=request.user).prefetch_related("days").select_related("copied_from_owner")
     shown = list(mine.filter(archived_at__isnull=not archived))
     return render(request, "albright_fitness/programs.html", {
         "programs": [(p, _status(p)) for p in shown], "archived": archived,
+        "shared_programs": [] if archived else programs.shared_with(request.user),
         "archived_count": len(shown) if archived else mine.filter(archived_at__isnull=False).count()})
 
 
@@ -171,7 +175,11 @@ def _next_day(p, today):
 @login_required
 def program(request, pk):
     from . import log_views, views
-    p = get_object_or_404(Program, pk=pk, owner=request.user)
+    p = get_object_or_404(Program, pk=pk)
+    if p.owner_id != request.user.pk:
+        if request.method != "GET" or not programs.can_view(request.user, p):
+            raise Http404
+        return _shared_program(request, p)
     if request.method == "POST":
         action = request.POST.get("action")
         if action in ("pause", "resume"):
@@ -192,7 +200,58 @@ def program(request, pk):
         "p": p, "days": days, "status": _status(p), "next_day": nxt, "next_when": when, "today": today,
         "ends": p.start_date + timedelta(weeks=p.weeks) - timedelta(days=1) if p.start_date and p.weeks else None,
         "start_url": programs.start_url(nxt) if nxt else "",
-        "scheduled": log_views.scheduled_for(request.user, program=p)})   # older one-off sessions: still listed to remove
+        "scheduled": log_views.scheduled_for(request.user, program=p),   # older one-off sessions: still listed to remove
+        # Sharing (the plan only): the Share control, who joined / copied it, Stop sharing.
+        "share": sharing.control(request.user, p), "members": list(p.members.select_related("user")),
+        "copies": list(p.copies.select_related("owner").order_by("pk")),
+        "is_shared": bool(sharing.grants(p)) or p.members.filter(ended_at__isnull=True).exists()})
+
+
+def _shared_program(request, p):
+    """A program someone shared with me (or that I joined): its plan, read-only, with "Add to my planner" (my own
+    copy) and "Join as shared workout" - or, joined, Leave; after the owner stopped sharing, keep a copy or remove."""
+    today = timezone.localdate()
+    nxt, when = _next_day(p, today) if p.active else (None, None)
+    return render(request, "albright_fitness/program_shared.html", {
+        "p": p, "days": list(p.days.prefetch_related("exercises__exercise")), "today": today,
+        "member": programs.member(p, request.user), "participants": programs.participants(p),
+        "my_copy": Program.objects.filter(owner=request.user, copied_from=p).order_by("-pk").first(),
+        "next_day": nxt, "next_when": when, "start_url": programs.start_url(nxt) if nxt else "",
+        "ends": p.start_date + timedelta(weeks=p.weeks) - timedelta(days=1) if p.start_date and p.weeks else None})
+
+
+@login_required
+@require_POST
+def program_share_action(request, pk):
+    """The sharing choices: a recipient's copy / join / leave / keep_copy; the owner's stop (Stop sharing)."""
+    p = get_object_or_404(Program, pk=pk)
+    action, user = request.POST.get("action"), request.user
+    if action == "stop" and p.owner_id == user.pk:
+        n = programs.stop_sharing(p)
+        messages.success(request, "Stopped sharing." + (f" The {n} {'person' if n == 1 else 'people'} who joined can keep "
+                                                        "a personal copy or remove their tasks." if n else ""))
+        return redirect("albright_fitness:program", pk=p.pk)
+    if p.owner_id == user.pk or not programs.can_view(user, p):
+        raise Http404
+    member = programs.member(p, user)
+    if action == "copy":
+        copy = programs.copy_shared(p, user)
+        messages.success(request, f"Copied {p.name} - it's yours to change. Pick your days and start to put it on your Planner.")
+        return redirect("albright_fitness:program_setup", pk=copy.pk)
+    if action == "join" and (member is None or member.ended_at is None):
+        if not sharing.can_view(user, p):
+            raise Http404
+        programs.join(p, user)
+        messages.success(request, f"Joined {p.name} - its workouts are on your Planner on {person_name(p.owner)}'s days.")
+    elif action == "leave" and member is not None:
+        programs.leave(p, user)
+        messages.success(request, f"Left {p.name} - its upcoming workouts are off your Planner. Your logged workouts stay.")
+        return redirect("albright_fitness:programs")
+    elif action == "keep_copy" and member is not None and member.ended_at is not None:
+        copy = programs.keep_copy(p, user)
+        messages.success(request, f"{copy.name} is yours now - same days, on your Planner.")
+        return redirect("albright_fitness:program", pk=copy.pk)
+    return redirect("albright_fitness:program", pk=p.pk)
 
 
 # ---------------------------------------------------------------------------

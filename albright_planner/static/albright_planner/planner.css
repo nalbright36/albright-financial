@@ -583,3 +583,21 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
   }
   .pl-wx-hourly__legend { flex-direction: column; gap: 4px; }
 }
+
+/* A skipped planned workout / weigh-in (ItemCompletion "skipped"): a skip arrow in the box instead of a check, muted
+   title - not struck through - and "Skipped - Rest day" among the indicators. */
+.pl .is-skipped .pl-check[aria-checked="true"] { background: var(--surface-hover); border-color: var(--pl-muted); color: var(--pl-muted); }
+.pl .is-skipped .pl-check .skip-icon { display: block; }
+.pl-item.is-skipped .pl-item__title, .pl-view.is-skipped .pl-view__title { color: var(--pl-muted); font-weight: 500; text-decoration: none; }
+.pl-skip-label { display: inline-flex; align-items: center; gap: 4px; color: var(--pl-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; max-width: 14em; }
+.pl-view__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pl-today__skip { flex-shrink: 0; }
+
+/* A shared workout (a program people joined): everyone's avatar with a small done / skipped / open mark. */
+.pl-parts { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.pl-part { position: relative; }
+.pl-part.is-open { opacity: .55; }
+.pl-part__mark { position: absolute; right: -3px; bottom: -3px; min-width: 11px; height: 11px; border-radius: 50%; display: grid;
+  place-items: center; font-size: 8px; line-height: 1; color: #fff; background: var(--pl-muted); border: 1px solid var(--surface); }
+.pl-part__mark:empty { display: none; }
+.pl-part.is-done .pl-part__mark { background: var(--gain, #16A34A); }

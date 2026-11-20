@@ -11,6 +11,11 @@
     was started from, and anything else scheduled that day it covers (schedule.complete_matching).
   - reopen_scheduled_workout(): the task was unchecked. An auto-made "Completed from Planner" workout with no sets
     is deleted; a workout with real sets is kept (the caller shows KEPT_NOTE).
+  - skip_scheduled_workout(): "Skip" (the Planner / Home menu, Fitness Today, the Bot API): the occurrence is
+    checked off with status "skipped" (+ an optional reason) and a "skipped" Workout with no sets is recorded for
+    that date - History shows "Skipped - Rest day"; Workout.objects (stats, volume, streaks, insights) never sees
+    it, and the program's schedule doesn't change. Unchecking reopens it and deletes that record (reopen_...).
+    Logging the workout after all turns the skip into a plain done (_clear_skip).
   - Weigh-ins follow the same rule (task done <=> weight logged): weigh_in.on_toggle / weigh_in's receivers.
   - backfill(): tasks already checked off with no workout get their "Completed from Planner" one (the
     sync_workout_task_completion command and migration 0018).
@@ -22,6 +27,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import ProgramDay, ScheduledSession, Workout, WorkoutSet
+
+class SkipError(Exception):
+    pass
+
 
 SOURCE = "fitness"
 AUTO_LABEL = "Completed from Planner"
@@ -59,7 +68,9 @@ def target(item):
         return None, None
     sid = item.source_id
     if sid.startswith("day-") and sid[4:].isdigit():
-        return ProgramDay.objects.filter(pk=sid[4:], program__owner=item.owner).select_related("program").first(), None
+        from django.db.models import Q                     # mine, or a program I joined (ProgramMember)
+        return ProgramDay.objects.filter(Q(program__owner=item.owner) | Q(program__members__user=item.owner),
+                                         pk=sid[4:]).select_related("program").distinct().first(), None
     session = ScheduledSession.objects.filter(planner_item=item).select_related(
         "exercise", "program", "program_day__program").first()
     return (session.program_day if session else None), session
@@ -139,12 +150,83 @@ def complete_scheduled_workout(item, day, user=None):
 
 
 @transaction.atomic
-def reopen_scheduled_workout(item, day, user=None):
-    """The task's occurrence on `day` was unchecked: an auto-made, empty "Completed from Planner" workout goes; one
-    with logged sets stays. Returns the workout kept, or None."""
+def skip_scheduled_workout(item, day, user=None, reason="", note=""):
+    """Skip the task's occurrence on `day`: checked off as "skipped" (reason: ItemCompletion.SKIP_REASONS key, note
+    optional) and a skipped Workout (no sets) recorded for that date. Already skipped: the reason is updated.
+    Returns the skipped Workout, or None if it isn't scheduled then. SkipError when it's already done."""
+    from albright_planner import planner, services
     if not is_workout_task(item):
         return None
-    for workout in Workout.objects.filter(owner=item.owner, planner_item=item, planner_date=day, from_planner=True,
+    completion = item.completions.filter(occurrence_date=day).first()
+    if completion is not None and not completion.skipped:
+        if finished_workout(item, day) is not None and has_sets(finished_workout(item, day)):
+            raise SkipError("It's already done - uncheck it first to skip it.")
+        with from_fitness():                                    # an empty "Completed from Planner": reopen, then skip
+            planner.toggle(item, day, user, done=False)
+        reopen_scheduled_workout(item, day, user)
+        completion = None
+    if completion is None:
+        with from_fitness():
+            if planner.toggle(item, day, user, done=True) is None:
+                return None
+    reason, note = services.clean_skip(reason, note)
+    services.set_skipped(item, day, reason, note)
+    day_obj, session = target(item)
+    workout, _created = Workout.all_objects.update_or_create(
+        owner=item.owner, planner_item=item, planner_date=day, status=Workout.SKIPPED,
+        defaults={"date": day, "program_day": day_obj, "from_planner": True, "finished_at": timezone.now(),
+                  "name": "" if day_obj else (session.title if session else item.title)[:100],
+                  "skip_reason": reason, "skip_note": note})
+    return workout
+
+
+@transaction.atomic
+def skip_program_day(user, day_obj, on_date, reason="", note=""):
+    """Fitness Today's Skip: through its Planner task when the program is on the Planner, else just the skipped
+    record. Returns the skipped Workout (None: not scheduled that day)."""
+    from . import programs
+    item, when = programs.planner_occurrence(user, day_obj, on_date)
+    if item is not None:
+        return skip_scheduled_workout(item, when, user, reason, note)
+    from albright_planner import services
+    reason, note = services.clean_skip(reason, note)
+    workout, _created = Workout.all_objects.update_or_create(
+        owner=user, program_day=day_obj, date=on_date, status=Workout.SKIPPED, planner_item=None,
+        defaults={"from_planner": True, "finished_at": timezone.now(), "skip_reason": reason, "skip_note": note})
+    return workout
+
+
+@transaction.atomic
+def unskip_program_day(user, day_obj, on_date):
+    """Undo Fitness Today's Skip: reopen its task (which removes the record), or remove the record."""
+    from albright_planner import planner
+
+    from . import programs
+    item, when = programs.planner_occurrence(user, day_obj, on_date)
+    if item is not None and item.completions.filter(occurrence_date=when, status="skipped").exists():
+        planner.toggle(item, when, user, done=False)
+    for workout in Workout.all_objects.filter(owner=user, program_day=day_obj, date=on_date, status=Workout.SKIPPED):
+        if not has_sets(workout):
+            workout.delete()
+
+
+def _clear_skip(item, day):
+    """The occurrence was skipped, but the workout happened after all: plain done, and the skipped record goes."""
+    from albright_planner import services
+    if services.clear_skipped(item, day):
+        for workout in Workout.all_objects.filter(owner=item.owner, planner_item=item, planner_date=day,
+                                                  status=Workout.SKIPPED):
+            if not has_sets(workout):
+                workout.delete()
+
+
+@transaction.atomic
+def reopen_scheduled_workout(item, day, user=None):
+    """The task's occurrence on `day` was unchecked: an auto-made, empty "Completed from Planner" workout goes (a
+    skipped record too); one with logged sets stays. Returns the workout kept, or None."""
+    if not is_workout_task(item):
+        return None
+    for workout in Workout.all_objects.filter(owner=item.owner, planner_item=item, planner_date=day, from_planner=True,
                                           finished_at__isnull=False):
         if not has_sets(workout):
             workout.delete()
@@ -160,6 +242,7 @@ def workout_finished(workout):
     done = []
     with from_fitness():
         if workout.planner_item_id and workout.planner_date and workout.planner_item.owner_id == workout.owner_id:
+            _clear_skip(workout.planner_item, workout.planner_date)
             if services.complete_occurrence(workout.planner_item, workout.planner_date, workout.owner):
                 done.append(workout.planner_item)
         done += schedule.complete_matching(workout)            # the same exercise / program day scheduled that day
@@ -175,6 +258,8 @@ def _check_program_day(workout, done):
     if not workout.program_day_id or workout.planner_item_id:
         return
     item, when = programs.planner_occurrence(workout.owner, workout.program_day, workout.date)
+    if item is not None and item not in done:
+        _clear_skip(item, when)
     if item is not None and item not in done and not services.is_done(item, when):
         if services.complete_occurrence(item, when, workout.owner):
             done.append(item)

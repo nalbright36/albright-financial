@@ -69,3 +69,10 @@ def planner_wx(context):
             show = row["show_weather"]
     return {"auto": auto and show, "show": show}
 
+
+
+@register.simple_tag
+def skip_reasons():
+    """The Skip pop-over's reason chips (_skip_form.html): [(key, "Rest day"), ...]."""
+    from albright_planner.models import ItemCompletion
+    return ItemCompletion.SKIP_REASONS

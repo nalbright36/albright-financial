@@ -24,6 +24,7 @@ urlpatterns = [
     path("<int:pk>/", item_page(views.edit_item), name="edit"),
     path("<int:pk>/duplicate/", views.duplicate, name="duplicate"),
     path("<int:pk>/toggle/", views.toggle, name="toggle"),
+    path("<int:pk>/skip/", views.skip, name="skip"),
     path("<int:pk>/move/", views.move, name="move"),
     path("<int:pk>/remove/", views.remove, name="remove"),
     path("<int:pk>/note/", item_page(views.item_note), name="item_note"),

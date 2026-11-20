@@ -182,7 +182,8 @@ def _occurrence_json(o, files=None):
     return {"item_id": o.item.pk, "type": _type(o.item), "title": o.title, "date": o.date.isoformat(),
             "occurrence_date": o.occurrence_date.isoformat(), "start_time": o.start_time.strftime("%H:%M") if o.start_time else None,
             "end_time": o.end_time.strftime("%H:%M") if o.end_time else None, "kind": o.item.kind,
-            "checkable": o.item.checkable, "done": o.done, "repeats": o.item.repeats,
+            "checkable": o.item.checkable, "done": o.done,
+            "skipped": bool(getattr(o, "skipped", False)), "skip_label": getattr(o, "skip_label", "") or None, "repeats": o.item.repeats,
             "one_at_a_time": o.item.one_at_a_time, "created_by": o.item.created_by,
             "owner": _person(o.item.owner), "mine": not getattr(o, "shared_in", False),
             "done_by": _person(o.done_by) if getattr(o, "done_by", None) else None,
@@ -352,6 +353,45 @@ def schedule_complete(request, token, item_id):
 @bot_endpoint("schedule:write", methods=("POST",))
 def schedule_uncomplete(request, token, item_id):
     return _set_done(request, token, item_id, False)
+
+
+@bot_endpoint("schedule:write", methods=("POST",))
+def schedule_skip(request, token, item_id):
+    """Skip one occurrence of a planned workout (or weigh-in): done as "skipped", with an optional reason - the same
+    service as the Planner's Skip (albright_fitness.workout_sync.skip_scheduled_workout). Uncomplete reopens it."""
+    from albright_planner import planner
+    from albright_planner.models import ItemCompletion, ScheduleItem
+    _require_planner_access(token)
+    item = ScheduleItem.objects.editable_by(token.owner).filter(pk=item_id, archived=False, owner=token.owner).first()
+    if item is None:
+        raise ApiError(404, f"No item {item_id} the owner can skip.", "rejected: item not found or not the owner's")
+    if not (item.is_workout or item.is_weigh_in):
+        raise ApiError(400, "Only a planned workout or weigh-in can be skipped.", "rejected: not a Fitness task")
+    data = json_body(request)
+    occurrence = _date(data.get("occurrence_date"), "occurrence_date", required=item.repeats) or item.date
+    reason = data.get("reason") or ""
+    if reason and reason not in dict(ItemCompletion.SKIP_REASONS):
+        raise ApiError(400, '"reason" must be one of rest, sick, busy, travel, other.', "rejected: bad skip reason")
+    note = _str(data, "note", 200)
+    if not planner.valid_occurrence(item, occurrence):
+        raise ApiError(400, f"Item {item_id} isn't scheduled on {occurrence}.", "rejected: not scheduled that day")
+    extra = {}
+    if item.is_workout:
+        from albright_fitness import workout_sync
+        try:
+            workout = workout_sync.skip_scheduled_workout(item, occurrence, token.owner, reason, note)
+        except workout_sync.SkipError as exc:
+            raise ApiError(400, str(exc), "rejected: already done")
+        if workout is None:
+            raise ApiError(400, f"Item {item_id} isn't scheduled on {occurrence}.", "rejected: not scheduled that day")
+        extra = {"workout_id": workout.pk}
+    else:
+        from albright_fitness import weigh_in
+        weigh_in.skip(item, occurrence, token.owner, reason, note)
+    completion = item.completions.get(occurrence_date=occurrence)
+    return ({"item_id": item.pk, "occurrence_date": occurrence.isoformat(), "done": True, "skipped": True,
+             "skip_reason": completion.skip_reason or None, "label": completion.skip_label, **extra}, 200,
+            f"skipped item #{item.pk} on {occurrence}")
 
 
 @csrf_exempt

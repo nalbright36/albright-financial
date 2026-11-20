@@ -541,3 +541,20 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 .fx-wis__form fieldset { min-width: 0; }
 .fx-wis__form legend { width: 100%; margin-bottom: 4px; }
 .fx-wis__preview { min-height: 1.2em; font-weight: 600; color: var(--text-primary); }
+
+/* Skipped planned workouts (workout_sync.skip_*): Today's "Skipped - Rest day" + Undo, and History's muted rows. */
+.fx-today__acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.fx-skipped { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-secondary); font-size: var(--text-sm); font-style: italic; }
+.fx-inline { display: inline; margin: 0; }
+.fx-row--skipped .fx-row__title { color: var(--text-secondary); font-weight: 500; }
+.fx-cal__w.is-skipped { opacity: .6; font-style: italic; }
+
+/* Shared programs: the recipient's choices, and who's doing it. */
+.fx-shared-acts { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.fx-shared-acts form, .fx-shared-option { margin: 0; }
+.fx-shared-options { display: grid; gap: 14px; }
+.fx-participants { display: flex; gap: 4px; margin: 6px 0 10px; }
+.fx-subtitle { font-size: var(--text-sm); font-weight: 600; margin: 14px 0 4px; }
+.fx-program-share .fx-help { margin-bottom: 10px; }
+.fx-participants .pl-avatar { --pl-avatar: #7C3AED; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--pl-avatar); color: #fff; font-size: 0.75rem; font-weight: 700; }
