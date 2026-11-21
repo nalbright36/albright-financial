@@ -5,6 +5,7 @@ undo), notes, and deleting a suggestion. Superusers only.
 The page always opens on New; ?status=<key> (or all) picks another tab, so
 those views can be bookmarked. Nothing remembers the last tab."""
 import json
+import logging
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -44,6 +45,15 @@ def _back(request, kind):
     return redirect(KINDS[kind].page_url)
 
 
+def _safe_planner(planner_block, obj, user):
+    """An idea's Planner block - if it fails, the row just has none (logged), never a 500 for the list."""
+    try:
+        return planner_block(obj, user)
+    except Exception:
+        logging.getLogger(__name__).exception("Admin ideas: planner block failed for #%s", obj.pk)
+        return None
+
+
 def list_page(request, kind):
     from albright_planner.planner import today
     k = KINDS[kind]
@@ -55,14 +65,15 @@ def list_page(request, kind):
     if kind == "ideas":
         # The Planner tab: my main task and subtasks for each idea (idea_views.planner_block - never anyone else's).
         from .idea_views import planner_block
-        rows = [{**k.row(obj), "planner": planner_block(obj, request.user)} for obj in qs[:LIST_LIMIT]]
+        rows = [{**k.safe_row(obj), "planner": _safe_planner(planner_block, obj, request.user)}
+                for obj in qs[:LIST_LIMIT]]
     else:
-        rows = [k.row(obj) for obj in qs[:LIST_LIMIT]]
+        rows = [k.safe_row(obj) for obj in qs[:LIST_LIMIT]]
     keep = {name: value for name, value in values.items() if value}
     queue = []
     if status == "new":
         # Review mode: the same New items (with the same filters), oldest first.
-        queue = [k.row(obj) for obj in k.queryset({**values, "sort": "oldest"}, "new")[:LIST_LIMIT]]
+        queue = [k.safe_row(obj) for obj in k.queryset({**values, "sort": "oldest"}, "new")[:LIST_LIMIT]]
         if kind == "ideas":
             # The same Planner block, as plain values - review mode gets the queue as JSON.
             from .idea_views import planner_block

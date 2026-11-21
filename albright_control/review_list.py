@@ -8,6 +8,8 @@ one record becomes a row (a plain dict - the template renders the list from
 it and review mode gets the same dicts as JSON). Ideas use Idea.STATUSES; a
 Bot suggestion is an inbox item - new, declined, or promoted (only by
 ideas.from_suggestion, never a status button)."""
+import logging
+
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.urls import reverse
 from django.utils import timezone
@@ -23,6 +25,7 @@ STATUSES = Idea.STATUSES
 TABS = STATUSES + [("all", "All")]
 DEFAULT_TAB = "new"
 LIST_LIMIT = 500
+log = logging.getLogger(__name__)
 # Review mode's keys - the legend, help overlay and phone buttons are all built from this list.
 SHORTCUTS = [
     (["C"], "Considering", "considering"),
@@ -157,15 +160,47 @@ class Kind:
     def urls(self, obj):
         raise NotImplementedError
 
+    def safe_row(self, obj, now=None):
+        """row(), but one bad record never breaks the page: it's logged and shown as a plain row (title, status,
+        app and the usual buttons) instead of a 500 for the whole list."""
+        try:
+            return self.row(obj, now)
+        except Exception:
+            log.exception("Admin %s: couldn't build the row for #%s", self.plural, obj.pk)
+        try:
+            urls = self.urls(obj)
+        except Exception:
+            urls = {}
+        status = getattr(obj, "status", "")
+        return {
+            "id": obj.pk, "title": getattr(obj, "title", "") or f"#{obj.pk}", "status": status,
+            "status_label": dict(getattr(self, "statuses", ()) or getattr(self.model, "STATUSES", ())).get(status, status),
+            "app": app_label(obj), "priority": getattr(obj, "priority", ""), "priority_label": "",
+            "priority_class": "", "created": "", "created_full": "", "description": getattr(obj, "description", ""),
+            "description_html": "", "notes": getattr(obj, "my_notes", ""), "urls": urls, "links": [], "tags": [],
+            "prompt": "", "source": "", "promoted_idea": None, "promoted_url": "",
+        }
+
     def row(self, obj, now=None):
         return {
             "id": obj.pk, "title": obj.title, "status": obj.status, "status_label": obj.get_status_display(),
-            "app": obj.get_app_display(), "priority": obj.priority, "priority_label": obj.get_priority_display(),
+            "app": app_label(obj), "priority": obj.priority, "priority_label": obj.get_priority_display(),
             "priority_class": PRIORITY_BADGE.get(obj.priority, ""),
             "created": ago(obj.created_at, now), "created_full": _full_date(obj.created_at),
             "description": obj.description, "description_html": rich_text(obj.description), "notes": obj.my_notes,
             "urls": self.urls(obj),
         }
+
+
+def app_label(obj):
+    """The app's name for a row: an archived app reads "Trading (archived)" (albright_labs.archive), and a slug
+    that's no longer (or not yet) one of the model's choices shows as itself rather than failing."""
+    from albright_labs.archive import is_app_archived
+    slug = getattr(obj, "app", "") or ""
+    label = dict(getattr(type(obj), "APPS", ())).get(slug) or slug.title() or "Whole site"
+    if slug and slug != "all" and is_app_archived(slug):
+        label += " (archived)"
+    return label
 
 
 class IdeaKind(Kind):

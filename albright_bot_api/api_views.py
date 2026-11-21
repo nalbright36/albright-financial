@@ -350,7 +350,7 @@ def site_suggestions_create(request, token):
     data = json_body(request)
     app = data.get("app")
     if app not in dict(SiteSuggestion.APPS):
-        raise ApiError(400, '"app" must be one of: trade, resell, opps, all.', "rejected: bad app")
+        raise ApiError(400, '"app" must be one of: ' + ", ".join(dict(SiteSuggestion.APPS)) + ".", "rejected: bad app")
     priority = data.get("priority") or "medium"
     if priority not in dict(SiteSuggestion.PRIORITIES):
         raise ApiError(400, '"priority" must be low, medium or high.', "rejected: bad priority")
