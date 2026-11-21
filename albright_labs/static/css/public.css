@@ -19,7 +19,7 @@
   --btn-ghost-bg:rgba(255,255,255,.04);--input-bg:rgba(255,255,255,.04);
   --nav-bg:rgba(0,0,0,.62);--red:var(--red);
   --title-gradient:linear-gradient(180deg,#fff,#b9c2cd);
-  --glow-top:rgba(220,228,240,.16);--glow-flare:rgba(255,255,255,.10);--arc-line:rgba(230,236,245,.35);--arc-glow:rgba(230,236,245,.25);
+  --glow-top:rgba(220,228,240,.16);--glow-flare:rgba(255,255,255,.10);--bar-bg:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)),rgba(0,0,0,.35);--bar-bg-scrolled:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)),rgba(8,9,11,.8);--bar-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.07);--bar-shadow-scrolled:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.07),0 10px 30px rgba(0,0,0,.5);
   --app-labs:var(--app-labs);--app-meals:var(--app-meals);--app-planner:var(--app-planner);--app-money:var(--app-money);--app-notes:var(--app-notes);
   --app-fitness:var(--app-fitness);--app-opportunities:var(--app-opportunities);
 }
@@ -44,8 +44,9 @@ html{scroll-padding-top:84px}                                  /* #anchors land 
 a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 
 /* --- Header --------------------------------------------------------------------------------------------------- */
-.ld-header{position:sticky;top:0;z-index:20;background:var(--nav-bg);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--hairline)}
-.ld-nav{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:28px}
+/* The floating glass bar, as in the app (style.css HEADER; header_options_CE.html, Option E). */
+.ld-header{position:sticky;top:12px;z-index:20;margin:12px 16px 0;border-radius:16px;background:var(--bar-bg);-webkit-backdrop-filter:blur(14px) saturate(140%);backdrop-filter:blur(14px) saturate(140%);box-shadow:var(--bar-shadow)}
+.ld-nav{max-width:1200px;margin:0 auto;height:56px;padding:0 16px;box-sizing:border-box;display:flex;align-items:center;gap:28px}
 .ld-brand{display:flex;align-items:center;gap:10px}
 .ld-brand__logo{height:32px;width:auto}
 .ld-brand__name{font-size:18px;font-weight:600}
@@ -111,7 +112,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 /* --- Small screens, reduced motion ------------------------------------------------------------------------------ */
 @media (max-width:960px){.navlinks{display:none !important}}   /* no room beside the buttons on a tablet */
 @media (max-width:760px){
-  .ld-nav{gap:12px;padding:12px 16px}
+  .ld-nav{gap:12px;padding:0 8px;height:52px}
   .ld-doc__h{font-size:34px}
 }
 @media (max-width:440px){
@@ -123,9 +124,16 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 }
 @media (prefers-reduced-motion:reduce){.btn:hover{transform:none}}
 
-/* --- Eclipse page light (as in the app's style.css): a silver glow at the top and a faint arc behind the header --- */
+/* --- Eclipse page light (as in the app's style.css): a silver glow at the top --- */
 .ld-page{position:relative;isolation:isolate}
 .ld-page::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:radial-gradient(120% 60% at 50% -18%,var(--glow-top),transparent 55%),radial-gradient(40% 18% at 88% 6%,var(--glow-flare),transparent 70%)}
-.ld-page::after{content:"";position:fixed;left:-30%;right:-30%;top:-210px;height:300px;z-index:-1;pointer-events:none;border-radius:50%;
-  border-bottom:1px solid var(--arc-line);box-shadow:0 18px 40px -20px var(--arc-glow)}
+
+/* --- The bar on phones, and its scrolled state (no script on public pages - the CSP allows none - so it's a
+   scroll-driven animation where the browser has one; elsewhere the bar keeps its resting glass) --- */
+@media (max-width:640px){.ld-header{top:8px;margin:8px 8px 0;border-radius:14px}}
+@supports (animation-timeline:scroll()){
+  .ld-header{animation:ld-bar-scrolled linear both;animation-timeline:scroll(root);animation-range:0 48px}
+  @keyframes ld-bar-scrolled{to{background:var(--bar-bg-scrolled);box-shadow:var(--bar-shadow-scrolled);
+    -webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%)}}
+}

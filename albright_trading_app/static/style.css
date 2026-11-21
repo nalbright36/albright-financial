@@ -132,8 +132,12 @@
   /* The page light: a silver glow at the top, a flare at the top right, a thin arc behind the header. */
   --glow-top: rgba(220, 228, 240, 0.16);
   --glow-flare: rgba(255, 255, 255, 0.10);
-  --arc-line: rgba(230, 236, 245, 0.35);
-  --arc-glow: rgba(230, 236, 245, 0.25);
+  /* The header: a floating glass bar (header_options_CE.html, Option E) - the design's .e gradient, highlight and
+     hairline; once the page scrolls, a darker base under the same glass so what scrolls beneath stays readable. */
+  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)), rgba(0, 0, 0, 0.35);
+  --bar-bg-scrolled: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)), rgba(8, 9, 11, 0.8);
+  --bar-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --bar-shadow-scrolled: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 10px 30px rgba(0, 0, 0, 0.5);
   --on-badge: #000;           /* text on an app-color badge */
   --backdrop: rgba(0, 0, 0, 0.6);
 
@@ -231,8 +235,10 @@
   --title-gradient: linear-gradient(180deg, #0E1116, #4A5361);
   --glow-top: rgba(170, 182, 200, 0.28);
   --glow-flare: rgba(255, 255, 255, 0.9);
-  --arc-line: rgba(120, 132, 150, 0.22);
-  --arc-glow: rgba(120, 132, 150, 0.12);
+  --bar-bg: rgba(255, 255, 255, 0.72);
+  --bar-bg-scrolled: rgba(255, 255, 255, 0.9);
+  --bar-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08), 0 4px 16px rgba(15, 23, 42, 0.06);
+  --bar-shadow-scrolled: inset 0 0 0 1px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.1);
   --on-badge: #07090C;
   --backdrop: rgba(15, 23, 42, 0.35);
 
@@ -1555,10 +1561,9 @@ tr.scanner-detail td {
    its width. App-specific surfaces: "ECLIPSE: app surfaces" at the end.
    ============================================================ */
 
-/* ---------- Page background: pure black with the logo's light - a soft silver glow at the top, a faint flare at the
-   top right (::before) and a thin arc of light behind the header (::after). Fixed to the top of the viewport (fixed
-   pseudo-elements, not background-attachment: fixed, which iOS Safari ignores), behind everything, never a target.
-   A fixed box adds no scrollable overflow, so the arc's extra width never scrolls the page sideways. ---------- */
+/* ---------- Page background: pure black with the logo's light - a soft silver glow at the top and a faint flare at
+   the top right. Fixed to the top of the viewport (a fixed pseudo-element, not background-attachment: fixed, which iOS
+   Safari ignores), behind everything, never a target. ---------- */
 body::before {
   content: "";
   position: fixed;
@@ -1568,19 +1573,6 @@ body::before {
   background:
     radial-gradient(120% 60% at 50% -18%, var(--glow-top), transparent 55%),
     radial-gradient(40% 18% at 88% 6%, var(--glow-flare), transparent 70%);
-}
-body::after {
-  content: "";
-  position: fixed;
-  left: -30%;
-  right: -30%;
-  top: -210px;
-  height: 300px;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: 50%;
-  border-bottom: 1px solid var(--arc-line);
-  box-shadow: 0 18px 40px -20px var(--arc-glow);
 }
 
 /* ---------- Headings: Space Grotesk (h1-h4, base rules); page titles get the white-to-silver text gradient (dark
@@ -1632,10 +1624,18 @@ table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid)
 /* ---------- Header: black glass, a hairline under it; icon buttons are glass squares with hairline borders; the app
    chip is the current app's accent tint. ---------- */
 .navbar {
-  background: var(--nav-bg);
+  background: var(--bar-bg);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 0;
+  box-shadow: var(--bar-shadow);
+  transition: background-color var(--transition), box-shadow var(--transition);
+}
+.navbar--scrolled {
+  background: var(--bar-bg-scrolled);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: var(--bar-shadow-scrolled);
 }
 .theme-toggle,
 .navbar__toggle,
@@ -1763,16 +1763,17 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
    glows drop out on their own; the hairlines become real borders again so cards keep an edge. */
 @media (prefers-reduced-transparency: reduce) {
   .card,
-  .navbar {
+  .navbar,
+  .navbar--scrolled {
     background: var(--surface-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  body::before, body::after { display: none; }
+  body::before { display: none; }
 }
 @media (forced-colors: active) {
   .card { border-color: CanvasText; }
-  body::before, body::after { display: none; }
+  body::before { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .card, .btn, .badge, .navbar, body { transition: none; }
@@ -3311,4 +3312,58 @@ html .mn .ledger-input:focus {
   outline: none;
   border-color: var(--focus-border);
   box-shadow: var(--focus-ring);
+}
+
+/* ============================================================
+   HEADER: the floating glass bar (Option E of docs/design/header_options_CE.html - its .e values). Inset from the
+   edges (16px; 8px on phones), 12px from the top (8px), 56px tall (52px), radius 16px (14px), and sticky at that same
+   inset, so it floats while the page scrolls under it (index.html adds .navbar--scrolled once the page has moved:
+   a stronger base and blur). Here at the end so it beats the earlier phone header rules.
+
+   Everything that opens from the header drops 8px below the bar and lines up with its edges: the launcher, the
+   bell's panel and the account menu are placed against the bar (it's sticky, so their containing block), right edge
+   to right edge (full bar width on phones); a link's dropdown sits under its own link, which fills the bar's height;
+   the phone menu is the bar's width.
+   ============================================================ */
+/* The page's <body> keeps the browser's 8px margin (the site never reset it), so the bar's own margin is the rest:
+   12px from the top and 16px from the sides on screen (8px / 8px on phones). Sticky `top` is from the viewport. */
+.navbar {
+  position: sticky;
+  top: 12px;
+  margin: 4px 8px 0;
+  border-radius: 16px;
+}
+.navbar__main-row { min-height: 56px; padding: 0 16px; }
+.navbar:not(.navbar--collapsed) .navbar__links { align-self: stretch; }
+.navbar:not(.navbar--collapsed) .navbar__links > .navbar__dropdown { align-self: stretch; display: flex; align-items: center; }
+.navbar:not(.navbar--collapsed) .navbar__links .navbar__dropdown-menu { top: calc(100% + 8px); }
+.navbar__tools .navbar__dropdown,
+html .navbar .app-launcher,
+html .navbar .notif-bell { position: static; }
+.navbar__tools .navbar__dropdown-menu,
+html .navbar .app-launcher__menu,
+html .navbar .notif-panel { top: calc(100% + 8px); right: 0; left: auto; }
+.navbar--collapsed .navbar__links {
+  top: calc(100% + 8px);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--surface-overlay);
+  box-shadow: var(--overlay-shadow);
+}
+@media (max-width: 640px) {
+  .navbar { top: 8px; margin: 0; border-radius: 14px; }
+  .navbar__main-row { min-height: 52px; padding: 0 8px; }
+  html .navbar .app-launcher__menu,
+  html .navbar .notif-panel {
+    left: 0; right: 0; border: 1px solid var(--hairline); border-radius: 14px;
+  }
+  html .navbar .notif-panel__head { border-radius: 14px 14px 0 0; }
+  .navbar--collapsed .navbar__links {
+    /* the screen below the bar, less the 8px gap above and an 8px margin below */
+    height: calc(100vh - var(--navbar-bottom, 60px) - 16px); height: calc(100dvh - var(--navbar-bottom, 60px) - 16px);
+    border: 1px solid var(--hairline); border-radius: 14px; overflow-x: hidden;
+  }
+}
+@media (max-width: 370px) {
+  .navbar__main-row { padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
 }

@@ -326,6 +326,18 @@
                     if (e.relatedTarget && !links.contains(e.relatedTarget) && e.relatedTarget !== toggle) setOpen(false);
                 });
             })();
+            // The floating header bar (style.css HEADER): once the page has scrolled, a stronger glass, so what
+            // scrolls under it stays readable.
+            (function () {
+                var nav = document.querySelector('.navbar'), on = null;
+                if (!nav) return;
+                function update() {
+                    var scrolled = window.scrollY > 4;
+                    if (scrolled !== on) { on = scrolled; nav.classList.toggle('navbar--scrolled', scrolled); }
+                }
+                window.addEventListener('scroll', update, {passive: true});
+                update();
+            })();
         </script>
 
         {% if user.is_authenticated %}
