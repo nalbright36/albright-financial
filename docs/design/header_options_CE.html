@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Header C vs E</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1d22;color:#e8eaed;font:15px/1.4 Inter,system-ui,sans-serif;padding:28px 16px}
+h1.pt{font-size:22px;text-align:center;margin-bottom:28px}
+.opt{max-width:1500px;margin:0 auto 48px}.opt h2{font-size:18px;margin-bottom:4px}.opt h2 b{color:#cbd5e1}
+.opt p{color:#9aa3af;font-size:13px;margin-bottom:12px}
+.pair{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.lbl{font-size:12px;color:#9aa3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em}
+svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.frame{position:relative;background:#000;overflow:hidden;isolation:isolate;border:1px solid #2a2f37}
+.desk{width:1040px;max-width:100%;height:420px;border-radius:14px}
+.mob{width:360px;height:620px;border-radius:36px;border:8px solid #16191e}
+.fx{position:absolute;inset:0;z-index:-1;pointer-events:none}
+.hd{display:flex;align-items:center;gap:12px;height:64px;padding:0 28px;position:relative}
+.logo{width:56px;height:30px}
+.chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:rgba(45,212,191,.12);color:#2dd4bf;font-weight:600;font-size:14px;box-shadow:inset 0 0 0 1px rgba(45,212,191,.25)}
+.chip svg{width:15px;height:15px}
+.sp{flex:1}.nav{color:#c9d1db;margin-right:12px}
+.ib{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#c9d1db;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);background:rgba(255,255,255,.03)}
+.ib.plain{box-shadow:none;background:none}
+.user{display:flex;align-items:center;gap:6px;color:#c9d1db;margin-left:8px}
+.ct{padding:28px 56px}
+.greet{font-family:'Space Grotesk',Inter,system-ui,sans-serif;font-size:34px;font-weight:600;background:linear-gradient(180deg,#fff,#b9c2cd);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:22px}
+.card{border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.015));box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 0 0 1px rgba(255,255,255,.07);padding:18px 22px}
+.card .h b{font-size:17px}.card .h span{color:#7d8794;font-size:13px;margin-left:8px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 12px;margin-top:10px;border-radius:12px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 3px 0 #2dd4bf;font-size:14px}
+.cb{width:17px;height:17px;border-radius:6px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.35)}
+/* mobile sizing */
+.mob .hd{height:56px;padding:0 12px;gap:6px}
+.mob .logo{width:44px;height:24px}.mob .chip{padding:6px 9px}
+.mob .ib{width:34px;height:34px;border-radius:10px}
+.mob .ct{padding:18px 16px}.mob .greet{font-size:24px;margin-bottom:16px}
+.mob .card{padding:14px}
+/* C */
+.c .hd::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,rgba(230,236,245,.45) 50%,transparent)}
+.c .fx{background:radial-gradient(40% 90px at 50% 64px,rgba(230,236,245,.07),transparent 70%)}
+.c.mob .fx{background:radial-gradient(70% 80px at 50% 56px,rgba(230,236,245,.07),transparent 70%)}
+/* E */
+.e .hd{margin:12px 16px 0;height:56px;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.07);padding:0 16px}
+.e .ct{padding-top:24px}
+.e.mob .hd{margin:8px 8px 0;height:52px;border-radius:14px;padding:0 8px}
+.e.mob .ct{padding-top:16px}
+</style></head><body>
+<h1 class="pt">Header C vs E: desktop and mobile</h1>
+<svg style="display:none">
+<symbol id="lg" viewBox="0 0 56 30"><path d="M6 28C12 8 44 8 50 28" stroke="#fff" stroke-width="2.2"/><path d="M20 27l8-17 8 17" stroke="#e5e7eb" stroke-width="2.6"/><path d="M3 29C17 20 32 18 49 17" stroke="#fff" stroke-width="1.5"/><circle cx="49" cy="17" r="2.4" fill="#fff" stroke="none"/></symbol>
+<symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+<symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+<symbol id="dots" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="19" cy="5" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/><circle cx="5" cy="19" r="1.6"/><circle cx="12" cy="19" r="1.6"/><circle cx="19" cy="19" r="1.6"/></g></symbol>
+<symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+<symbol id="menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+</svg>
+
+<!-- C -->
+<div class="opt"><h2><b>C</b> · Straight line that fades out</h2><p>Flat black header; a thin line under it, brightest in the middle and fading out at both edges.</p>
+<div class="pair">
+<div><div class="lbl">Desktop</div>
+<div class="frame desk c"><div class="fx"></div><header class="hd"><svg class="logo"><use href="#lg"/></svg><span class="chip"><svg><use href="#home"/></svg>Labs</span><span class="sp"></span><span class="nav">Home</span><span class="ib"><svg><use href="#moon"/></svg></span><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span><span class="user"><svg><use href="#user"/></svg>nalbright36</span></header>
+<div class="ct"><div class="greet">Good evening, Nathan</div><div class="card"><div class="h"><b>Today</b><span>Friday, November 20</span></div><div class="row"><span class="cb"></span>Look into Conception</div><div class="row"><span class="cb"></span>Put together business plan</div></div></div></div></div>
+<div><div class="lbl">Mobile</div>
+<div class="frame mob c"><div class="fx"></div><header class="hd"><svg class="logo"><use href="#lg"/></svg><span class="chip"><svg><use href="#home"/></svg></span><span class="sp"></span><span class="ib"><svg><use href="#home"/></svg></span><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span><span class="ib plain"><svg><use href="#menu"/></svg></span></header>
+<div class="ct"><div class="greet">Good evening, Nathan</div><div class="card"><div class="h"><b>Today</b><span>Fri, Nov 20</span></div><div class="row"><span class="cb"></span>Look into Conception</div><div class="row"><span class="cb"></span>Put together business plan</div></div></div></div></div>
+</div></div>
+
+<!-- E -->
+<div class="opt"><h2><b>E</b> · Floating glass bar</h2><p>The header is a rounded glass bar floating on black, matching the cards. No lines across the page.</p>
+<div class="pair">
+<div><div class="lbl">Desktop</div>
+<div class="frame desk e"><div class="fx"></div><header class="hd"><svg class="logo"><use href="#lg"/></svg><span class="chip"><svg><use href="#home"/></svg>Labs</span><span class="sp"></span><span class="nav">Home</span><span class="ib"><svg><use href="#moon"/></svg></span><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span><span class="user"><svg><use href="#user"/></svg>nalbright36</span></header>
+<div class="ct"><div class="greet">Good evening, Nathan</div><div class="card"><div class="h"><b>Today</b><span>Friday, November 20</span></div><div class="row"><span class="cb"></span>Look into Conception</div><div class="row"><span class="cb"></span>Put together business plan</div></div></div></div></div>
+<div><div class="lbl">Mobile</div>
+<div class="frame mob e"><div class="fx"></div><header class="hd"><svg class="logo"><use href="#lg"/></svg><span class="chip"><svg><use href="#home"/></svg></span><span class="sp"></span><span class="ib"><svg><use href="#home"/></svg></span><span class="ib"><svg><use href="#bell"/></svg></span><span class="ib"><svg><use href="#dots"/></svg></span><span class="ib plain"><svg><use href="#menu"/></svg></span></header>
+<div class="ct"><div class="greet">Good evening, Nathan</div><div class="card"><div class="h"><b>Today</b><span>Fri, Nov 20</span></div><div class="row"><span class="cb"></span>Look into Conception</div><div class="row"><span class="cb"></span>Put together business plan</div></div></div></div></div>
+</div></div>
+</body></html>
