@@ -11,7 +11,8 @@
  * no card can clip it and no later card can cover it (a card's backdrop-filter traps position: fixed and z-index
  * inside it otherwise). data-menu-scope puts those classes on the layer, so scoped styles (".pl .pl-menu__item")
  * still apply there.
- *   - Opens below the button, right edges lined up; above it when there's no room below; never off screen.
+ *   - Opens below the button, right edges lined up (data-menu-align="start": left edges); above it when there's no room
+ *     below; never off screen.
  *   - Closes on Esc (focus back on the button), a click outside, choosing an option, or Tab; scrolling and resizing
  *     move it with its button.
  *   - ArrowDown/ArrowUp/Home/End move between the options (ArrowDown on the button opens it at the first).
@@ -71,7 +72,9 @@
         var vw = document.documentElement.clientWidth, vh = window.innerHeight;
         panel.style.maxHeight = (vh - 2 * EDGE) + "px";
         var pw = panel.offsetWidth, ph = panel.offsetHeight;
-        var left = Math.min(Math.max(EDGE, r.right - pw), vw - pw - EDGE);   // right edges lined up, kept on screen
+        // Right edges lined up (data-menu-align="start": left edges), kept on screen.
+        var start = current.details.getAttribute("data-menu-align") === "start";
+        var left = Math.min(Math.max(EDGE, start ? r.left : r.right - pw), vw - pw - EDGE);
         var top = r.bottom + GAP;
         if (top + ph > vh - EDGE) {
             if (r.top - GAP - ph >= EDGE) top = r.top - GAP - ph;            // no room below: open above

@@ -3,87 +3,109 @@
 {% block page_title %}Recipes · {% endblock %}
 {% block content %}
 {% comment %}
-Recipes (views.recipes): three tabs - My recipes (the space being shown), Shared with me (other spaces' recipes
-shared with me, read-only), the Recipe library (everyone's library recipes, read-only). Text search, tags, and the
-rating filters - who rated it (me, someone in the space, anyone in it) and which levels (or not rated),
-plus "We both love" - all in the URL, so a filter can be bookmarked. Each card shows my rating as a drop-down that
-saves on change without opening the recipe (static/meals/ratings.js), and the space's other stamps.
+Recipes (views.recipes) - Option A "Clean text cards" of docs/design/recipe_layouts_v2.html. Three tabs: My recipes
+(the space being shown), Shared with me (other spaces' recipes shared with me, read-only), the Recipe library
+(everyone's library recipes, read-only). A search box and one row of filter chips (All, Staples, Favorites, Not rated,
+the most-used tags, Under 30 min - views._recipe_chips) that keep the search; "More filters" has the full rating
+filters (who rated it, which levels, "We both love"). Everything is in the URL, so a filter can be bookmarked.
+
+Each card: the title (the card's link - it covers the card), a ⋯ menu (Share, Add ingredients to groceries, Edit,
+Delete, and where it came from), a one-line description, time and servings, then my rating chip (tap: a small menu of
+the levels, saved without opening the recipe - static/meals/ratings.js), the space's other stamps, and two tags.
+The menu, the chip and the stamps sit above the card's link, so using them never opens the recipe.
 {% endcomment %}
 <div class="container meals-page">
 {% include "albright_labs/_space_switch.html" %}
     {% include "albright_meals/_notices.html" %}
-    <div class="meals-head">
-        <div>
-            <h1 class="meals-head__title">Recipes</h1>
-            <p class="meals-head__sub" id="recipe-count">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag or filtering %} found{% endif %}</p>
-        </div>
-        <a href="{% url 'albright_meals:recipe_add' %}" class="btn btn-primary btn-sm">Add a recipe</a>
-    </div>
+    <form method="get" class="rl-head" id="recipe-filters" role="search">
+        <h1 class="rl-head__title">Recipes</h1>
+        {% if tab != "mine" %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
+        {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+        {% if quick %}<input type="hidden" name="quick" value="1">{% endif %}
+        <label class="rl-search" for="recipe-q">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="visually-hidden">Search recipes</span>
+            <input type="search" name="q" id="recipe-q" value="{{ q }}" placeholder="Search recipes" autocomplete="off">
+        </label>
+        <button type="submit" class="visually-hidden">Search</button>
+        <a href="{% url 'albright_meals:recipe_add' %}" class="btn btn-primary rl-head__add">+ Add recipe</a>
+    </form>
+    <p class="rl-count" id="recipe-count">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag or quick or filtering %} found{% endif %}</p>
 
     <nav class="meals-tabs" aria-label="Which recipes">{% for key, label in tabs %}<a href="?{% if key != 'mine' %}tab={{ key }}{% endif %}" class="meals-tabs__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if key == "shared" and shared_count %} <span class="meals-tabs__count">{{ shared_count }}</span>{% endif %}</a>{% endfor %}</nav>
 
+    <nav class="rl-chips" aria-label="Filter recipes">{% for chip in chips %}<a href="{{ chip.href }}" class="rl-chip{% if chip.on %} is-on{% endif %}"{% if chip.on %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</nav>
 
-    <form method="get" class="meals-filters" id="recipe-filters" role="search">
-        {% if tab != "mine" %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
-        {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
-        <div class="meals-search">
-            <label for="recipe-q" class="visually-hidden">Search recipes</label>
-            <input type="search" name="q" id="recipe-q" value="{{ q }}" class="ledger-input" placeholder="Search recipes">
-            <button type="submit" class="btn btn-secondary">Search</button>
+    {# The full rating filters - their fields belong to the search form above (form=), so search, chips and these combine. #}
+    <details class="meals-filter-box rl-more">
+        <summary>More filters{% if filtering %} <span class="meals-chip meals-chip--on">on</span>{% endif %}</summary>
+        <div class="meals-filter-grid">
+            <label class="field"><span>Rated by</span>
+                <select name="rated_by" class="ledger-input" id="filter-rated-by" form="recipe-filters">
+                    <option value="me"{% if filters.rated_by == "me" %} selected{% endif %}>Me</option>
+                    {% for m in members %}<option value="{{ m.pk }}"{% if filters.rated_by == m.pk %} selected{% endif %}>{{ m.first_name|default:m.username }}</option>{% endfor %}
+                    <option value="anyone"{% if filters.rated_by == "anyone" %} selected{% endif %}>Anyone in this space</option>
+                </select></label>
+            <fieldset class="meals-filter-levels"><legend>Rating</legend>
+                {% for r in rating_levels %}<label class="meals-filter-chip"><input type="checkbox" name="rating" value="{{ r.value }}" form="recipe-filters"{% if r.value in filters.levels %} checked{% endif %}> {{ r.emoji }} {{ r.label }}</label>{% endfor %}
+                <label class="meals-filter-chip"><input type="checkbox" name="rating" value="none" form="recipe-filters"{% if filters.none %} checked{% endif %}> Not rated</label>
+            </fieldset>
+            <label class="meals-filter-chip meals-filter-chip--love"><input type="checkbox" name="love" value="1" form="recipe-filters"{% if filters.love %} checked{% endif %}> &#x2764;&#xFE0F; We both love <span class="meals-hint">(at least two of us rated it, all Favorite or Staple)</span></label>
         </div>
-        <details class="meals-filter-box"{% if filtering %} open{% endif %}>
-            <summary>Filter by rating{% if filtering %} <span class="meals-chip meals-chip--on">on</span>{% endif %}</summary>
-            <div class="meals-filter-grid">
-                <label class="field"><span>Rated by</span>
-                    <select name="rated_by" class="ledger-input" id="filter-rated-by">
-                        <option value="me"{% if filters.rated_by == "me" %} selected{% endif %}>Me</option>
-                        {% for m in members %}<option value="{{ m.pk }}"{% if filters.rated_by == m.pk %} selected{% endif %}>{{ m.first_name|default:m.username }}</option>{% endfor %}
-                        <option value="anyone"{% if filters.rated_by == "anyone" %} selected{% endif %}>Anyone in this space</option>
-                    </select></label>
-                <fieldset class="meals-filter-levels"><legend>Rating</legend>
-                    {% for r in rating_levels %}<label class="meals-filter-chip"><input type="checkbox" name="rating" value="{{ r.value }}"{% if r.value in filters.levels %} checked{% endif %}> {{ r.emoji }} {{ r.label }}</label>{% endfor %}
-                    <label class="meals-filter-chip"><input type="checkbox" name="rating" value="none"{% if filters.none %} checked{% endif %}> Not rated</label>
-                </fieldset>
-                <label class="meals-filter-chip meals-filter-chip--love"><input type="checkbox" name="love" value="1"{% if filters.love %} checked{% endif %}> &#x2764;&#xFE0F; We both love <span class="meals-hint">(at least two of us rated it, all Favorite or Staple)</span></label>
-            </div>
-            <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm">Apply</button>{% if filtering %} <a href="?{% if tab != 'mine' %}tab={{ tab }}{% endif %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
-        </details>
-    </form>
+        <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm" form="recipe-filters">Apply</button>{% if filtering %} <a href="?{% if tab != 'mine' %}tab={{ tab }}{% endif %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
+    </details>
 
-    {% if tags %}
-    <div class="meals-tags" aria-label="Tags">
-        <a href="?{{ query }}" class="meals-tag{% if not tag %} is-active{% endif %}">All</a>
-        {% for t in tags %}<a href="?{% if tab != 'mine' %}tab={{ tab }}&amp;{% endif %}tag={{ t|urlencode }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}" class="meals-tag{% if t == tag %} is-active" aria-current="true{% endif %}">{{ t }}</a>{% endfor %}
-    </div>
-    {% endif %}
-
-    <ul class="meals-recipe-grid" id="recipe-list">
+    <p class="visually-hidden" role="status" aria-live="polite" id="rate-status"></p>
+    <ul class="rl-grid" id="recipe-list">
         {% for c in cards %}{% with r=c.recipe %}
-        <li><article class="card meals-recipe-card" data-recipe="{{ r.pk }}">
-            {# The title is the card's link (it covers the card); the rating, stamps and Share sit above it, so using them never opens the recipe. #}
-            <a href="{% url 'albright_meals:recipe' r.pk %}" class="meals-recipe-card__link"><strong class="meals-recipe-card__title">{{ r.title }}{% if r.needs_review %} <span class="badge warn meals-review-badge">Needs review</span>{% endif %}</strong></a>
-            {% if r.description %}<span class="meals-recipe-card__desc">{{ r.description|truncatechars:110 }}</span>{% endif %}
-            <span class="meals-hint">{% if not c.own %}{% if c.share %}Shared by <span class="meals-by">{{ c.share.created_by.first_name|default:c.share.created_by.username|default:"someone" }}</span>{% else %}{{ r.space.label }}{% endif %} &middot; {% endif %}{% if r.saved_from_name %}Saved from {{ r.saved_from_name }} &middot; {% endif %}{% if r.total_minutes %}{{ r.total_minutes }} min{% endif %}{% if r.total_minutes and r.servings %} &middot; {% endif %}{% if r.servings %}serves {{ r.servings }}{% endif %}{% if r.from_bot %}{% if r.total_minutes or r.servings %} &middot; {% endif %}<span class="meals-by">Recipe Bot</span>{% endif %}</span>
-            {% if c.nutrition %}<span class="meals-card-nutrition" data-nutrition>{{ c.nutrition.calories|floatformat:0|default:"?" }} kcal &middot; {{ c.nutrition.protein|floatformat:0|default:"?" }} g protein <span class="meals-hint">per serving{% if r.nutrition.needs_review %} &middot; needs review{% endif %}</span></span>{% endif %}
-            {% if r.tags %}<span class="meals-tags meals-tags--small">{% for t in r.tags|slice:":4" %}<span class="meals-tag">{{ t }}</span>{% endfor %}</span>{% endif %}
-            <div class="meals-card-rating">
-                <form method="post" action="{% url 'albright_meals:recipe_rate' r.pk %}" class="meals-card-rate" data-card-rate>{% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <label for="rate-{{ r.pk }}" class="visually-hidden">My rating for {{ r.title }}</label>
-                    <select name="level" id="rate-{{ r.pk }}" class="ledger-input meals-rating__select meals-card-rate__select" data-level="{{ c.mine.level|default:'' }}">
-                        <option value=""{% if not c.mine %} selected{% endif %}>Not rated</option>
-                        {% for lv in rating_levels %}<option value="{{ lv.value }}" title="{{ lv.meaning }}"{% if c.mine.level == lv.value %} selected{% endif %}>{{ lv.emoji }} {{ lv.label }}</option>{% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-secondary btn-sm meals-card-rate__save">Save</button>
-                    <span class="meals-card-rate__status" role="status" aria-live="polite"></span>
-                </form>
-                {% if c.others %}<span class="meals-stamps">{% for r in c.others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</span>{% endif %}
-                {% if c.own %}<a href="{% url 'albright_meals:recipe' r.pk %}#share-box" class="btn btn-secondary btn-sm meals-card-share">Share</a>{% endif %}
+        <li><article class="rl-card" data-recipe="{{ r.pk }}">
+            <div class="rl-card__top">
+                <h2 class="rl-card__title"><a href="{% url 'albright_meals:recipe' r.pk %}" class="rl-card__link"><span class="meals-recipe-card__title">{{ r.title }}</span></a></h2>
+                <details class="rl-menu" data-menu>
+                    <summary class="rl-menu__btn" aria-label="More for {{ r.title }}"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
+                    <div class="menu-panel rl-menu__panel" data-menu-panel>
+                        {% if c.own %}
+                        <a href="{% url 'albright_meals:recipe' r.pk %}#share-box" class="menu-item">Share</a>
+                        <form method="post" action="{% url 'albright_meals:recipe_groceries' r.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="menu-item">Add ingredients to groceries</button></form>
+                        <a href="{% url 'albright_meals:recipe_edit' r.pk %}" class="menu-item">Edit</a>
+                        <form method="post" action="{% url 'albright_meals:recipe_delete' r.pk %}" data-confirm="Delete &ldquo;{{ r.title }}&rdquo;? This can't be undone - planned meals keep its name.">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="menu-item menu-item--danger">Delete</button></form>
+                        {% else %}
+                        <a href="{% url 'albright_meals:recipe' r.pk %}" class="menu-item">Open recipe</a>
+                        {% endif %}
+                        {% if c.source or r.saved_from_name or not c.own %}<div class="rl-menu__info">
+                            {% if c.source == "bot" %}<span class="rl-menu__line" aria-disabled="true">From: <span class="meals-by">Recipe Bot</span></span>{% elif c.source %}<span class="rl-menu__line" aria-disabled="true">From: {{ c.source }}</span>{% endif %}
+                            {% if r.saved_from_name %}<span class="rl-menu__line" aria-disabled="true">Saved from {{ r.saved_from_name }}</span>{% endif %}
+                            {% if not c.own %}<span class="rl-menu__line" aria-disabled="true">{% if c.share %}Shared by <span class="meals-by">{{ c.share.created_by.first_name|default:c.share.created_by.username|default:"someone" }}</span>{% else %}{{ r.space.label }}{% endif %}</span>{% endif %}
+                        </div>{% endif %}
+                    </div>
+                </details>
+            </div>
+            {% if r.description %}<p class="rl-card__desc">{{ r.description }}</p>{% endif %}
+            {% if r.total_minutes or r.servings or r.needs_review %}<div class="rl-card__meta">
+                {% if r.total_minutes %}<span><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{{ r.total_minutes }} min</span>{% endif %}
+                {% if r.servings %}<span><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>Serves {{ r.servings }}</span>{% endif %}
+                {% if r.needs_review %}<span class="badge warn meals-review-badge">Needs review</span>{% endif %}
+            </div>{% endif %}
+            <div class="rl-card__foot">
+                <div class="rl-card__rating">
+                    <details class="rl-rate" data-menu data-menu-align="start">
+                        <summary class="rl-rate__chip" data-rate-chip="{{ r.pk }}" data-level="{{ c.mine.level|default:'' }}" aria-label="My rating for {{ r.title }}: {% if c.mine %}{{ c.mine.get_level_display }}{% else %}not rated{% endif %}">
+                            <svg class="rl-rate__star" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg><span class="rl-rate__dot" aria-hidden="true"></span><span class="rl-rate__label">{% if c.mine %}{{ c.mine.get_level_display }}{% else %}Rate{% endif %}</span>
+                        </summary>
+                        <form method="post" action="{% url 'albright_meals:recipe_rate' r.pk %}" class="menu-panel rl-rate__panel" data-menu-panel data-rate-form="{{ r.pk }}">{% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            {% for lv in rating_levels reversed %}<button type="submit" name="level" value="{{ lv.value }}" class="menu-item rl-rate__opt" data-level="{{ lv.value }}" title="{{ lv.meaning }}"{% if c.mine.level == lv.value %} aria-current="true"{% endif %}><span class="rl-rate__dot" aria-hidden="true"></span>{{ lv.label }}</button>{% endfor %}
+                            <button type="submit" name="level" value="" class="menu-item rl-rate__clear">Clear rating</button>
+                        </form>
+                    </details>
+                    {% if c.others %}<span class="meals-stamps">{% for r in c.others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</span>{% endif %}
+                </div>
+                {% if c.tags %}<span class="rl-card__tags">{% for t in c.tags %}{{ t|capfirst }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</span>{% endif %}
             </div>
             <p class="meals-stamp-note" data-stamp-note hidden></p>
         </article></li>
         {% endwith %}{% empty %}
-        <li class="meals-empty">{% if q or tag or filtering %}No recipes match.{% elif tab == "shared" %}Nothing's been shared with you yet.{% elif tab == "library" %}The library is empty so far - put one of yours in it from its page.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
+        <li class="meals-empty">{% if q or tag or quick or filtering %}No recipes match.{% elif tab == "shared" %}Nothing's been shared with you yet.{% elif tab == "library" %}The library is empty so far - put one of yours in it from its page.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
         {% endfor %}
     </ul>
 </div>

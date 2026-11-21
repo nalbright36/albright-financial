@@ -43,6 +43,7 @@ urlpatterns = [
     path("recipes/<int:pk>/visibility/", views.recipe_visibility, name="recipe_visibility"),
     path("recipes/<int:pk>/move/", views.recipe_move, name="recipe_move"),
     path("recipes/<int:pk>/groceries/", views.recipe_groceries, name="recipe_groceries"),
+    path("recipes/<int:pk>/delete/", views.recipe_delete, name="recipe_delete"),
     path("recipes/<int:pk>/reimport/", views.recipe_reimport, name="recipe_reimport"),
     path("recipes/<int:pk>/nutrition/", item_page(views.recipe_nutrition_page), name="recipe_nutrition"),
     path("recipes/<int:pk>/nutrition/calculate/", views.recipe_nutrition_calculate, name="recipe_nutrition_calculate"),

@@ -5,6 +5,7 @@ anything in a space you don't see is a 404 (Meals access itself is checked first
 recipe in the library is read-only to everyone else; one shared with someone (albright_labs.sharing) is theirs to read
 or edit as shared, and they can save a copy."""
 import secrets
+from collections import Counter
 from types import SimpleNamespace
 from datetime import timedelta
 from urllib.parse import urlencode, urlsplit
@@ -17,6 +18,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -396,13 +398,55 @@ def idea_decline(request, pk):
 # Recipes: mine, shared with me, the library - with ratings on the cards
 # ---------------------------------------------------------------------------
 
-def _filter_query(request, filters, tab, q, tag):
+QUICK_MINUTES = 30          # the "Under 30 min" chip: total time at most this
+CHIP_TAGS = 6               # the most-used tags shown as chips
+
+
+def _recipe_chips(tab, q, tag, quick, filters, top_tags):
+    """The chip row under the search (recipes.html): All, Staples, Favorites, Not rated, the most-used tags, Under 30 min.
+    One chip at a time; each keeps the tab and the search. The rating chips are my own stamps, like the filter box's
+    default ("Rated by: Me")."""
+    base = ([("tab", tab)] if tab != "mine" else []) + ([("q", q)] if q else [])
+    mine = filters["rated_by"] == "me" and not filters["love"]
+    rating_only = mine and not tag and not quick
+
+    def href(*extra):
+        return "?" + urlencode(base + list(extra))
+
+    chips = [{"label": "All", "href": href(), "on": not (tag or quick or scope.filters_active(filters))},
+             {"label": "Staples", "href": href(("rating", RecipeRating.STAPLE)),
+              "on": rating_only and filters["levels"] == [RecipeRating.STAPLE] and not filters["none"]},
+             {"label": "Favorites", "href": href(("rating", RecipeRating.FAVORITE)),
+              "on": rating_only and filters["levels"] == [RecipeRating.FAVORITE] and not filters["none"]},
+             {"label": "Not rated", "href": href(("rating", "none")),
+              "on": rating_only and filters["none"] and not filters["levels"]}]
+    shown = list(top_tags) + ([tag] if tag and tag not in top_tags else [])
+    chips += [{"label": t.capitalize(), "href": href(("tag", t)), "on": t == tag and not quick and not scope.filters_active(filters)}
+              for t in shown]
+    chips.append({"label": f"Under {QUICK_MINUTES} min", "href": href(("quick", "1")),
+                  "on": quick and not tag and not scope.filters_active(filters)})
+    return chips
+
+
+def _recipe_source(recipe):
+    """Where a recipe came from, for its card's ⋯ menu: the Recipe Bot, or the website it was imported from."""
+    if recipe.from_bot:
+        return "bot"
+    if recipe.source_url and importer.is_web_url(recipe.source_url):
+        host = urlsplit(recipe.source_url).hostname or ""
+        return host[4:] if host.startswith("www.") else host
+    return ""
+
+
+def _filter_query(request, filters, tab, q, tag, quick=False):
     """The current filters as a query string (bookmarkable) - without the page's own tab switch."""
     params = [("tab", tab)] if tab != "mine" else []
     if q:
         params.append(("q", q))
     if tag:
         params.append(("tag", tag))
+    if quick:
+        params.append(("quick", "1"))
     if scope.filters_active(filters):
         params.append(("rated_by", str(filters["rated_by"])))
         params += [("rating", str(level)) for level in filters["levels"]] + ([("rating", "none")] if filters["none"] else [])
@@ -419,6 +463,7 @@ def recipes(request):
     tab = tab if tab in dict(TABS) else "mine"
     q = (request.GET.get("q") or "").strip()[:100]
     tag = (request.GET.get("tag") or "").strip().lower()[:50]
+    quick = request.GET.get("quick") == "1"
     filters = scope.parse_filters(request.GET, user, space)
     base = {"mine": scope.own(space), "shared": scope.shared_with(user, space), "library": scope.library()}[tab]
     qs = base.select_related("created_by", "space__circle", "space__user", "nutrition")
@@ -427,6 +472,8 @@ def recipes(request):
     qs = scope.apply_filters(qs, filters, user, space).distinct()
     rows = [r for r in qs if not tag or tag in [t.lower() for t in (r.tags or [])]
             or tag in [label.lower() for key, label in STANDARD_TAGS if key in (r.standard_tags or [])]]
+    if quick:
+        rows = [r for r in rows if r.total_minutes and r.total_minutes <= QUICK_MINUTES]
     stamps = scope.stamps(rows, space, user)
     mine_by_recipe, others = {}, {}
     for recipe_pk, ratings in stamps.items():
@@ -440,11 +487,13 @@ def recipes(request):
     visible = scope.space_ids(user)
     cards = [{"recipe": r, "mine": mine_by_recipe.get(r.pk), "others": others.get(r.pk, []), "own": r.space_id in visible,
               "nutrition": recipe_nutrition.per_serving(getattr(r, "nutrition", None)),
-              "share": shares.get(r.pk)} for r in rows]
-    tags = sorted({t.lower() for r in base.only("tags") for t in (r.tags or [])})
+              "share": shares.get(r.pk), "source": _recipe_source(r), "tags": list(r.tags or [])[:2]} for r in rows]
+    tag_counts = Counter(t.lower() for r in base.only("tags") for t in (r.tags or []))
+    top_tags = [t for t, _n in sorted(tag_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:CHIP_TAGS]]
     return render(request, "albright_meals/recipes.html", {
-        "cards": cards, "recipes": rows, "q": q, "tag": tag, "tags": tags, "tab": tab, "tabs": TABS,
-        "filters": filters, "filtering": scope.filters_active(filters), "query": _filter_query(request, filters, tab, q, tag),
+        "cards": cards, "recipes": rows, "q": q, "tag": tag, "quick": quick, "tab": tab, "tabs": TABS,
+        "chips": _recipe_chips(tab, q, tag, quick, filters, top_tags),
+        "filters": filters, "filtering": scope.filters_active(filters), "query": _filter_query(request, filters, tab, q, tag, quick),
         "members": [m for m in circles.space_members(space, scope.APP) if m.pk != user.pk], "rating_levels": RecipeRating.choices(),
         "notices": _notices(request), "shared_count": scope.shared_with(user, space).count()})
 
@@ -589,7 +638,29 @@ def recipe_groceries(request, pk):
         messages.success(request, f"Added {added} item{'s' if added != 1 else ''} to the grocery list"
                                   + (f", {merged} combined with what was there" if merged else "")
                                   + (f" ({skipped} already on it from this recipe)" if skipped else "") + ".")
-    return redirect("albright_meals:recipe", pk=pk)
+    return redirect(_safe_next(request) or reverse("albright_meals:recipe", args=[pk]))
+
+
+def _safe_next(request):
+    """A posted `next` that stays on this site (a recipe card's menu sends the list it's on), else ""."""
+    target = request.POST.get("next", "")
+    return target if target and url_has_allowed_host_and_scheme(
+        target, allowed_hosts={request.get_host()}, require_https=request.is_secure()) else ""
+
+
+@login_required
+@scope.space_required
+@require_POST
+def recipe_delete(request, pk):
+    """Delete a recipe (its card's ⋯ menu) - owners only (a space they see). Planned meals keep its title as plain text;
+    its ratings, nutrition and shares go with it (cascade / sharing's post_delete)."""
+    obj = scope.owned_recipe(request.user, pk)
+    with transaction.atomic():
+        MealPlanEntry.objects.filter(recipe=obj, title="").update(title=obj.title[:200])
+        title = obj.title
+        obj.delete()
+    messages.success(request, f"Deleted {title}.")
+    return redirect(_safe_next(request) or reverse("albright_meals:recipes"))
 
 
 @login_required

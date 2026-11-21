@@ -276,14 +276,16 @@ class ShareTests(Base):
 # ---------------------------------------------------------------------------
 
 class CardRatingTests(Base):
-    def test_card_dropdown_saves_without_opening_the_recipe(self):
+    def test_card_rating_chip_saves_without_opening_the_recipe(self):
         meatballs = self.recipe()
         self.rate(self.wife, meatballs, FAV, "So good")
         page = self.client.get(url("recipes")).content.decode()
         card = page.split(f'data-recipe="{meatballs.pk}"', 1)[1].split("</article>", 1)[0]
         link_end = card.index("</a>")
-        self.assertLess(link_end, card.index('<select name="level"'))          # the drop-down isn't inside the link
-        self.assertIn('<option value="" selected>Not rated</option>', card)
+        self.assertLess(link_end, card.index('data-rate-chip='))                # the chip isn't inside the link
+        self.assertIn('data-level=""', card)                                    # not rated by me yet: "Rate"
+        self.assertIn('<span class="rl-rate__label">Rate</span>', card)
+        self.assertIn('name="level" value="6"', card)                           # its menu of levels (+ Clear rating)
         self.assertIn("Sam: ❤️ Favorite - &ldquo;So good&rdquo;", card)          # her stamp, with her note on tap
         response = self.client.post(url("recipe_rate", meatballs.pk), {"level": str(STAPLE)}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 200)
@@ -323,7 +325,7 @@ class RatingFilterTests(Base):
 
     def titles(self, query):
         page = self.client.get(url("recipes") + "?" + query).content.decode()
-        return sorted(re.findall(r'class="meals-recipe-card__title">([^<]+?)(?: <|</strong>)', page))
+        return sorted(re.findall(r'class="meals-recipe-card__title">([^<]+?)(?: <|</)', page))
 
     def test_filters(self):
         wife = self.wife.pk
