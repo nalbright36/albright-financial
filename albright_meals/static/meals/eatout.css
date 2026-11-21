@@ -67,7 +67,7 @@
   padding: 6px 14px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-solid);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--text-sm);
@@ -132,7 +132,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--accent-contrast);
   transition: left .15s ease, right .15s ease;
 }
 .eo-toggle:has(input:checked) .eo-toggle__box {
@@ -188,7 +188,7 @@ fieldset.eo-q { border: 0; padding: 0; min-width: 0; }
   align-items: center;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  background: var(--surface);
+  background: var(--surface-solid);
   font-size: var(--text-sm);
   font-weight: 600;
 }

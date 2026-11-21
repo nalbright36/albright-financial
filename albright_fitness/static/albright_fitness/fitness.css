@@ -9,7 +9,7 @@
 .fx-narrow--wide { max-width: 860px; }
 .fx .btn { min-height: 44px; }
 .fx .btn-sm { min-height: 36px; }
-.fx .ledger-input { min-height: 44px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); }
+.fx .ledger-input { min-height: 44px; border: 1px solid var(--border); background: var(--surface-solid); border-radius: var(--radius-sm); }
 .fx .ledger-input:focus { border-color: var(--accent); box-shadow: var(--glow-ring); outline: none; }
 .fx [hidden] { display: none !important; }
 
@@ -102,7 +102,7 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-field--reps { flex: 0.8 1 0; }
 .fx-field--rpe { flex: 0 0 52px; }
 .fx .fx-input { width: 100%; min-width: 0; height: 48px; padding: 0 8px; font-size: 1.125rem; font-variant-numeric: tabular-nums; text-align: center;
-  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text-primary); }
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid); color: var(--text-primary); }
 .fx-field--rpe .fx-input { font-size: 0.875rem; }
 .fx .fx-input:focus { border-color: var(--accent); box-shadow: var(--glow-ring); outline: none; }
 .fx-unit { position: absolute; right: 6px; bottom: 3px; font-size: 0.625rem; color: var(--text-tertiary); pointer-events: none; }
@@ -137,7 +137,7 @@ details[open] > summary { margin-bottom: var(--space-3); }
 
 /* ---------- History ---------- */
 .fx-monthnav { display: flex; gap: 6px; }
-.fx-cal { margin-bottom: var(--space-4); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.fx-cal { margin-bottom: var(--space-4); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-solid); }
 .fx-cal__row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .fx-cal__dows span { padding: 6px 2px; font-size: 0.6875rem; font-weight: 700; text-align: center; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
 .fx-cal__cell { min-height: 56px; padding: 4px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-width: 0; }
@@ -165,7 +165,7 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-chart__grid { stroke: var(--chart-grid); stroke-width: 1; }
 .fx-chart__line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .fx-chart__dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--accent);
-  box-shadow: 0 0 0 2px var(--surface); }
+  box-shadow: 0 0 0 2px var(--surface-solid); }
 .fx-chart__dot.is-on { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
 .fx-chart__cross { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--text-tertiary); }
 .fx-chart__dates { grid-column: 2; display: flex; justify-content: space-between; padding-top: 6px; font-size: 0.6875rem;
@@ -337,7 +337,7 @@ details[open] > summary { margin-bottom: var(--space-3); }
 /* ---------- The bottom sheet ---------- */
 .fx-sheet { width: min(560px, 100%); max-width: 100%; max-height: 88vh; margin: auto auto 0; padding: 12px 0 0; border: 0;
   border-radius: 16px 16px 0 0; background: var(--bg); color: var(--text-primary); overflow: auto; }
-.fx-sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
+.fx-sheet::backdrop { background: var(--backdrop); }
 .fx-sheet__close { position: sticky; top: 0; float: right; margin: 0 8px 0 0; z-index: 1; }
 .fx-sheet__body { padding: 0 12px 16px; }
 .fx-sheet .fx-log { margin: 0; }
@@ -385,13 +385,13 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-term { position: relative; display: inline-block; vertical-align: middle; margin-left: 4px; font-size: var(--text-xs);
   font-weight: 400; line-height: 1.4; }
 .fx-term__btn { width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 50%;
-  background: var(--surface); color: var(--text-secondary); font: inherit; font-weight: 600; cursor: pointer; }
+  background: var(--surface-solid); color: var(--text-secondary); font: inherit; font-weight: 600; cursor: pointer; }
 .fx-term__btn:hover, .fx-term__btn[aria-expanded="true"] { color: var(--text-primary); background: var(--surface-hover); }
 /* The note itself stays hidden in the page; fitness.js shows a copy on <body> (#fx-term-pop), fixed under the "?" -
    on a phone, a card at the bottom of the screen. */
 .fx-term__body { position: fixed; z-index: 30; top: 0; left: 0; width: min(18rem, 80vw); padding: 10px 12px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); text-align: left; white-space: normal; }
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-solid); color: var(--text-primary);
+  box-shadow: var(--overlay-shadow); text-align: left; white-space: normal; }
 .fx-term__body strong { display: block; margin-bottom: 2px; }
 .fx-term .fx-term__body { display: none; }
 @media (max-width: 600px) {
@@ -413,15 +413,15 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-steps__n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface-hover);
   font-size: var(--text-xs); }
 .fx-steps__item.is-on .fx-steps__n { background: var(--accent-solid); color: var(--accent-contrast); }
-.fx-errors { margin: 0 0 var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: var(--loss-bg, #fdecec);
-  color: var(--loss, #b42318); font-size: var(--text-sm); }
+.fx-errors { margin: 0 0 var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: var(--loss-bg);
+  color: var(--loss); font-size: var(--text-sm); }
 .fx-errors p { margin: 0; }
 .fx-setup__sub { margin-top: var(--space-4); }
 .fx-setup-day { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 12px 0 0; border: 0;
   border-top: 1px solid var(--border); }
 .fx-setup-day .fx-weekdays { flex-wrap: wrap; }
 .fx-setup__bar { position: sticky; bottom: 0; display: flex; justify-content: space-between; gap: 8px; margin: var(--space-4) -4px 0;
-  padding: 10px 4px; background: var(--surface); border-top: 1px solid var(--border); }
+  padding: 10px 4px; background: var(--surface-solid); border-top: 1px solid var(--border); }
 .fx-setup__bar .btn-primary { flex: 1; max-width: 18rem; margin-left: auto; }
 .fx-setup__skip { text-align: right; }
 .fx-setup__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -462,8 +462,8 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .fx-program-archived p { margin: 0; }
 /* The delete confirmation: a dialog (_program_delete_dialog.html), or a card without JS (program_delete.html). */
 dialog.fx-confirm { width: min(440px, calc(100% - 32px)); max-width: none; padding: 20px; border: 1px solid var(--border);
-  border-radius: 16px; background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, .3)); }
-dialog.fx-confirm::backdrop { background: rgba(0, 0, 0, 0.5); }
+  border-radius: 16px; background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--overlay-shadow); }
+dialog.fx-confirm::backdrop { background: var(--backdrop); }
 .fx-confirm form, form.fx-confirm { margin: 0; }
 .fx-confirm__title { margin: 0 0 8px; font-size: var(--text-lg); overflow-wrap: anywhere; }
 .fx-confirm p { margin: 0 0 12px; }
@@ -475,7 +475,7 @@ dialog.fx-confirm::backdrop { background: rgba(0, 0, 0, 0.5); }
   color: var(--text-primary); font: inherit; cursor: pointer; }
 .fx-switch-btn__track { position: relative; width: 40px; height: 24px; border-radius: 12px; background: var(--border); transition: background .15s; }
 .fx-switch-btn__track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--surface); transition: left .15s; }
+  background: var(--surface-solid); transition: left .15s; }
 .fx-switch-btn[aria-checked="true"] .fx-switch-btn__track { background: var(--accent-solid); }
 .fx-switch-btn[aria-checked="true"] .fx-switch-btn__track::after { left: 19px; }
 .fx-chip.is-on { border-color: var(--accent); background: var(--accent-soft); }
@@ -499,7 +499,7 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 .fx-amount__qty .ledger-input { font-size: 1.25rem; text-align: center; }
 .fx-amount__unit .fx-select { width: 100%; flex: none; height: 48px; }
 .fx-amount__chips { display: flex; gap: 6px; margin: 4px 0 12px; }
-.fx-amount__chips .fx-chip { min-height: 32px; background: var(--surface); cursor: pointer; font: inherit; }
+.fx-amount__chips .fx-chip { min-height: 32px; background: var(--surface-solid); cursor: pointer; font: inherit; }
 .fx-amount__live { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 12px; padding: 10px; border-radius: var(--radius-sm);
   background: var(--surface-hover); text-align: center; }
 .fx-amount__live dt { font-size: var(--text-xs); color: var(--text-secondary); }

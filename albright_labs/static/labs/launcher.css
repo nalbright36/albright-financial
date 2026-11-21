@@ -25,8 +25,9 @@
 .navbar__home { display: none; position: relative; text-decoration: none; }
 .navbar__home::before { content: ""; position: absolute; inset: -3px; }
 .navbar__home:hover { text-decoration: none; }
-.navbar__home.is-active { color: #2DD4BF; background: rgba(20, 184, 166, .14); border-color: rgba(20, 184, 166, .45); }
-:root[data-theme="light"] .navbar__home.is-active { color: #0F766E; }
+.navbar__home.is-active { color: var(--app-labs); background: color-mix(in srgb, var(--app-labs) 14%, transparent);
+  border-color: color-mix(in srgb, var(--app-labs) 45%, transparent); }
+:root[data-theme="light"] .navbar__home.is-active { color: color-mix(in srgb, var(--app-labs) 60%, var(--text)); }
 @media (max-width: 639.98px) { .navbar__home { display: inline-flex; } }
 
 /* .menu + .b .menu - never taller than the screen below it: --launcher-top is where the panel starts (set by
@@ -35,7 +36,7 @@
 .app-launcher__menu {
   display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 330px; padding: 10px 10px 0;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+  box-shadow: var(--overlay-shadow);
   max-height: calc(100vh - var(--launcher-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
   max-height: calc(100dvh - var(--launcher-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
   overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
@@ -117,14 +118,14 @@
 .notif-bell__button { position: relative; }
 .notif-bell__count {
   position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; color: #fff;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; color: var(--on-semantic);
   background: var(--red); border: 2px solid var(--surface-raised); box-sizing: content-box;
 }
 .notif-bell__count[hidden] { display: none; }
 .notif-panel {
   display: none; position: absolute; z-index: 200; right: 0; top: calc(100% + 8px); width: 380px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+  box-shadow: var(--overlay-shadow);
   max-height: calc(100vh - var(--notif-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
   max-height: calc(100dvh - var(--notif-top, 72px) - 24px - env(safe-area-inset-bottom, 0px));
   overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
@@ -163,6 +164,6 @@
 .quicksave-retry {
     position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
     z-index: 2000; max-width: calc(100vw - 32px); min-height: 44px; padding: 10px 16px; border: 0; border-radius: 999px;
-    background: #B91C1C; color: #fff; font: inherit; font-size: 0.9rem; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); cursor: pointer;
+    background: var(--loss); color: var(--on-semantic); font: inherit; font-size: 0.9rem; box-shadow: var(--shadow-lg); cursor: pointer;
 }
 .quicksave-retry[hidden] { display: none; }

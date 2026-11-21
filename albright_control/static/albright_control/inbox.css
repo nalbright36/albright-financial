@@ -13,7 +13,7 @@
  */
 .ib {
   /* The mockup's tokens -> the site's. */
-  --ib-card: var(--glass-bg-solid, var(--surface));
+  --ib-card: var(--glass-bg-solid, var(--surface-solid));
   --ib-line: var(--border);
   --ib-ink: var(--text-primary);
   --ib-muted: var(--text-secondary);
@@ -71,7 +71,7 @@
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
-.ib-select option { background: var(--surface); color: var(--text-primary); }
+.ib-select option { background: var(--surface-solid); color: var(--text-primary); }
 .ib .ib-input:focus, .ib .ib-select:focus, .ib .ib-textarea:focus {
   outline: none; border-color: var(--ib-accent); box-shadow: 0 0 0 3px var(--accent-ring);
 }
@@ -182,7 +182,7 @@ button.ib-tab { background: none; border: 0; border-bottom: 2px solid transparen
 .ib-plan { display: grid; gap: 6px; }
 .ib-sub { padding-left: 26px; }
 .ib-done { text-decoration: line-through; opacity: .6; }
-.ib-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--ib-line, #232a33); padding-top: 12px; }
+.ib-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--ib-line); padding-top: 12px; }
 @media (prefers-reduced-motion: reduce) { .ib * { transition: none !important; } }
 .ib-plan { gap: 8px; }
 .ib-plan .ib-row, .ib-foot form { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; margin: 0; }

@@ -14,7 +14,7 @@
 .nt {
   /* The mockup's tokens -> the site's. */
   --nt-bg: var(--bg);
-  --nt-card: var(--surface);
+  --nt-card: var(--surface-solid);
   --nt-card2: var(--glass-bg-solid, var(--bg-elevated));
   --nt-line: var(--border);
   --nt-ink: var(--text-primary);

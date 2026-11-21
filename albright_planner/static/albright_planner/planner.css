@@ -10,7 +10,7 @@
  * nothing falls back to browser-default styling. The resets use :where() (no
  * specificity), so this file's classes always win over them.
  */
-.pl { --pl-line: var(--border); --pl-card: var(--glass-bg-solid, var(--surface)); --pl-muted: var(--text-secondary);
+.pl { --pl-line: var(--border); --pl-card: var(--glass-bg-solid, var(--surface-solid)); --pl-muted: var(--text-secondary);
   color: var(--text-primary); padding-top: 22px; padding-bottom: 64px; }
 [data-theme="dark"] .pl { color-scheme: dark; }
 [data-theme="light"] .pl { color-scheme: light; }
@@ -37,7 +37,7 @@ html.js .pl .pl-nojs { display: none; }
 /* ---------- Controls ---------- */
 .pl .pl-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 7px 14px;
-  font-size: 0.875rem; font-weight: 500; color: var(--text-primary); background: var(--surface); border: 1px solid var(--pl-line);
+  font-size: 0.875rem; font-weight: 500; color: var(--text-primary); background: var(--surface-solid); border: 1px solid var(--pl-line);
   border-radius: 10px; text-decoration: none; white-space: nowrap; line-height: 1.2;
 }
 .pl .pl-btn:hover { background: var(--surface-hover); text-decoration: none; color: var(--text-primary); }
@@ -48,7 +48,7 @@ html.js .pl .pl-nojs { display: none; }
 .pl .pl-btn--icon { width: 38px; padding: 0; font-size: 1.25rem; }
 .pl .pl-input {
   width: 100%; min-height: 40px; padding: 8px 11px; font-size: 0.9375rem; color: var(--text-primary);
-  background: var(--surface); border: 1px solid var(--pl-line); border-radius: 10px;
+  background: var(--surface-solid); border: 1px solid var(--pl-line); border-radius: 10px;
 }
 .pl textarea.pl-input { min-height: 80px; resize: vertical; line-height: 1.5; }
 /* The notes box (the shared Markdown editor, style.css): 14 lines to start, growing to 70% of the screen. */
@@ -60,13 +60,13 @@ html.js .pl .pl-nojs { display: none; }
   background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
 }
 .pl-form select.pl-input { width: 100%; }
-.pl select option { background: var(--surface); color: var(--text-primary); }
+.pl select option { background: var(--surface-solid); color: var(--text-primary); }
 .pl .pl-btn:focus-visible, .pl .pl-input:focus-visible, .pl .pl-check:focus-visible,
 .pl .pl-item__body:focus-visible, .pl a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pl .pl-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .pl-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 0.875rem; color: var(--pl-muted); cursor: pointer; min-height: 38px; }
 .pl input[type="checkbox"], .pl input[type="radio"] {
-  width: 17px; height: 17px; flex-shrink: 0; border: 1.5px solid var(--pl-muted); border-radius: 4px; background: var(--surface);
+  width: 17px; height: 17px; flex-shrink: 0; border: 1.5px solid var(--pl-muted); border-radius: 4px; background: var(--surface-solid);
   display: inline-grid; place-content: center; cursor: pointer;
 }
 .pl input[type="radio"] { border-radius: 50%; }
@@ -94,7 +94,7 @@ html.js .pl .pl-nojs { display: none; }
   padding: 4px 8px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; color: var(--pl-muted);
   text-align: center; line-height: 1.2; text-decoration: none; }
 .pl-views a:hover { text-decoration: none; color: var(--text-primary); }
-.pl-views a.is-current { background: var(--surface); color: var(--text-primary);
+.pl-views a.is-current { background: var(--surface-solid); color: var(--text-primary);
   box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
 .pl-views a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pl-jump { display: flex; align-items: center; gap: 6px; margin: 0; position: relative; flex-shrink: 1; min-width: 0; }
@@ -149,12 +149,12 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 }
 
 /* ---------- View options and New item: solid dialogs; bottom sheets on phones ---------- */
-.pl-sheet { --pl-sheet-bg: var(--glass-bg-solid, var(--surface));
+.pl-sheet { --pl-sheet-bg: var(--glass-bg-solid, var(--surface-solid));
   width: min(460px, calc(100% - 32px)); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); padding: 0;
   border: 1px solid var(--pl-line); border-radius: 16px; background: var(--pl-sheet-bg); color: var(--text-primary);
   -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft); overflow: hidden; }
 .pl-sheet--new { width: min(640px, calc(100% - 32px)); }
-.pl-sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
+.pl-sheet::backdrop { background: var(--backdrop); }
 .pl-sheet[open] { display: flex; flex-direction: column; }
 .pl-sheet__frame { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; }
 .pl-sheet__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0;
@@ -178,7 +178,7 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl .pl-seg__item input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; cursor: pointer; }
 .pl-seg__item span { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 4px 6px; border-radius: 8px;
   font-size: 0.875rem; font-weight: 600; color: var(--pl-muted); text-align: center; line-height: 1.2; }
-.pl-seg__item input:checked + span { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.pl-seg__item input:checked + span { background: var(--surface-solid); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
 .pl-seg__item input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* On / off switches (Hide completed, Show meals). */
 .pl input[type="checkbox"].pl-switch { position: relative; display: inline-block; width: 44px; height: 26px; border-radius: 999px;
@@ -186,7 +186,7 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl input[type="checkbox"].pl-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
   border: 0; border-radius: 50%; background: var(--text-secondary); transform: none; transition: transform .15s; }
 .pl input[type="checkbox"].pl-switch:checked { border-color: var(--accent-solid); background: var(--accent-solid); }
-.pl input[type="checkbox"].pl-switch:checked::after { background: #fff; transform: translateX(18px); }
+.pl input[type="checkbox"].pl-switch:checked::after { background: var(--accent-contrast); transform: translateX(18px); }
 /* New item: quick add first, then "More options" brings the full form in under it. */
 .pl-quick { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 .pl-quick__row { display: flex; gap: 8px; }
@@ -332,7 +332,7 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl-day-chip { position: relative; cursor: pointer; }
 .pl-day-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .pl-day-chip span { display: inline-grid; place-items: center; min-width: 46px; height: 36px; padding: 0 8px; border-radius: 999px;
-  border: 1px solid var(--pl-line); background: var(--surface); font-size: 0.8125rem; font-weight: 600; }
+  border: 1px solid var(--pl-line); background: var(--surface-solid); font-size: 0.8125rem; font-weight: 600; }
 .pl-day-chip input:checked + span { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--accent-contrast); }
 .pl-day-chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pl-summary { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--accent); }
@@ -346,8 +346,8 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 
 /* ---------- Drag scope dialog ---------- */
 .pl-dialog { border: 1px solid var(--pl-line); border-radius: 14px; padding: 18px; max-width: 380px; width: calc(100% - 32px);
-  background: var(--glass-bg-dialog, var(--surface)); color: var(--text-primary); box-shadow: var(--shadow-lg); }
-.pl-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+  background: var(--glass-bg-dialog, var(--surface-solid)); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.pl-dialog::backdrop { background: var(--backdrop); }
 .pl-dialog h2 { margin: 0 0 4px; font-size: 1.0625rem; }
 .pl-dialog__actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 
@@ -399,7 +399,7 @@ html.js .pl-jump input[type="month"]::-webkit-calendar-picker-indicator {
 .pl-kept-note { display: block; flex-basis: 100%; margin-top: 2px; }
 .wi-panel { display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; width: min(320px, calc(100vw - 32px));
     padding: 12px; border: 1px solid var(--pl-line); border-radius: 12px; background: var(--pl-card, var(--bg-elevated));
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+    box-shadow: var(--overlay-shadow); }
 .wi-panel.is-open { display: block; }
 html:not(.js) .wi-panel { display: block; position: static; width: 100%; margin-top: 6px; box-shadow: none; }
 html:not(.js) .wi-open { display: none; }
@@ -414,13 +414,13 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
 .wi-save { min-height: 40px; }
 .wi-skip { margin-top: 8px; padding: 4px 0; border: 0; background: none; color: var(--text-secondary); font-size: 0.8125rem;
     text-decoration: underline; cursor: pointer; }
-.wi-msg { margin: 6px 0 0; min-height: 1em; font-size: 0.8125rem; color: var(--danger, #ef4444); }
+.wi-msg { margin: 6px 0 0; min-height: 1em; font-size: 0.8125rem; color: var(--red); }
 .wi-msg:empty { display: none; }
 .wi-backdrop { display: none; }
 @media (max-width: 640px) {
     .wi-panel.is-open { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; padding: 16px 16px max(16px, env(safe-area-inset-bottom));
         border-radius: 16px 16px 0 0; border-bottom: 0; z-index: 1001; }
-    .wi-backdrop:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.45); }
+    .wi-backdrop:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 1000; background: var(--backdrop); }
     .wi-panel .wi-input { min-height: 56px; font-size: 1.75rem; font-weight: 600; text-align: center; }
     .wi-panel .wi-save { min-height: 56px; padding: 0 20px; }
     .wi-skip { min-height: 44px; }
@@ -547,7 +547,7 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
 
 /* Hourly strip under the Day header (today and future days). */
 .pl-wx-hourly { display: flex; gap: 0; align-items: stretch; margin: 0 0 16px; padding: 16px 8px 8px;
-  background: var(--surface); border: 1px solid var(--pl-line); border-radius: 12px;
+  background: var(--surface-solid); border: 1px solid var(--pl-line); border-radius: 12px;
   overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
 .pl-day-wx + .pl-wx-hourly { margin-top: -10px; }
 .pl-wx-hourly__h { flex: 1 1 0; min-width: 22px; display: flex; flex-direction: column; align-items: center;
@@ -599,9 +599,9 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
 .pl-part { position: relative; }
 .pl-part.is-open { opacity: .55; }
 .pl-part__mark { position: absolute; right: -3px; bottom: -3px; min-width: 11px; height: 11px; border-radius: 50%; display: grid;
-  place-items: center; font-size: 8px; line-height: 1; color: #fff; background: var(--pl-muted); border: 1px solid var(--surface); }
+  place-items: center; font-size: 8px; line-height: 1; color: var(--bg); background: var(--pl-muted); border: 1px solid var(--surface-solid); }
 .pl-part__mark:empty { display: none; }
-.pl-part.is-done .pl-part__mark { background: var(--gain, #16A34A); }
+.pl-part.is-done .pl-part__mark { background: var(--gain); }
 
 /* Home's Today panel on a phone: tighter spacing so the title keeps the room (checkbox, icon, title, repeats, Skip,
    checklist count and open-arrow stay on one line at 375px). */

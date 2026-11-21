@@ -9,7 +9,7 @@
 .mn-narrow--wide { max-width: 920px; }
 .mn .btn { min-height: 40px; }
 .mn .btn-sm { min-height: 34px; }
-.mn .ledger-input { min-height: 40px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); }
+.mn .ledger-input { min-height: 40px; border: 1px solid var(--border); background: var(--surface-solid); border-radius: var(--radius-sm); }
 .mn .ledger-input:focus { border-color: var(--accent); box-shadow: var(--glow-ring); outline: none; }
 html.js .mn .mn-nojs { display: none; }
 .mn [hidden] { display: none !important; }
@@ -55,7 +55,7 @@ html.js .mn .mn-nojs { display: none; }
 .mn-seg__item { flex: 1 1 0; padding: 7px 10px; border-radius: 8px; text-align: center; font-size: var(--text-sm); font-weight: 600;
   color: var(--text-secondary); text-decoration: none; }
 .mn-seg__item:hover { color: var(--text-primary); text-decoration: none; }
-.mn-seg__item.is-on { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.mn-seg__item.is-on { background: var(--surface-solid); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
 
 /* ---------- Stats (dashboard, budget) ---------- */
 .mn-stats { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
@@ -110,7 +110,7 @@ a.mn-list__main:hover { color: var(--accent); text-decoration: none; }
 .mn-offer__form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
 .mn-offer__form > span { flex: 1 1 220px; }
 .mn-day__date { margin: var(--space-4) 0 6px; font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); }
-.mn-txns { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+.mn-txns { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-solid);
   overflow: hidden; }
 .mn-txn { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main amount" "cat cat"; align-items: center;
   gap: 6px 12px; padding: 10px 12px; border-top: 1px solid var(--border); }

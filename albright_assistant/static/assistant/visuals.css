@@ -1,7 +1,7 @@
 /* Visuals (static/assistant/visuals.js): the chart card - in the assistant's chat and on Account > Visuals - the
    full-screen view, and the chart tooltip (vega-tooltip's own <style> is blocked by the CSP, so it's styled here). */
 .vz-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 14px;
-  background: var(--surface); min-width: 0; }
+  background: var(--surface-solid); min-width: 0; }
 .vz-card__head { display: flex; align-items: baseline; gap: 8px; }
 .vz-card__title { margin: 0; font-size: .9375rem; font-weight: 700; color: var(--text-primary); line-height: 1.3; }
 .vz-card__title a { color: inherit; text-decoration: none; }
@@ -22,8 +22,8 @@
 .as-log .vz-card { align-self: stretch; }
 
 .vz-full { width: min(1100px, calc(100vw - 24px)); max-width: none; max-height: calc(100vh - 24px); padding: 16px; border: 1px solid var(--border);
-  border-radius: 16px; background: var(--bg-elevated, var(--surface)); color: var(--text-primary); }
-.vz-full::backdrop { background: rgba(0, 0, 0, .6); }
+  border-radius: 16px; background: var(--bg-elevated, var(--surface-solid)); color: var(--text-primary); }
+.vz-full::backdrop { background: var(--backdrop); }
 .vz-full__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .vz-full__title { margin: 0; font-size: 1.125rem; }
 .vz-full__chart { width: 100%; }
@@ -40,7 +40,7 @@
 
 /* The chart tooltip (vega-tooltip, theme "custom"). */
 #vg-tooltip-element { visibility: hidden; position: fixed; z-index: 1000; padding: 8px 10px; border-radius: 10px;
-  border: 1px solid var(--border-strong, var(--border)); background: var(--surface-raised, var(--surface));
+  border: 1px solid var(--border-strong, var(--border)); background: var(--surface-raised, var(--surface-solid));
   color: var(--text-primary); font: 12px/1.4 inherit; font-family: inherit; box-shadow: var(--shadow-md); pointer-events: none;
   max-width: 280px; }
 #vg-tooltip-element.visible { visibility: visible; }

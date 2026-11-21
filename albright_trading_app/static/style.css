@@ -1,7 +1,11 @@
 /* ============================================================
-   ALBRIGHT FINANCIAL — v2 visual system (Linear / Vercel / Stripe
-   register: quiet dark neutrals, one refined accent per app,
-   no glow/scanline/bracket decoration, real typographic scale).
+   ALBRIGHT FINANCIAL — "Eclipse" visual system (Option A of
+   docs/design/style_directions.html): pure black with the logo's
+   light flare, dark glass cards with a hairline silver edge and a
+   soft top highlight, white-to-silver primary buttons. App colors
+   stay, but only as small glows, icons and accents. "Eclipse light"
+   is the same system on a soft off-white page. Every color is a token
+   (the theme blocks below); app stylesheets use only the tokens.
 
    Same class names the templates have always used (.card, .btn,
    table.holdings, .badge, .scanner-tab, tr.scanner-row/
@@ -12,7 +16,7 @@
    scrolls horizontally inside its card instead of overflowing).
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ---------- Shared tokens (same in both themes) ---------- */
 :root {
@@ -27,11 +31,15 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  /* Radius */
-  --radius-sm: 8px;   /* inputs, buttons */
-  --radius-md: 10px;  /* cards, panels */
-  --radius-lg: 12px;  /* larger surfaces (modals, the styleguide's big tiles) */
+  /* Radius - Eclipse: cards 20px, rows 12px, tiles 17px, buttons 12px. */
+  --radius-sm: 8px;   /* small chips, checkboxes, focus outlines */
+  --radius-md: 12px;  /* rows, small panels, menus */
+  --radius-lg: 20px;  /* larger surfaces (modals, the styleguide's big tiles) */
   --radius-full: 999px;
+  --radius-card: 20px;
+  --radius-row: 12px;
+  --radius-tile: 17px;
+  --radius-btn: 12px;
 
   /* Motion */
   --transition: 150ms ease;
@@ -39,6 +47,7 @@
   /* Type */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-body: var(--font-sans);  /* alias - a couple of templates reference this name directly */
+  --font-display: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;   /* headings */
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
   --text-xs: 0.75rem;     /* 12px — small table/meta labels */
@@ -61,7 +70,6 @@
   /* Glass and glow (see the "Glass and glow" section at the end) -
      theme-independent parts; per-theme colors are in the two blocks below. */
   --glass-blur: 14px;
-  --radius-card: 14px;
   /* The accent glows (--glow-ring, --glow-primary*, --page-glow-*,
      --nav-tint) are per app - defined on <body> in "Per-app accent". */
 }
@@ -78,17 +86,60 @@
    toggle. The real site only ever sets data-theme on <html>. */
 :root,
 [data-theme="dark"] {
-  --bg: #0B0D10;
-  --bg-elevated: #12151A;
-  --surface: #12151A;
-  --surface-hover: #171B21;
-  --surface-raised: #1A1E25;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  color-scheme: dark;
+  /* Eclipse - the design's .eclipse values. */
+  --bg: #000;
+  --text: #E8EAED;
+  --text-muted: #7D8794;      /* 5.8:1 on the page, 5.3:1 on a card */
+  --text-soft: #C9D1DB;
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+  --surface: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015));   /* cards (a background image) */
+  --surface-row: rgba(255, 255, 255, 0.03);
+  --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 50px rgba(0, 0, 0, 0.6);
+  --row-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --tile-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  --tile-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --icon-glow: 55%;           /* how much of the app color the icon's drop-shadow glow uses */
+  /* Opaque layers: a card's average tone (#0A0B0D) - for borders, color-mix() and anything that must hide what's
+     under it (sticky cells, <option>s). Overlays (menus, sheets, dialogs) are the card glass on a solid base. */
+  --surface-solid: #0A0B0D;
+  --surface-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015)), #0C0D10;
+  --overlay-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 20px 50px rgba(0, 0, 0, 0.6);
+  --bg-elevated: #0A0B0D;
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --surface-raised: #111317;
+  --border: var(--hairline);
+  --border-strong: var(--hairline-strong);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --focus-border: rgba(255, 255, 255, 0.55);
+  --focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.16);
+  /* Buttons: primary white-to-silver with black text and a soft white glow; secondary/ghost transparent glass. */
+  --btn-primary-bg: linear-gradient(180deg, #FFFFFF, #D6DCE4);
+  --btn-primary-bg-hover: linear-gradient(180deg, #FFFFFF, #E6EAEF);
+  --btn-primary-text: #000;
+  --btn-primary-glow: 0 0 24px rgba(255, 255, 255, 0.18);
+  --btn-primary-glow-hover: 0 0 30px rgba(255, 255, 255, 0.28);
+  --btn-ghost-bg: rgba(255, 255, 255, 0.04);
+  --btn-ghost-text: #E8EEF6;
+  --icon-btn-bg: rgba(255, 255, 255, 0.03);
+  /* The AI button: a silver orb with a soft halo. */
+  --fab-bg: radial-gradient(circle at 35% 30%, #FFFFFF, #CFD6DF 45%, #8A94A1);
+  --fab-text: #000;
+  --fab-halo: 0 0 0 6px rgba(255, 255, 255, 0.06), 0 0 30px rgba(255, 255, 255, 0.3);
+  --nav-bg: rgba(0, 0, 0, 0.62);
+  --title-gradient: linear-gradient(180deg, #FFFFFF, #B9C2CD);
+  /* The page light: a silver glow at the top, a flare at the top right, a thin arc behind the header. */
+  --glow-top: rgba(220, 228, 240, 0.16);
+  --glow-flare: rgba(255, 255, 255, 0.10);
+  --arc-line: rgba(230, 236, 245, 0.35);
+  --arc-glow: rgba(230, 236, 245, 0.25);
+  --on-badge: #000;           /* text on an app-color badge */
+  --backdrop: rgba(0, 0, 0, 0.6);
 
-  --text-primary: #E6E8EB;
-  --text-secondary: #8B93A1;
-  --text-tertiary: #7D8694;   /* was #5B6472 (3.1:1) - now 4.5:1+ on the glass cards */
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+  --text-tertiary: var(--text-muted);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -122,13 +173,13 @@
   --app-fitness: #FACC15;
   --app-weather: #22D3EE;
   /* Text on a solid gain/loss/red fill (buy/sell/danger buttons). */
-  --on-semantic: #0B0D10;
-  --glass-bg: rgba(18, 21, 26, 0.6);
-  --glass-bg-solid: #12151A;               /* no backdrop-filter / reduced transparency; sticky table cells */
-  --glass-bg-dialog: rgba(18, 21, 26, 0.88); /* dialogs sit over a dimmed backdrop - near-solid for contrast */
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
-  --nav-border: rgba(255, 255, 255, 0.06);
+  --on-semantic: #000;
+  --glass-bg: var(--surface-solid);
+  --glass-bg-solid: #0A0B0D;               /* solid card tone: sticky table cells, color-mix() bases */
+  --glass-bg-dialog: #0C0D10;              /* dialogs sit over a dimmed backdrop - solid */
+  --glass-border: var(--hairline);
+  --glass-shadow: var(--card-shadow);
+  --nav-border: var(--hairline);
   --glow-gain: rgba(52, 211, 153, 0.22);
   --glow-loss: rgba(251, 113, 133, 0.22);
   --glow-warn: rgba(245, 158, 11, 0.20);
@@ -139,17 +190,55 @@
 
 /* ---------- Light theme ---------- */
 [data-theme="light"] {
-  --bg: #F3F4F6;
-  --bg-elevated: #F6F7F8;
-  --surface: #FFFFFF;
-  --surface-hover: #F3F4F6;
+  color-scheme: light;
+  /* Eclipse light: the same tokens on a soft off-white page - white cards with a hairline edge and a light shadow. */
+  --bg: #F5F6F8;
+  --text: #0E1116;
+  --text-muted: #5B6472;      /* 5.6:1 on the page, 6.0:1 on white */
+  --text-soft: #2B313B;
+  --hairline: rgba(15, 23, 42, 0.09);
+  --hairline-strong: rgba(15, 23, 42, 0.16);
+  --surface: linear-gradient(180deg, #FFFFFF, #FDFDFE);
+  --surface-row: rgba(15, 23, 42, 0.025);
+  --card-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --row-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.07);
+  --tile-surface: linear-gradient(180deg, #FFFFFF, #F7F8FA);
+  --tile-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.05);
+  --icon-glow: 25%;
+  --surface-solid: #FFFFFF;
+  --surface-overlay: linear-gradient(180deg, #FFFFFF, #FDFDFE), #FFFFFF;
+  --overlay-shadow: 0 12px 32px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --bg-elevated: #FFFFFF;
+  --surface-hover: rgba(15, 23, 42, 0.05);
   --surface-raised: #FFFFFF;
-  --border: #E2E5EA;
-  --border-strong: rgba(0, 0, 0, 0.14);
+  --border: var(--hairline);
+  --border-strong: var(--hairline-strong);
+  --input-bg: #FFFFFF;
+  --focus-border: rgba(15, 23, 42, 0.55);
+  --focus-ring: 0 0 0 3px rgba(15, 23, 42, 0.12);
+  --btn-primary-bg: linear-gradient(180deg, #2B313B, #0E1116);
+  --btn-primary-bg-hover: linear-gradient(180deg, #3A414C, #1A1F27);
+  --btn-primary-text: #FFFFFF;
+  --btn-primary-glow: 0 4px 14px rgba(15, 23, 42, 0.18);
+  --btn-primary-glow-hover: 0 6px 18px rgba(15, 23, 42, 0.24);
+  --btn-ghost-bg: rgba(255, 255, 255, 0.7);
+  --btn-ghost-text: #0E1116;
+  --icon-btn-bg: #FFFFFF;
+  --fab-bg: radial-gradient(circle at 35% 30%, #FFFFFF, #E3E7EC 45%, #A7B0BC);
+  --fab-text: #0E1116;
+  --fab-halo: 0 0 0 6px rgba(15, 23, 42, 0.04), 0 6px 20px rgba(15, 23, 42, 0.18);
+  --nav-bg: rgba(245, 246, 248, 0.8);
+  --title-gradient: linear-gradient(180deg, #0E1116, #4A5361);
+  --glow-top: rgba(170, 182, 200, 0.28);
+  --glow-flare: rgba(255, 255, 255, 0.9);
+  --arc-line: rgba(120, 132, 150, 0.22);
+  --arc-glow: rgba(120, 132, 150, 0.12);
+  --on-badge: #07090C;
+  --backdrop: rgba(15, 23, 42, 0.35);
 
-  --text-primary: #0E1116;
-  --text-secondary: #5B6472;
-  --text-tertiary: #666E7A;   /* was #8B93A1 (3.0:1) - now 4.5:1+ on the glass cards */
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+  --text-tertiary: var(--text-muted);
 
   /* Two-layer card shadow - cards need to lift off the new gray page
      background, not just the old white-on-white/near-invisible edge. */
@@ -184,12 +273,12 @@
   --app-fitness: #CA8A04;
   --app-weather: #0E7490;
   --on-semantic: #FFFFFF;
-  --glass-bg: rgba(255, 255, 255, 0.62);
-  --glass-bg-solid: #FAFBFC;
-  --glass-bg-dialog: rgba(255, 255, 255, 0.92);
-  --glass-border: rgba(255, 255, 255, 0.7);
-  --glass-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
-  --nav-border: rgba(15, 23, 42, 0.06);
+  --glass-bg: var(--surface-solid);
+  --glass-bg-solid: #FFFFFF;
+  --glass-bg-dialog: #FFFFFF;
+  --glass-border: var(--hairline);
+  --glass-shadow: var(--card-shadow);
+  --nav-border: var(--hairline);
   --glow-gain: rgba(16, 185, 129, 0.20);
   --glow-loss: rgba(244, 63, 94, 0.18);
   --glow-warn: rgba(245, 158, 11, 0.18);
@@ -433,7 +522,7 @@ body {
 }
 
 h1, h2, h3, h4 {
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -558,7 +647,7 @@ a:hover { color: var(--accent-hover); }
   line-height: 1.4;
   white-space: nowrap;
 }
-[data-theme="light"] .navbar__chip { color: color-mix(in srgb, var(--accent-hover) 85%, #000); }
+[data-theme="light"] .navbar__chip { color: color-mix(in srgb, var(--accent-hover) 85%, var(--text)); }
 .navbar__chip svg { width: 16px; height: 16px; flex-shrink: 0; }
 /* Under 640px the chip shows only the icon (the phone header rules, further down). */
 
@@ -588,7 +677,7 @@ a:hover { color: var(--accent-hover); }
   height: 30px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-solid);
   color: var(--text-secondary);
   cursor: pointer;
   transition: color var(--transition), border-color var(--transition), background var(--transition);
@@ -636,7 +725,7 @@ html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 .navbar__toggle {
   display: none; align-items: center; gap: var(--space-1); margin-left: auto; cursor: pointer;
   padding: 4px 10px; min-height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: var(--surface); color: var(--text-primary); font: inherit; font-size: var(--text-sm); font-weight: 600;
+  background: var(--surface-solid); color: var(--text-primary); font: inherit; font-size: var(--text-sm); font-weight: 600;
   white-space: nowrap; flex-shrink: 0;
 }
 .navbar__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -676,7 +765,7 @@ html:not(.js) .navbar__dropdown:hover .navbar__dropdown-menu,
 html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
 .back-chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 2px 12px; border-radius: 999px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text-primary);
+  border: 1px solid var(--border); background: var(--surface-solid); color: var(--text-primary);
   font-size: var(--text-sm); font-weight: 600; text-decoration: none; -webkit-tap-highlight-color: transparent;
 }
 .back-chip__arrow { color: var(--accent); }
@@ -722,7 +811,7 @@ html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
 
 /* ---------- Cards ---------- */
 .card {
-  background: var(--surface);
+  background: var(--surface-solid);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-5);
@@ -797,7 +886,7 @@ html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
 
 .status-card {
   flex: 1 1 230px;
-  background: var(--surface);
+  background: var(--surface-solid);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
@@ -852,7 +941,7 @@ html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
   background: var(--surface-raised); box-shadow: var(--shadow-lg);
   overflow-y: auto; color: var(--text-primary);
 }
-.calc-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.calc-dialog::backdrop { background: var(--backdrop); }
 .calc-dialog__header {
   display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
   padding: var(--space-4); border-bottom: 1px solid var(--border);
@@ -932,7 +1021,7 @@ html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
 .btn-primary:hover { background: var(--accent-solid-hover); }
 .btn-primary:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
 
-.btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--text-primary); }
+.btn-secondary { background: var(--surface-solid); border-color: var(--border-strong); color: var(--text-primary); }
 .btn-secondary:hover { background: var(--surface-hover); border-color: var(--text-tertiary); }
 
 /* Watchlist star toggle, once watching - see _watch_button.html. */
@@ -1048,7 +1137,7 @@ html.is-standalone .back-row[data-mode="back"]:not([hidden]) { display: flex; }
 [data-theme="light"] .field textarea,
 [data-theme="light"] .scanner-controls input,
 [data-theme="light"] .scanner-controls select {
-  background: var(--surface);
+  background: var(--surface-solid);
   border-color: var(--border);
 }
 
@@ -1071,7 +1160,7 @@ table.holdings thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--surface);
+  background: var(--surface-solid);
   text-align: left;
   font-size: var(--text-xs);
   text-transform: uppercase;     /* the one deliberate uppercase use: small table header labels */
@@ -1178,7 +1267,7 @@ table.ledger-view-table tfoot td:first-child {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--surface);
+  background: var(--surface-solid);
 }
 table.ledger-view-table thead th.ledger-item-col {
   position: sticky;
@@ -1360,7 +1449,7 @@ tr.scanner-detail td {
   background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   color: var(--text-primary); font-family: var(--font-sans); font-size: var(--text-sm); padding: 2px var(--space-2);
 }
-[data-theme="light"] .review-scope__select { background: var(--surface); border-color: var(--border); }
+[data-theme="light"] .review-scope__select { background: var(--surface-solid); border-color: var(--border); }
 .review-layout {
   display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--space-5); align-items: start;
 }
@@ -1420,12 +1509,12 @@ tr.scanner-detail td {
 .review-legend__list li.is-flash { background: var(--accent-soft); color: var(--accent); }
 .review-legend-tab {
   position: sticky; top: var(--space-4); writing-mode: vertical-rl; padding: var(--space-3) var(--space-2);
-  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-solid);
   color: var(--text-secondary); font-size: var(--text-xs); cursor: pointer;
 }
 .review-help {
   position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center;
-  padding: var(--space-4); background: rgba(0, 0, 0, 0.6);
+  padding: var(--space-4); background: var(--backdrop);
 }
 .review-help__panel { width: 440px; max-width: 100%; max-height: 90vh; overflow-y: auto; }
 .spinner {
@@ -1458,22 +1547,18 @@ tr.scanner-detail td {
 
 
 /* ============================================================
-   GLASS AND GLOW - visual layer over everything above, for both apps
-   and both themes. Colors all come from the per-theme tokens
-   (--page-glow-*, --glass-*, --glow-*, --money-gradient, --chart-*)
-   and the shared ones (--glow-ring/--glow-primary, --primary-*,
-   --nav-tint). Styling only: no class/ID/data-* that JS relies on
-   changed - everything here targets selectors that already existed.
-
-   Fallbacks: cards are SOLID (--glass-bg-solid) unless the browser
-   supports backdrop-filter, and stay solid for anyone who asks for
-   reduced transparency. Reduced motion already zeroes --transition
-   (top of file); the extra transitions here use it too.
+   ECLIPSE - the visual layer over everything above, both themes
+   (docs/design/style_directions.html, Option A; its .eclipse values
+   are the tokens in the two theme blocks at the top). Styling only:
+   no class/ID/data-* that JS relies on changed, no box sizes changed -
+   a hairline drawn as an inset shadow replaces a border's color, never
+   its width. App-specific surfaces: "ECLIPSE: app surfaces" at the end.
    ============================================================ */
 
-/* ---------- Page background: two faint radial glows, fixed to the
-   viewport (a fixed pseudo-element, not background-attachment:fixed,
-   which iOS Safari ignores) - painted once, never per section. ---------- */
+/* ---------- Page background: pure black with the logo's light - a soft silver glow at the top, a faint flare at the
+   top right (::before) and a thin arc of light behind the header (::after). Fixed to the top of the viewport (fixed
+   pseudo-elements, not background-attachment: fixed, which iOS Safari ignores), behind everything, never a target.
+   A fixed box adds no scrollable overflow, so the arc's extra width never scrolls the page sideways. ---------- */
 body::before {
   content: "";
   position: fixed;
@@ -1481,92 +1566,151 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60vmax 45vmax at 0% 0%, var(--page-glow-1), transparent 70%),
-    radial-gradient(55vmax 40vmax at 100% 0%, var(--page-glow-2), transparent 70%);
+    radial-gradient(120% 60% at 50% -18%, var(--glow-top), transparent 55%),
+    radial-gradient(40% 18% at 88% 6%, var(--glow-flare), transparent 70%);
+}
+body::after {
+  content: "";
+  position: fixed;
+  left: -30%;
+  right: -30%;
+  top: -210px;
+  height: 300px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  border-bottom: 1px solid var(--arc-line);
+  box-shadow: 0 18px 40px -20px var(--arc-glow);
 }
 
-/* ---------- Cards: tiles, table cards, filter bar, ledger,
-   calculator panels (all .card), plus the dialogs. Blur lives on these
-   containers only - never on table rows or cells. ---------- */
-.card,
-.calc-dialog,
-.lightbox {
-  background: var(--glass-bg-solid);
-  border: 1px solid var(--glass-border);
+/* ---------- Headings: Space Grotesk (h1-h4, base rules); page titles get the white-to-silver text gradient (dark
+   to slate in light mode). Anything inside a title (a badge, an icon, a link) keeps its own color. ---------- */
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  h1 {
+    background-image: var(--title-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  h1 * { -webkit-text-fill-color: currentColor; }
+}
+
+/* ---------- Cards: dark glass, a hairline edge and a top highlight (--card-shadow); the border stays 1px but
+   transparent, so no card changes size. Every .card: tiles, panels, forms, settings, Home's Today panel. ---------- */
+.card {
+  background: var(--surface);
+  border-color: transparent;
   border-radius: var(--radius-card);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--card-shadow);
 }
-.card:hover { border-color: var(--glass-border); }
+.card:hover { border-color: transparent; }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .card {
-    background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  }
-  /* Dialogs float over a 50% black backdrop - a 62%-white panel would
-     turn grey there and fail contrast, so they're near-solid glass. */
-  .calc-dialog,
-  .lightbox {
-    background: var(--glass-bg-dialog);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  }
+/* Overlays - dialogs, menus, dropdowns, toasts: the same glass on a solid base (--surface-overlay), so nothing shows
+   through them. They keep their hairline border; the shadow adds the top highlight and the lift. */
+.calc-dialog,
+.lightbox,
+.navbar__dropdown-menu,
+.navbar--collapsed .navbar__links,
+.toast,
+.menu-panel,
+.pl-menu__panel,
+.pl-view-dialog,
+.meals-dialog,
+.ht-sheet__panel {
+  background: var(--surface-overlay);
+  box-shadow: var(--overlay-shadow);
 }
+.calc-dialog,
+.lightbox { border-radius: var(--radius-card); }
+.pl-view-page .pl-view { background: var(--surface); box-shadow: var(--card-shadow); border-color: transparent; }
 
-/* Sticky cells that must hide what scrolls under them: the card's own
-   (opaque) tone instead of plain --surface, so they don't show as a
-   brighter/darker strip on the glass. */
+/* Sticky cells that must hide what scrolls under them: the card's solid tone. */
 table.holdings thead th,
 table.ledger-view-table .ledger-item-cell,
 table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid); }
 
-/* ---------- Nav bar: a soft tint of the app's accent, same blur, faint
-   bottom border. ---------- */
+/* ---------- Header: black glass, a hairline under it; icon buttons are glass squares with hairline borders; the app
+   chip is the current app's accent tint. ---------- */
 .navbar {
-  background: var(--nav-tint), color-mix(in srgb, var(--bg) 82%, transparent);
+  background: var(--nav-bg);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  border-bottom: 1px solid var(--nav-border);
+  border-bottom: 1px solid var(--hairline);
 }
+.theme-toggle,
+.navbar__toggle,
+.back-chip {
+  background: var(--icon-btn-bg);
+  border-color: var(--hairline-strong);
+  color: var(--text-soft);
+}
+.theme-toggle:hover,
+.navbar__toggle:hover,
+.back-chip:hover { background: var(--surface-hover); color: var(--text-primary); }
+.navbar__chip { box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.28); }
 
-/* ---------- Primary buttons: the app's accent, white text, soft glow; a little
-   stronger on hover. Secondary buttons are unchanged. ---------- */
+/* ---------- Buttons: primary = white-to-silver with black text and a soft white glow (near-black with white text in
+   light mode); secondary and ghost = transparent glass with a hairline border. Danger / buy / sell keep their
+   semantic colors. ---------- */
+.btn { border-radius: var(--radius-btn); }
 .btn-primary {
-  background: var(--primary-bg);
-  border-color: var(--primary-bg);
-  color: var(--primary-text);
-  box-shadow: var(--glow-primary);
+  background: var(--btn-primary-bg);
+  border-color: transparent;
+  color: var(--btn-primary-text);
+  box-shadow: var(--btn-primary-glow);
 }
 .btn-primary:hover {
-  background: var(--primary-bg-hover);
-  border-color: var(--primary-bg-hover);
-  color: var(--primary-text);
-  box-shadow: var(--glow-primary-hover);
+  background: var(--btn-primary-bg-hover);
+  border-color: transparent;
+  color: var(--btn-primary-text);
+  box-shadow: var(--btn-primary-glow-hover);
 }
-.btn-primary:focus-visible { box-shadow: var(--glow-primary-hover); }
+.btn-primary:focus-visible { box-shadow: var(--btn-primary-glow-hover), var(--focus-ring); }
+.btn-primary[data-loading="true"]::after { color: var(--btn-primary-text); }
+.btn-secondary,
+.btn-ghost {
+  background: var(--btn-ghost-bg);
+  border-color: var(--hairline-strong);
+  color: var(--btn-ghost-text);
+}
+.btn-secondary:hover,
+.btn-ghost:hover {
+  background: var(--surface-hover);
+  border-color: var(--hairline-strong);
+  color: var(--text-primary);
+}
 
-/* ---------- Focus: the app's accent glow ring on inputs and buttons
-   (links keep the existing outline). ---------- */
+/* ---------- Inputs: dark glass, a hairline border, a white focus ring (dark in light mode). ---------- */
+body { --glow-ring: var(--focus-ring); }
+.field input, .field select, .field textarea,
+.scanner-controls input[type="text"], .scanner-controls input[type="number"],
+.scanner-controls input[type="date"], .scanner-controls select {
+  background: var(--input-bg);
+  border-color: var(--hairline-strong);
+}
 .btn:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  box-shadow: var(--glow-ring);
+  box-shadow: var(--focus-ring);
 }
 .field input:focus, .field select:focus, .field textarea:focus,
 .scanner-controls input:focus, .scanner-controls select:focus,
 .ledger-input:focus {
-  border-color: var(--accent);
-  box-shadow: var(--glow-ring);
+  border-color: var(--focus-border);
+  box-shadow: var(--focus-ring);
 }
+.ledger-input:focus { background: var(--input-bg); }
+/* A select's open list: solid, in the theme's colors (a translucent select would leave it to the browser). */
+select option { background-color: var(--surface-raised); color: var(--text-primary); }
 
-/* ---------- Checkboxes, radios, ranges: the app's accent ---------- */
+/* ---------- Checkboxes, radios, ranges: the app's accent; a checked box glows softly in it. ---------- */
 input[type="checkbox"],
 input[type="radio"],
 input[type="range"] { accent-color: var(--accent-solid); }
+input[type="checkbox"]:checked { box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.45); }
 
 /* ---------- Date and time inputs: iOS Safari draws them at their own native width, so they stuck out of
    narrow cards (Meals' plan form). Every form: the field's full width and no wider, the native look off, the
@@ -1579,19 +1723,18 @@ input[type="datetime-local"] {
   -webkit-appearance: none; appearance: none; text-align: left;
 }
 :where(input[type="date"], input[type="time"], input[type="datetime-local"]) {
-  min-height: 2.5em; padding: var(--space-1) var(--space-2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font: inherit;
+  min-height: 2.5em; padding: var(--space-1) var(--space-2); border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-primary); font: inherit;
 }
 input[type="date"]::-webkit-date-and-time-value,
 input[type="time"]::-webkit-date-and-time-value,
 input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 
-/* ---------- Status pills / badges: tinted background (unchanged
-   tokens) plus a faint glow in the same hue. ---------- */
+/* ---------- Status pills / badges: tinted background plus a faint glow in the same hue. ---------- */
 .badge.gain { box-shadow: 0 0 0 1px var(--glow-gain), 0 0 12px var(--glow-gain); }
 .badge.loss { box-shadow: 0 0 0 1px var(--glow-loss), 0 0 12px var(--glow-loss); }
 .badge.warn { box-shadow: 0 0 0 1px var(--glow-warn), 0 0 12px var(--glow-warn); }
-.badge.neutral { box-shadow: 0 0 0 1px var(--glass-border); }
+.badge.neutral { box-shadow: 0 0 0 1px var(--hairline); }
 .js-watch-toggle.is-watching { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-ring), 0 0 12px var(--accent-glow); }
 
 /* ---------- Big positive money values in tiles: emerald-to-blue
@@ -1616,16 +1759,20 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 
 
 /* ---------- Accessibility fallbacks ---------- */
+/* Reduced transparency: solid cards and header, no page light. Forced colors (Windows High Contrast): the glass and
+   glows drop out on their own; the hairlines become real borders again so cards keep an edge. */
 @media (prefers-reduced-transparency: reduce) {
   .card,
-  .calc-dialog,
-  .lightbox,
   .navbar {
-    background: var(--glass-bg-solid);
+    background: var(--surface-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  body::before { display: none; }
+  body::before, body::after { display: none; }
+}
+@media (forced-colors: active) {
+  .card { border-color: CanvasText; }
+  body::before, body::after { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .card, .btn, .badge, .navbar, body { transition: none; }
@@ -1759,8 +1906,8 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ht__badge { position: absolute; top: -5px; left: calc(50% + 15px); min-width: 19px; height: 19px; padding: 0 5px;
   border-radius: 10px; display: grid; place-items: center; font-size: 0.625rem; font-weight: 700; line-height: 1;
-  background: var(--tile-c); color: #07090C; box-shadow: 0 0 0 2px var(--bg); }
-.ht--add .ht__icon { background: var(--surface); color: var(--text-secondary); border: 1px dashed var(--border-strong); }
+  background: var(--tile-c); color: var(--on-badge); box-shadow: 0 0 0 2px var(--bg); }
+.ht--add .ht__icon { background: var(--surface-solid); color: var(--text-secondary); border: 1px dashed var(--border-strong); }
 .ht--add .ht__label { color: var(--text-secondary); }
 .ht__remove { position: absolute; top: -6px; left: calc(50% - 35px); width: 24px; height: 24px; padding: 0; display: none;
   place-items: center; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface-raised);
@@ -1783,7 +1930,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-picker.is-dragging-tile, .labs-picker.is-dragging-tile * { cursor: grabbing; }
 .ht__moves { display: none; justify-content: center; gap: 4px; margin-top: 4px; }
 .labs-picker.is-editing .ht__moves { display: flex; }
-.ht__move { width: 26px; height: 22px; padding: 0; border-radius: 7px; border: 1px solid var(--border); background: var(--surface);
+.ht__move { width: 26px; height: 22px; padding: 0; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-solid);
   color: var(--text-secondary); font-size: 1rem; line-height: 1; cursor: pointer; }
 .ht__move:hover { color: var(--text-primary); border-color: var(--border-strong); }
 .ht__move:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -1795,7 +1942,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .ht-sheet { padding: 0; border: 0; background: transparent; color: var(--text-primary); max-width: none; max-height: none;
   width: 100%; margin: auto 0 0; }
 .ht-sheet:not([open]) { display: none; }
-.ht-sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
+.ht-sheet::backdrop { background: var(--backdrop); }
 .ht-sheet__panel { display: flex; flex-direction: column; gap: 12px; max-height: 85vh; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
   background: var(--bg-elevated); border: 1px solid var(--border); border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: var(--shadow-lg); }
 .ht-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 0 auto -4px; }
@@ -1811,7 +1958,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   .ht-sheet__grab { display: none; }
 }
 /* One border - the wrapper's; the input has none of its own, and the focus ring is on the wrapper. */
-.ht-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: var(--surface);
+.ht-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: var(--surface-solid);
   border: 1px solid var(--border); color: var(--text-secondary); margin: 0; }
 .ht-search svg { fill: none; stroke: currentColor; flex: none; }
 .ht-search input[type="search"], .ht-search input[type="search"]:focus, .ht-search input[type="search"]:focus-visible {
@@ -1833,7 +1980,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .ht-sheet__list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 .ht-sheet__list::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 .ht-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ht-row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+.ht-row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--surface-solid); border: 1px solid var(--border); }
 .ht-row[hidden] { display: none; }
 .ht-row__icon { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; flex: none;
   background: color-mix(in srgb, var(--tile-c) 14%, transparent); color: var(--tile-c); }
@@ -1975,10 +2122,10 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   .navbar--collapsed .navbar__menu-extra .navbar__badge { margin-left: auto; }
 }
 /* The phone menu's colors: dark by default, light below. */
-:root { --menu-bg: #171C24; --menu-account-bg: #11151B; --menu-account-hover: #1A2029; --menu-line: #262D38;
-  --menu-row: #CFD4DC; --menu-icon: #8B93A1; --menu-muted: #8B93A1; }
-:root[data-theme="light"] { --menu-bg: #FFFFFF; --menu-account-bg: #F1F3F6; --menu-account-hover: #E6E9EE; --menu-line: #E2E5EA;
-  --menu-row: #2B313B; --menu-icon: #6B7280; --menu-muted: #5B6472; }
+:root { --menu-bg: #0E1013; --menu-account-bg: var(--surface-solid); --menu-account-hover: #15181C; --menu-line: var(--hairline);
+  --menu-row: var(--text-soft); --menu-icon: var(--text-muted); --menu-muted: var(--text-muted); }
+:root[data-theme="light"] { --menu-bg: #FFFFFF; --menu-account-bg: #F1F3F6; --menu-account-hover: #E6E9EE; --menu-line: var(--hairline);
+  --menu-row: var(--text-soft); --menu-icon: var(--text-muted); --menu-muted: var(--text-muted); }
 @media (max-width: 370px) {
   .navbar__main-row {
     padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
@@ -1989,7 +2136,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 /* "Archived app - hidden from everyone else": a superuser on an archived app's page (albright_labs.archive). */
 .archived-banner {
   padding: 8px var(--space-4); font-size: var(--text-sm); text-align: center; color: var(--text-primary);
-  background: var(--warning-soft, rgba(250, 204, 21, 0.14)); border-bottom: 1px solid var(--border);
+  background: var(--warn-bg); border-bottom: 1px solid var(--border);
 }
 .archived-banner a { font-weight: 600; }
 
@@ -2011,7 +2158,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-nav-row {
   --labs-tile-color: var(--app-dot, var(--accent));
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding: 6px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  padding: 6px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-solid);
 }
 .labs-nav-row__move { display: inline-flex; gap: 4px; }
 .labs-nav-row__move .btn { min-width: 34px; justify-content: center; }
@@ -2070,7 +2217,7 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .meals-day__empty { color: var(--text-secondary); font-size: var(--text-sm); }
 .meals-meal { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "slot actions" "title actions" "meta actions";
   align-items: start; column-gap: var(--space-2); padding: 8px 10px; border-radius: var(--radius-sm);
-  background: var(--surface); border: 1px solid var(--border); position: relative; }
+  background: var(--surface-solid); border: 1px solid var(--border); position: relative; }
 .meals-meal__slot { grid-area: slot; font-size: 0.6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--text-secondary); }
 .meals-meal__title { grid-area: title; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; padding: 2px 0; }
@@ -2112,14 +2259,14 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
   align-items: stretch; column-gap: 6px; }
 .meals-item__toggle-form { grid-area: main; margin: 0; }
 .meals-item__toggle { width: 100%; min-height: 52px; display: flex; align-items: center; gap: var(--space-3); text-align: left;
-  padding: 10px var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface);
+  padding: 10px var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface-solid);
   color: var(--text-primary); font: inherit; cursor: pointer; }
 .meals-item__toggle:hover { border-color: var(--border-strong); }
 .meals-item__toggle:focus-visible, .meals-item__delete:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .meals-item__box { width: 24px; height: 24px; flex-shrink: 0; border-radius: 6px; border: 2px solid var(--border-strong);
   display: inline-flex; align-items: center; justify-content: center; }
 .meals-item.is-checked .meals-item__box { background: var(--accent-solid); border-color: var(--accent-solid); }
-.meals-item.is-checked .meals-item__box::after { content: ""; width: 6px; height: 11px; border: solid #fff; border-width: 0 2px 2px 0;
+.meals-item.is-checked .meals-item__box::after { content: ""; width: 6px; height: 11px; border: solid var(--accent-contrast); border-width: 0 2px 2px 0;
   transform: rotate(45deg) translate(-1px, -1px); }
 .meals-item__text { display: flex; flex-direction: column; min-width: 0; }
 .meals-item__name { font-size: 1rem; overflow-wrap: anywhere; }
@@ -2147,12 +2294,12 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 /* Badges under a line: "2 recipes", "Possible duplicate" + Merge, "In task: ...". */
 .meals-item__extras { grid-area: extra; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 2px 2px; }
 .meals-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 2px 10px; border-radius: var(--radius-full);
-  border: 1px solid var(--border); background: var(--surface); font-size: 0.75rem; color: var(--text-secondary);
+  border: 1px solid var(--border); background: var(--surface-solid); font-size: 0.75rem; color: var(--text-secondary);
   text-decoration: none; cursor: default; }
 a.meals-chip, summary.meals-chip, button.meals-chip { cursor: pointer; }
 a.meals-chip:hover { text-decoration: none; border-color: var(--border-strong); color: var(--text-primary); }
 .meals-chip--warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent);
-  background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface-solid)); }
 .meals-chip--action { font: inherit; font-size: 0.75rem; color: var(--accent-hover); border-color: var(--accent); }
 .meals-chip--task { color: var(--app-planner, var(--accent)); border-color: color-mix(in srgb, var(--app-planner, var(--accent)) 45%, transparent); }
 .meals-chip--on { color: var(--accent-hover); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
@@ -2232,7 +2379,7 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-card-share { position: relative; z-index: 1; }
 .meals-stamps { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .meals-stamp { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 8px; border-radius: var(--radius-full);
-  border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+  border: 1px solid var(--border); background: var(--surface-solid); color: var(--text-primary); font: inherit; font-size: var(--text-sm); cursor: pointer; }
 .meals-stamp__initial { font-size: 0.6875rem; font-weight: 700; color: var(--text-secondary); }
 .meals-stamp-note { position: relative; z-index: 1; margin: 6px 0 0; font-size: var(--text-sm); color: var(--text-secondary); }
 .meals-stamp-note[hidden] { display: none; }
@@ -2240,10 +2387,10 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
   border: 1px solid var(--border); overflow-x: auto; }
 .meals-tabs__item { flex: 1 0 auto; padding: 8px 12px; border-radius: 8px; text-align: center; font-size: var(--text-sm); font-weight: 600;
   color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
-.meals-tabs__item.is-on { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.meals-tabs__item.is-on { background: var(--surface-solid); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
 .meals-tabs__count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.6875rem; }
 .meals-filters { margin-bottom: var(--space-3); }
-.meals-filter-box { margin-top: var(--space-2); padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.meals-filter-box { margin-top: var(--space-2); padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-solid); }
 .meals-filter-box > summary { cursor: pointer; font-weight: 600; font-size: var(--text-sm); }
 .meals-filter-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .meals-filter-grid .field { margin: 0; max-width: 320px; }
@@ -2262,8 +2409,8 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .meals-inline-form { display: inline; margin: 0; }
 .meals-dialog { width: min(440px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--border); border-radius: 16px;
-  background: var(--glass-bg-solid, var(--surface)); color: var(--text-primary); box-shadow: var(--shadow-lg); }
-.meals-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  background: var(--glass-bg-solid, var(--surface-solid)); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.meals-dialog::backdrop { background: var(--backdrop); }
 .meals-dialog__title { margin: 0 0 10px; font-size: 1.125rem; }
 .meals-share-row { display: flex; gap: 8px; margin-top: 4px; }
 .meals-share-row .ledger-input { flex: 1 1 auto; min-width: 0; min-height: 40px; }
@@ -2372,7 +2519,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .strategy-colors__choice input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .strategy-colors__swatch { display: block; width: 30px; height: 30px; border-radius: 50%; background: var(--strategy-color);
   border: 3px solid transparent; box-shadow: 0 0 0 1px var(--border); }
-.strategy-colors__choice input:checked + .strategy-colors__swatch { border-color: var(--surface, #fff); box-shadow: 0 0 0 2px var(--text-primary); }
+.strategy-colors__choice input:checked + .strategy-colors__swatch { border-color: var(--surface-solid); box-shadow: 0 0 0 2px var(--text-primary); }
 .strategy-colors__choice input:focus-visible + .strategy-colors__swatch { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Twelve columns: tighter cells, and headers may wrap, so the table fits a laptop without scrolling. */
 .strategy-table th, .strategy-table td { padding-left: 10px; padding-right: 10px; }
@@ -2398,10 +2545,10 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   border: 1px solid var(--border); border-radius: 16px; color: var(--text-primary);
   /* Solid - the calendar must not show through it (no transparency, no backdrop-filter); the dimmed ::backdrop
      sits behind it. --glass-bg-solid is the theme's solid surface, dark and light. */
-  background: var(--glass-bg-solid, var(--surface)); -webkit-backdrop-filter: none; backdrop-filter: none; opacity: 1;
+  background: var(--glass-bg-solid, var(--surface-solid)); -webkit-backdrop-filter: none; backdrop-filter: none; opacity: 1;
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
 }
-.pl-view-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.pl-view-dialog::backdrop { background: var(--backdrop); }
 .pl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; }
 .pl-view__body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 /* In the dialog: the header (title, menu, x) stays at the top and Edit / Close at the bottom - only the middle
@@ -2412,7 +2559,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .pl-view-dialog .pl-view__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   margin: 0 -20px; padding: 0 20px 2px; }
 .pl-view-page .pl-view { max-width: 600px; border: 1px solid var(--border); border-radius: 16px;
-  background: var(--glass-bg-solid, var(--surface)); box-shadow: 0 0 0 1px var(--accent-soft); }
+  background: var(--glass-bg-solid, var(--surface-solid)); box-shadow: 0 0 0 1px var(--accent-soft); }
 .pl-view__head { display: flex; align-items: flex-start; gap: 10px; }
 .pl .pl-check--lg { width: 30px; height: 30px; border-radius: 8px; margin-top: 1px; }
 .pl-view__dot { margin: 11px 6px 0; }
@@ -2425,7 +2572,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .pl-menu { position: relative; }
 .pl-menu__panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 230px; padding: 6px;
   display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border); border-radius: 12px;
-  background: var(--glass-bg-solid, var(--surface)); box-shadow: var(--shadow-lg); }
+  background: var(--glass-bg-solid, var(--surface-solid)); box-shadow: var(--shadow-lg); }
 .pl-menu__panel form { margin: 0; }
 .pl .pl-menu__item { display: flex; align-items: center; width: 100%; min-height: 38px; padding: 6px 10px; border-radius: 8px;
   font-size: 0.875rem; color: var(--text-primary); cursor: pointer; list-style: none; }
@@ -2441,7 +2588,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .pl-badge--medium { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .pl-view__shared { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.875rem; }
 .pl-view__avatars { display: inline-flex; }
-.pl-view__avatars .pl-avatar + .pl-avatar { margin-left: -4px; box-shadow: 0 0 0 2px var(--surface); }
+.pl-view__avatars .pl-avatar + .pl-avatar { margin-left: -4px; box-shadow: 0 0 0 2px var(--surface-solid); }
 .pl-view__section { border-top: 1px solid var(--border); padding-top: 12px; }
 .pl-view__label { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary); }
 .pl-view__notes { font-size: 0.9375rem; line-height: 1.55; overflow-wrap: anywhere; }
@@ -2519,7 +2666,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .md-editor { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; }
 .md-editor [hidden] { display: none !important; }
 .md-editor__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px;
-  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid); }
 .md-editor__btn, .md-editor__tab {
   display: inline-grid; place-items: center; min-width: 34px; height: 32px; padding: 0 8px; margin: 0;
   font: inherit; font-size: 0.875rem; color: var(--text-secondary); background: transparent;
@@ -2536,7 +2683,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   resize: vertical; line-height: 1.5; tab-size: 4;
 }
 .md-editor__preview { min-height: calc(14 * 1.5em + 20px); max-height: 70vh; overflow-y: auto; padding: 10px 12px;
-  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); line-height: 1.55; }
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid); line-height: 1.55; }
 .md-editor__empty { color: var(--text-secondary); }
 
 /* ---------- Meals: recipe nutrition (recipe page, cards, the week, the review table) ---------- */
@@ -2599,7 +2746,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 /* Its dock button: a Meals-orange pill, 56px tall like the AI button; an icon-only circle under 480px. */
 .meals-convert-fab {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 56px; padding: 0 20px; border: 0; border-radius: 999px;
-  background: var(--accent-solid); color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--glow-accent, 0 8px 24px rgba(0, 0, 0, .3));
+  background: var(--accent-solid); color: var(--accent-contrast); font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--glow-primary);
 }
 .meals-convert-fab:hover { filter: brightness(1.06); }
 .meals-convert-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -2624,9 +2771,9 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .meals-converter {
   width: min(480px, calc(100vw - 32px)); max-height: min(86vh, 760px); padding: 0 16px 16px; overflow-y: auto; overscroll-behavior: contain;
   border: 1px solid var(--border); border-radius: 16px; background: var(--glass-bg-solid, var(--surface-raised)); color: var(--text-primary);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+  box-shadow: var(--overlay-shadow);
 }
-.meals-converter::backdrop { background: rgba(0, 0, 0, .5); }
+.meals-converter::backdrop { background: var(--backdrop); }
 .meals-converter__grip { display: none; }
 .meals-converter__head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin: 0 -16px; padding: 12px 16px 8px; background: var(--glass-bg-solid, var(--surface-raised)); }
@@ -2638,7 +2785,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .meals-converter__tabs { display: flex; gap: 2px; padding: 3px; margin-bottom: 12px; border-radius: 11px; background: var(--surface-hover); border: 1px solid var(--border); }
 .meals-converter__tab { flex: 1; min-height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary);
   font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
-.meals-converter__tab[aria-selected="true"] { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.meals-converter__tab[aria-selected="true"] { background: var(--surface-solid); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
 .meals-converter__inputs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .meals-converter__inputs .field { margin: 0; }
 .meals-converter .ledger-input { min-height: 44px; background: var(--bg-elevated); border-color: var(--border-strong); font-size: 1rem; }
@@ -2693,7 +2840,7 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 .circles-circle__name { font-weight: 700; font-size: 1.0625rem; color: var(--text-primary); }
 .circles-circle__name[style]::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: var(--circle-color); }
 .circles-avatars { display: inline-flex; }
-.circles-avatar { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; border-radius: 50%; border: 2px solid var(--surface);
+.circles-avatar { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; border-radius: 50%; border: 2px solid var(--surface-solid);
   background: var(--accent-soft); color: var(--accent-hover); font-size: 0.6875rem; font-weight: 700; flex-shrink: 0; }
 .circles-avatars .circles-avatar:first-child, .circles-row > .circles-avatar { margin-left: 0; }
 .circles-avatar--more { background: var(--surface-hover); color: var(--text-secondary); }
@@ -2703,7 +2850,7 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
   background: var(--surface-hover); cursor: pointer; }
 .circles-switch span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--text-secondary); transition: left .15s ease; }
 .circles-switch.is-on { background: var(--accent-solid); border-color: var(--accent-solid); }
-.circles-switch.is-on span { left: 23px; background: #fff; }
+.circles-switch.is-on span { left: 23px; background: var(--accent-contrast); }
 .circles-switch:disabled { opacity: .45; cursor: not-allowed; }
 .circles-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .circles-form { display: flex; flex-direction: column; gap: var(--space-3); margin: 0 0 var(--space-3); }
@@ -2721,19 +2868,19 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 .circles-menu > summary { list-style: none; }
 .circles-menu > summary::-webkit-details-marker { display: none; }
 .circles-menu__panel { position: absolute; right: 0; z-index: 20; display: flex; flex-direction: column; gap: 6px; padding: 8px; margin-top: 4px;
-  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.25)); }
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--overlay-shadow); }
 .circles-danger { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 /* The space switcher (Meals and Money headers). */
 .space-switch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 var(--space-3); }
 .space-switch__label { font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
 .space-switch__tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-hover); border: 1px solid var(--border); max-width: 100%; overflow-x: auto; }
 .space-switch__item { padding: 6px 12px; border-radius: 8px; font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
-.space-switch__item.is-on { background: var(--surface); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
+.space-switch__item.is-on { background: var(--surface-solid); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-sm); }
 @media (max-width: 420px) { .space-switch__label { display: none; } .space-switch__item { padding: 6px 8px; font-size: 0.8125rem; } }
 
 /* ---------- The Share control (albright_labs/_share.html, labs/share.js) and the sharing pages ---------- */
 .share-box, .share-new { margin: var(--space-4) 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md);
-  background: var(--surface); }
+  background: var(--surface-solid); }
 .share-new { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .share-new legend { padding: 0 4px; }
 .share-box__title { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: 700; }
@@ -2874,7 +3021,7 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
 .notif-level__choice { position: relative; display: inline-flex; }
 .notif-level__choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .notif-level__choice span { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: var(--text-sm); color: var(--text-secondary); }
-.notif-level__choice input:checked + span { background: var(--accent-solid); color: var(--accent-contrast, #fff); font-weight: 600; }
+.notif-level__choice input:checked + span { background: var(--accent-solid); color: var(--accent-contrast); font-weight: 600; }
 .notif-level__choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .notif-quiet__times { display: flex; align-items: center; gap: 8px; }
 .notif-quiet__times .ledger-input { flex: 0 1 140px; min-height: 44px; }
@@ -2955,7 +3102,7 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
 /* The plain menu look: a solid panel of full-width text rows, one line each. */
 .menu-panel { display: flex; flex-direction: column; gap: 2px; min-width: 200px; max-width: calc(100vw - 16px); padding: 6px;
   border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised);
-  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, .3)); }
+  box-shadow: var(--overlay-shadow); }
 .menu-panel form { margin: 0; }
 .menu-item { display: flex; align-items: center; width: 100%; min-height: 38px; margin: 0; padding: 8px 12px; border: 0;
   border-radius: 8px; background: none; color: var(--text-primary); font: inherit; font-size: var(--text-sm);
@@ -3017,7 +3164,7 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
 .skip-pop > summary::-webkit-details-marker { display: none; }
 .skip-pop__form { position: absolute; z-index: 60; right: 0; top: calc(100% + 6px); width: min(300px, calc(100vw - 32px));
   display: flex; flex-direction: column; gap: 10px; padding: 12px; margin: 0; background: var(--surface-raised);
-  border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .3); text-align: left; }
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--overlay-shadow); text-align: left; }
 .skip-pop__reasons { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; }
 .skip-pop__legend { width: 100%; margin-bottom: 6px; padding: 0; font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); }
 .skip-pop__opt { font-weight: 400; color: var(--text-secondary); }
@@ -3027,9 +3174,141 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
   background: var(--surface-hover); color: var(--text-secondary); border: 1px solid transparent; }
 .skip-chip input:checked + span { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--text-primary); }
 .skip-chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-.skip-pop__note { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+.skip-pop__note { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-solid);
   color: var(--text-primary); font: inherit; font-size: var(--text-sm); }
 .skip-pop__go { align-self: flex-end; height: 36px; padding: 0 14px; border-radius: 8px; border: 0; cursor: pointer; font: inherit;
-  font-weight: 600; background: var(--accent-solid); color: #fff; }
+  font-weight: 600; background: var(--accent-solid); color: var(--accent-contrast); }
 .pl-menu__panel .skip-pop { display: block; }
 .pl-menu__panel .skip-pop__form { position: static; width: auto; box-shadow: none; margin: 4px 0; }
+
+/* ============================================================
+   ECLIPSE: app surfaces - the same look on each app's own rows,
+   tiles, sheets and buttons. Rules for classes that live in a
+   stylesheet loaded after this one (planner.css, launcher.css,
+   assistant.css, fitness.css, notes.css, money.css) start with
+   `html` - one element more specific, so they win without !important.
+   Colors are tokens only.
+   ============================================================ */
+
+/* ---------- List rows: --surface-row with a hairline inset edge (the 1px borders stay, transparent). ---------- */
+html .pl-item {
+  background: var(--surface-row);
+  border-color: transparent;
+  border-left-color: var(--pl-color);
+  border-radius: var(--radius-row);
+  box-shadow: var(--row-shadow);
+}
+/* Workout rows keep their yellow tint, fading from the left. */
+html .pl-item.is-fitness {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--app-fitness) 9%, transparent), var(--surface-row) 60%);
+}
+html .pl-item.is-fitness .pl-check { border-color: color-mix(in srgb, var(--app-fitness) 70%, transparent); }
+html .pl-item.is-fitness .pl-check[aria-checked="true"] {
+  background: var(--app-fitness); border-color: var(--app-fitness); color: var(--on-badge);
+}
+.meals-item__toggle,
+.ht-row {
+  background: var(--surface-row);
+  border-color: transparent;
+  border-radius: var(--radius-row);
+  box-shadow: var(--row-shadow);
+}
+.meals-item__toggle:hover { border-color: transparent; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+
+/* ---------- Checked boxes: a soft glow in their app color. ---------- */
+html .pl .pl-check[aria-checked="true"],
+html .pl .pl-cl__check[aria-checked="true"] {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--pl-color, var(--accent)) 50%, transparent);
+}
+.meals-item.is-checked .meals-item__box { box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.5); }
+html .fx-done[aria-checked="true"] { box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.5); }
+
+/* ---------- Home tiles and app icons: glass squares with the top highlight; the icon in its app color with a soft
+   glow; badges in the app color with a small glow. ---------- */
+.ht__icon {
+  background: var(--tile-surface);
+  border-color: transparent;
+  border-radius: var(--radius-tile);
+  box-shadow: var(--tile-shadow);
+}
+.ht__icon svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tile-c) var(--icon-glow), transparent)); }
+.ht--add .ht__icon { background: var(--tile-surface); border-color: var(--hairline-strong); box-shadow: none; }
+.ht--add .ht__icon svg { filter: none; }
+.ht__badge { box-shadow: 0 0 0 2px var(--bg), 0 0 10px color-mix(in srgb, var(--tile-c) 60%, transparent); }
+.ht-row__icon { background: var(--tile-surface); box-shadow: var(--tile-shadow); }
+html .app-launcher__icon { background: var(--tile-surface); box-shadow: var(--tile-shadow); }
+html .app-launcher__icon svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--app-color) var(--icon-glow), transparent)); }
+
+/* ---------- Header icon buttons that live in launcher.css (launcher, bell, phones' Home). ---------- */
+html .app-launcher__button {
+  background: var(--icon-btn-bg);
+  border-color: var(--hairline-strong);
+  color: var(--text-soft);
+}
+html .app-launcher__button:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+/* ---------- Overlays in the apps' own stylesheets: glass on a solid base. ---------- */
+html .app-launcher__menu,
+html .notif-panel,
+html .as-panel,
+html .as-connect,
+html .pl-sheet,
+html .pl-dialog,
+html .fx-sheet,
+html dialog.fx-confirm,
+html .nt-pop,
+html .nt-results {
+  background: var(--surface-overlay);
+  box-shadow: var(--overlay-shadow);
+}
+
+/* ---------- The AI button: a silver orb with a soft halo. ---------- */
+html .as-fab {
+  background: var(--fab-bg);
+  color: var(--fab-text);
+  box-shadow: var(--fab-halo);
+}
+html .as-fab:focus-visible { outline: 2px solid var(--focus-border); }
+
+/* ---------- Planner controls: buttons and inputs like the site's. ---------- */
+html .pl .pl-btn {
+  background: var(--btn-ghost-bg);
+  border-color: var(--hairline-strong);
+  border-radius: var(--radius-btn);
+  color: var(--btn-ghost-text);
+}
+html .pl .pl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+html .pl .pl-btn--ghost { background: transparent; border-color: transparent; color: var(--pl-muted); }
+html .pl .pl-btn--ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
+html .pl .pl-btn--danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+html .pl .pl-btn--primary {
+  background: var(--btn-primary-bg);
+  border-color: transparent;
+  color: var(--btn-primary-text);
+  box-shadow: var(--btn-primary-glow);
+}
+html .nt .nt-btn.primary {
+  background: var(--btn-primary-bg);
+  border-color: transparent;
+  color: var(--btn-primary-text);
+  box-shadow: var(--btn-primary-glow);
+}
+html .nt .nt-btn.primary:hover { background: var(--btn-primary-bg-hover); color: var(--btn-primary-text); }
+html .pl .pl-btn--primary:hover {
+  background: var(--btn-primary-bg-hover);
+  color: var(--btn-primary-text);
+  box-shadow: var(--btn-primary-glow-hover);
+}
+html .pl .pl-input,
+html .fx .ledger-input,
+html .mn .ledger-input {
+  background-color: var(--input-bg);
+  border-color: var(--hairline-strong);
+}
+html .pl .pl-input:focus,
+html .fx .ledger-input:focus,
+html .mn .ledger-input:focus {
+  outline: none;
+  border-color: var(--focus-border);
+  box-shadow: var(--focus-ring);
+}
