@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Planner Task Options</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet"><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#14171b;color:#e8eaed;font:15px/1.4 Inter,system-ui,sans-serif;padding:28px 16px}
+.pt{font-size:22px;text-align:center;margin-bottom:6px}.ps{color:#9aa3af;text-align:center;margin-bottom:30px;font-size:14px}
+.opt{max-width:1480px;margin:0 auto 54px}.opt>h2{font-size:18px;margin-bottom:4px}.opt>h2 b{color:#a3e635}
+.opt>p{color:#9aa3af;font-size:13px;margin-bottom:12px;max-width:920px}
+.pair{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.lbl{font-size:12px;color:#9aa3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em}
+svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;text-align:left}
+input{font:inherit;color:inherit;background:none;border:0;outline:0}
+h2,.qt,.tbig,.title{font-family:'Space Grotesk',Inter,system-ui,sans-serif;font-weight:600;letter-spacing:-.01em}
+.frame{width:1000px;max-width:100%;min-height:560px;background:#000;border:1px solid #2a2f37;border-radius:14px;padding:26px;display:flex;justify-content:center;align-items:flex-start;background-image:radial-gradient(60% 160px at 50% -40px,rgba(220,228,240,.10),transparent 70%)}
+.phone{width:350px;height:760px;overflow:hidden;background:#000;border:8px solid #16191e;border-radius:36px;padding:12px}
+.glass,.qv,.sec,.side,.ed.c .props,.qv .props{background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.015));box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.07)}
+.ib{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#9aa3af}
+.lnk{color:#bef264;font-size:13px;font-weight:500}
+.btn{min-height:42px;padding:0 18px;border-radius:12px;font-weight:600;font-size:14px;text-align:center}
+.btn.pri{background:linear-gradient(180deg,#fff,#d6dce4);color:#000}
+.btn.alt{background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.cb{width:22px;height:22px;border-radius:7px;box-shadow:inset 0 0 0 2px #a3e635;flex:none}
+.saved{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#7d8794}.saved svg{width:13px;height:13px;color:#a3e635}
+.spx{flex:1}
+small{color:#7d8794;font-size:11.5px}
+/* property rows */
+.props{border-radius:14px;overflow:hidden}
+.prow{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.05);font-size:14px}
+.prow:last-child{border-bottom:0}
+.pl{display:flex;align-items:center;gap:8px;color:#9aa3af;width:120px;flex:none}.pl svg{color:#a3e635}
+.pv{flex:1;color:#e8eaed}.prow>svg{color:#4b5563;width:14px;height:14px}
+/* checklist */
+.ck{display:flex;align-items:center;gap:10px;padding:7px 2px;font-size:14px}
+.cbx{width:17px;height:17px;border-radius:5px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.35);display:grid;place-items:center;flex:none}
+.ck.d .cbx{background:#a3e635;box-shadow:none;color:#000}.ck.d .cbx svg{width:12px;height:12px;stroke-width:3}
+.ck.d span:last-child{color:#7d8794;text-decoration:line-through}
+.ck.add{color:#7d8794}.ck.add svg{width:15px;height:15px}
+.sl,.st{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#7d8794;font-weight:600;margin-bottom:6px}
+.sl span,.st span{letter-spacing:0;color:#9aa3af}
+.notes,.ta{font-size:14px;color:#c9d1db;line-height:1.5;outline:0}
+.ta{padding:12px;border-radius:12px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);min-height:64px}.ta.tall{min-height:110px;margin-bottom:16px}
+.fi{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#bef264;background:rgba(163,230,53,.12);flex:none}
+.att{display:flex;align-items:center;gap:10px;font-size:13px;color:#c9d1db}
+.files{display:flex;flex-direction:column;gap:8px}
+.file{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);font-size:13px}
+.dz{display:flex;align-items:center;gap:8px;padding:11px 12px;border-radius:12px;border:1px dashed rgba(255,255,255,.18);font-size:13px;font-weight:600;color:#c9d1db}.dz small{font-weight:400;margin-left:4px}
+.share{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:8px}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px}
+.inp,.in{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font-size:14px;color:#c9d1db}
+.inp{color:#7d8794}.in svg{color:#a3e635}
+.del{display:flex;align-items:center;gap:8px;color:#f87171;font-size:13px;font-weight:600;padding:8px 0}
+.wx{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#9aa3af}.wx svg{color:#a3e635}
+/* quick view */
+.qv{width:460px;border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:14px;background-color:#0b0d10;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.08),0 30px 80px rgba(0,0,0,.7)}
+.qv.m{width:100%;border-radius:22px;padding:14px;gap:12px}
+.qh{display:flex;align-items:center;gap:10px}.qt{flex:1;font-size:20px;outline:0;border-radius:6px}
+.qv.m .qt{font-size:17px}
+.qv .props{background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.qv.m .pl{width:104px}
+.qmeta{display:flex;justify-content:space-between;align-items:center}
+.qf{display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid rgba(255,255,255,.07)}
+/* edit shared */
+.ed{width:100%;max-width:720px;display:flex;flex-direction:column;gap:14px}
+.ed.m{gap:10px}
+.eh{display:flex;align-items:center;gap:8px}.eh h2{font-size:20px}
+.title{font-size:24px;width:100%;padding:4px 0}
+.ed.m .title{font-size:19px}
+/* A */
+.ed.a .sec{border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.ed.a.m .sec{padding:13px;gap:10px;border-radius:16px}
+.ed.a .sec.danger{background:none;box-shadow:none;padding:0 4px}
+.row2{display:flex;gap:10px}.row2 .fld{flex:1}
+.fld{display:flex;flex-direction:column;gap:6px}.fld>span{font-size:12px;color:#9aa3af}
+.sticky{position:relative;display:flex;justify-content:flex-end;gap:10px;padding:12px 0 2px;background:linear-gradient(transparent,#000 40%)}
+.ed.a.m .sticky .btn{flex:1}
+/* B */
+.ed.b{max-width:none}
+.cols{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
+.mainc{display:flex;flex-direction:column;gap:10px}
+.side{border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.side .prow{padding:10px 4px}.side .pl{width:100px}
+.ed.b.m .cols{grid-template-columns:1fr;gap:12px}
+.ed.b.m .ta.tall{min-height:70px;margin-bottom:6px}
+/* C */
+.ed.c{max-width:640px;gap:16px}.ed.c.m{gap:12px}
+.ttl{display:flex;align-items:flex-start;gap:12px}.tbig{font-size:28px;line-height:1.15}.ed.c.m .tbig{font-size:21px}.ttl .cb{margin-top:6px}
+.blk{display:flex;flex-direction:column;gap:4px}
+.ed.c.m .pl{width:104px}
+</style></head>
+<body><h1 class="pt">Planner task: quick view and edit page</h1><p class="ps">Same features as today, cleaned up. Eclipse styling, Planner lime.</p><svg style="display:none">
+<symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="rep" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 21a7 7 0 0 1 14 0M16 4a3.5 3.5 0 0 1 0 7M22 21a7 7 0 0 0-4-6.3"/></symbol>
+<symbol id="note" viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></symbol>
+<symbol id="cv" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+<symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="tick" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="clip" viewBox="0 0 24 24"><path d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+<symbol id="rain" viewBox="0 0 24 24"><path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 18 9a3 3 0 0 1 0 6z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></symbol>
+<symbol id="back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+<symbol id="trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></symbol>
+</svg>
+<section class="opt"><h2><b>Quick view</b> · What opens when you tap a task</h2><p>Every field is editable right here and saves automatically: tap the title to rename, tap a row (Date, Time, Repeat, Shared, Linked note) to change it, check off or add checklist items, edit notes. Existing attachments are listed but there's no Add files: that lives in the full editor.</p><div class="pair"><div><div class="lbl">Desktop</div><div class="frame"><div class="qv">
+<div class="qh"><span class="cb"></span><div class="qt" contenteditable="true">Put together business plan</div><button class="ib"><svg><use href="#more"/></svg></button><button class="ib"><svg><use href="#x"/></svg></button></div>
+<div class="props">
+<button class="prow "><span class="pl"><svg><use href="#cal"/></svg>Date</span><span class="pv">Fri, Nov 20</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#clock"/></svg>Time</span><span class="pv">All day</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#rep"/></svg>Repeat</span><span class="pv">Doesn't repeat</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#users"/></svg>Shared</span><span class="pv">Only me</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#note"/></svg>Linked note</span><span class="pv">None</span><svg><use href="#cv"/></svg></button>
+</div>
+<div class="qsec"><div class="sl">Checklist <span>2/4</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div></div>
+<div class="qsec"><div class="sl">Notes</div><div class="notes" contenteditable="true">Focus on the Labs subscription idea first.</div></div>
+<div class="qsec"><div class="sl">Attachments <span>1</span></div><div class="att"><span class="fi">PDF</span>Plan draft v2.pdf</div></div>
+<div class="qmeta"><span class="wx"><svg><use href="#rain"/></svg>73° / 68° Drizzle</span><span class="saved"><svg><use href="#tick"/></svg>Saved</span></div>
+<div class="qf"><a class="lnk">Open full editor →</a><button class="btn alt">Close</button></div></div></div></div><div><div class="lbl">Mobile</div><div class="phone"><div class="qv m">
+<div class="qh"><span class="cb"></span><div class="qt" contenteditable="true">Put together business plan</div><button class="ib"><svg><use href="#more"/></svg></button><button class="ib"><svg><use href="#x"/></svg></button></div>
+<div class="props">
+<button class="prow "><span class="pl"><svg><use href="#cal"/></svg>Date</span><span class="pv">Fri, Nov 20</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#clock"/></svg>Time</span><span class="pv">All day</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#rep"/></svg>Repeat</span><span class="pv">Doesn't repeat</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#users"/></svg>Shared</span><span class="pv">Only me</span><svg><use href="#cv"/></svg></button>
+<button class="prow "><span class="pl"><svg><use href="#note"/></svg>Linked note</span><span class="pv">None</span><svg><use href="#cv"/></svg></button>
+</div>
+<div class="qsec"><div class="sl">Checklist <span>2/4</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div></div>
+<div class="qsec"><div class="sl">Notes</div><div class="notes" contenteditable="true">Focus on the Labs subscription idea first.</div></div>
+<div class="qsec"><div class="sl">Attachments <span>1</span></div><div class="att"><span class="fi">PDF</span>Plan draft v2.pdf</div></div>
+<div class="qmeta"><span class="wx"><svg><use href="#rain"/></svg>73° / 68° Drizzle</span><span class="saved"><svg><use href="#tick"/></svg>Saved</span></div>
+<div class="qf"><a class="lnk">Open full editor →</a><button class="btn alt">Close</button></div></div></div></div></div></section><section class="opt"><h2><b>A</b> · Clean sections</h2><p>One column split into clear cards: Details, Checklist, Notes, Attachments, Sharing, Delete. Save/Cancel stay pinned at the bottom. Closest to today, just tidy.</p><div class="pair"><div><div class="lbl">Desktop</div><div class="frame"><div class="ed a"><div class="eh"><button class="ib"><svg><use href="#back"/></svg></button><h2>Edit task</h2></div>
+<div class="sec"><input class="title" value="Put together business plan"><div class="row2"><label class="fld"><span>Date</span><div class="in"><svg><use href="#cal"/></svg>Fri, Nov 20</div></label><label class="fld"><span>Time</span><div class="in"><svg><use href="#clock"/></svg>All day</div></label></div>
+<label class="fld"><span>Repeat</span><div class="in"><svg><use href="#rep"/></svg>Doesn't repeat</div></label></div>
+<div class="sec"><div class="st">Checklist</div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div></div>
+<div class="sec"><div class="st">Notes</div><div class="ta">Focus on the Labs subscription idea first.</div><label class="fld"><span>Linked note</span><div class="in"><svg><use href="#note"/></svg>None</div></label></div>
+<div class="sec"><div class="st">Attachments</div><div class="files"><div class="file"><span class="fi">PDF</span><div><div>Plan draft v2.pdf</div><small>1.0 MB</small></div></div><button class="dz"><svg><use href="#clip"/></svg>Add files <small>or drop here · 15 MB max</small></button></div></div>
+<div class="sec"><div class="st">Sharing</div><div class="share"><span class="av" style="background:#3a2a3a;color:#f9a8d4">S</span><div><div>Sam</div><small>Can edit</small></div><span class="spx"></span><button class="lnk">Change</button></div><div class="inp"><svg><use href="#search"/></svg>Add people or circles…</div></div>
+<div class="sec danger"><button class="del"><svg><use href="#trash"/></svg>Delete task</button></div>
+<div class="sticky"><button class="btn alt">Cancel</button><button class="btn pri">Save</button></div></div></div></div><div><div class="lbl">Mobile</div><div class="phone"><div class="ed a m"><div class="eh"><button class="ib"><svg><use href="#back"/></svg></button><h2>Edit task</h2></div>
+<div class="sec"><input class="title" value="Put together business plan"><div class="row2"><label class="fld"><span>Date</span><div class="in"><svg><use href="#cal"/></svg>Fri, Nov 20</div></label><label class="fld"><span>Time</span><div class="in"><svg><use href="#clock"/></svg>All day</div></label></div>
+<label class="fld"><span>Repeat</span><div class="in"><svg><use href="#rep"/></svg>Doesn't repeat</div></label></div>
+<div class="sec"><div class="st">Checklist</div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div></div>
+<div class="sec"><div class="st">Notes</div><div class="ta">Focus on the Labs subscription idea first.</div><label class="fld"><span>Linked note</span><div class="in"><svg><use href="#note"/></svg>None</div></label></div>
+<div class="sec"><div class="st">Attachments</div><div class="files"><div class="file"><span class="fi">PDF</span><div><div>Plan draft v2.pdf</div><small>1.0 MB</small></div></div><button class="dz"><svg><use href="#clip"/></svg>Add files <small>or drop here · 15 MB max</small></button></div></div>
+<div class="sec"><div class="st">Sharing</div><div class="share"><span class="av" style="background:#3a2a3a;color:#f9a8d4">S</span><div><div>Sam</div><small>Can edit</small></div><span class="spx"></span><button class="lnk">Change</button></div><div class="inp"><svg><use href="#search"/></svg>Add people or circles…</div></div>
+<div class="sec danger"><button class="del"><svg><use href="#trash"/></svg>Delete task</button></div>
+<div class="sticky"><button class="btn alt">Cancel</button><button class="btn pri">Save</button></div></div></div></div></div></section><section class="opt"><h2><b>B</b> · Two columns</h2><p>On desktop: the content (title, notes, checklist, files) on the left and the settings (date, repeat, sharing) in a side panel on the right. Saves automatically. On phones the side panel moves below.</p><div class="pair"><div><div class="lbl">Desktop</div><div class="frame"><div class="ed b"><div class="eh"><button class="ib"><svg><use href="#back"/></svg></button><h2>Edit task</h2><span class="spx"></span><span class="saved"><svg><use href="#tick"/></svg>Saved</span></div><div class="cols"><div class="mainc"><input class="title" value="Put together business plan"><div class="ta tall">Focus on the Labs subscription idea first.</div><div class="st">Checklist <span>2/4</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div><div class="st">Attachments</div><div class="files"><div class="file"><span class="fi">PDF</span><div><div>Plan draft v2.pdf</div><small>1.0 MB</small></div></div><button class="dz"><svg><use href="#clip"/></svg>Add files <small>or drop here · 15 MB max</small></button></div></div><aside class="side"><div class="st">Details</div><button class="prow "><span class="pl"><svg><use href="#cal"/></svg>Date</span><span class="pv">Fri, Nov 20</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#clock"/></svg>Time</span><span class="pv">All day</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#rep"/></svg>Repeat</span><span class="pv">Doesn't repeat</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#note"/></svg>Linked note</span><span class="pv">None</span><svg><use href="#cv"/></svg></button>
+<div class="st" style="margin-top:14px">Sharing</div><div class="share"><span class="av" style="background:#3a2a3a;color:#f9a8d4">S</span><div><div>Sam</div><small>Can edit</small></div><span class="spx"></span><button class="lnk">Change</button></div><div class="inp"><svg><use href="#search"/></svg>Add people or circles…</div><button class="del"><svg><use href="#trash"/></svg>Delete task</button></aside></div></div></div></div><div><div class="lbl">Mobile</div><div class="phone"><div class="ed b m"><div class="eh"><button class="ib"><svg><use href="#back"/></svg></button><h2>Edit task</h2><span class="spx"></span><span class="saved"><svg><use href="#tick"/></svg>Saved</span></div><div class="cols"><div class="mainc"><input class="title" value="Put together business plan"><div class="ta tall">Focus on the Labs subscription idea first.</div><div class="st">Checklist <span>2/4</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div><div class="st">Attachments</div><div class="files"><div class="file"><span class="fi">PDF</span><div><div>Plan draft v2.pdf</div><small>1.0 MB</small></div></div><button class="dz"><svg><use href="#clip"/></svg>Add files <small>or drop here · 15 MB max</small></button></div></div><aside class="side"><div class="st">Details</div><button class="prow "><span class="pl"><svg><use href="#cal"/></svg>Date</span><span class="pv">Fri, Nov 20</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#clock"/></svg>Time</span><span class="pv">All day</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#rep"/></svg>Repeat</span><span class="pv">Doesn't repeat</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#note"/></svg>Linked note</span><span class="pv">None</span><svg><use href="#cv"/></svg></button>
+<div class="st" style="margin-top:14px">Sharing</div><div class="share"><span class="av" style="background:#3a2a3a;color:#f9a8d4">S</span><div><div>Sam</div><small>Can edit</small></div><span class="spx"></span><button class="lnk">Change</button></div><div class="inp"><svg><use href="#search"/></svg>Add people or circles…</div><button class="del"><svg><use href="#trash"/></svg>Delete task</button></aside></div></div></div></div></div></section><section class="opt"><h2><b>C</b> · Property list</h2><p>Like a document: big title, then a short list of property rows you tap to change, then notes, checklist and files. No form boxes at all; saves automatically. Matches the quick view, so both feel like one thing.</p><div class="pair"><div><div class="lbl">Desktop</div><div class="frame"><div class="ed c"><div class="eh"><button class="ib"><svg><use href="#back"/></svg></button><span class="spx"></span><span class="saved"><svg><use href="#tick"/></svg>Saved</span><button class="ib"><svg><use href="#more"/></svg></button></div>
+<div class="ttl"><span class="cb"></span><div class="tbig">Put together business plan</div></div>
+<div class="props"><button class="prow "><span class="pl"><svg><use href="#cal"/></svg>Date</span><span class="pv">Fri, Nov 20</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#clock"/></svg>Time</span><span class="pv">All day</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#rep"/></svg>Repeat</span><span class="pv">Doesn't repeat</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#users"/></svg>Shared</span><span class="pv">Sam (can edit)</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#note"/></svg>Linked note</span><span class="pv">None</span><svg><use href="#cv"/></svg></button></div>
+<div class="blk"><div class="sl">Notes</div><div class="notes">Focus on the Labs subscription idea first.</div></div>
+<div class="blk"><div class="sl">Checklist <span>2/4</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div></div>
+<div class="blk"><div class="sl">Attachments</div><div class="files"><div class="file"><span class="fi">PDF</span><div><div>Plan draft v2.pdf</div><small>1.0 MB</small></div></div><button class="dz"><svg><use href="#clip"/></svg>Add files <small>or drop here · 15 MB max</small></button></div></div></div></div></div><div><div class="lbl">Mobile</div><div class="phone"><div class="ed c m"><div class="eh"><button class="ib"><svg><use href="#back"/></svg></button><span class="spx"></span><span class="saved"><svg><use href="#tick"/></svg>Saved</span><button class="ib"><svg><use href="#more"/></svg></button></div>
+<div class="ttl"><span class="cb"></span><div class="tbig">Put together business plan</div></div>
+<div class="props"><button class="prow "><span class="pl"><svg><use href="#cal"/></svg>Date</span><span class="pv">Fri, Nov 20</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#clock"/></svg>Time</span><span class="pv">All day</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#rep"/></svg>Repeat</span><span class="pv">Doesn't repeat</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#users"/></svg>Shared</span><span class="pv">Sam (can edit)</span><svg><use href="#cv"/></svg></button><button class="prow "><span class="pl"><svg><use href="#note"/></svg>Linked note</span><span class="pv">None</span><svg><use href="#cv"/></svg></button></div>
+<div class="blk"><div class="sl">Notes</div><div class="notes">Focus on the Labs subscription idea first.</div></div>
+<div class="blk"><div class="sl">Checklist <span>2/4</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Outline sections</span></div><div class="ck d"><span class="cbx"><svg><use href="#tick"/></svg></span><span>Market research</span></div><div class="ck"><span class="cbx"></span><span>Financial projections</span></div><div class="ck"><span class="cbx"></span><span>Review with mentor</span></div><div class="ck add"><svg><use href="#plus"/></svg><span>Add item</span></div></div>
+<div class="blk"><div class="sl">Attachments</div><div class="files"><div class="file"><span class="fi">PDF</span><div><div>Plan draft v2.pdf</div><small>1.0 MB</small></div></div><button class="dz"><svg><use href="#clip"/></svg>Add files <small>or drop here · 15 MB max</small></button></div></div></div></div></div></div></section></body></html>

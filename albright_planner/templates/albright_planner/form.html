@@ -1,84 +1,194 @@
 {% extends "albright_planner/base.html" %}
 {% block page_title %}{% if item %}{{ item.title }}{% else %}New item{% endif %} · {% endblock %}
 {% block planner %}{% load planner_extras %}
-{% comment %}
-The full item form (new and edit). Repeats are plain choices - the extra
-fields for each show only when they apply (planner.js; all show without JS) -
-and the summary under them reads the choice back in plain English. Editing a
-repeating item asks which occurrences the change applies to.
-{% endcomment %}
+{% if not item %}
+{% comment %}New item: the full form (repeats are plain choices - the extra fields for each show only when they apply).{% endcomment %}
 <div class="pl-form-wrap">
-    <h1 class="pl-title">{% if item %}{% if can_edit %}Edit{% else %}View{% endif %} &ldquo;{{ item.title }}&rdquo;{% else %}New item{% endif %}</h1>
-    {% if item %}
-    <p class="pl-muted pl-small">
-        {% if repeat_text %}<span id="pl-one-at-a-time">{{ repeat_text }}</span> &middot; {% if done %}this one: {{ occurrence|date:"D M j, Y" }} &middot; done{% else %}due {{ occurrence|date:"D M j, Y" }}{% endif %}{% elif item.repeats %}{{ summary }} &middot; this occurrence: {{ occurrence|date:"D M j, Y" }}{% if done %} &middot; done{% endif %}{% else %}{{ item.date|date:"D M j, Y" }}{% endif %}
-        {% if done and done_by %}{% if not is_owner or shared_with %} &middot; <span id="pl-done-by">Done by {{ done_by }}</span>{% endif %}{% endif %}
-        {% if not is_owner %} &middot; <span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> <span id="pl-shared-by">Shared by {{ owner_name }}</span>{% if not can_edit %} (view only){% else %} (you can edit){% endif %}{% endif %}
-        {% if is_owner and shared_with %} &middot; <span id="pl-shared-with">Shared with {{ shared_with|join:", " }}</span>{% endif %}
-        {% if item.from_bot %} &middot; added by {{ item.created_by }}{% endif %}
-        {% if item.source_href %} &middot; <a href="{{ item.source_href }}"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app</a>{% if item.locked %} (kept up to date from there - view only){% endif %}{% endif %}
-    </p>
-    {% endif %}
-
+    <h1 class="pl-title">New item</h1>
     {% include "albright_planner/_item_form.html" %}
-
-    {% if item %}{% if checklist or can_edit and item.kind == "task" %}
-    <section class="pl-section" id="checklist" aria-labelledby="pl-cl-h">
-        <h2 class="pl-section__title" id="pl-cl-h">{% if item.repeats %}This occurrence&rsquo;s checklist{% else %}Checklist{% endif %} {% if checklist_progress %}<span class="pl-muted pl-small" id="pl-cl-progress" title="{{ checklist_progress.title }}" data-cl-progress>{{ checklist_progress.label }}</span>{% endif %}</h2>
-        {% if checklist %}<ul class="pl-cl__rows pl-cl__rows--full" data-cl-list>{% for row in checklist %}{% if can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=True %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=False %}{% endif %}{% endfor %}</ul>
-        {% else %}<p class="pl-muted pl-small">No checklist{% if item.repeats %} on this occurrence{% endif %}{% if can_edit %} &ndash; add items under Checklist above{% endif %}.</p>{% endif %}
-        <p class="pl-muted pl-small">{% if checklist.0.grocery_item_id %}These are lines on the Meals grocery list: checking one here checks it there, and the other way round. {% endif %}{% if checklist %}{% if item.repeats %}Ticks are for {{ occurrence|date:"D M j" }} only &ndash; every occurrence starts with all items open. {% endif %}The task checks itself off when every item is checked (Planner settings).{% endif %}</p>
-    </section>
-    {% endif %}{% endif %}
-
-    {% if item %}
-    <section class="pl-section" id="note" aria-labelledby="pl-note-h">
-        <h2 class="pl-section__title" id="pl-note-h">Note</h2>
-        {% if linked_note.title %}
-        <a href="{{ linked_note.url }}" class="pl-note-card" id="pl-linked-note">
-            <span class="pl-note-card__title">&#x1F4DD; {{ linked_note.title }}</span>
-            {% if linked_note.preview %}<span class="pl-note-card__preview">{{ linked_note.preview }}</span>{% endif %}
-        </a>
-        {% elif linked_note.hidden %}<p class="pl-muted pl-small" id="pl-linked-note">A note is linked, but it isn't shared with you.</p>
-        {% elif linked_note.deleted %}<p class="pl-muted pl-small" id="pl-linked-note">Note deleted</p>
-        {% elif not can_note %}<p class="pl-muted pl-small">No note linked.</p>{% endif %}
-        {% if can_edit and item.note_id %}
-        <form method="post" action="{% url 'albright_planner:item_note' item.pk %}" class="pl-inline">{% csrf_token %}<input type="hidden" name="action" value="detach"><button type="submit" class="pl-btn pl-btn--ghost" id="pl-note-detach">Remove note from item</button></form>
-        {% elif can_note %}
-        <div class="pl-actions">
-            {% if note_choices %}
-            <form method="post" action="{% url 'albright_planner:item_note' item.pk %}" class="pl-inline" id="pl-note-attach">{% csrf_token %}
-                <input type="hidden" name="action" value="attach">
-                <label for="pl-note-pick" class="visually-hidden">Note to attach</label>
-                <select name="note" id="pl-note-pick" class="pl-input pl-select" required><option value="">Attach note&hellip;</option>{% for n in note_choices %}<option value="{{ n.pk }}">{{ n.title }}</option>{% endfor %}</select>
-                <button type="submit" class="pl-btn">Attach note</button>
-            </form>
-            {% endif %}
-            <form method="post" action="{% url 'albright_planner:item_note' item.pk %}" class="pl-inline">{% csrf_token %}<input type="hidden" name="action" value="new"><button type="submit" class="pl-btn" id="pl-note-new">New note</button></form>
-        </div>
-        {% endif %}
-    </section>
-    {% endif %}
-
-    {% if item and att.count or item and att.can_edit %}<div class="pl-section" id="pl-attachments">{% include "albright_labs/_attachments.html" %}</div>{% endif %}
-
-    {% if item and can_remove %}
-    <section class="pl-section" id="delete">
-        <h2 class="pl-section__title">{% if item.repeats %}Remove{% else %}Delete{% endif %}</h2>
-        <div class="pl-actions">
-            {% if item.repeats %}
-            <form method="post" action="{% url 'albright_planner:remove' item.pk %}">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="this"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-btn" id="pl-skip">{% if is_current %}Skip this one{% else %}Skip this occurrence{% endif %}</button></form>
-            {% if is_owner %}
-            <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="End this series before {{ occurrence|date:'M j' }}? Earlier occurrences stay.">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="following"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-btn">Delete this and following</button></form>
-            <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="Delete every occurrence of &ldquo;{{ item.title }}&rdquo;? This can't be undone.">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="all"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-btn pl-btn--danger">Delete all occurrences</button></form>
-            {% endif %}
-            {% elif is_owner %}
-            <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="Delete &ldquo;{{ item.title }}&rdquo;? This can't be undone.">{% csrf_token %}<input type="hidden" name="scope" value="all"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-btn pl-btn--danger" id="pl-delete">Delete</button></form>
-            {% endif %}
-        </div>
-    </section>
-    {% endif %}
-
-    {% if item %}{% include "albright_labs/_share.html" %}{% endif %}
 </div>
+{% else %}
+{% comment %}
+An item's edit page - Option C "Property list" of docs/design/planner_task_options.html. Back and ⋯ on top; the check
+box and the big title; property rows you tap to change (Date, Time, Repeat, Changes apply to, Shared, Linked note,
+Location, Type, Priority, Color, and who owns it); then Notes, the Checklist (drag to reorder) and Attachments.
+Nothing is saved until Save - the floating button in the dock (planner.js), or Ctrl/Cmd+S; leaving with changes asks
+first. It stays on this page after saving. Acting on the item itself happens at once, as everywhere: checking it or
+a checklist item off, sharing (its own control), attachments, and the ⋯ menu (skip, duplicate, delete).
+All the form's fields are ItemForm's (forms.py) inside #pl-form, so planner.js's repeat and checklist editors work as
+on the New item form; the title sits above the form but belongs to it (form="pl-form").
+{% endcomment %}
+<div class="pl-ed{% if o.done %} is-done{% endif %}" data-edit-page>
+    <div class="pl-ed__bar">
+        <a href="{{ back_url|default:next }}" class="pl-ed__back" data-ed-back aria-label="Back" title="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></a>
+        <span class="pl-ed__where">{% if item.repeats %}{% if repeat_text %}{% if done %}This one: {{ occurrence|date:"D M j" }} &middot; done{% else %}Due {{ occurrence|date:"D M j" }}{% endif %}{% else %}This occurrence: {{ occurrence|date:"D M j, Y" }}{% if done %} &middot; done{% endif %}{% endif %}{% elif done %}Done{% endif %}{% if done and done_by %}{% if not is_owner or shared_with %} by {{ done_by }}{% endif %}{% endif %}</span>
+        <details class="pl-menu" id="pl-ed-menu" data-menu data-menu-scope="pl">
+            <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
+            <div class="pl-menu__panel" data-menu-panel>
+                {% if item.source_href %}<a href="{{ item.source_href }}" class="pl-menu__item"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app &#x2197;</a>{% endif %}
+                {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=next uid="edmenu" label=item.is_weigh_in|yesno:"Skip weigh-in…,Skip workout…" btn_class="pl-menu__item" %}{% endif %}
+                <form method="post" action="{% url 'albright_planner:duplicate' item.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item" id="pl-ed-duplicate">Duplicate</button></form>
+                {% if can_remove %}{% if item.repeats %}
+                <form method="post" action="{% url 'albright_planner:remove' item.pk %}">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="this"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item" id="pl-skip">{% if is_current %}Skip this one{% else %}Skip this occurrence{% endif %}</button></form>
+                {% if is_owner %}
+                <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="End this series before {{ occurrence|date:'M j' }}? Earlier occurrences stay.">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="following"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item pl-menu__item--danger">Delete this and following</button></form>
+                <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="Delete every occurrence of &ldquo;{{ item.title }}&rdquo;? This can't be undone.">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="all"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item pl-menu__item--danger">Delete all occurrences</button></form>
+                {% endif %}
+                {% elif is_owner %}
+                <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="Delete &ldquo;{{ item.title }}&rdquo;? This can't be undone.">{% csrf_token %}<input type="hidden" name="scope" value="all"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item pl-menu__item--danger" id="pl-delete">Delete</button></form>
+                {% endif %}{% endif %}
+            </div>
+        </details>
+    </div>
+
+    <div class="pl-ed__titlerow">
+        {% if item.checkable %}{% if can_edit %}
+        <form method="post" action="{% url 'albright_planner:toggle' item.pk %}" class="pl-check-form">{% csrf_token %}
+            <input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}" data-ed-occurrence><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="pl-check pl-check--lg" id="pl-ed-check" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-label="Done: {{ o.title }}"><svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </form>
+        {% else %}<span class="pl-check pl-check--lg is-readonly" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-disabled="true" aria-label="Done: {{ o.title }} (view only)"><svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endif %}
+        {% else %}<span class="pl-dot pl-ed__dot" aria-hidden="true"></span>{% endif %}
+        <div class="pl-ed__titlebox">{{ form.title }}{% for e in form.title.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
+    </div>
+
+    <form method="post" class="pl-form pl-ed__form" id="pl-form" data-edit-form novalidate>{% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">{% if then %}<input type="hidden" name="then" value="{{ then }}">{% endif %}
+        <input type="hidden" name="occurrence" value="{{ occurrence|date:'Y-m-d' }}" data-ed-occurrence>
+        <p class="pl-error pl-error--banner" id="pl-form-errors" role="alert"{% if not form.errors %} hidden{% endif %}>Not saved yet - fix what&rsquo;s marked below. Everything you typed is still here.</p>
+        {% if form.non_field_errors %}<p class="pl-error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+        <fieldset class="pl-fieldset"{% if not can_edit %} disabled{% endif %}>
+        <div class="pl-props" id="pl-props">
+            <details class="pl-prop" data-prop="date"{% if form.date.errors %} open{% endif %}>
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="date" %}Date</span><span class="pl-prop__value" data-prop-value>{{ props.date }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body"><label for="{{ form.date.id_for_label }}" class="visually-hidden">Date</label>{{ form.date }}{% for e in form.date.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
+            </details>
+            <details class="pl-prop" data-prop="time"{% if form.start_time.errors or form.end_time.errors %} open{% endif %}>
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="time" %}Time</span><span class="pl-prop__value" data-prop-value>{{ props.time }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body pl-prop__times">
+                    <label class="pl-prop__field"><span class="pl-label">Starts</span>{{ form.start_time }}</label>
+                    <label class="pl-prop__field"><span class="pl-label">Ends</span>{{ form.end_time }}</label>
+                    <button type="button" class="pl-btn pl-btn--ghost" data-all-day>All day</button>
+                    {% for e in form.start_time.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}{% for e in form.end_time.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}
+                </div>
+            </details>
+            <details class="pl-prop" data-prop="repeat"{% if form.until.errors or form.count.errors or form.day_interval.errors %} open{% endif %}>
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="repeat" %}Repeat</span><span class="pl-prop__value" data-prop-value>{{ props.repeat }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body pl-repeat" id="pl-repeat">
+                    <div class="pl-field"><label for="{{ form.repeat.id_for_label }}" class="visually-hidden">Repeat</label>{{ form.repeat }}</div>
+                    <div class="pl-field" data-show-for="weekly every_n_weeks"><span class="pl-label">On</span><div class="pl-days">{% for c in form.days %}<label class="pl-day-chip">{{ c.tag }}<span>{{ c.choice_label }}</span></label>{% endfor %}</div></div>
+                    <div class="pl-field" data-show-for="every_n_weeks">{{ form.interval.label_tag }}{{ form.interval }}</div>
+                    <div class="pl-field" data-show-for="every_n_days">{{ form.day_interval.label_tag }}{{ form.day_interval }}{% for e in form.day_interval.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
+                    <div class="pl-field" data-show-for="monthly_day">{{ form.month_day.label_tag }}{{ form.month_day }}</div>
+                    <div class="pl-grid" data-show-for="monthly_nth">
+                        <div class="pl-field">{{ form.nth.label_tag }}{{ form.nth }}</div>
+                        <div class="pl-field">{{ form.nth_weekday.label_tag }}{{ form.nth_weekday }}</div>
+                    </div>
+                    <div class="pl-field" data-show-for="daily every_n_days weekdays weekly every_n_weeks monthly_day monthly_nth yearly">
+                        <span class="pl-label">Ends</span>
+                        <div class="pl-radios">{% for r in form.ends %}<label class="pl-radio">{{ r.tag }} {{ r.choice_label }}</label>{% endfor %}</div>
+                        <div class="pl-grid">
+                            <div class="pl-field" data-ends="on">{{ form.until.label_tag }}{{ form.until }}{% for e in form.until.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
+                            <div class="pl-field" data-ends="after">{{ form.count.label_tag }}{{ form.count }}{% for e in form.count.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
+                        </div>
+                        <label class="pl-toggle" data-ends="never" data-kind="task" id="pl-from-completion">{{ form.repeat_from_completion }} {{ form.repeat_from_completion.label }}</label>
+                        <span class="pl-help" data-ends="never" data-kind="task">{{ form.repeat_from_completion.help_text }}</span>
+                    </div>
+                    <p class="pl-summary" id="pl-summary" aria-live="polite">{% if summary %}{{ summary }}{% endif %}</p>
+                </div>
+            </details>
+            {% if form.scope %}
+            <details class="pl-prop" data-prop="scope" id="pl-scope-field">
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="scope" %}Save to</span><span class="pl-prop__value" data-prop-value>This occurrence</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body">
+                    <div class="pl-radios pl-radios--stack">{% for r in form.scope %}<label class="pl-radio">{{ r.tag }} {{ r.choice_label }}</label>{% endfor %}</div>
+                    <span class="pl-help">&ldquo;This occurrence only&rdquo; changes its title, day and start time; the rest applies to the series. The checklist changes from {% if checklist_from %}{{ checklist_from|date:"D M j" }}{% else %}this occurrence{% endif %} on &ndash; earlier occurrences keep their own list and ticks.</span>
+                </div>
+            </details>
+            {% endif %}
+            <button type="button" class="pl-prop__row pl-prop__row--btn" data-share-open aria-haspopup="dialog" aria-controls="pl-ed-share">
+                <span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="shared" %}Shared</span>
+                <span class="pl-prop__value">{% if not is_owner %}Shared by {{ owner_name }}{% if can_edit %} (you can edit){% else %} (view only){% endif %}{% elif shared_with %}{{ shared_with|join:", " }}{% else %}Only me{% endif %}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}
+            </button>
+            <details class="pl-prop" data-prop="note">
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="note" %}Linked note</span><span class="pl-prop__value" data-prop-value data-note-value>{{ note_text }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body">
+                    {% if can_note %}
+                    <label for="pl-note-pick" class="visually-hidden">Linked note</label>
+                    <select name="note_choice" id="pl-note-pick" class="pl-input pl-select">
+                        <option value="keep" selected data-label="{{ note_text }}">{% if linked_note.title %}{{ linked_note.title }}{% else %}{{ note_text }}{% endif %}</option>
+                        {% if item.note_id %}<option value="none" data-label="None">No note</option>{% endif %}
+                        {% for n in note_choices %}{% if n.pk != item.note_id %}<option value="{{ n.pk }}" data-label="{{ n.title }}">{{ n.title }}</option>{% endif %}{% endfor %}
+                        <option value="new" data-label="New note (made when you save)">New note, titled from this item</option>
+                    </select>
+                    {% else %}<p class="pl-muted pl-small">{% if linked_note.hidden %}A note is linked, but it isn&rsquo;t shared with you.{% elif linked_note.deleted %}The linked note was deleted.{% elif not linked_note %}No note linked.{% endif %}</p>{% endif %}
+                    <a href="{{ linked_note.url|default:'#' }}" class="pl-prop__link" data-note-link{% if not linked_note.url %} hidden{% endif %}>Open in Notes &rarr;</a>
+                </div>
+            </details>
+            <details class="pl-prop" data-prop="place"{% if form.location.errors %} open{% endif %}>
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="place" %}Location</span><span class="pl-prop__value" data-prop-value>{{ item.location_label|default:"Home" }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body pl-field" id="pl-location-field"><label for="{{ form.location.id_for_label }}" class="visually-hidden">Location</label>{{ form.location }}<span class="pl-help">{{ form.location.help_text }}</span>{% for e in form.location.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
+            </details>
+            <details class="pl-prop" data-prop="kind">
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="kind" %}Type</span><span class="pl-prop__value" data-prop-value>{{ item.get_kind_display }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body">
+                    <div class="pl-radios" id="pl-kind-radios">{% for r in form.kind %}<label class="pl-radio">{{ r.tag }} {{ r.choice_label }}</label>{% endfor %}</div>
+                    <label class="pl-toggle" id="pl-checkable">{{ form.checkable }} {{ form.checkable.label }}</label>
+                </div>
+            </details>
+            <details class="pl-prop" data-prop="priority">
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="priority" %}Priority</span><span class="pl-prop__value" data-prop-value>{{ item.get_priority_display }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body"><label for="{{ form.priority.id_for_label }}" class="visually-hidden">Priority</label>{{ form.priority }}</div>
+            </details>
+            <details class="pl-prop" data-prop="color">
+                <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="color" %}Color</span><span class="pl-prop__value" data-prop-value>&nbsp;</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
+                <div class="pl-prop__body"><label for="{{ form.color.id_for_label }}" class="visually-hidden">Color</label>{{ form.color }}</div>
+            </details>
+            {% if not is_owner or item.from_bot %}
+            <div class="pl-prop__row pl-prop__row--info">
+                <span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="owner" %}Owner</span>
+                <span class="pl-prop__value">{% if not is_owner %}<span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> <span id="pl-shared-by">{{ owner_name }}</span>{% else %}You{% endif %}{% if item.from_bot %} &middot; added by {{ item.created_by }}{% endif %}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Notes: Markdown, in the shared editor (templates/_md_editor.html) - rendered on the quick view like a note. #}
+        <section class="pl-ed__blk pl-field--notes{% if form.notes.errors %} has-error{% endif %}" aria-labelledby="pl-ed-notes-h">
+            <h2 class="pl-ed__label" id="pl-ed-notes-h"><label for="{{ form.notes.id_for_label }}">Notes</label></h2>
+            {% url 'albright_planner:notes_preview' as notes_preview_url %}{% include "_md_editor.html" with field=form.notes preview_url=notes_preview_url %}
+            {% for e in form.notes.errors %}<span class="pl-error" id="pl-notes-error">{{ e }}</span>{% endfor %}
+            <span class="pl-help">Markdown: **bold**, *italic*, ## heading, - list, 1. list, - [ ] checklist, [link](https://&hellip;).</span>
+        </section>
+
+        <section class="pl-ed__blk pl-cl-edit" id="pl-cl-edit" data-kind-only="task" aria-labelledby="pl-cl-edit-h">
+            <h2 class="pl-ed__label" id="pl-cl-edit-h">Checklist {% if checklist_progress %}<span class="pl-ed__count" title="{{ checklist_progress.title }}" data-cl-progress>{{ checklist_progress.label }}</span>{% endif %}</h2>
+            <input type="hidden" name="cl_section" value="1">
+            <ol class="pl-cl-edit__rows" id="pl-cl-edit-rows" aria-labelledby="pl-cl-edit-h">{% include "albright_planner/_ed_checklist.html" with can_tick=can_tick %}</ol>
+            <span class="pl-help">{% if checklist and checklist.0.grocery_item_id %}These are lines on the Meals grocery list: checking one here checks it there. {% endif %}A tick saves at once{% if item.repeats %} (for {{ occurrence|date:"D M j" }} only){% endif %}; new, renamed, reordered or removed items save with Save. Drag the handle, or use the arrows, to reorder.</span>
+        </section>
+        </fieldset>
+    </form>
+
+    {% if att.count or att.can_edit %}<div class="pl-ed__blk" id="pl-attachments">{% include "albright_labs/_attachments.html" %}</div>{% endif %}
+
+    {# Sharing has its own control (it saves at once, as everywhere); the Shared row opens it here. #}
+    <dialog class="pl-ed-share" id="pl-ed-share" aria-label="Sharing">
+        <div class="pl-ed-share__head"><span class="pl-ed-share__title">Sharing</span><button type="button" class="pl-view__close" data-share-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+        {% include "albright_labs/_share.html" %}
+        <p class="pl-help pl-ed-share__note">Sharing changes save right away.</p>
+    </dialog>
+
+    <dialog class="pl-dialog pl-unsaved" id="pl-unsaved" aria-labelledby="pl-unsaved-h">
+        <h2 id="pl-unsaved-h">You have unsaved changes</h2>
+        <p class="pl-muted pl-small">Save them before leaving?</p>
+        <div class="pl-dialog__actions">
+            <button type="button" class="pl-btn pl-btn--primary" data-unsaved="save">Save</button>
+            <button type="button" class="pl-btn pl-btn--danger" data-unsaved="discard">Discard</button>
+            <button type="button" class="pl-btn" data-unsaved="keep">Keep editing</button>
+        </div>
+    </dialog>
+</div>
+{% endif %}
 {% endblock %}
+
+{% block fab_items %}{% if item and can_edit %}<div class="pl-save-wrap"><p class="pl-save-msg" id="pl-save-msg" role="alert" hidden></p><button type="submit" form="pl-form" class="pl-save-fab" id="pl-save" data-state="dirty" aria-keyshortcuts="Control+S Meta+S" title="Save (Ctrl/Cmd+S)"><svg class="pl-save-fab__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span class="pl-save-fab__dot" aria-hidden="true"></span><span class="pl-save-fab__label">Save</span></button></div>{% endif %}{% endblock %}

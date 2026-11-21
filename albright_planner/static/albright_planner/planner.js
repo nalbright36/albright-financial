@@ -426,7 +426,7 @@
     }, true);
 
     // ---------- The view panel ----------
-    var viewDialog = null, viewOpener = null, viewPushed = false;
+    var viewDialog = null, viewOpener = null, viewPushed = false, reloadOnPop = false;
     var canDialog = !!(window.fetch && document.createElement("dialog").showModal);
     function viewBox() {
         if (viewDialog) return viewDialog;
@@ -441,13 +441,21 @@
             if (close) { event.preventDefault(); viewDialog.close(); }
         });
         viewDialog.addEventListener("close", function () {
+            // Something was changed in the quick view: the calendar under it reloads to show it.
+            var changed = viewDialog.dataset.changed === "1";
+            viewDialog.dataset.changed = "";
             viewDialog.innerHTML = "";
-            if (viewPushed) { viewPushed = false; history.back(); }                  // the URL back to the calendar's
+            if (viewPushed) {                                                        // the URL back to the calendar's
+                viewPushed = false;
+                reloadOnPop = changed;
+                history.back();
+            } else if (changed) window.location.reload();
             if (viewOpener && document.contains(viewOpener)) viewOpener.focus();
         });
         return viewDialog;
     }
     window.addEventListener("popstate", function () {                                // Back (a phone's too) closes it
+        if (reloadOnPop) { reloadOnPop = false; window.location.reload(); return; }
         if (viewDialog && viewDialog.open) { viewPushed = false; viewDialog.close(); }
     });
     function clampNotes(scope) {
@@ -479,6 +487,7 @@
             var edit = box.querySelector("[data-view-edit]");
             if (edit) edit.href = edit.href.replace("then=view", "then=panel");     // saving comes back to this dialog
             if (!box.open) box.showModal();
+            box.querySelectorAll("[data-qv-title]").forEach(qvGrow);              // a long title wraps
             clampNotes(box);
             var close = box.querySelector(".pl-view__close");
             if (close) close.focus();
@@ -966,4 +975,510 @@
             if (field) field.focus({preventScroll: true});
         }
     }
+    // ---------- The quick view: every change saves on its own (views.quick_edit) ----------
+    // The panel carries data-quick-url for someone who can edit the item. A change shows at once; the request runs
+    // in the background ("Saving…" / "Saved" in the corner); if it fails, the old value comes back with the reason.
+    // Closing the dialog after a change reloads the calendar under it, so it shows the change too.
+    var DAYS3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    var MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function qvPanel(el) { return el && el.closest ? el.closest("[data-quick-url]") : null; }
+    function qvStatus(panel, text, state) {
+        var s = panel.querySelector("[data-qv-status]");
+        if (!s) return;
+        s.className = "pl-qv__saved" + (state ? " is-" + state : "");
+        s.textContent = text;
+    }
+    function qvValue(panel, key, text) {
+        var v = panel.querySelector('[data-qv-value="' + key + '"]');
+        if (v && text !== undefined && text !== null) v.textContent = text;
+        return v ? v.textContent : "";
+    }
+    function qvSave(panel, fields) {
+        var body = new FormData();
+        body.append("date", panel.dataset.date);
+        Object.keys(fields).forEach(function (k) { body.append(k, fields[k]); });
+        qvStatus(panel, "Saving…", "saving");
+        return post(panel.dataset.quickUrl, body).then(function (res) {
+            if (!res.ok || !res.data.ok) throw new Error((res.data && res.data.error) || "check your connection and try again.");
+            var dialog = panel.closest("dialog");
+            if (dialog) dialog.dataset.changed = "1";
+            if (res.data.occurrence && res.data.occurrence !== panel.dataset.date) {
+                panel.dataset.date = res.data.occurrence;
+                panel.querySelectorAll('input[name=date]').forEach(function (i) { i.value = res.data.occurrence; });
+            }
+            ["date", "time", "repeat"].forEach(function (k) { if (res.data[k]) qvValue(panel, k, res.data[k]); });
+            qvStatus(panel, "Saved", "saved");
+            return res.data;
+        }).catch(function (err) {
+            qvStatus(panel, "Couldn’t save – " + (err && err.message ? err.message : "try again."), "error");
+            throw err;
+        });
+    }
+    function qvDate(iso) {
+        var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+        if (!p) return iso;
+        var d = new Date(+p[1], +p[2] - 1, +p[3]);
+        return DAYS3[d.getDay()] + ", " + MONTHS3[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== new Date().getFullYear() ? ", " + d.getFullYear() : "");
+    }
+    function qvClock(hm) {
+        var p = /^(\d{1,2}):(\d{2})/.exec(hm || "");
+        if (!p) return "";
+        var h = +p[1], ampm = h < 12 ? "AM" : "PM";
+        return ((h % 12) || 12) + ":" + p[2] + " " + ampm;
+    }
+    function qvTimeText(start, end) {
+        if (!start) return "All day";
+        return qvClock(start) + (end ? "–" + qvClock(end) : "");
+    }
+    function qvClosePickers(panel, except) {
+        panel.querySelectorAll("[data-qv-pick][aria-expanded=true]").forEach(function (b) {
+            if (b === except) return;
+            b.setAttribute("aria-expanded", "false");
+            var picker = b.parentNode.querySelector(".pl-qv__picker");
+            if (picker) picker.hidden = true;
+        });
+    }
+    function qvGrow(area) { area.style.height = "auto"; area.style.height = area.scrollHeight + "px"; }
+
+    document.addEventListener("click", function (event) {
+        var panel = qvPanel(event.target);
+        if (!panel) return;
+        var pick = event.target.closest("[data-qv-pick]");
+        if (pick) {                                                    // a property row: its picker
+            var picker = pick.parentNode.querySelector(".pl-qv__picker"), open = pick.getAttribute("aria-expanded") !== "true";
+            qvClosePickers(panel, pick);
+            pick.setAttribute("aria-expanded", open ? "true" : "false");
+            if (picker) {
+                picker.hidden = !open;
+                var first = open && picker.querySelector("input:not([type=hidden]), select");
+                if (first) first.focus();
+            }
+            return;
+        }
+        if (event.target.closest("[data-qv-allday]")) {                // Time: All day
+            var box = event.target.closest(".pl-qv__picker"), before = qvValue(panel, "time");
+            var inputs = box.querySelectorAll("[data-qv-time]"), old = [inputs[0].value, inputs[1].value];
+            inputs.forEach(function (i) { i.value = ""; });
+            qvValue(panel, "time", "All day");
+            qvSave(panel, {field: "time", start: "", end: ""}).catch(function () {
+                inputs[0].value = old[0]; inputs[1].value = old[1];
+                qvValue(panel, "time", before);
+            });
+            return;
+        }
+        var add = event.target.closest("[data-qv-notes-add]");
+        var notesView = !add && event.target.closest("[data-qv-notes-view]");
+        if ((add || notesView) && !event.target.closest("a, input")) { qvEditNotes(panel); return; }
+        var rowText = event.target.closest("[data-qv-row-text]");
+        if (rowText && !rowText.querySelector("input")) qvRenameRow(panel, rowText);
+    });
+    document.addEventListener("keydown", function (event) {
+        var panel = qvPanel(event.target);
+        if (!panel || (event.key !== "Enter" && event.key !== " ")) return;
+        if (event.target.matches("[data-qv-notes-view]")) { event.preventDefault(); qvEditNotes(panel); }
+        else if (event.target.matches("[data-qv-row-text]") && !event.target.querySelector("input")) { event.preventDefault(); qvRenameRow(panel, event.target); }
+    });
+
+    // Date, repeat and the linked note save on change; the time a moment after the last change.
+    var qvTimer = null;
+    document.addEventListener("change", function (event) {
+        var panel = qvPanel(event.target), el = event.target;
+        if (!panel) return;
+        var field = el.getAttribute("data-qv-field");
+        if (field === "date") {
+            if (!el.value) return;
+            var was = qvValue(panel, "date"), oldDate = el.defaultValue;
+            qvValue(panel, "date", qvDate(el.value));
+            qvSave(panel, {field: "date", value: el.value}).then(function () { el.defaultValue = el.value; }).catch(function () {
+                el.value = oldDate; qvValue(panel, "date", was);
+            });
+        } else if (field === "repeat") {
+            var wasRepeat = qvValue(panel, "repeat"), oldIndex = Array.prototype.findIndex.call(el.options, function (o) { return o.defaultSelected; });
+            qvValue(panel, "repeat", el.value === "none" ? "Doesn't repeat" : el.options[el.selectedIndex].text);
+            qvSave(panel, {field: "repeat", value: el.value}).then(function () {
+                Array.prototype.forEach.call(el.options, function (o) { o.defaultSelected = o.selected; });
+            }).catch(function () { if (oldIndex >= 0) el.selectedIndex = oldIndex; qvValue(panel, "repeat", wasRepeat); });
+        } else if (field === "note") {
+            var wasNote = qvValue(panel, "note"), oldNote = Array.prototype.findIndex.call(el.options, function (o) { return o.defaultSelected; });
+            qvValue(panel, "note", el.value === "none" ? "None" : el.value === "new" ? "New note…" : el.options[el.selectedIndex].text);
+            qvSave(panel, {field: "note", value: el.value}).then(function (data) {
+                qvValue(panel, "note", data.note);
+                if (el.value === "new" && data.note_id) {                // the new note joins the list, chosen
+                    var opt = document.createElement("option");
+                    opt.value = data.note_id; opt.textContent = data.note;
+                    el.insertBefore(opt, el.options[1] || null);
+                    el.value = String(data.note_id);
+                }
+                Array.prototype.forEach.call(el.options, function (o) { o.defaultSelected = o.selected; });
+            }).catch(function () { if (oldNote >= 0) el.selectedIndex = oldNote; qvValue(panel, "note", wasNote); });
+        }
+    });
+    document.addEventListener("input", function (event) {
+        var panel = qvPanel(event.target), el = event.target;
+        if (!panel) return;
+        if (el.matches("[data-qv-title]")) { qvGrow(el); return; }
+        if (!el.matches("[data-qv-time]")) return;
+        var box = el.closest(".pl-qv__picker"), start = box.querySelector('[data-qv-time="start"]'), end = box.querySelector('[data-qv-time="end"]');
+        clearTimeout(qvTimer);
+        qvTimer = setTimeout(function () {
+            if (!start.value && end.value) return;                       // waits for a start time
+            var was = qvValue(panel, "time"), old = [start.defaultValue, end.defaultValue];
+            qvValue(panel, "time", qvTimeText(start.value, end.value));
+            qvSave(panel, {field: "time", start: start.value, end: end.value}).then(function () {
+                start.defaultValue = start.value; end.defaultValue = end.value;
+            }).catch(function () { start.value = old[0]; end.value = old[1]; qvValue(panel, "time", was); });
+        }, 700);
+    });
+
+    // The title: Enter (or leaving it) saves; Esc puts it back.
+    document.addEventListener("keydown", function (event) {
+        var el = event.target;
+        if (!el.matches || !el.matches("[data-qv-title]")) return;
+        if (event.key === "Enter") { event.preventDefault(); el.blur(); }
+        else if (event.key === "Escape") { el.value = el.dataset.saved; el.blur(); event.stopPropagation(); }
+    });
+    document.addEventListener("focusout", function (event) {
+        var el = event.target, panel = qvPanel(el);
+        if (!panel || !el.matches("[data-qv-title]")) return;
+        var text = el.value.replace(/\s+/g, " ").trim();
+        if (!text) { el.value = el.dataset.saved; qvGrow(el); return; }
+        if (text === el.dataset.saved) return;
+        var was = el.dataset.saved;
+        el.dataset.saved = text;
+        qvSave(panel, {field: "title", value: text}).catch(function () { el.value = el.dataset.saved = was; qvGrow(el); });
+    });
+
+    // Notes: tap them (or "Add notes") to edit the Markdown; leaving the box saves and shows them rendered again.
+    function qvEditNotes(panel) {
+        var area = panel.querySelector("[data-qv-notes]"), view = panel.querySelector("[data-qv-notes-view]");
+        var add = panel.querySelector("[data-qv-notes-add]"), more = panel.querySelector("#pl-view-notes [data-show-more]");
+        if (!area) return;
+        area.hidden = false;
+        if (view) view.hidden = true;
+        if (add) add.hidden = true;
+        if (more) more.hidden = true;
+        area.dataset.saved = area.value;
+        qvGrow(area);
+        area.focus();
+    }
+    document.addEventListener("focusout", function (event) {
+        var area = event.target, panel = qvPanel(area);
+        if (!panel || !area.matches("[data-qv-notes]")) return;
+        var view = panel.querySelector("[data-qv-notes-view]"), add = panel.querySelector("[data-qv-notes-add]");
+        function show(html) {
+            area.hidden = true;
+            if (typeof html === "string") view.innerHTML = html;
+            view.hidden = !area.value.trim();
+            if (add) add.hidden = !!area.value.trim();
+        }
+        if (area.value === area.dataset.saved) { show(); return; }
+        var was = area.dataset.saved;
+        show();
+        qvSave(panel, {field: "notes", value: area.value}).then(function (data) {
+            area.value = area.dataset.saved = data.notes || "";
+            show(data.notes_html || "");
+        }).catch(function () { area.value = area.dataset.saved = was; show(); });
+    });
+    document.addEventListener("input", function (event) { if (event.target.matches && event.target.matches("[data-qv-notes]")) qvGrow(event.target); });
+
+    // The checklist: tap an item's text to rename it (empty removes it); "Add item" + Enter adds one.
+    function qvRenameRow(panel, span) {
+        var row = span.closest(".pl-cl__row"), old = span.textContent;
+        var input = document.createElement("input");
+        input.type = "text"; input.className = "pl-qv__rename"; input.maxLength = 200; input.value = old;
+        input.setAttribute("aria-label", "Rename checklist item");
+        span.textContent = "";
+        span.appendChild(input);
+        input.focus();
+        input.select();
+        var done = false;
+        function finish(save) {
+            if (done) return;
+            done = true;
+            var text = input.value.replace(/\s+/g, " ").trim();
+            span.textContent = save ? (text || old) : old;
+            if (!save || text === old) return;
+            if (!text) row.hidden = true;
+            qvSave(panel, {field: "cl_text", row: row.dataset.row, value: text}).then(function (data) {
+                if (!text) row.remove();
+                showProgress(panel, data);
+            }).catch(function () { span.textContent = old; row.hidden = false; });
+        }
+        input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") { e.preventDefault(); finish(true); }
+            else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+        });
+        input.addEventListener("blur", function () { finish(true); });
+    }
+    document.addEventListener("keydown", function (event) {
+        var input = event.target, panel = qvPanel(input);
+        if (!panel || event.key !== "Enter" || !input.matches("[data-qv-add]")) return;
+        event.preventDefault();
+        var text = input.value.replace(/\s+/g, " ").trim(), list = panel.querySelector("[data-qv-checklist]");
+        if (!text || !list) return;
+        var ghost = document.createElement("li");
+        ghost.className = "pl-cl__row is-pending";
+        ghost.textContent = text;
+        list.appendChild(ghost);
+        input.value = "";
+        qvSave(panel, {field: "cl_add", value: text}).then(function (data) {
+            if (data.row_html) {
+                var tmp = document.createElement("ul");
+                tmp.innerHTML = data.row_html.trim();
+                if (tmp.firstElementChild) list.replaceChild(tmp.firstElementChild, ghost);
+            } else ghost.remove();
+            showProgress(panel, data);
+            var title = panel.querySelector("[data-cl-progress-title]");
+            if (title) title.hidden = !data.progress_title;
+            panel.dataset.openSubtasks = String(data.open || 0);
+        }).catch(function () { ghost.remove(); input.value = text; });
+    });
+
+    // ---------- The edit page: explicit Save (the floating button), and nothing lost on the way out ----------
+    var edForm = document.querySelector("[data-edit-form]");
+    // The dock (with the Save button) comes after this script on the page: set up once the page is all there.
+    if (edForm) (document.readyState === "loading" ? function (fn) { document.addEventListener("DOMContentLoaded", fn); }
+                                                    : function (fn) { fn(); })(function () {
+        var saveBtn = document.getElementById("pl-save"), saveMsg = document.getElementById("pl-save-msg");
+        var unsaved = document.getElementById("pl-unsaved"), shareDialog = document.getElementById("pl-ed-share");
+        var baseline = "", saving = false, leaving = false, savedTimer = null, pendingHref = null;
+
+        // The rows' values, from their fields.
+        function picked(name) {
+            var els = edForm.querySelectorAll('[name="' + name + '"]');
+            for (var i = 0; i < els.length; i++) if (els[i].checked) return els[i];
+            return null;
+        }
+        function labelOf(input) { var l = input && input.closest("label"); return l ? l.textContent.trim() : ""; }
+        function selectText(name) {
+            var s = edForm.querySelector('select[name="' + name + '"]');
+            return s && s.selectedIndex >= 0 ? s.options[s.selectedIndex].text : "";
+        }
+        function setRow(key, text) {
+            var v = edForm.querySelector('[data-prop="' + key + '"] [data-prop-value]');
+            if (v && text) v.textContent = text;
+        }
+        function rowValues() {
+            var f = edForm.elements;
+            if (f.date && f.date.value) setRow("date", qvDate(f.date.value));
+            setRow("time", qvTimeText(f.start_time && f.start_time.value, f.end_time && f.end_time.value));
+            var repeat = f.repeat && f.repeat.value, summary = document.getElementById("pl-summary");
+            setRow("repeat", repeat === "none" ? "Doesn't repeat" : (summary && summary.textContent.trim()) || selectText("repeat"));
+            var scope = picked("scope");
+            if (scope) setRow("scope", labelOf(scope));
+            setRow("place", (f.location && f.location.value.trim()) || "Home");
+            var kind = picked("kind");
+            setRow("kind", labelOf(kind) + (kind && kind.value !== "task" && f.checkable && f.checkable.checked ? " · can be checked off" : ""));
+            setRow("priority", selectText("priority"));
+            setRow("color", selectText("color"));
+            var note = edForm.querySelector("#pl-note-pick");
+            if (note && note.selectedIndex >= 0) setRow("note", note.options[note.selectedIndex].dataset.label || note.options[note.selectedIndex].text);
+        }
+
+        // What's changed: the form's data (the title too - form="pl-form"), leaving out the empty "Add an item" line.
+        function snapshot() {
+            var data = new FormData(edForm), out = [], ids = data.getAll("cl_id"), texts = data.getAll("cl_text");
+            data.forEach(function (value, key) {
+                if (key !== "cl_id" && key !== "cl_text" && key !== "csrfmiddlewaretoken" && typeof value === "string") out.push(key + "=" + value);
+            });
+            ids.forEach(function (id, i) { if (id || (texts[i] || "").trim()) out.push("cl=" + id + ":" + texts[i]); });
+            return out.join("&");
+        }
+        function dirty() { return snapshot() !== baseline; }
+        function setState(state, text) {
+            if (!saveBtn) return;
+            saveBtn.dataset.state = state;
+            saveBtn.disabled = state !== "dirty";
+            saveBtn.querySelector(".pl-save-fab__label").textContent = text;
+        }
+        function refresh() {
+            rowValues();
+            if (saving) return;
+            if (dirty()) { clearTimeout(savedTimer); setState("dirty", "Save"); }
+            else if (saveBtn && saveBtn.dataset.state !== "done") setState("saved", "Saved");
+        }
+        function say(text) {
+            if (!saveMsg) return;
+            saveMsg.textContent = text || "";
+            saveMsg.hidden = !text;
+        }
+        function clearErrors() {
+            edForm.querySelectorAll(".pl-error[data-js-error]").forEach(function (e) { e.remove(); });
+            document.querySelectorAll(".pl-ed__titlebox .pl-error[data-js-error]").forEach(function (e) { e.remove(); });
+            var banner = document.getElementById("pl-form-errors");
+            if (banner) banner.hidden = true;
+        }
+        function showErrors(errors) {
+            var first = null;
+            Object.keys(errors || {}).forEach(function (name) {
+                var field = document.querySelector('[form="pl-form"][name="' + name + '"]') || edForm.querySelector('[name="' + name + '"]');
+                if (!field) return;
+                var holder = field.closest(".pl-prop__body, .pl-ed__blk, .pl-ed__titlebox") || field.parentNode;
+                var details = field.closest("details");
+                if (details) details.open = true;
+                var msg = document.createElement("span");
+                msg.className = "pl-error"; msg.setAttribute("data-js-error", "");
+                msg.textContent = errors[name].join(" ");
+                holder.appendChild(msg);
+                if (!first) first = field;
+            });
+            var banner = document.getElementById("pl-form-errors");
+            if (banner) banner.hidden = false;
+            if (first) { first.scrollIntoView({block: "center"}); first.focus({preventScroll: true}); }
+        }
+
+        function save() {
+            if (saving || !saveBtn) return Promise.resolve(false);
+            if (!dirty()) return Promise.resolve(true);
+            saving = true;
+            var sent = snapshot();
+            setState("saving", "Saving…");
+            say("");
+            clearErrors();
+            return post(window.location.pathname + window.location.search, new FormData(edForm)).then(function (res) {
+                saving = false;
+                if (!res.ok || !res.data.ok) {
+                    setState("dirty", "Save");
+                    say((res.data && res.data.message) || "Couldn’t save – check your connection and try again.");
+                    if (res.data && res.data.errors) showErrors(res.data.errors);
+                    return false;
+                }
+                var d = res.data;
+                if (d.redirect) { leaving = true; window.location.href = d.redirect; return true; }
+                var typed = snapshot() !== sent;                         // changed again while saving: stays unsaved
+                document.querySelectorAll("[data-ed-occurrence]").forEach(function (i) { i.value = d.occurrence; });
+                var rows = document.getElementById("pl-cl-edit-rows");
+                if (rows && typeof d.checklist_html === "string") rows.innerHTML = d.checklist_html;
+                var note = edForm.querySelector("#pl-note-pick");
+                if (note) {                                              // the choice is applied: back to "keep"
+                    var keep = note.querySelector('option[value="keep"]'), none = note.querySelector('option[value="none"]');
+                    keep.textContent = keep.dataset.label = d.note;
+                    note.value = "keep";
+                    if (d.note_id && !none) {
+                        none = document.createElement("option"); none.value = "none"; none.textContent = "No note"; none.dataset.label = "None";
+                        keep.after(none);
+                    } else if (!d.note_id && none) none.remove();
+                }
+                var link = document.querySelector("[data-note-link]");
+                if (link) { link.hidden = !d.note_url; if (d.note_url) link.href = d.note_url; }
+                setRow("note", d.note);
+                if (d.url && history.replaceState) history.replaceState(history.state, "", d.url);
+                var check = document.getElementById("pl-ed-check");
+                if (check && d.title) check.setAttribute("aria-label", "Done: " + d.title);
+                if (d.title) document.title = document.title.replace(/^[^·]*·/, d.title + " ·");
+                baseline = typed ? sent : snapshot();                    // new checklist rows now have their ids
+                if (dirty()) { setState("dirty", "Save"); return true; }
+                setState("done", "Saved ✓");
+                clearTimeout(savedTimer);
+                savedTimer = setTimeout(function () { if (!dirty() && !saving) setState("saved", "Saved"); }, 2000);
+                return true;
+            }).catch(function () {
+                saving = false;
+                setState("dirty", "Save");
+                say("Couldn’t save – check your connection and try again.");
+                return false;
+            });
+        }
+
+        edForm.addEventListener("submit", function (event) { event.preventDefault(); save(); });
+        document.addEventListener("input", function (event) {
+            if (edForm.contains(event.target) || event.target.getAttribute("form") === "pl-form") refresh();
+        });
+        document.addEventListener("change", function (event) {
+            if (edForm.contains(event.target) || event.target.getAttribute("form") === "pl-form") refresh();
+        });
+        edForm.addEventListener("click", function (event) {
+            var allDay = event.target.closest("[data-all-day]");
+            if (allDay) {
+                edForm.elements.start_time.value = "";
+                edForm.elements.end_time.value = "";
+                refresh();
+            }
+            if (event.target.closest("[data-cl-delete], [data-cl-move]")) setTimeout(refresh, 0);
+            if (event.target.closest("[data-share-open]") && shareDialog && shareDialog.showModal) shareDialog.showModal();
+        });
+        new MutationObserver(function () { refresh(); }).observe(document.getElementById("pl-cl-edit-rows") || edForm, {childList: true});
+        if (shareDialog) shareDialog.addEventListener("click", function (event) {
+            if (event.target === shareDialog || event.target.closest("[data-share-close]")) shareDialog.close();
+        });
+
+        // A checklist tick saves at once (this occurrence) - it's checking something off, not editing the task.
+        edForm.addEventListener("click", function (event) {
+            var tick = event.target.closest("[data-ed-tick]");
+            if (!tick) return;
+            var was = tick.getAttribute("aria-checked") === "true", row = tick.closest(".pl-cl-edit__row");
+            var show = function (on) { tick.setAttribute("aria-checked", on ? "true" : "false"); row.classList.toggle("is-done", on); };
+            show(!was);
+            var body = new FormData();
+            body.append("date", document.querySelector("input[name=occurrence]").value);
+            body.append("checked", was ? "0" : "1");
+            post(tick.dataset.edTick, body).then(function (res) {
+                if (!res.ok || !res.data.ok) throw new Error("not saved");
+                show(!!res.data.checked);
+                showProgress(document, res.data);
+                var box = document.getElementById("pl-ed-check");
+                if (box) box.setAttribute("aria-checked", res.data.task_done ? "true" : "false");
+            }).catch(function () { show(was); say("Couldn’t save that tick – try again."); });
+        });
+
+        // Ctrl/Cmd+S saves.
+        document.addEventListener("keydown", function (event) {
+            if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === "s" || event.key === "S")) {
+                event.preventDefault();
+                save();
+            }
+        });
+
+        // Leaving with unsaved changes: links and Back ask here (Save / Discard / Keep editing); closing the tab or the
+        // browser's Back gets the browser's own question.
+        function go(href) { leaving = true; window.location.href = href; }
+        document.addEventListener("click", function (event) {
+            var link = event.target.closest && event.target.closest("a[href]");
+            if (!link || leaving || event.defaultPrevented || !dirty() || saving) return;
+            if (link.target === "_blank" || link.hasAttribute("download") || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+            var href = link.getAttribute("href");
+            if (!href || href.charAt(0) === "#" || /^(mailto|tel|javascript):/i.test(href)) return;
+            event.preventDefault();
+            pendingHref = link.href;
+            if (unsaved && unsaved.showModal) unsaved.showModal();
+            else if (window.confirm("You have unsaved changes. Leave without saving?")) go(pendingHref);
+        }, true);
+        if (unsaved) unsaved.addEventListener("click", function (event) {
+            var choice = event.target.closest("[data-unsaved]");
+            if (!choice && event.target === unsaved) { unsaved.close(); return; }
+            if (!choice) return;
+            var what = choice.dataset.unsaved;
+            if (what === "keep") { unsaved.close(); return; }
+            if (what === "discard") { unsaved.close(); go(pendingHref); return; }
+            unsaved.close();
+            save().then(function (ok) { if (ok && !dirty()) go(pendingHref); });
+        });
+        // A form posting elsewhere (Duplicate, Delete, Skip...) leaves the page: the browser's question covers it.
+        window.addEventListener("beforeunload", function (event) {
+            if (leaving || !dirty()) return;
+            event.preventDefault();
+            event.returnValue = "You have unsaved changes";
+            return "You have unsaved changes";
+        });
+
+        // The starting point: after planner.js has set the form up (its blank checklist line, repeat fields).
+        setTimeout(function () {
+            var banner = document.getElementById("pl-form-errors");
+            // Back with errors (a save without JavaScript): what's on the page isn't saved yet.
+            baseline = banner && !banner.hidden ? "unsaved" : snapshot();
+            rowValues();
+            if (dirty()) setState("dirty", "Save");
+            else setState("saved", "Saved");
+        }, 0);
+
+        // The big title: a text box that grows with it (a long title wraps); Enter never adds a line.
+        var bigTitle = document.querySelector(".pl-ed__title");
+        if (bigTitle) {
+            qvGrow(bigTitle);
+            bigTitle.addEventListener("input", function () { qvGrow(bigTitle); });
+            bigTitle.addEventListener("keydown", function (event) { if (event.key === "Enter") event.preventDefault(); });
+            window.addEventListener("resize", function () { qvGrow(bigTitle); });
+        }
+    });
+    document.querySelectorAll(".pl-view-page [data-qv-title]").forEach(qvGrow);   // the quick view as a page
 })();

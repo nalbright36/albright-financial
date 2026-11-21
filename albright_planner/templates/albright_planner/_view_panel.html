@@ -1,11 +1,14 @@
 {% comment %}
-An item's view panel for one occurrence (views.view_item): read-only at a glance. Check it off and tick its
-checklist here (that occurrence only); Edit (or "E") opens the form. planner.js shows it in a <dialog> over the
-calendar; item.html is the same panel as a page. Every empty section is left out. In the dialog the header and
-the footer stay put and the middle (.pl-view__body) scrolls. A linked note shows in full - its checklist boxes
-tick right here (saved to the note) for someone who can edit it.
+An item's quick view for one occurrence (views.view_item) - the "Quick view" of docs/design/planner_task_options.html.
+planner.js shows it in a <dialog> over the calendar (a bottom sheet on phones); item.html is the same panel as a page.
+For someone who can edit it (quick): the title, the property rows (Date, Time, Repeat, Shared, Linked note - tap for a
+small picker), the checklist (tick, add, rename) and the notes save as you go - one small request per change
+(views.quick_edit; planner.js), "Saved" in the corner, the old value back with a message if one fails. Attachments are
+listed only (adding files is the full editor's). Otherwise the same panel, read-only. Every empty section is left out;
+in the dialog the header and the footer stay put and the middle (.pl-view__body) scrolls. A linked note shows in full -
+its checklist boxes tick right here (saved to the note) for someone who can edit it.
 {% endcomment %}{% load planner_extras %}
-<article class="pl-view{% if o.skipped %} is-skipped{% elif o.done %} is-done{% endif %}{% if item.source_app == 'fitness' %} is-fitness{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if item.source_app == "fitness" and fitness.start_url %} data-log-url="{{ fitness.start_url }}"{% endif %}{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
+<article class="pl-view pl-qv{% if o.skipped %} is-skipped{% elif o.done %} is-done{% endif %}{% if item.source_app == 'fitness' %} is-fitness{% endif %}" id="pl-view-panel" data-item="{{ item.pk }}" data-date="{{ occurrence|date:'Y-m-d' }}"{% if quick %} data-quick-url="{{ quick_url }}"{% endif %}{% if item.source_app == "fitness" and fitness.start_url %} data-log-url="{{ fitness.start_url }}"{% endif %}{% if checklist_progress %} data-open-subtasks="{{ checklist_progress.open }}"{% endif %} aria-labelledby="pl-view-title"{% if item.color %} style="--pl-color: {{ item.color }};"{% endif %}>
     <header class="pl-view__head">
         {% if item.checkable %}{% if can_edit %}
         <form method="post" action="{% url 'albright_planner:toggle' item.pk %}" class="pl-check-form">{% csrf_token %}
@@ -14,13 +17,14 @@ tick right here (saved to the note) for someone who can edit it.
         </form>
         {% else %}<span class="pl-check pl-check--lg is-readonly" id="pl-view-check" role="checkbox" aria-checked="{{ o.done|yesno:'true,false' }}" aria-disabled="true" aria-label="{% if o.skipped %}Skipped{% else %}Done{% endif %}: {{ o.title }} (view only)">{% if o.skipped %}{% include "albright_planner/_skip_icon.html" %}{% else %}<svg width="16" height="16" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}</span>{% endif %}
         {% else %}<span class="pl-dot pl-view__dot" aria-hidden="true"></span>{% endif %}
-        <h2 class="pl-view__title" id="pl-view-title">{{ o.title }}</h2>
+        {% if quick %}<h2 class="pl-view__title pl-qv__titlebox"><label for="pl-view-title" class="visually-hidden">Title</label><textarea class="pl-qv__title" id="pl-view-title" rows="1" maxlength="200" spellcheck="true" data-qv-title data-saved="{{ o.title }}">{{ o.title }}</textarea></h2>
+        {% else %}<h2 class="pl-view__title" id="pl-view-title">{{ o.title }}</h2>{% endif %}
         <details class="pl-menu" id="pl-view-menu" data-menu data-menu-scope="pl">
             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
             <div class="pl-menu__panel" data-menu-panel>
-                {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" label="Skip workout…" btn_class="pl-menu__item" %}{% endif %}
+                {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" label=item.is_weigh_in|yesno:"Skip weigh-in…,Skip workout…" btn_class="pl-menu__item" %}{% endif %}
                 {% if can_skip %}<form method="post" action="{% url 'albright_planner:remove' item.pk %}">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="this"><input type="hidden" name="next" value="{{ back }}"><button type="submit" class="pl-menu__item" id="pl-view-skip">Skip this one</button></form>{% endif %}
-                {% if can_move %}<details class="pl-menu__move">
+                {% if can_move and not quick %}<details class="pl-menu__move">
                     <summary class="pl-menu__item">Move&hellip;</summary>
                     <form method="post" action="{% url 'albright_planner:move' item.pk %}" class="pl-menu__form" id="pl-view-move">{% csrf_token %}
                         <input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ back }}">
@@ -37,22 +41,58 @@ tick right here (saved to the note) for someone who can edit it.
     </header>
 
     <div class="pl-view__body">
+    {% if o.overdue or item.priority != "none" or o.skipped or o.done and o.done_by and o.shared or item.source_href or item.parent_id or item.idea_id %}
     <p class="pl-view__facts" id="pl-view-facts">
-        <span class="pl-view__fact"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg> {{ o.date|date:"D, M j" }}{% if o.date.year != today.year %}, {{ o.date|date:"Y" }}{% endif %} &middot; {% if o.start_time %}<span class="pl-time">{{ o.start_time|time:"g:i A" }}{% if o.end_time %}&ndash;{{ o.end_time|time:"g:i A" }}{% endif %}</span>{% else %}All day{% endif %}</span>
         {% if o.overdue %}<span class="pl-view__fact pl-overdue">Overdue</span>{% endif %}
-        {% if repeat_text %}<span class="pl-view__fact" id="pl-view-repeat"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-1a5 5 0 015-5h11"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 12.5v1a5 5 0 01-5 5H4"/></svg> {{ repeat_text }}</span>{% endif %}
-        {% if o.weather %}<span class="pl-view__fact" id="pl-view-weather">{% include "albright_planner/_weather.html" with wx=o.weather place=o.weather_place show_label=True show_place=True %}</span>{% endif %}
         {% if item.priority != "none" %}<span class="pl-badge pl-badge--{{ item.priority }}" id="pl-view-priority">{{ item.get_priority_display }}</span>{% endif %}
         {% if o.skipped %}<span class="pl-view__fact pl-skip-label" id="pl-view-skipped">{% include "albright_planner/_skip_icon.html" %} {{ o.skip_label }}</span>{% endif %}
         {% if o.done and o.done_by and o.shared %}<span class="pl-view__fact pl-done-by">Done by {{ o.done_by|person }}</span>{% endif %}
         {% if item.source_href %}<a href="{{ item.source_href }}" class="pl-view__fact"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app &#x2197;</a>{% endif %}
-    </p>
-    {% if item.parent_id or item.idea_id %}
-    <p class="pl-view__facts" id="pl-view-links">
         {% if item.parent_id %}<span class="pl-view__fact" id="pl-view-parent">Subtask of <a href="{% url 'albright_planner:item' item.parent_id %}" data-view>{{ item.parent.title }}</a> &rarr;</span>{% endif %}
         {% if item.idea_id %}<a href="{% url 'albright_control:idea' item.idea_id %}" class="pl-view__fact" id="pl-view-idea">Idea #{{ item.idea_id }} &rarr;</a>{% endif %}
     </p>
     {% endif %}
+
+    {# The property rows: tap one (quick) for its picker - each change saves on its own. #}
+    <div class="pl-props pl-qv__props" id="pl-view-props">
+        <div class="pl-qv__prop" data-qv-prop="date">
+            {% if quick %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="date" %}Date</span><span class="pl-prop__value" data-qv-value="date" id="pl-view-date">{{ props.date }}</span>{% if quick %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
+            {% if quick %}<div class="pl-qv__picker" hidden><label class="visually-hidden" for="pl-qv-date">Date</label><input type="date" id="pl-qv-date" class="pl-input" value="{{ o.date|date:'Y-m-d' }}" data-qv-field="date" required>{% if item.repeats %}<span class="pl-help">Moves this occurrence only &ndash; the series is changed in the full editor.</span>{% endif %}</div>{% endif %}
+        </div>
+        <div class="pl-qv__prop" data-qv-prop="time">
+            {% if quick %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="time" %}Time</span><span class="pl-prop__value" data-qv-value="time" id="pl-view-time">{{ props.time }}</span>{% if quick %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
+            {% if quick %}<div class="pl-qv__picker pl-prop__times" hidden>
+                <label class="pl-prop__field"><span class="pl-label">Starts</span><input type="time" class="pl-input" value="{{ o.start_time|time:'H:i' }}" data-qv-time="start"></label>
+                <label class="pl-prop__field"><span class="pl-label">Ends</span><input type="time" class="pl-input" value="{{ o.end_time|time:'H:i' }}" data-qv-time="end"></label>
+                <button type="button" class="pl-btn pl-btn--ghost" data-qv-allday>All day</button>
+            </div>{% endif %}
+        </div>
+        <div class="pl-qv__prop" data-qv-prop="repeat">
+            {% if quick %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="repeat" %}Repeat</span><span class="pl-prop__value" data-qv-value="repeat" id="pl-view-repeat">{{ props.repeat }}</span>{% if quick %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
+            {% if quick %}<div class="pl-qv__picker" hidden>
+                <label class="visually-hidden" for="pl-qv-repeat">Repeat</label>
+                <select id="pl-qv-repeat" class="pl-input pl-select" data-qv-field="repeat">{% for key, label in repeat_choices %}<option value="{{ key }}"{% if key == repeat_now %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+                <span class="pl-help">Days, ends and the rest are in the full editor.</span>
+            </div>{% endif %}
+        </div>
+        <div class="pl-qv__prop" data-qv-prop="shared">
+            {% if share and is_owner or share and quick %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="shared" %}Shared</span><span class="pl-prop__value" id="pl-view-shared">{% if o.shared_in %}<span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> Shared by {{ item.owner|person }}{% if not can_edit %} &middot; view only{% endif %}{% elif shared_with %}{{ shared_with|join:", " }}{% else %}Only me{% endif %}</span>{% if share and is_owner or share and quick %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
+            {% if share and is_owner or share and quick %}<div class="pl-qv__picker pl-qv__share" hidden>{% include "albright_labs/_share.html" %}<span class="pl-help">Sharing changes save right away.</span></div>{% endif %}
+        </div>
+        <div class="pl-qv__prop" data-qv-prop="note">
+            {% if can_note %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="note" %}Linked note</span><span class="pl-prop__value" data-qv-value="note">{{ note_text }}</span>{% if can_note %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
+            {% if can_note %}<div class="pl-qv__picker" hidden>
+                <label class="visually-hidden" for="pl-qv-note">Linked note</label>
+                <select id="pl-qv-note" class="pl-input pl-select" data-qv-field="note">
+                    <option value="none"{% if not item.note_id %} selected{% endif %}>No note</option>
+                    {% if item.note_id and not linked_note.title %}<option value="" selected disabled>{{ note_text }}</option>{% endif %}
+                    {% for n in note_choices %}<option value="{{ n.pk }}"{% if n.pk == item.note_id %} selected{% endif %}>{{ n.title }}</option>{% endfor %}
+                    <option value="new">New note, titled from this item</option>
+                </select>
+            </div>{% endif %}
+        </div>
+    </div>
+
     {% if item.is_weigh_in %}{% load weigh_in_tags %}
     <section class="pl-view__section pl-view__fitness pl-view__weigh-in" id="pl-view-weigh-in" aria-labelledby="pl-view-wi-h">
         <h3 class="pl-view__label" id="pl-view-wi-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_scale.html" %}</span> Weigh-in</h3>
@@ -64,8 +104,8 @@ tick right here (saved to the note) for someone who can edit it.
     <section class="pl-view__section pl-view__fitness" id="pl-view-fitness" aria-labelledby="pl-view-fit-h">
         <h3 class="pl-view__label" id="pl-view-fit-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workout</h3>
         {% if fitness.rows %}<ul class="pl-view__rows">{% for r in fitness.rows %}<li class="pl-view__row"><span class="pl-view__row-name" title="{{ r.exercise.name }}">{{ r.exercise.name }}{% if r.last %}<span class="pl-view__last" title="Last time: {{ r.last }}">Last time: {{ r.last }}</span>{% endif %}</span>{% if r.target %}<span class="pl-view__row-ind">{{ r.target }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
-        {% if fitness.start_url and not o.done or can_skip_workout %}<div class="pl-view__acts">{% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
-        {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="panel" %}{% endif %}</div>{% endif %}
+        {% if fitness.start_url and not o.done or can_skip_workout and not item.is_weigh_in %}<div class="pl-view__acts">{% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
+        {% if can_skip_workout and not item.is_weigh_in %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="panel" %}{% endif %}</div>{% endif %}
     </section>
     {% endif %}
     {% if subtasks %}
@@ -75,22 +115,23 @@ tick right here (saved to the note) for someone who can edit it.
     </section>
     {% endif %}
 
-    {% if o.shared_in %}<p class="pl-view__shared" id="pl-view-shared"><span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> Shared by {{ item.owner|person }}{% if not can_edit %} <span class="pl-muted">&middot; view only</span>{% endif %}</p>
-    {% elif shared_with %}<p class="pl-view__shared" id="pl-view-shared">Shared with {{ shared_with|join:", " }}</p>{% endif %}
-
-    {% if checklist %}
+    {% if checklist or can_checklist %}
     <section class="pl-view__section" id="pl-view-checklist" aria-labelledby="pl-view-cl-h">
-        <h3 class="pl-view__label" id="pl-view-cl-h">Checklist</h3>
-        <ul class="pl-cl__rows pl-cl__rows--full">{% for row in checklist %}{% if can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=item back=self_url day=occurrence show_done_by=o.shared can_toggle=True %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=self_url day=occurrence show_done_by=o.shared can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=self_url day=occurrence show_done_by=o.shared can_toggle=False %}{% endif %}{% endfor %}</ul>
-        <p class="pl-muted pl-small" data-cl-progress-title>{{ checklist_progress.title }}</p>
+        <h3 class="pl-view__label" id="pl-view-cl-h">Checklist <span class="pl-view__count" data-cl-progress>{% if checklist_progress %}{{ checklist_progress.label }}{% endif %}</span></h3>
+        <ul class="pl-cl__rows pl-cl__rows--full" data-qv-checklist>{% for row in checklist %}{% if can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=item back=self_url day=occurrence show_done_by=o.shared can_toggle=True editable=can_checklist %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=self_url day=occurrence show_done_by=o.shared can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=item back=self_url day=occurrence show_done_by=o.shared can_toggle=False %}{% endif %}{% endfor %}</ul>
+        {% if can_checklist %}<div class="pl-qv__add"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg><label class="visually-hidden" for="pl-qv-add">Add a checklist item</label><input type="text" id="pl-qv-add" class="pl-qv__add-input" maxlength="200" placeholder="Add item" autocomplete="off" data-qv-add></div>{% endif %}
+        <p class="pl-muted pl-small" data-cl-progress-title{% if not checklist_progress %} hidden{% endif %}>{{ checklist_progress.title }}</p>
     </section>
     {% endif %}
 
-    {% if item.notes %}
+    {% if item.notes or quick %}
     <section class="pl-view__section" id="pl-view-notes" aria-labelledby="pl-view-notes-h">
         <h3 class="pl-view__label" id="pl-view-notes-h">Notes</h3>
-        <div class="pl-view__notes md-body" data-clamp>{{ item.notes|notes_markdown }}</div>
+        <div class="pl-view__notes md-body" data-clamp data-qv-notes-view{% if quick %} tabindex="0" role="button" aria-label="Edit notes"{% endif %}{% if not item.notes %} hidden{% endif %}>{{ item.notes|notes_markdown }}</div>
         <button type="button" class="pl-view__more" data-show-more aria-expanded="false" hidden>Show more</button>
+        {% if quick %}<button type="button" class="pl-qv__addnotes" data-qv-notes-add{% if item.notes %} hidden{% endif %}>Add notes</button>
+        <label class="visually-hidden" for="pl-qv-notes">Notes (Markdown)</label>
+        <textarea id="pl-qv-notes" class="pl-input pl-qv__notes" rows="6" maxlength="{{ notes_max|default:20000 }}" data-qv-notes hidden>{{ item.notes }}</textarea>{% endif %}
     </section>
     {% endif %}
 
@@ -106,12 +147,15 @@ tick right here (saved to the note) for someone who can edit it.
     {% endif %}
 
     {% include "albright_labs/_attachments.html" %}
+
+    <div class="pl-qv__meta">
+        <span class="pl-qv__wx" id="pl-view-weather">{% if o.weather %}{% include "albright_planner/_weather.html" with wx=o.weather place=o.weather_place show_label=True show_place=True %}{% endif %}</span>
+        {% if quick %}<span class="pl-qv__saved" data-qv-status role="status" aria-live="polite"></span>{% endif %}
+    </div>
     </div>
 
-    {% if share %}{% include "albright_labs/_share.html" %}{% endif %}
-
-    <footer class="pl-view__foot">
-        {% if edit_url %}<a href="{{ edit_url }}" class="pl-btn pl-btn--primary" id="pl-view-edit" data-view-edit title="Edit (E)">Edit</a>{% endif %}
+    <footer class="pl-view__foot pl-qv__foot">
+        {% if edit_url %}<a href="{{ edit_url }}" class="pl-qv__editor" id="pl-view-edit" data-view-edit title="Open the full editor (E)">Open full editor &rarr;</a>{% endif %}
         <a href="{{ back }}" class="pl-btn" data-view-close>Close</a>
     </footer>
 </article>

@@ -12,7 +12,7 @@ are read live from Meals for people who can open it (and haven't hidden them).
 Opening the Planner at all needs access in Admin > Users (albright_labs.app_access)."""
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,7 +20,9 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.dateformat import format as date_format, time_format
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -427,6 +429,179 @@ def _fitness_panel(item, user, occurrence):
         return None
 
 
+def _props(item, occ, today):
+    """The property rows' values (quick view and edit page): {"title", "date", "time", "repeat"} in plain words."""
+    day = occ.date
+    date_text = date_format(day, "D, M j") + (date_format(day, ", Y") if day.year != today.year else "")
+    if occ.start_time:
+        time_text = time_format(occ.start_time, "g:i A") + ("–" + time_format(occ.end_time, "g:i A") if occ.end_time else "")
+    else:
+        time_text = "All day"
+    return {"title": occ.title, "date": date_text, "time": time_text,
+            "repeat": planner.plain_repeat(item) or "Doesn't repeat"}
+
+
+def _note_text(linked):
+    """The Linked note row's value."""
+    if not linked:
+        return "None"
+    if linked.get("hidden"):
+        return "A note that isn't shared with you"
+    if linked.get("deleted"):
+        return "Note deleted"
+    return linked.get("title") or "Untitled note"
+
+
+def _form_data(item, occurrence, viewer):
+    """ItemForm's posted data for one occurrence, as it is now - so one changed value can be saved through the very
+    same validation and save as the edit page (the quick view's autosave)."""
+    data = {}
+    for key, value in ItemForm.initial_for(item, occurrence, viewer).items():
+        if value is None or value is False:
+            continue
+        if value is True:
+            data[key] = "on"
+        elif isinstance(value, (date, datetime)):
+            data[key] = value.isoformat()
+        elif isinstance(value, time):
+            data[key] = value.strftime("%H:%M")
+        elif isinstance(value, (list, tuple)):
+            data[key] = list(value)
+        else:
+            data[key] = str(value)
+    return data
+
+
+def _save_form(item, occurrence, scope, form, viewer):
+    """A valid ItemForm saved onto one occurrence (planner.change) - times entered in the viewer's zone go back into
+    the item's own, so a series keeps its time there. Returns the item now holding that occurrence."""
+    changes = form.changes()
+    if changes.get("start_time"):
+        changes["date"], changes["start_time"], changes["end_time"] = planner.convert(
+            changes["date"], changes["start_time"], changes["end_time"], viewer, planner.zone(item.timezone))
+    return planner.change(item, occurrence, scope, changes), changes
+
+
+def _occurrence_after(item, occurrence, scope, changes):
+    """Where an occurrence is after a save: a one-off's own date; a series' occurrence (moved with "all" / "following",
+    or kept for "this"), else its current / first one."""
+    if not item.repeats:
+        return item.date
+    day = occurrence if scope == planner.THIS else (changes.get("date") or occurrence)
+    return day if planner.valid_occurrence(item, day) else planner.current_or_first(item)
+
+
+def _first_error(form):
+    for errors in form.errors.values():
+        if errors:
+            return str(errors[0])
+    return "That couldn't be saved."
+
+
+def _link_note(request, item, choice):
+    """The Linked note picker: "none" unlinks, "new" makes a note titled from the item, a note id links that note
+    (one this person can see). Returns an error message, or ""."""
+    from albright_notes import notes
+    from albright_notes.models import Note
+    if choice == "none":
+        item.note, item.note_deleted = None, False
+    elif not sources.can_open(request.user, "notes"):
+        return "Linking a note needs the Notes app."
+    elif choice == "new":
+        item.note, item.note_deleted = notes.create(request.user, item.title, author=request.user), False
+    else:
+        note = Note.objects.visible_to(request.user).filter(pk=int(choice) if str(choice).isdigit() else 0).first()
+        if note is None:
+            return "Pick one of your notes (or one shared with you)."
+        item.note, item.note_deleted = note, False
+    item.save(update_fields=["note", "note_deleted", "updated_at"])
+    return ""
+
+
+@login_required
+@require_POST
+def quick_edit(request, pk):
+    """The quick view's autosave - one small change per request (JSON), on one occurrence (date=):
+      field=title|notes|repeat (value) - the whole series; field=date (value) - a one-off moves, a series' occurrence
+      moves alone; field=time (start, end; both empty: all day); field=note (value: none | new | <note id>);
+      field=cl_text (row, value - empty removes it); field=cl_add (value).
+    Everything but the checklist goes through ItemForm, exactly like the edit page. Replies with the rows' new values,
+    or {"ok": false, "error"} (the quick view puts the old value back)."""
+    item = _editable(request, pk)
+    if item.locked or item.is_weigh_in:
+        return JsonResponse({"ok": False, "error": "Change this one in its own app."}, status=400)
+    occurrence = _day(request.POST.get("date"))
+    if not item.repeats:
+        occurrence = item.date
+    elif occurrence is None or not planner.valid_occurrence(item, occurrence):
+        return JsonResponse({"ok": False, "error": "That occurrence isn't scheduled any more - reload."}, status=400)
+    field, value = request.POST.get("field", ""), request.POST.get("value", "")
+    viewer, extra = planner.user_zone(request.user), {}
+    if field in ("title", "notes", "repeat", "date", "time"):
+        data, scope = _form_data(item, occurrence, viewer), planner.ALL
+        if field in ("title", "notes", "repeat"):
+            data[field] = value
+        elif field == "date":
+            data["date"] = value
+            if item.repeats:                              # just this occurrence, like dragging it to another day
+                scope = planner.THIS
+                occ = planner.occurrence_for(item, occurrence, request.user)
+                data["title"] = occ.title
+                for key, when in (("start_time", occ.start_time), ("end_time", occ.end_time)):
+                    if when:
+                        data[key] = when.strftime("%H:%M")
+                    else:
+                        data.pop(key, None)
+        else:
+            for key, posted in (("start_time", request.POST.get("start", "")), ("end_time", request.POST.get("end", ""))):
+                if posted:
+                    data[key] = posted
+                else:
+                    data.pop(key, None)
+        saved_place = ((item.location_label, item.location_lat, item.location_lon)
+                       if item.location_lat is not None else None)
+        form = ItemForm(data, saved_place=saved_place)
+        if not form.is_valid():
+            return JsonResponse({"ok": False, "error": _first_error(form)}, status=400)
+        item, changes = _save_form(item, occurrence, scope, form, viewer)
+        occurrence = _occurrence_after(item, occurrence, scope, changes)
+        if field == "notes":
+            from .templatetags.planner_extras import notes_markdown
+            extra["notes_html"] = str(notes_markdown(item.notes)) if item.notes.strip() else ""
+            extra["notes"] = item.notes
+    elif field == "note":
+        error = _link_note(request, item, value or "none")
+        if error:
+            return JsonResponse({"ok": False, "error": error}, status=400)
+        linked = planner.linked_note(item, request.user)
+        extra.update(note=_note_text(linked), note_url=(linked or {}).get("url", ""), note_id=(linked or {}).get("id", ""))
+    elif field in ("cl_text", "cl_add") and item.kind == ScheduleItem.TASK:
+        if field == "cl_text":
+            row_id = int(request.POST.get("row") or 0)
+            rows = checklist.current_rows(item)
+            if row_id not in {r.pk for r in rows}:
+                return JsonResponse({"ok": False, "error": "That item changed meanwhile - reload."}, status=400)
+            checklist.save_rows(item, [(r.pk, value if r.pk == row_id else r.text) for r in rows])
+        else:
+            added = checklist.add(item, value)
+            if added is None:
+                return JsonResponse({"ok": False, "error": "Type the item first."}, status=400)
+            row = next((r for r in checklist.occurrence_rows(item, occurrence) if r.pk == added.pk), None)
+            if row is not None:
+                extra["row_html"] = render_to_string("albright_planner/_checklist_row.html", {
+                    "row": row, "task": item, "day": occurrence, "back": "", "can_toggle": True, "show_done_by": False,
+                    "editable": True}, request=request)
+        rows = checklist.occurrence_rows(item, occurrence)
+        shown = checklist.progress(rows) if rows else None
+        extra.update(progress=shown["label"] if shown else "", progress_title=shown["title"] if shown else "",
+                     open=shown["open"] if shown else 0)
+    else:
+        return JsonResponse({"ok": False, "error": "Nothing to save."}, status=400)
+    occ = planner.occurrence_for(item, occurrence, request.user)
+    return JsonResponse({"ok": True, "item": item.pk, "occurrence": occurrence.isoformat(),
+                         **_props(item, occ, planner.today(request.user)), **extra})
+
+
 @login_required
 @never_cache
 def view_item(request, pk):
@@ -446,11 +621,20 @@ def view_item(request, pk):
     rows = checklist.occurrence_rows(item, occurrence)
     shared_with = planner.shared_names(item) if is_owner else []
     # A planned workout: "Skip workout" (done as skipped, with a reason) instead of "Skip this one" (drops it).
-    can_skip_workout = item.is_workout and is_owner and can_edit and not occ.done
+    can_skip_workout = (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done
     can_skip = item.repeats and can_edit and not item.is_workout
     can_delete = is_owner and (can_edit or item.locked)
     template = "albright_planner/_view_panel.html" if request.GET.get("panel") == "1" else "albright_planner/item.html"
+    quick = can_edit and not item.locked and not item.is_weigh_in             # edits right here (planner.js)
+    can_note = quick and sources.can_open(request.user, "notes")
+    linked = planner.linked_note(item, request.user, full=True)
+    rule = recurrence.describe(item.recurrence)
     return render(request, template, {
+        "quick": quick, "quick_url": reverse("albright_planner:quick_edit", args=[item.pk]) if quick else "",
+        "props": _props(item, occ, planner.today(request.user)), "note_text": _note_text(linked),
+        "can_note": can_note, "note_choices": planner.attachable_notes(request.user) if can_note else [],
+        "repeat_choices": recurrence.REPEATS, "repeat_now": rule["repeat"] if item.recurrence else "none",
+        "can_checklist": quick and item.kind == ScheduleItem.TASK, "notes_max": NOTES_MAX,
         "item": item, "o": occ, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
         "today": planner.today(request.user),
         "back": back, "self_url": _view_url(item, occurrence, back),
@@ -461,12 +645,13 @@ def view_item(request, pk):
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "can_check_groceries": sources.can_open(request.user, "meals"),
         "fitness": _fitness_panel(item, request.user, occurrence),
-        "linked_note": planner.linked_note(item, request.user, full=True),
+        "linked_note": linked,
         "can_skip": can_skip, "can_skip_workout": can_skip_workout, "can_move": can_edit, "can_delete": can_delete,
         "is_current": item.one_at_a_time and occurrence == planner.current_occurrence(item),
         "subtasks": list(ScheduleItem.objects.visible_to(request.user).filter(parent=item, archived=False)
                          .order_by("date", "pk")),
-        "att": attachments.section(request.user, item, "planner", editable=can_edit,
+        # Listed only - adding files is the full editor's (no Add files, drop zone or storage line here).
+        "att": attachments.section(request.user, item, "planner", editable=False,
                                    next_url=_view_url(item, occurrence, back)),
     })
 
@@ -516,15 +701,52 @@ def edit_item(request, pk):
             changed = planner.change(item, occurrence, scope, changes)
             if request.POST.get("cl_section") and changed.kind == ScheduleItem.TASK:
                 checklist.save_rows(changed, checklist.posted_rows(request.POST))
-            messages.success(request, "Saved." if not item.repeats else
-                             {"this": "Saved this occurrence.", "following": "Saved this and the following occurrences.",
-                              "all": "Saved every occurrence."}[scope])
-            return redirect(_after_edit(request, changed, changes, scope, occurrence))
+            note_choice = request.POST.get("note_choice", "keep")
+            note_error = _link_note(request, changed, note_choice) if note_choice not in ("", "keep") else ""
+            text = "Saved." if not item.repeats else {"this": "Saved this occurrence.", "following":
+                                                      "Saved this and the following occurrences.", "all": "Saved every occurrence."}[scope]
+            day = _occurrence_after(changed, occurrence, scope, changes)
+            # Saving stays on the page (the edit page's floating Save): the same page, for where the occurrence is now.
+            here = reverse("albright_planner:edit", args=[changed.pk]) + "?" + urlencode(
+                {"date": day.isoformat(), "next": _next(request), **({"then": request.POST.get("then")}
+                                                                    if request.POST.get("then") else {})})
+            if _wants_json(request):
+                if changed.pk != item.pk:                 # "this and following" made a new series: its own page
+                    messages.success(request, text)
+                    return JsonResponse({"ok": True, "message": text, "redirect": here})
+                linked = planner.linked_note(changed, request.user)
+                return JsonResponse({
+                    "ok": True, "message": text + (f" {note_error}" if note_error else ""), "url": here,
+                    "occurrence": day.isoformat(), "checklist_html": _editor_html(request, changed, day),
+                    "note": _note_text(linked), "note_url": (linked or {}).get("url", ""),
+                    "note_id": (linked or {}).get("id", ""),
+                    **_props(changed, planner.occurrence_for(changed, day, request.user), planner.today(request.user))})
+            messages.success(request, text)
+            if note_error:
+                messages.error(request, note_error)
+            return redirect(here)
+        if _wants_json(request):
+            return JsonResponse({"ok": False, "message": "Not saved yet - fix what's marked. Everything you typed is still here.",
+                                 "errors": {name: [str(e) for e in errors] for name, errors in form.errors.items()}},
+                                status=400)
     shared_with = planner.shared_names(item) if is_owner else []
     completion = item.completions.select_related("completed_by").filter(occurrence_date=occurrence).first()
     can_note = can_edit and sources.can_open(request.user, "notes")
     rows = checklist.occurrence_rows(item, occurrence)
+    # The big title sits above the form (next to the check box) but belongs to it; a text box so a long one wraps.
+    from django import forms as dj_forms
+    form.fields["title"].widget = dj_forms.Textarea(attrs={
+        "form": "pl-form", "class": "pl-ed__title", "aria-label": "Title", "placeholder": "Title", "rows": 1,
+        "maxlength": 200, "spellcheck": "true"})
+    if not can_edit:
+        form.fields["title"].widget.attrs["disabled"] = True
+    occ = planner.occurrence_for(item, occurrence, request.user)
+    linked = planner.linked_note(item, request.user)
     return render(request, "albright_planner/form.html", {
+        "o": occ, "props": _props(item, occ, planner.today(request.user)), "note_text": _note_text(linked),
+        "editor_rows": _editor_ticks(request, item, occurrence, _editor_rows(request, checklist.current_rows(item))),
+        "can_tick": can_edit, "edit_page": True,
+        "can_skip_workout": (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done,
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "checklist_edit": _editor_rows(request, checklist.current_rows(item)),
         "checklist_from": checklist.edit_from(item), "show_done_by": is_owner and bool(shared_with) or not is_owner,
@@ -541,6 +763,27 @@ def edit_item(request, pk):
         "shared_with": shared_with, "share": sharing.control(request.user, item),
         "att": attachments.section(request.user, item, "planner", editable=can_edit),
     })
+
+
+def _editor_ticks(request, item, occurrence, rows):
+    """The edit page's checklist rows ({"pk", "text", "grocery"}) with this occurrence's ticks: "checked", "can_tick"
+    (a grocery row checks the grocery line, so it needs Meals), "done_by"."""
+    ticks = {r.pk: r for r in checklist.occurrence_rows(item, occurrence)}
+    meals = sources.can_open(request.user, "meals")
+    for row in rows:
+        tick = ticks.get(row["pk"]) if row["pk"] else None
+        row["checked"] = bool(tick and tick.checked)
+        row["can_tick"] = tick is not None and (not row["grocery"] or meals)
+    return rows
+
+
+def _editor_html(request, item, occurrence):
+    """The edit page's checklist rows after a save - new rows now have their ids, so the next Save renames them."""
+    saved = [{"pk": r.pk, "text": r.text, "grocery": bool(r.grocery_item_id)} for r in checklist.current_rows(item)]
+    rows = _editor_ticks(request, item, occurrence, saved)
+    return render_to_string("albright_planner/_ed_checklist.html", {
+        "editor_rows": rows, "item": item, "occurrence": occurrence, "can_tick": item.can_edit(request.user)},
+        request=request)
 
 
 def _then(request, item, occurrence):

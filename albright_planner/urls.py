@@ -23,6 +23,7 @@ urlpatterns = [
     path("item/<int:pk>/", item_page(views.view_item), name="item"),
     path("<int:pk>/", item_page(views.edit_item), name="edit"),
     path("<int:pk>/duplicate/", views.duplicate, name="duplicate"),
+    path("<int:pk>/quick/", views.quick_edit, name="quick_edit"),
     path("<int:pk>/toggle/", views.toggle, name="toggle"),
     path("<int:pk>/skip/", views.skip, name="skip"),
     path("<int:pk>/move/", views.move, name="move"),

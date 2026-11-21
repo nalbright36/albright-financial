@@ -2995,6 +2995,144 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
   appearance: menulist; -webkit-appearance: menulist;
 }
 .pl-view-dialog .share-box { flex: 0 0 auto; }
+
+/* ---------- Planner: a task's quick view and edit page (docs/design/planner_task_options.html - "Quick view" and
+   Option C "Property list"). Property rows (Date, Time, Repeat, Shared, Linked note...) you tap to change: on the
+   quick view each opens a small picker and saves on its own; on the edit page each opens its fields, saved with the
+   floating Save (planner.js). In Planner lime. ---------- */
+.pl-props { border-radius: 14px; overflow: hidden; background: var(--surface-row); box-shadow: var(--row-shadow); }
+.pl-props > * + * { border-top: 1px solid var(--hairline); }
+.pl-prop { margin: 0; }
+.pl .pl-prop__row, .pl-prop__row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; margin: 0;
+  padding: 11px 12px; border: 0; background: none; color: var(--text-primary); font: inherit; font-size: 0.875rem; text-align: left;
+  cursor: pointer; list-style: none; }
+.pl-prop__row::-webkit-details-marker { display: none; }
+.pl-prop__row:hover { background: var(--surface-hover); }
+.pl .pl-prop__row:focus-visible { outline: 2px solid var(--focus-border); outline-offset: -2px; }
+.pl .pl-prop__row--info { cursor: default; }
+.pl .pl-prop__row--info:hover { background: none; }
+.pl-fieldset:disabled .pl-prop__row { cursor: default; }
+.pl-prop__label { display: flex; align-items: center; gap: 8px; width: 120px; flex: none; color: var(--text-secondary); }
+.pl-prop__icon { flex: none; color: var(--accent); }
+.pl-prop__value { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--text-primary); }
+.pl-prop__chev { width: 14px; height: 14px; color: var(--text-muted); transition: transform .15s ease; }
+details[open] > .pl-prop__row .pl-prop__chev, .pl-prop__row[aria-expanded="true"] .pl-prop__chev { transform: rotate(90deg); }
+.pl-prop__body, .pl-qv__picker { display: flex; flex-direction: column; gap: 10px; padding: 2px 12px 14px; }
+.pl-qv__picker[hidden] { display: none; }
+.pl-prop__times { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+.pl-prop__field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 130px; min-width: 0; }
+.pl-prop__link { font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
+.pl-prop__link[hidden] { display: none; }
+.pl-radios--stack { flex-direction: column; align-items: flex-start; }
+/* The Repeat row's fields: the row's own body, not the New item form's boxed panel (planner.css .pl-repeat). */
+.pl .pl-prop__body.pl-repeat { padding: 2px 12px 14px; border: 0; border-radius: 0; background: none; }
+
+/* The quick view (the design's .qv): a modal on desktop, a bottom sheet on phones. */
+.pl-view-dialog { border-radius: 22px; }
+.pl-qv .pl-view__head { align-items: center; }
+.pl-qv__titlebox { flex: 1; min-width: 0; margin: 0; }
+.pl .pl-qv__title, .pl-qv__title { display: block; width: 100%; margin: 0; padding: 2px 6px; border: 0; border-radius: 8px; resize: none;
+  overflow: hidden; background: transparent; color: var(--text-primary); font-family: var(--font-display); font-size: 1.25rem;
+  font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
+.pl .pl-qv__title:hover { background: var(--surface-hover); }
+.pl .pl-qv__title:focus { outline: none; background: var(--input-bg); box-shadow: var(--focus-ring); }
+.pl-view.is-done .pl-qv__title { text-decoration: line-through; color: var(--text-secondary); }
+.pl-view__count { margin-left: 4px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
+.pl-qv [data-qv-row-text] { cursor: text; border-radius: 4px; }
+.pl-qv [data-qv-row-text]:hover { background: var(--surface-hover); }
+.pl-qv [data-qv-row-text]:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 1px; }
+.pl .pl-qv__rename { width: 100%; padding: 2px 6px; border-radius: 6px; background: var(--input-bg); box-shadow: var(--focus-ring); color: var(--text-primary); }
+.pl-cl__row.is-pending { opacity: .6; padding-left: 30px; }
+.pl-qv__add { display: flex; align-items: center; gap: 10px; padding: 6px 2px; color: var(--text-muted); }
+.pl-qv__add svg { flex: none; }
+.pl .pl-qv__add-input { flex: 1; min-width: 0; padding: 4px 0; color: var(--text-primary); font-size: 0.875rem; }
+.pl .pl-qv__add-input:focus { outline: none; box-shadow: inset 0 -1px 0 var(--focus-border); }
+.pl-qv [data-qv-notes-view][role="button"] { cursor: text; border-radius: 8px; }
+.pl-qv [data-qv-notes-view][role="button"]:hover { background: var(--surface-hover); }
+.pl-qv [data-qv-notes-view]:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 2px; }
+.pl .pl-qv__addnotes { padding: 4px 0; color: var(--text-muted); font-size: 0.875rem; }
+.pl .pl-qv__addnotes:hover { color: var(--text-primary); }
+.pl .pl-qv__notes { min-height: 110px; resize: vertical; line-height: 1.5; }
+.pl-qv__share .share-box { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.pl-qv__share .share-box__title { display: none; }
+.pl-qv__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.8125rem; color: var(--text-secondary); }
+.pl-qv__meta:has(.pl-qv__wx:empty):not(:has(.pl-qv__saved:not(:empty))) { display: none; }
+.pl-qv__saved { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-size: 0.75rem; color: var(--text-muted); }
+.pl-qv__saved.is-saved::before { content: "\2713"; font-weight: 700; color: var(--accent); }
+.pl-qv__saved.is-error { color: var(--red); }
+.pl-qv__foot { justify-content: space-between; align-items: center; }
+.pl-qv__editor { font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
+.pl-qv__editor:hover { color: var(--accent-hover); text-decoration: none; }
+
+/* The edit page (Option C): back + ⋯, the check box and a big title, the property rows, Notes, Checklist, Attachments. */
+.pl-ed { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 104px; }
+.pl-ed__bar { display: flex; align-items: center; gap: 8px; }
+.pl-ed__back { width: 38px; height: 38px; display: grid; place-items: center; flex: none; border-radius: 10px; color: var(--text-secondary); }
+.pl-ed__back:hover { color: var(--text-primary); background: var(--surface-hover); }
+.pl-ed__back:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 1px; }
+.pl-ed__where { flex: 1; min-width: 0; font-size: 0.8125rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-ed__titlerow { display: flex; align-items: flex-start; gap: 12px; }
+.pl-ed__titlerow .pl-check-form, .pl-ed__titlerow > .pl-check { margin-top: 7px; }
+.pl-ed__dot { margin: 16px 4px 0; }
+.pl-ed__titlebox { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pl .pl-ed__title { display: block; resize: none; overflow: hidden; width: 100%; margin: 0 0 0 -6px; padding: 4px 6px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-primary); font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+.pl .pl-ed__title:hover:not(:disabled) { background: var(--surface-hover); }
+.pl .pl-ed__title:focus { outline: none; background: var(--input-bg); box-shadow: var(--focus-ring); }
+.pl-ed.is-done .pl-ed__title { text-decoration: line-through; color: var(--text-secondary); }
+.pl-ed__form, .pl-ed__form > .pl-fieldset { display: flex; flex-direction: column; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.pl-ed__blk { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pl-ed__blk[hidden] { display: none; }
+.pl-ed__label { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-sans); font-size: 11px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--text-muted); }
+.pl-ed__label label { cursor: text; }
+.pl-ed__count { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
+.pl-ed .pl-cl-edit__row .pl-cl__check { flex: none; }
+.pl-ed .pl-cl-edit__row.is-done .pl-cl-edit__text { text-decoration: line-through; color: var(--text-secondary); }
+.pl-ed .att__add { padding: 11px 12px; border: 1px dashed var(--hairline-strong); border-radius: 12px; }
+.pl-ed-share { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 48px); padding: 16px; overflow: auto; border: 1px solid var(--hairline);
+  border-radius: 20px; background: var(--surface-overlay); color: var(--text-primary); box-shadow: var(--overlay-shadow); }
+.pl-ed-share::backdrop { background: var(--backdrop); }
+.pl-ed-share__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pl-ed-share__title { font-family: var(--font-display); font-size: 1.0625rem; font-weight: 600; }
+.pl-ed-share .share-box { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.pl-ed-share .share-box__title { display: none; }
+.pl-ed-share__note { margin: 10px 0 0; }
+
+/* The edit page's floating Save - in the dock, left of the AI button: Saved (dimmed) / ● Save / Saving… / Saved ✓. */
+.pl-save-wrap { position: relative; display: flex; align-items: center; }
+.pl-save-fab { display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 20px; border: 0; border-radius: 999px;
+  font: inherit; font-size: 0.9375rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+  background: var(--btn-primary-bg); color: var(--btn-primary-text); box-shadow: var(--btn-primary-glow), var(--overlay-shadow);
+  transition: opacity .15s ease, transform .15s ease; }
+.pl-save-fab:hover:not(:disabled) { background: var(--btn-primary-bg-hover); transform: translateY(-1px); }
+.pl-save-fab:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 3px; }
+.pl-save-fab:disabled { cursor: default; opacity: .5; box-shadow: var(--overlay-shadow); }
+.pl-save-fab[data-state="done"]:disabled { opacity: 1; }
+.pl-save-fab[data-state="saving"] { cursor: progress; opacity: .8; }
+.pl-save-fab__dot { display: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-solid);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.8); }
+[data-theme="light"] .pl-save-fab__dot { background: var(--app-planner); }
+.pl-save-fab[data-state="dirty"] .pl-save-fab__dot { display: block; }
+.pl-save-msg { position: absolute; right: 0; bottom: calc(100% + 10px); width: max-content; max-width: min(320px, calc(100vw - 32px)); margin: 0;
+  padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--red) 50%, transparent); border-radius: 12px; font-size: 0.8125rem;
+  color: var(--text-primary); background: var(--surface-overlay); box-shadow: var(--overlay-shadow); }
+.pl-save-msg[hidden] { display: none; }
+.pl-unsaved .pl-dialog__actions { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .pl-view-dialog { width: 100%; max-width: 100%; margin: auto 0 0; top: auto; bottom: 0; border-radius: 22px 22px 0 0;
+    border-bottom: 0; max-height: min(92vh, calc(100vh - env(safe-area-inset-top) - 8px));
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - 8px)); padding-bottom: env(safe-area-inset-bottom); }
+  .pl-prop__label { width: 104px; }
+  .pl .pl-qv__title { font-size: 1.0625rem; }
+  .pl-ed { gap: 12px; }
+  .pl .pl-ed__title { font-size: 1.3125rem; }
+  .pl-save-fab { min-height: 48px; padding: 0 16px; }
+  .pl-unsaved .pl-dialog__actions { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .pl-prop__chev, .pl-save-fab { transition: none; } }
 .circles-links { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 var(--space-4); }
 .swm-row { color: var(--text-primary); text-decoration: none; }
 .swm-row:hover { background: var(--surface-hover); text-decoration: none; }
