@@ -18,7 +18,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, JsonResponse
+from django.core.cache import cache
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -29,7 +30,7 @@ from django.views.decorators.http import require_POST
 
 from albright_labs import attachments, sharing
 
-from . import checklist, planner, quickadd, recurrence, sources, weather
+from . import checklist, planner, quickadd, quickview, recurrence, sources, weather
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
 from .models import NOTES_MAX, PlannerSettings, ScheduleItem, home_zone
 
@@ -250,6 +251,7 @@ def day_view(request):
     top = meals + top
     overdue = overdue_occs
     day_wx = weather.attach(request.user, occs + overdue_occs, [day])
+    quickview.attach(occs + overdue_occs, request.user)          # each row's instant quick view (data-qv)
     first = min([FIRST_HOUR] + [o.start_time.hour for o in timed])
     last = max([LAST_HOUR] + [o.start_time.hour for o in timed])
     hours = [{"hour": h, "label": datetime(2000, 1, 1, h).strftime("%I %p").lstrip("0"),
@@ -292,6 +294,7 @@ def week_view(request):
             checklist.attach(overdue_outside)
     week_days = [start + timedelta(days=i) for i in range(7)]
     home_wx = weather.attach(request.user, list(occs) + overdue_outside, week_days)
+    quickview.attach(list(occs) + overdue_outside, request.user)
     days = []
     for d in week_days:
         top, timed = _split([o for o in occs if o.date == d])
@@ -320,7 +323,8 @@ def month_view(request):
     grid_start = planner.week_start(first)
     last = _add_months(first, 1) - timedelta(days=1)
     grid_end = planner.week_start(last) + timedelta(days=6)
-    occs = checklist.attach(planner.occurrences(request.user, grid_start, grid_end, **_filters(request)))
+    occs = quickview.attach(checklist.attach(planner.occurrences(request.user, grid_start, grid_end, **_filters(request))),
+                            request.user)
     meals = sources.meals(request.user, grid_start, grid_end, show=_options(request)["meals"])
     context = _frame(request, "month", day, _add_months(first, -1), _add_months(first, 1), f"{first:%B %Y}")
     weeks, d = [], grid_start
@@ -519,6 +523,25 @@ def _link_note(request, item, choice):
 
 
 @login_required
+@never_cache
+def share_box(request, pk):
+    """The quick view's Shared row, when it's opened: the Share control (albright_labs/_share.html) for this item."""
+    item = _visible(request, pk)
+    return render(request, "albright_labs/_share.html", {"share": sharing.control(request.user, item)})
+
+
+@login_required
+@never_cache
+def note_choices(request, pk):
+    """The quick view's Linked note row, when it's opened: the notes this person can link ({"notes": [{id, title}]})."""
+    item = _editable(request, pk)
+    if not sources.can_open(request.user, "notes"):
+        raise Http404
+    return JsonResponse({"notes": [{"id": n.pk, "title": n.title} for n in planner.attachable_notes(request.user)
+                                   if n.pk != item.note_id]})
+
+
+@login_required
 @require_POST
 def quick_edit(request, pk):
     """The quick view's autosave - one small change per request (JSON), on one occurrence (date=):
@@ -582,6 +605,7 @@ def quick_edit(request, pk):
             if row_id not in {r.pk for r in rows}:
                 return JsonResponse({"ok": False, "error": "That item changed meanwhile - reload."}, status=400)
             checklist.save_rows(item, [(r.pk, value if r.pk == row_id else r.text) for r in rows])
+            item.save(update_fields=["updated_at"])
         else:
             added = checklist.add(item, value)
             if added is None:
@@ -614,6 +638,13 @@ def view_item(request, pk):
         occurrence = item.date
     elif occurrence is None or not planner.valid_occurrence(item, occurrence):
         occurrence = planner.current_or_first(item)
+    panel = request.GET.get("panel") == "1"
+    key = None
+    if panel:                                      # the dialog: the same panel as a moment ago comes straight back
+        key = quickview.panel_key(request, item, occurrence)
+        hit = cache.get(key) if key else None
+        if hit is not None:
+            return HttpResponse(hit)
     back = _next(request)
     occ = planner.occurrence_for(item, occurrence, request.user)
     weather.attach(request.user, [occ], [occ.date])
@@ -624,15 +655,21 @@ def view_item(request, pk):
     can_skip_workout = (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done
     can_skip = item.repeats and can_edit and not item.is_workout
     can_delete = is_owner and (can_edit or item.locked)
-    template = "albright_planner/_view_panel.html" if request.GET.get("panel") == "1" else "albright_planner/item.html"
+    template = "albright_planner/_view_panel.html" if panel else "albright_planner/item.html"
     quick = can_edit and not item.locked and not item.is_weigh_in             # edits right here (planner.js)
     can_note = quick and sources.can_open(request.user, "notes")
+    # In the dialog (JavaScript) the costliest parts load only when their row is opened: the Share control (its
+    # circles and people) and the notes you can link. The page (no JavaScript) has them inline.
+    lazy = panel
+    share_ctl = None if lazy else sharing.control(request.user, item)
     linked = planner.linked_note(item, request.user, full=True)
     rule = recurrence.describe(item.recurrence)
-    return render(request, template, {
+    response = render(request, template, {
         "quick": quick, "quick_url": reverse("albright_planner:quick_edit", args=[item.pk]) if quick else "",
         "props": _props(item, occ, planner.today(request.user)), "note_text": _note_text(linked),
-        "can_note": can_note, "note_choices": planner.attachable_notes(request.user) if can_note else [],
+        "can_note": can_note, "note_choices": planner.attachable_notes(request.user) if can_note and not lazy else [],
+        "notes_url": reverse("albright_planner:note_choices", args=[item.pk]) if can_note and lazy else "",
+        "share_url": reverse("albright_planner:share_box", args=[item.pk]) if lazy and (is_owner or quick) else "",
         "repeat_choices": recurrence.REPEATS, "repeat_now": rule["repeat"] if item.recurrence else "none",
         "can_checklist": quick and item.kind == ScheduleItem.TASK, "notes_max": NOTES_MAX,
         "item": item, "o": occ, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,
@@ -641,7 +678,7 @@ def view_item(request, pk):
         "edit_url": reverse("albright_planner:edit", args=[item.pk]) + "?" + urlencode(
             {"date": occurrence.isoformat(), "next": back, "then": "view"}) if can_edit else "",
         "repeat_text": planner.plain_repeat(item), "shared_with": shared_with,
-        "share": sharing.control(request.user, item),
+        "share": share_ctl,
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "can_check_groceries": sources.can_open(request.user, "meals"),
         "fitness": _fitness_panel(item, request.user, occurrence),
@@ -654,6 +691,9 @@ def view_item(request, pk):
         "att": attachments.section(request.user, item, "planner", editable=False,
                                    next_url=_view_url(item, occurrence, back)),
     })
+    if panel and key:
+        cache.set(key, response.content.decode(), quickview.PANEL_TTL)
+    return response
 
 
 def _after_edit(request, item, changes, scope, occurrence):

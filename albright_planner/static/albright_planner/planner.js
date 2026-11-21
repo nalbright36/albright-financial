@@ -445,6 +445,8 @@
             var changed = viewDialog.dataset.changed === "1";
             viewDialog.dataset.changed = "";
             viewDialog.innerHTML = "";
+            viewDialog._token = null;
+            document.documentElement.classList.remove("pl-scroll-lock");            // the page scrolls again
             if (viewPushed) {                                                        // the URL back to the calendar's
                 viewPushed = false;
                 reloadOnPop = changed;
@@ -471,10 +473,14 @@
             });
         });
     }
-    function openView(url, opener) {
-        var box = viewBox();
-        viewOpener = opener || null;
-        return fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "panel=1", {
+    // The full panel for a link (views.view_item ?panel=1) - fetched once, already on pointerdown, so it's usually here
+    // by the time the tap ends; kept 30 seconds, and forgotten after any change (a check-off, a quick edit...).
+    var panelCache = {};
+    function forgetPanels() { panelCache = {}; }
+    function fetchPanel(url) {
+        var hit = panelCache[url];
+        if (hit && Date.now() - hit.at < 30000) return hit.promise;
+        var promise = fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "panel=1", {
             credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}
         }).then(function (r) {
             if (!r.ok) throw new Error(r.status);
@@ -482,24 +488,120 @@
         }).then(function (html) {
             // Only ever an item's view panel - anything else (a whole page) is followed as a link instead.
             if (html.indexOf('id="pl-view-panel"') < 0) throw new Error("not a view panel");
-            box.innerHTML = html;
-            if (window.AlbrightShare && typeof window.AlbrightShare.enhance === "function") window.AlbrightShare.enhance(box);
-            var edit = box.querySelector("[data-view-edit]");
-            if (edit) edit.href = edit.href.replace("then=view", "then=panel");     // saving comes back to this dialog
-            if (!box.open) box.showModal();
-            box.querySelectorAll("[data-qv-title]").forEach(qvGrow);              // a long title wraps
-            clampNotes(box);
-            var close = box.querySelector(".pl-view__close");
-            if (close) close.focus();
-            if (history.pushState && !viewPushed) { history.pushState({plView: true}, "", url); viewPushed = true; }
-        }).catch(function () { window.location.href = url; });                       // the panel's own page
+            return html;
+        });
+        promise.catch(function () { if (panelCache[url] && panelCache[url].promise === promise) delete panelCache[url]; });
+        panelCache[url] = {at: Date.now(), promise: promise};
+        return promise;
     }
+    document.addEventListener("submit", forgetPanels, true);
+
+    // The instant first paint, from the link's data-qv (planner/quickview.py): the same panel, read-only for the moment,
+    // with a shimmer where the full panel adds more (weather); no data (a link inside a panel): a skeleton.
+    function esc(text) {
+        return String(text == null ? "" : text).replace(/[&<>"']/g, function (c) {
+            return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+        });
+    }
+    var QV_ICONS = {
+        date: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+        time: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+        repeat: '<path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-1a5 5 0 015-5h11"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 12.5v1a5 5 0 01-5 5H4"/>',
+        shared: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/>',
+        note: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/>'
+    };
+    function qvIcon(name) {
+        return '<svg class="pl-prop__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + QV_ICONS[name] + "</svg>";
+    }
+    var TICK = '<svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.2l2.3 2.3 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var CLOSE_X = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+    function instantPanel(data, url) {
+        var back = window.location.pathname + window.location.search;
+        try { back = new URL(url, window.location.href).searchParams.get("next") || back; } catch (e) { /* old browsers */ }
+        var skel = '<span class="pl-skel" aria-hidden="true"></span>';
+        function row(icon, label, value) {
+            return '<div class="pl-qv__prop"><div class="pl-prop__row"><span class="pl-prop__label">' + qvIcon(icon) + label +
+                '</span><span class="pl-prop__value">' + (value === null ? skel : esc(value)) + "</span></div></div>";
+        }
+        var d = data || {};
+        var html = '<article class="pl-view pl-qv is-instant' + (d.done ? " is-done" : "") + '" aria-busy="true" aria-labelledby="pl-view-title">' +
+            '<header class="pl-view__head">' +
+            (data ? (d.checkable ? '<span class="pl-check pl-check--lg is-readonly" role="checkbox" aria-checked="' + (d.done ? "true" : "false") + '" aria-disabled="true">' + TICK.replace(/10/g, "16") + "</span>"
+                                 : '<span class="pl-dot pl-view__dot" aria-hidden="true"></span>') : "") +
+            '<h2 class="pl-view__title" id="pl-view-title">' + (data ? esc(d.title) : '<span class="pl-skel pl-skel--title" aria-hidden="true"></span><span class="visually-hidden">Loading</span>') + "</h2>" +
+            '<span class="pl-menu__btn is-placeholder" aria-hidden="true"></span>' +
+            '<a href="' + esc(back) + '" class="pl-view__close" data-view-close aria-label="Close" title="Close (Esc)">' + CLOSE_X + "</a></header>" +
+            '<div class="pl-view__body"><div class="pl-props pl-qv__props">' +
+            row("date", "Date", data ? d.dateText : null) + row("time", "Time", data ? d.timeText : null) +
+            row("repeat", "Repeat", data ? d.repeat : null) + row("shared", "Shared", data ? d.shared : null) +
+            row("note", "Linked note", data ? d.note : null) + "</div>";
+        if (d.checklist && d.checklist.length) {
+            var done = d.checklist.filter(function (r) { return r.c; }).length;
+            html += '<section class="pl-view__section"><h3 class="pl-view__label">Checklist <span class="pl-view__count">' + done + "/" + d.checklist.length +
+                '</span></h3><ul class="pl-cl__rows pl-cl__rows--full">' + d.checklist.map(function (r) {
+                    return '<li class="pl-cl__row' + (r.c ? " is-done" : "") + '"><span class="pl-cl__check is-readonly" role="checkbox" aria-checked="' +
+                        (r.c ? "true" : "false") + '" aria-disabled="true">' + TICK + '</span><span class="pl-cl__text">' + esc(r.t) + "</span></li>";
+                }).join("") + "</ul></section>";
+        }
+        if (d.notes) {
+            html += '<section class="pl-view__section"><h3 class="pl-view__label">Notes</h3><div class="pl-view__notes pl-qv__plain">' +
+                esc(d.notes) + (d.more ? "…" : "") + "</div></section>";
+        }
+        if (d.files && d.files.length) {
+            html += '<section class="pl-view__section"><h3 class="pl-view__label">Attachments <span class="pl-view__count">' + d.files.length +
+                '</span></h3><ul class="pl-qv__files">' + d.files.map(function (f) { return "<li>" + esc(f) + "</li>"; }).join("") + "</ul></section>";
+        }
+        html += '<div class="pl-qv__meta"><span class="pl-qv__wx">' + skel + "</span></div></div>" +
+            '<footer class="pl-view__foot pl-qv__foot">' +
+            (d.edit ? '<a href="' + esc(d.edit + "?date=" + encodeURIComponent(d.date) + "&next=" + encodeURIComponent(back) + "&then=panel") +
+                      '" class="pl-qv__editor" data-view-edit>Open full editor &rarr;</a>' : "<span></span>") +
+            '<a href="' + esc(back) + '" class="pl-btn" data-view-close>Close</a></footer></article>';
+        return html;
+    }
+    function showPanel(box, html) {
+        var body = box.querySelector(".pl-view__body"), top = body ? body.scrollTop : 0;
+        var focusClose = !document.activeElement || document.activeElement === document.body || box.contains(document.activeElement);
+        box.innerHTML = html;
+        if (window.AlbrightShare && typeof window.AlbrightShare.enhance === "function") window.AlbrightShare.enhance(box);
+        var edit = box.querySelector("[data-view-edit]");
+        if (edit) edit.href = edit.href.replace("then=view", "then=panel");     // saving comes back to this dialog
+        box.querySelectorAll("[data-qv-title]").forEach(qvGrow);                  // a long title wraps
+        clampNotes(box);
+        var newBody = box.querySelector(".pl-view__body");
+        if (newBody) newBody.scrollTop = top;
+        var close = box.querySelector(".pl-view__close");
+        if (close && focusClose) close.focus();
+    }
+    function openView(url, opener, data) {
+        var box = viewBox(), token = {};
+        viewOpener = opener || null;
+        box._token = token;
+        var request = fetchPanel(url);
+        box.innerHTML = instantPanel(data, url);                                 // at once - no waiting on the server
+        if (!box.open) box.showModal();
+        document.documentElement.classList.add("pl-scroll-lock");                // the page behind stays put
+        var close = box.querySelector(".pl-view__close");
+        if (close) close.focus();
+        if (history.pushState && !viewPushed) { history.pushState({plView: true}, "", url); viewPushed = true; }
+        request.then(function (html) {
+            if (box._token !== token || !box.open) return;                       // closed, or another task opened
+            showPanel(box, html);
+        }).catch(function () {
+            if (box._token === token) window.location.href = url;                // the panel's own page
+        });
+    }
+    document.addEventListener("pointerdown", function (event) {                  // prefetch before the tap completes
+        var link = event.target.closest && event.target.closest('a[data-view=""]');
+        if (link && canDialog && event.button === 0) fetchPanel(link.getAttribute("href"));
+    }, {passive: true});
     document.addEventListener("click", function (event) {
         // An item's link (data-view, no value) - not the Day / Week / Month tabs (data-tab), which are page links.
         var link = event.target.closest && event.target.closest('a[data-view=""]');
         if (!link || !canDialog || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        openView(link.getAttribute("href"), link);
+        var data = null;
+        try { data = link.dataset.qv ? JSON.parse(link.dataset.qv) : null; } catch (e) { data = null; }
+        openView(link.getAttribute("href"), link, data);
     });
     // The linked note's checklist (the panel shows the whole note): a box ticks that one "- [ ]" line in the note
     // itself - Notes' check endpoint, by the item's stable id (data-item-id), on the note's latest text - so someone
@@ -1002,6 +1104,7 @@
             if (!res.ok || !res.data.ok) throw new Error((res.data && res.data.error) || "check your connection and try again.");
             var dialog = panel.closest("dialog");
             if (dialog) dialog.dataset.changed = "1";
+            forgetPanels();
             if (res.data.occurrence && res.data.occurrence !== panel.dataset.date) {
                 panel.dataset.date = res.data.occurrence;
                 panel.querySelectorAll('input[name=date]').forEach(function (i) { i.value = res.data.occurrence; });
@@ -1039,6 +1142,35 @@
         });
     }
     function qvGrow(area) { area.style.height = "auto"; area.style.height = area.scrollHeight + "px"; }
+    // Pickers whose contents cost the server most load only when first opened: the Share control (data-lazy-html)
+    // and the notes you can link (data-lazy-options).
+    function qvLazy(picker) {
+        var box = picker.querySelector("[data-lazy-html]");
+        if (box && !box.dataset.loaded) {
+            box.dataset.loaded = "1";
+            fetch(box.dataset.lazyHtml, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+                .then(function (html) {
+                    box.innerHTML = html;
+                    if (window.AlbrightShare && typeof window.AlbrightShare.enhance === "function") window.AlbrightShare.enhance(box);
+                }).catch(function () { box.dataset.loaded = ""; box.innerHTML = '<p class="pl-error">Couldn\u2019t load sharing \u2013 try again.</p>'; });
+        }
+        var select = picker.querySelector("select[data-lazy-options]");
+        if (select && !select.dataset.loaded) {
+            select.dataset.loaded = "1";
+            fetch(select.dataset.lazyOptions, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (data) {
+                    var newOpt = select.querySelector('option[value="new"]');
+                    (data.notes || []).forEach(function (n) {
+                        if (select.querySelector('option[value="' + n.id + '"]')) return;
+                        var opt = document.createElement("option");
+                        opt.value = n.id; opt.textContent = n.title;
+                        select.insertBefore(opt, newOpt);
+                    });
+                }).catch(function () { select.dataset.loaded = ""; });
+        }
+    }
 
     document.addEventListener("click", function (event) {
         var panel = qvPanel(event.target);
@@ -1050,6 +1182,7 @@
             pick.setAttribute("aria-expanded", open ? "true" : "false");
             if (picker) {
                 picker.hidden = !open;
+                if (open) qvLazy(picker);
                 var first = open && picker.querySelector("input:not([type=hidden]), select");
                 if (first) first.focus();
             }
@@ -1412,6 +1545,7 @@
             var body = new FormData();
             body.append("date", document.querySelector("input[name=occurrence]").value);
             body.append("checked", was ? "0" : "1");
+            forgetPanels();
             post(tick.dataset.edTick, body).then(function (res) {
                 if (!res.ok || !res.data.ok) throw new Error("not saved");
                 show(!!res.data.checked);

@@ -372,7 +372,7 @@ def section(user, parent, app, editable=None, next_url=""):
             "files": [r for r in rows if not r["is_image"]], "count": len(rows), "can_edit": editable,
             "upload_url": reverse("labs:attachment_upload"), "accept": ACCEPT, "max": max_per_parent(),
             "max_bytes": max_bytes(), "max_label": size_limit_label(max_bytes()), "next": next_url,
-            "storage": storage.get_storage_usage(user)}
+            "storage": storage.get_storage_usage(user) if editable else None}   # only shown with Add files
 
 
 def api_list(parent, request=None):

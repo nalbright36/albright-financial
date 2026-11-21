@@ -76,16 +76,18 @@ its checklist boxes tick right here (saved to the note) for someone who can edit
             </div>{% endif %}
         </div>
         <div class="pl-qv__prop" data-qv-prop="shared">
-            {% if share and is_owner or share and quick %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="shared" %}Shared</span><span class="pl-prop__value" id="pl-view-shared">{% if o.shared_in %}<span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> Shared by {{ item.owner|person }}{% if not can_edit %} &middot; view only{% endif %}{% elif shared_with %}{{ shared_with|join:", " }}{% else %}Only me{% endif %}</span>{% if share and is_owner or share and quick %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
-            {% if share and is_owner or share and quick %}<div class="pl-qv__picker pl-qv__share" hidden>{% include "albright_labs/_share.html" %}<span class="pl-help">Sharing changes save right away.</span></div>{% endif %}
+            {% if share and is_owner or share and quick or share_url %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="shared" %}Shared</span><span class="pl-prop__value" id="pl-view-shared">{% if o.shared_in %}<span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> Shared by {{ item.owner|person }}{% if not can_edit %} &middot; view only{% endif %}{% elif shared_with %}{{ shared_with|join:", " }}{% else %}Only me{% endif %}</span>{% if share and is_owner or share and quick or share_url %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
+            {% if share and is_owner or share and quick %}<div class="pl-qv__picker pl-qv__share" hidden>{% include "albright_labs/_share.html" %}<span class="pl-help">Sharing changes save right away.</span></div>
+            {% elif share_url %}<div class="pl-qv__picker pl-qv__share" hidden><div data-lazy-html="{{ share_url }}"><span class="pl-skel pl-skel--block" aria-hidden="true"></span><span class="visually-hidden">Loading sharing</span></div><span class="pl-help">Sharing changes save right away.</span></div>{% endif %}
         </div>
         <div class="pl-qv__prop" data-qv-prop="note">
             {% if can_note %}<button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false">{% else %}<div class="pl-prop__row">{% endif %}<span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="note" %}Linked note</span><span class="pl-prop__value" data-qv-value="note">{{ note_text }}</span>{% if can_note %}{% include "albright_planner/_prop_icon.html" with name="chevron" %}</button>{% else %}</div>{% endif %}
             {% if can_note %}<div class="pl-qv__picker" hidden>
                 <label class="visually-hidden" for="pl-qv-note">Linked note</label>
-                <select id="pl-qv-note" class="pl-input pl-select" data-qv-field="note">
+                <select id="pl-qv-note" class="pl-input pl-select" data-qv-field="note"{% if notes_url %} data-lazy-options="{{ notes_url }}"{% endif %}>
                     <option value="none"{% if not item.note_id %} selected{% endif %}>No note</option>
                     {% if item.note_id and not linked_note.title %}<option value="" selected disabled>{{ note_text }}</option>{% endif %}
+                    {% if notes_url and linked_note.title %}<option value="{{ item.note_id }}" selected>{{ linked_note.title }}</option>{% endif %}
                     {% for n in note_choices %}<option value="{{ n.pk }}"{% if n.pk == item.note_id %} selected{% endif %}>{{ n.title }}</option>{% endfor %}
                     <option value="new">New note, titled from this item</option>
                 </select>

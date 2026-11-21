@@ -374,6 +374,8 @@ def today_panel(user, show_completed=False):
     day = today(user)
     late = overdue(user, day)
     occs = checklist.attach(occurrences(user, day, day) + late)
+    from . import quickview
+    quickview.attach(occs, user)                                  # each row's instant quick view (data-qv)
     todays = [o for o in occs if o.item.kind == ScheduleItem.TASK and not getattr(o, "overdue", False)]
     fitness = sources.can_open(user, "fitness")
     workouts = [o for o in todays if fitness and o.item.source_app == "fitness"]

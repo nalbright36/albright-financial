@@ -116,3 +116,35 @@ class EditSaveTests(Base):
         for bit in ('id="pl-save"', 'data-edit-form', 'id="pl-unsaved"', 'data-share-open', 'name="note_choice"',
                     'class="pl-ed__title"', 'form="pl-form"'):
             self.assertIn(bit, page)
+
+
+class InstantTests(Base):
+    def test_rows_carry_their_quick_view(self):
+        import html as htmlmod
+        import json
+        task = self.item("Pack", kind="task", checkable=True, notes="bring **tent**")
+        checklist.create_rows(task, ["stove", "matches"])
+        page = self.client.get(url("day") + f"?date={TODAY.isoformat()}").content.decode()
+        raw = re.search(r'data-qv="([^"]+)"', page).group(1)
+        data = json.loads(htmlmod.unescape(raw))
+        self.assertEqual((data["id"], data["title"], data["timeText"], data["shared"], data["note"]),
+                         (task.pk, "Pack", "All day", "Only me", "None"))
+        self.assertEqual([r["t"] for r in data["checklist"]], ["stove", "matches"])
+        self.assertIn("tent", data["notes"])
+
+    def test_panel_is_lean_and_cached_until_something_changes(self):
+        task = self.item("Pack", kind="task", checkable=True)
+        self.client.get(url("day"))                                    # a CSRF cookie, like a real browser
+        path = url("item", task.pk) + f"?date={TODAY.isoformat()}&panel=1"
+        first = self.client.get(path).content.decode()
+        self.assertNotIn('id="share-box"', first)                       # the Share control loads when its row opens
+        self.assertIn(url("share_box", task.pk), first)
+        self.assertIn(url("note_choices", task.pk), first)
+        self.assertEqual(self.client.get(path).content.decode(), first)
+        self.client.post(url("toggle", task.pk), {"date": TODAY.isoformat(), "checked": "1"}, **AJAX)
+        after = self.client.get(path).content.decode()
+        self.assertNotEqual(after, first)
+        self.assertIn('aria-checked="true"', after)
+        self.assertIn('id="share-box"', self.client.get(url("share_box", task.pk)).content.decode())
+        self.assertEqual(self.client.get(url("note_choices", task.pk)).json(), {"notes": []})
+        self.assertEqual(self.as_user(self.stranger).get(url("share_box", task.pk)).status_code, 404)
