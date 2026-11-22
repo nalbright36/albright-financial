@@ -185,8 +185,7 @@ note_content.css. Styles: notes.css; behavior: notes.js; views.workspace.
                 <hr class="nt-menu__sep">
                 <label for="nt-tags" class="nt-mfield"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/></svg><span>Tags</span><input type="text" id="nt-tags" class="nt-input" data-field="tags" value="{{ open.tags|join:', ' }}" placeholder="home, taxes"></label>
                 <label class="nt-switch"><input type="checkbox" id="nt-sort-checked" data-field="sort_checked"{% if open.sort_checked %} checked{% endif %}><span class="nt-switch__track" aria-hidden="true"></span> <span class="nt-switch__text">Move checked items to the bottom</span></label>
-                {% if smart.planner %}<label class="nt-switch"><input type="checkbox" id="nt-auto-planner"{% if smart.auto_planner %} checked{% endif %}><span class="nt-switch__track" aria-hidden="true"></span> <span class="nt-switch__text">Dated items → Planner <span class="nt-muted nt-small">all your notes</span></span></label>{% endif %}
-                <p class="nt-small nt-muted nt-mhint">Type <b>@</b> in the note for a due date (&ldquo;@fri 5pm&rdquo;){% if smart.groceries %}, the grocery list (&ldquo;@grocery milk, eggs&rdquo;){% endif %} or a person.</p>
+                <p class="nt-small nt-muted nt-mhint">Type <b>@</b> in the note for a due date (&ldquo;@today call mom&rdquo;{% if smart.planner %} - the line goes to your Planner{% endif %}){% if smart.groceries %}, the grocery list (&ldquo;@grocery milk, eggs&rdquo;){% endif %} or a person.</p>
                 {% endif %}
                 {% if is_owner %}
                 <hr class="nt-menu__sep">

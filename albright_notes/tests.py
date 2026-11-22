@@ -724,3 +724,84 @@ class AccentTests(TestCase):
             self.assertEqual([w.id for w in warnings], ["albright_labs.W002"])
             self.assertIn("style.css", warnings[0].msg)
             self.assertIn("collectstatic", warnings[0].hint)
+
+
+class SmartPlannerTests(Base):
+    """A dated line ("@today call mom") goes to the Planner by itself, like @grocery: no setting, no click."""
+
+    def setUp(self):
+        super().setUp()
+        from albright_planner.models import ScheduleItem
+        self.Item = ScheduleItem
+
+    def test_a_second_dated_line_in_the_same_note_works(self):
+        # The bug: every task from a note had source_id = the note's id, so the 2nd hit the Planner's
+        # one-item-per-source constraint (IntegrityError -> a 500 and "Couldn't add to the Planner").
+        note = self.note(body="- [ ] call mom @[date:2026-11-23]\n- [ ] pay rent @[date:2026-11-24]")
+        first = self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": "call mom"})
+        second = self.post_json(url("planner", note.pk), {"date": "2026-11-24", "text": "pay rent"})
+        self.assertEqual((first.status_code, second.status_code), (200, 200))
+        self.assertNotEqual(first.json()["task_id"], second.json()["task_id"])
+        tasks = self.Item.objects.filter(note=note).order_by("date")
+        self.assertEqual([(t.title, t.date.isoformat()) for t in tasks], [("call mom", "2026-11-23"), ("pay rent", "2026-11-24")])
+        self.assertEqual(len({t.source_id for t in tasks}), 2)
+
+    def test_same_line_sent_twice_makes_one_task(self):
+        note = self.note(body="- [ ] call mom @[date:2026-11-23]")
+        one = self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": "call  mom "}).json()
+        two = self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": "call mom"}).json()
+        self.assertEqual((one["task_id"], one["created"], two["created"]), (two["task_id"], True, False))
+        self.assertEqual(self.Item.objects.filter(note=note).count(), 1)
+
+    def test_resaving_the_note_adds_nothing(self):
+        note = self.note(body="")
+        task = self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": "call mom"}).json()["task_id"]
+        body = f"- [ ] call mom @[date:2026-11-23|task:{task}]"
+        for _ in range(2):
+            note.refresh_from_db()
+            response = self.post_json(url("save", note.pk), {"body": body, "version": note.version})
+            self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.Item.objects.filter(note=note).count(), 1)
+        # Another line with the same words and day (the first is linked now) is its own task.
+        again = self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": "call mom"}).json()
+        self.assertTrue(again["created"])
+        self.assertEqual(self.Item.objects.filter(note=note).count(), 2)
+
+    def test_dates_and_times(self):
+        note = self.note()
+        for body, expect in (({"date": "2026-11-23", "time": "9:00", "text": "a"}, "09:00"),
+                             ({"date": "2026-11-23T17:30", "text": "b"}, "17:30"),
+                             ({"date": "2026-11-23", "text": "c"}, None)):
+            task = self.Item.objects.get(pk=self.post_json(url("planner", note.pk), body).json()["task_id"])
+            self.assertEqual(task.start_time and task.start_time.strftime("%H:%M"), expect)
+        self.assertEqual(self.post_json(url("planner", note.pk), {"date": "someday", "text": "x"}).status_code, 400)
+        self.assertEqual(self.post_json(url("planner", note.pk), {"text": "x"}).status_code, 400)
+
+    def test_empty_line_text_uses_the_title(self):
+        note = self.note(title="Errands")
+        task = self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": ""}).json()["task_id"]
+        self.assertEqual(self.Item.objects.get(pk=task).title, "Errands")
+
+    def test_no_planner_no_task(self):
+        with_apps(self.me, ["notes"])
+        note = self.note()
+        self.assertEqual(self.post_json(url("planner", note.pk), {"date": "2026-11-23", "text": "x"}).status_code, 403)
+        self.assertFalse(self.Item.objects.exists())
+
+    def test_on_for_everyone_with_the_planner_and_no_switch(self):
+        from albright_notes import smart
+        note = self.note(body="hi")
+        page = self.client.get(url("note", note.pk)).content.decode()
+        self.assertNotIn("nt-auto-planner", page)
+        self.assertIn('"auto_planner": true', page)
+        self.assertTrue(smart.auto_planner(self.me))
+        self.assertFalse(smart.auto_planner(with_apps(self.stranger, ["notes"])))
+
+    def test_bot_items_with_dates_each_get_a_task(self):
+        from albright_notes import smart
+        note = self.note(body="")
+        body, summary = smart.append_items(note, [{"text": "call mom", "due": "2026-11-23"},
+                                                  {"text": "pay rent", "due": "2026-11-24", "time": "09:00"}], self.me)
+        self.assertEqual(summary["planner_tasks"], 2)
+        self.assertEqual(self.Item.objects.filter(note=note).count(), 2)
+        self.assertEqual(len(smart.due_items(body)), 2)

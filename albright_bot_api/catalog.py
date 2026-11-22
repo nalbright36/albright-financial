@@ -457,7 +457,7 @@ Body: {"title": str (required, <=200), "body": Markdown str (optional, <=100000)
 "items": [{"text": str, "due": "YYYY-MM-DD" (optional), "time": "HH:MM" (optional), "grocery": bool (optional - put
 the text on the owner's grocery list; commas split it; anything already on the list isn't added twice),
 "checklist": bool (optional, default true)}] (optional, <=50 - lines added after the body; a dated one also becomes a
-Planner task when the owner has "Always add dated note items to Planner" on)}.
+Planner task when the owner can open the Planner)}.
 The note belongs to the owner and shows "by <your token's name>". Returns 201 {"id", ..., "url", "linked"}.""",
        scopes=("notes:write",), section="notes", status=201,
        body={"title": S(maxLength=200), "body": S("Markdown"), "tags": A(S()), "pinned": B(),

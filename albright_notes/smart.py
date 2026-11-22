@@ -21,6 +21,7 @@ Two-way sync (a "link" is a date chip with a task, or a grocery chip with lines)
     a conflict: it's merged (views.note_save)."""
 import re
 import threading
+import uuid
 from contextlib import contextmanager
 from datetime import date as date_cls, time as time_cls
 
@@ -411,14 +412,30 @@ def remove_groceries(user, ids):
 
 
 def add_task(note, user, day, at=None, text=""):
-    """A Planner task for a dated note item, linked back to the note."""
+    """A Planner task for a dated note item, linked back to the note. source_id is "<note>:<random>": the Planner
+    allows one item per (owner, source_app, source_id), and a note can have any number of dated lines."""
     from albright_planner import services
     from albright_planner.models import ScheduleItem
-    item = services.create_scheduled_task(user, TASK_SOURCE, note.pk, (text or note.title)[:200], day, at,
+    item = services.create_scheduled_task(user, TASK_SOURCE, f"{note.pk}:{uuid.uuid4().hex[:12]}",
+                                          (text or note.title)[:200], day, at,
                                           url=reverse("albright_notes:note", args=[note.pk]))
     ScheduleItem.objects.filter(pk=item.pk).update(note=note)
     item.note_id = note.pk
     return item
+
+
+def task_for_line(note, user, day, at=None, text=""):
+    """The editor's auto-add (a dated line, like "@today call mom"): this line's task, made once. A request sent twice
+    (a retry, two tabs) gets the task already made for it - same note, date, time and title, and no line of the
+    saved note links it yet - instead of a second one. Returns (task, created)."""
+    from albright_planner.models import ScheduleItem
+    title = (" ".join((text or note.title or "").split()) or "Untitled")[:200]
+    linked = {c["task"] for c in chips(note.body) if c["kind"] == "date" and c.get("task")}
+    for task in ScheduleItem.objects.filter(note_id=note.pk, owner=user, source_app=TASK_SOURCE, date=day,
+                                            start_time=at, title=title, archived=False).order_by("pk"):
+        if task.pk not in linked:
+            return task, False
+    return add_task(note, user, day, at, title), True
 
 
 def planner_task(user, task_id):
@@ -427,15 +444,18 @@ def planner_task(user, task_id):
 
 
 def auto_planner(user):
-    from .models import NotesSettings
-    row = NotesSettings.objects.filter(user=user).first()
-    return bool(row and row.auto_planner)
+    """A dated line always becomes a Planner task (like @grocery) for anyone who can open the Planner.
+    (NotesSettings.auto_planner, the old opt-in switch, is no longer read.)"""
+    from . import links
+    return "planner" in links._allowed_apps(user)
 
 
 def parse_when(day_text, time_text=None):
     """ISO date and optional "HH:MM" -> (date, time) or ValueError."""
-    day = date_cls.fromisoformat(str(day_text))
-    at = time_cls.fromisoformat(str(time_text)[:5]) if time_text else None
+    day_text, _sep, inline = str(day_text or "").strip().partition("T")      # "2026-12-03T17:00" works too
+    day = date_cls.fromisoformat(day_text)
+    time_text = str(time_text or inline or "").strip()
+    at = time_cls.fromisoformat(time_text[:5].zfill(5)) if time_text else None   # "9:00" -> 09:00
     return day, at
 
 

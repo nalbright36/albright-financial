@@ -12,8 +12,9 @@
  *                  menu, Aa for text styles, a selection toolbar on a desktop and a bar above the keyboard on a
  *                  phone. Lists continue on Enter; Enter on an empty item ends the list; Tab / Shift+Tab nest.
  *                  On a phone the note opens in a reading layout; tap the text to edit right there
- *   "@"            a due date ("@fri 5pm", "@dec 3" - a chip; tap it to change it or "Add to Planner"), the grocery
- *                  list ("@grocery milk, eggs" - sent when you leave the line, with Undo), or a person. Linked dates
+ *   "@"            a due date ("@today call mom", "@fri 5pm" - a chip; the line goes to the Planner when you leave
+ *                  it, with Undo; tap the chip to change it or open the task), the grocery list ("@grocery milk,
+ *                  eggs" - sent when you leave the line, with Undo), or a person. Linked dates
  *                  and grocery tags stay in step with their Planner task / grocery line both ways (smart.py)
  *   autosave       title, body, tags and "Move checked items to the bottom" save as you type (debounced): "Saving…" /
  *                  "Saved ✓". Each save sends the version it started from; a 409 means someone else changed the
@@ -783,12 +784,37 @@
     var linkBase = (smart && smart.link_state) || {};       // the link states the server last gave us (sent back on save)
     var atState = null;
     function atUpdate(props) {
+        if (autoDate(props)) return;
         if (!props.items.length) { atState = null; if (blockMenu) blockMenu.hidden = true; return; }
         if (!atState) atState = {active: 0};
         atState.props = props;
         atState.active = Math.min(atState.active, props.items.length - 1);
         drawMenu(props.items, atState.active, function (item) { props.command(item); });
         placeMenu(blockMenu, props.clientRect && props.clientRect());
+    }
+    // "@today call mom": a date followed by more words becomes a date chip on its own (like "@grocery" + space), so
+    // the rest of the line is the task. Waits while the words still read as a date ("@fri 5pm ...").
+    var NOT_ALONE = {tom: 1, tod: 1};                       // names as often as dates: pick them from the menu
+    function autoDate(props) {
+        var raw = props.query || "", words = [], re = /\S+/g, m;
+        if (!/\s$/.test(raw) || !props.range || !NoteEditor.parseWhen) return false;
+        while ((m = re.exec(raw))) words.push({end: m.index + m[0].length, text: m[0].toLowerCase()});
+        if (words.length < 2 || NOT_ALONE[words[0].text] || NoteEditor.parseWhen(raw)) return false;
+        var first = words[0].text, people = (smart && smart.people) || [];
+        if (people.some(function (p) { return p.name.toLowerCase().split(/\s+/).some(function (w) { return w.indexOf(first) === 0; }); })) return false;
+        for (var n = words.length - 1; n >= 1; n--) {
+            var when = NoteEditor.parseWhen(raw.slice(0, words[n - 1].end));
+            if (!when) continue;
+            var from = props.range.from, cut = 1 + words[n - 1].end + 1;           // "@" + the date words + one space
+            var end = props.range.to - cut + 2;                                     // where the typing was, after chip + space
+            atState = null;
+            if (blockMenu) blockMenu.hidden = true;
+            editor.commands.setTextSelection(from + cut);                          // insertChip inserts at the cursor
+            NoteEditor.insertChip(editor, {kind: "date", date: when.date, time: when.time}, {from: from, to: from + cut});
+            editor.commands.setTextSelection(Math.min(end, editor.state.doc.content.size));
+            return true;
+        }
+        return false;
     }
     function atKey(props) {
         if (!atState || blockMenu.hidden) return false;
@@ -814,7 +840,7 @@
     }
 
     // A chip just made is sent when you leave its line (so "@grocery milk, eggs" is finished first): the grocery
-    // tag puts the line's items on your grocery list; a date becomes a Planner task when that setting is on.
+    // tag puts the line's items on your grocery list; a date puts the line in the Planner as a task on that day.
     var resolveTimer = null, skipPrompt = {};
     function resolveSoon() { clearTimeout(resolveTimer); resolveTimer = setTimeout(function () { resolveChips(false); }, 120); }
     function resolveChips(force) {
@@ -841,19 +867,32 @@
                     NoteEditor.updateChip(editor, c.uid, {fresh: true}, true);
                     toast(err.message === "failed" ? "Couldn't add to groceries" : err.message);
                 });
-            } else if (c.attrs.kind === "date") {
+            } else if (c.attrs.kind === "date" && smart.planner && !c.attrs.task) {
+                if (!c.text) return;                                      // nothing on the line yet: wait
                 NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
-                if (smart.auto_planner && smart.planner && !c.attrs.task) addToPlanner(c);
+                addToPlanner(c, true);
             } else NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
         });
     }
-    function addToPlanner(c) {
-        return api(root.dataset.plannerUrl, {date: c.attrs.date, time: c.attrs.time, text: c.text})
+    // auto: sent on leaving the line (Undo; a failure retries next time) - else "Add to Planner" on the chip.
+    function addToPlanner(c, auto) {
+        return api(root.dataset.plannerUrl, {date: c.attrs.date, time: c.attrs.time, text: c.text.replace(/\s+/g, " ").trim()})
             .then(function (data) {
                 NoteEditor.updateChip(editor, c.uid, {task: data.task_id});
-                toast("Added to the Planner");
+                if (data.created === false) { toast("Already in the Planner"); return; }
+                var when = NoteEditor.dateLabel ? " · " + NoteEditor.dateLabel(c.attrs.date, c.attrs.time) : "";
+                toast("Added to the Planner" + when, auto ? "Undo" : null, function () {
+                    api(root.dataset.plannerDeleteUrl.replace("/0/", "/" + data.task_id + "/"), {}).then(function () {
+                        skipPrompt["task:" + data.task_id] = true;
+                        NoteEditor.updateChip(editor, c.uid, {task: null});   // keeps the date, drops the link
+                        toast("Removed from the Planner");
+                    }).catch(function () { toast("Couldn't remove it from the Planner"); });
+                });
             })
-            .catch(function (err) { toast(err.message === "failed" ? "Couldn't add to the Planner" : err.message); });
+            .catch(function (err) {
+                if (auto) NoteEditor.updateChip(editor, c.uid, {fresh: true}, true);
+                toast(err.message === "failed" ? "Couldn't add to the Planner" : err.message);
+            });
     }
 
     // Taking out a dated line (or its date) that's in the Planner, or a grocery tag: ask about the other side.
@@ -995,15 +1034,6 @@
             }).catch(function () {});
     }
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshLinks(); });
-
-    var autoPlanner = byId("nt-auto-planner");
-    if (autoPlanner) autoPlanner.addEventListener("change", function () {
-        var on = autoPlanner.checked;
-        api(root.dataset.settingsUrl, {auto_planner: on}).then(function () {
-            smart.auto_planner = on;
-            showSaved(on ? "Dated items will go to the Planner" : "Saved ✓");
-        }).catch(function () { autoPlanner.checked = !on; showSaved("Couldn't save that setting", true); });
-    });
 
     // ---------- Images and files (albright_labs/static/labs/attachments.js does the upload) ----------
     var attSection = root.querySelector("[data-att]");

@@ -564,7 +564,8 @@ def smart_groceries_remove(request, pk):
 @login_required
 @require_POST
 def smart_planner(request, pk):
-    """"Add to Planner" on a date chip: {date, time?, text} -> {task_id, url}."""
+    """A dated line goes to the Planner (sent by the editor when you leave the line, or "Add to Planner" on its chip):
+    {date, time?, text} -> {task_id, url, created}. Sending the same line twice gives back the same task."""
     note = _editable(request, pk)
     if "planner" not in links._allowed_apps(request.user):
         return JsonResponse({"ok": False, "error": "You can't open the Planner."}, status=403)
@@ -573,8 +574,8 @@ def smart_planner(request, pk):
         day, at = smart.parse_when(data.get("date"), data.get("time"))
     except (TypeError, ValueError):
         return JsonResponse({"ok": False, "error": "Pick a date"}, status=400)
-    task = smart.add_task(note, request.user, day, at, str(data.get("text") or "")[:200])
-    return JsonResponse({"ok": True, "task_id": task.pk,
+    task, created = smart.task_for_line(note, request.user, day, at, str(data.get("text") or "")[:200])
+    return JsonResponse({"ok": True, "task_id": task.pk, "created": created,
                          "url": reverse("albright_planner:item", args=[task.pk]) + f"?date={day.isoformat()}"})
 
 
@@ -603,7 +604,8 @@ def smart_state(request, pk):
 @login_required
 @require_POST
 def smart_settings(request):
-    """{auto_planner: bool} - "Always add dated note items to Planner"."""
+    """{auto_planner: bool} - the old "Dated items -> Planner" switch (kept so old pages don't error; dated lines now
+    always go to the Planner - smart.auto_planner)."""
     value = _json(request).get("auto_planner")
     if not isinstance(value, bool):
         return JsonResponse({"ok": False, "error": "auto_planner must be true or false"}, status=400)

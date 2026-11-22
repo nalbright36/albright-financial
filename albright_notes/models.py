@@ -107,7 +107,8 @@ class NoteLink(models.Model):
 class NotesSettings(models.Model):
     """A person's Notes settings."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notes_settings")
-    # Every date picked with "@" in a note becomes a Planner task too (smart.add_task).
+    # The old opt-in "Dated items -> Planner" switch. No longer read: every dated line goes to the Planner
+    # (smart.auto_planner); kept to avoid a migration.
     auto_planner = models.BooleanField(default=False)
 
     def __str__(self):
