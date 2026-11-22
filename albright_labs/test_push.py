@@ -283,3 +283,115 @@ class PageTests(Base):
         self.assertIn("Albright", page)
         self.assertIn("Try again", page)
         self.assertIn("labs/push.js", page)
+
+
+@override_settings(**VAPID)
+class BurstTests(Base):
+    """A burst of edits to one shared thing by one person is ONE banner (activity merges it; push sends a merged
+    event again only to someone who read it since)."""
+    def setUp(self):
+        super().setUp()
+        from albright_notes.models import Note
+        self.note = Note.objects.create(owner=self.nate, title="Groceries")
+        share_with(self.note, self.kate, "edit")
+        share_with(self.note, self.kim, "edit")
+        self.nates = _sub(self.nate, "nate")
+        self.n = 0
+
+    def edit(self, who, note=None):
+        from albright_notes import notes
+        self.n += 1
+        with mock.patch("albright_labs.push.webpush") as webpush:
+            with self.captureOnCommitCallbacks(execute=True):
+                with activity.acting(who):
+                    notes.save(note or self.note, who.username, body=f"milk {self.n}")
+        return [c for c in webpush.call_args_list if c.kwargs["subscription_info"]["endpoint"] == self.nates.endpoint]
+
+    def age(self, minutes):
+        from albright_labs.models import ActivityEvent
+        ActivityEvent.objects.update(updated_at=timezone.now() - timedelta(minutes=minutes))
+
+    def test_many_saves_in_a_burst_are_one_notification_and_one_push(self):
+        from albright_labs.models import ActivityEvent
+        sent = sum(len(self.edit(self.kate)) for _ in range(6))
+        self.assertEqual(sent, 1)
+        self.assertEqual(ActivityEvent.objects.count(), 1)
+        self.assertEqual(activity.unread_count(self.nate), 1)
+
+    def test_banner_replaces_itself_and_tapping_it_marks_it_read(self):
+        call = self.edit(self.kate)[0]
+        payload = json.loads(call.kwargs["data"])
+        event = activity.notifications(self.nate).get()
+        self.assertEqual(payload["tag"], f"event-{event.pk}")
+        self.assertEqual(payload["url"], reverse("labs:notification_open", args=[event.pk]))
+        self.client.get(payload["url"])
+        self.assertEqual(activity.unread_count(self.nate), 0)
+
+    def test_after_the_window_a_new_push(self):
+        self.assertEqual(len(self.edit(self.kate)), 1)
+        self.age(activity.NOTE_WINDOW.total_seconds() / 60 + 1)
+        self.assertEqual(len(self.edit(self.kate)), 1)
+        self.assertEqual(len(activity.notifications(self.nate)), 2)
+
+    def test_different_notes_and_people_are_separate(self):
+        from albright_notes.models import Note
+        other = Note.objects.create(owner=self.nate, title="Trip")
+        share_with(other, self.kate, "edit")
+        self.assertEqual(len(self.edit(self.kate)), 1)
+        self.assertEqual(len(self.edit(self.kate, other)), 1)
+        self.assertEqual(len(self.edit(self.kim)), 1)
+        self.assertEqual(len(self.edit(self.kate)), 0)
+
+    def test_reading_it_lets_the_next_edit_push_once_more(self):
+        self.edit(self.kate)
+        self.age(3)
+        activity.mark_read(self.nate, activity.notifications(self.nate).get())
+        self.assertEqual(len(self.edit(self.kate)), 1)
+        self.assertEqual(len(self.edit(self.kate)), 0)
+        self.age(3)
+        activity.mark_all_read(self.nate)
+        self.assertEqual(len(self.edit(self.kate)), 1)
+
+    def test_no_push_while_you_are_editing_it_too(self):
+        self.edit(self.nate)
+        self.assertEqual(len(self.edit(self.kate)), 0)
+        self.assertEqual(activity.unread_count(self.nate), 1)      # still in the bell
+        self.age(push.ACTIVE_WINDOW.total_seconds() / 60 + 1)
+        self.assertEqual(len(self.edit(self.kim)), 1)
+
+    def test_quiet_hours_then_the_next_edit_pushes_once(self):
+        item = self.item("Pack")
+        share_with(item, self.nate)
+        item.owner = self.kate
+        item.save()
+        now = timezone.localtime()
+        prefs = NotificationSettings.for_user(self.nate)
+        prefs.quiet_start = (now - timedelta(hours=3)).time().replace(microsecond=0)
+        prefs.quiet_end = (now - timedelta(hours=1)).time().replace(microsecond=0)
+        prefs.save()
+
+        def record():
+            with mock.patch("albright_labs.push.webpush") as webpush:
+                with self.captureOnCommitCallbacks(execute=True):
+                    activity.record_activity("planner", "updated", "changed “Pack”", obj=item, actor=self.kate,
+                                             group="x", window=timedelta(hours=4))
+            return webpush.call_count
+        record()
+        self.age(120)                                               # its last change was in quiet hours
+        self.assertEqual(record(), 1)
+        self.assertEqual(record(), 0)
+
+    def test_other_grouped_activity_is_one_push_too(self):
+        first, second = self.item("Pack"), self.item("Tickets")
+        for item in (first, second):
+            share_with(item, self.kate)
+        kates = _sub(self.kate, "kate")
+        counts = []
+        for item in (first, second):
+            with mock.patch("albright_labs.push.webpush") as webpush:
+                with self.captureOnCommitCallbacks(execute=True):
+                    activity.created(item, actor=self.nate)
+            counts.append(sum(c.kwargs["subscription_info"]["endpoint"] == kates.endpoint
+                              for c in webpush.call_args_list))
+        self.assertEqual(counts, [1, 0])
+        self.assertEqual(activity.text(activity.notifications(self.kate).get()), "Nathan added 2 tasks")

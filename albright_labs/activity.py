@@ -4,7 +4,8 @@ Apps call record_activity(...) (or one of the helpers below it) after a change. 
 only the actor can see: a Planner item, note or workout needs a share (albright_labs.sharing); a recipe a share or a
 circle's kitchen; a grocery line, meal plan, rating, budget or transaction a circle's space. Repeats by the same
 person on the same kind of thing within GROUP_WINDOW are merged ("Kate added 5 items to the grocery list"); a note's
-edits within NOTE_WINDOW are one event. A bot's actions say "via <bot name>".
+edits within NOTE_WINDOW are one event. A bot's actions say "via <bot name>". A merged event only sends another Web Push
+banner to someone who has read it since (push.notify_event) - a burst of edits is one banner, not one per save.
 
 Who sees an event is decided when they look (visible), never stored:
   - audience OBJECT: whoever can view the object right now (sharing.can_view - unsharing hides it at once);
@@ -32,7 +33,7 @@ from . import circles, sharing
 from .models import CIRCLE_APPS, ActivityEvent, ActivityRead, CircleMembership, NotificationSettings, ShareGrant
 
 GROUP_WINDOW = timedelta(minutes=15)
-NOTE_WINDOW = timedelta(minutes=10)
+NOTE_WINDOW = timedelta(minutes=30)
 KEEP_DAYS = 90
 OBJECT, CIRCLE = ActivityEvent.OBJECT, ActivityEvent.CIRCLE
 ALL, MINE, OFF = NotificationSettings.ALL, NotificationSettings.MINE, NotificationSettings.OFF
@@ -119,11 +120,12 @@ def _audience_key(obj):
 
 
 
-def _saved(event):
-    """An event was written; queue Web Push (never raises, never blocks a rollback)."""
+def _saved(event, merged_since=None):
+    """An event was written; queue Web Push (never raises, never blocks a rollback). merged_since: it grew - when it
+    last changed before this (push sends again only to someone who read it since)."""
     try:
         from . import push
-        push.schedule(event)
+        push.schedule(event, merged_since=merged_since)
     except Exception:
         pass
     return event
@@ -167,6 +169,7 @@ def record_activity(app, verb, summary, *, obj=None, actor=None, via=None, circl
                                                  circle=circle, audience=audience, recipient=recipient,
                                                  updated_at__gte=now - window).order_by("-updated_at").first())
         if existing is not None:
+            before = existing.updated_at
             existing.count += count
             existing.summary = (plural.format(n=existing.count) if plural and existing.count > 1 else summary)[:300]
             existing.updated_at = now
@@ -174,7 +177,7 @@ def record_activity(app, verb, summary, *, obj=None, actor=None, via=None, circl
             for name, value in fields.items():
                 setattr(existing, name, value)
             existing.save(update_fields=["count", "summary", "updated_at", "url", "content_type", "object_id"])
-            return _saved(existing)
+            return _saved(existing, merged_since=before)
     text = plural.format(n=count) if plural and count > 1 else summary
     return _saved(ActivityEvent.objects.create(actor=actor, via=via, app=app, verb=verb, summary=text[:300], count=count,
                                         group_key=group[:120], audience=audience, circle=circle, recipient=recipient,

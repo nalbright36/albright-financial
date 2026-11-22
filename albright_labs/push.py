@@ -2,12 +2,18 @@
 
 A PushSubscription is one browser or phone. After an ActivityEvent is saved, schedule()
 sends a banner to everyone who would see that event in the bell, except the actor and
-anyone in quiet hours. Missing VAPID keys disable sending (no error). A failed send
+anyone in quiet hours. Missing VAPID keys disable sending (no error).
+A merged event (the same person's burst of edits to one thing, activity.record_activity) is ONE banner: it is sent
+again to someone only after they've read it (tapped it, or Mark all read) since its last change, or when its last
+change fell in their quiet hours (so no banner went then). Nobody gets a banner about a thing they changed themselves
+in the last ACTIVE_WINDOW (they're working on it right now). The banner's tag is the event, so a repeat replaces the
+old banner instead of stacking, and tapping it marks it read (labs:notification_open). A failed send
 never raises to the caller. 404/410 from the push service deletes that subscription.
 """
 import json
 import logging
 import re
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -21,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 # A short timeout so a slow push service cannot stall the request that created the event.
 SEND_TIMEOUT = 8
+# Someone who changed the same thing this recently is in it right now: no banner about it.
+ACTIVE_WINDOW = timedelta(minutes=5)
 
 
 def vapid_enabled():
@@ -75,15 +83,15 @@ def device_name(user_agent):
     return f"{device} · {browser}" if browser else device
 
 
-def schedule(event):
-    """Send after the surrounding transaction commits. Never raises."""
+def schedule(event, merged_since=None):
+    """Send after the surrounding transaction commits. Never raises. merged_since: see notify_event."""
     if event is None or not getattr(event, "pk", None) or not vapid_enabled():
         return
     pk = event.pk
 
     def _run():
         try:
-            notify_event(pk)
+            notify_event(pk, merged_since=merged_since)
         except Exception:
             logger.exception("Web push failed for event %s", pk)
 
@@ -93,8 +101,30 @@ def schedule(event):
         logger.exception("Web push schedule failed for event %s", pk)
 
 
-def notify_event(event_or_pk):
-    """Send this event to every subscribed person who should be notified. Safe to call directly in tests."""
+def _busy_with_it(user, event):
+    """They changed the same thing themselves in the last ACTIVE_WINDOW (they're in it right now)."""
+    from .models import ActivityEvent
+    if not event.content_type_id or not event.object_id:
+        return False
+    return ActivityEvent.objects.filter(actor=user, content_type_id=event.content_type_id, object_id=event.object_id,
+                                        updated_at__gte=timezone.now() - ACTIVE_WINDOW).exists()
+
+
+def _worth_another(user, prefs, event, since):
+    """A merged event they were already bannered about: again only if they read it since its last change (`since`),
+    or that change fell in their quiet hours (no banner went then)."""
+    from . import activity
+    from .models import ActivityRead
+    if activity.in_quiet_hours(prefs, since):
+        return True
+    if prefs.read_all_at and prefs.read_all_at >= since:
+        return True
+    return ActivityRead.objects.filter(user=user, event=event, read_at__gte=since).exists()
+
+
+def notify_event(event_or_pk, merged_since=None):
+    """Send this event to every subscribed person who should be notified. Safe to call directly in tests.
+    merged_since: the event grew (record_activity merged into it) - when it last changed before that."""
     from . import activity
     from .models import ActivityEvent, PushSubscription
 
@@ -116,19 +146,24 @@ def notify_event(event_or_pk):
         prefs = activity.prefs_for(user)
         if activity.in_quiet_hours(prefs):
             continue
+        if merged_since is not None and not _worth_another(user, prefs, event, merged_since):
+            continue
+        if _busy_with_it(user, event):
+            continue
         if not activity.notifications(user, prefs).filter(pk=event.pk).exists():
             continue
         body = activity.text(event)
-        url = event.url or reverse("labs:activity")
+        url = reverse("labs:notification_open", args=[event.pk])
         for sub in PushSubscription.objects.filter(user=user):
-            send_to(sub, title="Albright", body=body, url=url)
+            send_to(sub, title="Albright", body=body, url=url, tag=f"event-{event.pk}")
 
 
-def send_to(sub, *, title, body, url):
-    """Send one banner. 404/410 drops the subscription. Other errors are logged and ignored."""
+def send_to(sub, *, title, body, url, tag=""):
+    """Send one banner. 404/410 drops the subscription. Other errors are logged and ignored.
+    tag: a banner with the same tag replaces the last one on the device (sw.js) instead of stacking."""
     if not vapid_enabled():
         return
-    payload = json.dumps({"title": title, "body": body, "url": url})
+    payload = json.dumps({"title": title, "body": body, "url": url, **({"tag": tag} if tag else {})})
     try:
         webpush(
             subscription_info={

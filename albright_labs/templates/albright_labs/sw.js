@@ -56,6 +56,7 @@ self.addEventListener("push", function (event) {
   var options = {
     body: data.body || "",
     data: { url: data.url || "/" },
+    tag: data.tag || undefined,          // the same event again replaces its banner instead of stacking
     icon: "{% static 'icons/icon-192.png' %}",
     badge: "{% static 'icons/favicon-32.png' %}"
   };

@@ -164,7 +164,8 @@ def purge_trash(now=None):
 
 
 def _record_edit(note):
-    """A shared note's edits show in others' activity - one event per person per NOTE_WINDOW (10 minutes)."""
+    """A shared note's edits show in others' activity - one event (and one push banner) per person per
+    burst - edits less than NOTE_WINDOW (30 minutes) apart."""
     from albright_labs import activity
     activity.record_activity("notes", "updated", f"edited the note {activity.quote(note.title)}", obj=note,
                              group=f"edited:{note.pk}", window=activity.NOTE_WINDOW)

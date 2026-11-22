@@ -123,14 +123,18 @@ class RecordingTests(Base):
         self.assertEqual(self.seen(self.nate)[0], "Kate added “Butter” to the grocery list")
         self.assertEqual(ActivityEvent.objects.count(), 2)
 
-    def test_note_edits_merge_within_10_minutes(self):
+    def test_note_edits_merge_within_30_minutes(self):
         note = Note.objects.create(owner=self.nate, title="Packing list")
         share_with(note, self.kate, "edit")
         with activity.acting(self.kate):
             notes.save(note, "kate", body="one")
             notes.save(note, "kate", body="two")
         self.assertEqual(ActivityEvent.objects.get().count, 2)
-        ActivityEvent.objects.update(updated_at=timezone.now() - timedelta(minutes=11))
+        ActivityEvent.objects.update(updated_at=timezone.now() - timedelta(minutes=25))
+        with activity.acting(self.kate):
+            notes.save(note, "kate", body="two and a half")
+        self.assertEqual(ActivityEvent.objects.get().count, 3)
+        ActivityEvent.objects.update(updated_at=timezone.now() - timedelta(minutes=31))
         with activity.acting(self.kate):
             notes.save(note, "kate", body="three")
             notes.save(note, "kate", body="three")                    # nothing changed: nothing recorded
