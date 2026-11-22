@@ -2,7 +2,9 @@
 {% comment %}
 Albright Notes' base template. The app's stylesheet and script come from the
 app registry (apps_registry: Notes' stylesheet / script), which index.html
-includes on every Notes page.
+includes on every Notes page. note_content.css is how a note's text looks - the same rules for the editor and for
+the rendered note, so the two always match.
 {% endcomment %}
-{% load cache_bust %}{% block app_head %}<link rel="stylesheet" href="{% static_version 'labs/attachments.css' %}">{% endblock %}
+{% load cache_bust %}{% block app_head %}<link rel="stylesheet" href="{% static_version 'labs/attachments.css' %}">
+<link rel="stylesheet" href="{% static_version 'albright_notes/note_content.css' %}">{% endblock %}
 {% block app_scripts %}<script src="{% static_version 'labs/attachments.js' %}" defer></script>{% endblock %}

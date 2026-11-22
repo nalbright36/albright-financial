@@ -12,6 +12,7 @@ ME = "me"                 # Note.created_by for a note its owner wrote on the si
 MAX_TAGS = 20
 MAX_TAG_LENGTH = 50
 MAX_BODY = 100_000
+TRASH_DAYS = 30           # "Recently deleted" keeps a note this long (prune_activity removes it after)
 
 
 class NoteQuerySet(models.QuerySet):
@@ -29,6 +30,14 @@ class NoteQuerySet(models.QuerySet):
         return sharing.editable_queryset(user, Note, self)
 
 
+class NoteManager(models.Manager.from_queryset(NoteQuerySet)):
+    """Note.objects: every note except the ones in Recently deleted - the pages, the Bot API, sharing and the
+    Planner's links all go through it, so a deleted note is gone everywhere until it's restored."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
 class Note(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notes")
     title = models.CharField(max_length=200)
@@ -36,6 +45,14 @@ class Note(models.Model):
     tags = models.JSONField(default=list, blank=True)           # ["groceries", "taxes"], lowercase
     pinned = models.BooleanField(default=False)
     archived = models.BooleanField(default=False)
+    # In "Recently deleted" since then (notes.trash / restore); prune_activity removes it TRASH_DAYS later.
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    # Ticked checklist items move to the bottom of their list (a per-note switch in the editor's More panel).
+    sort_checked = models.BooleanField(default=False)
+    # The rich editor (editor_src/note_editor.js) rewrites a note's Markdown in its own tidy form the first time
+    # it saves it; the Markdown from before that is kept here, with when, until we're sure nothing was lost.
+    body_backup = models.TextField(blank=True)
+    editor_saved_at = models.DateTimeField(null=True, blank=True)
     # "me" (written on the site), or the name of the bot token that created it.
     created_by = models.CharField(max_length=100, default=ME)
     bot_token = models.ForeignKey("albright_bot_api.BotToken", on_delete=models.SET_NULL, null=True, blank=True,
@@ -47,7 +64,8 @@ class Note(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = NoteQuerySet.as_manager()
+    objects = NoteManager()
+    all_objects = NoteQuerySet.as_manager()          # deleted ones too (Recently deleted, restore, purge)
 
     class Meta:
         ordering = ["-pinned", "-updated_at", "-pk"]

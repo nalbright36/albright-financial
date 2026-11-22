@@ -2,17 +2,33 @@
 (albright_bot_api.notes_api): creating, saving with a conflict check,
 tags, search, and who a note can be shared with."""
 import re
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import transaction
 from django.db.models import Q, TextField
 from django.db.models.functions import Cast
+from django.utils import timezone
 
-from .models import MAX_BODY, MAX_TAG_LENGTH, MAX_TAGS, ME, Note
+from .models import MAX_BODY, MAX_TAG_LENGTH, MAX_TAGS, ME, TRASH_DAYS, Note
 
 UNTITLED = "Untitled note"
 SEARCH_WORDS = 8
+
+# "+ New note" starters: key -> (menu label, title, Markdown body).
+TEMPLATES = {
+    "blank": ("Blank", UNTITLED, ""),
+    "checklist": ("Checklist", "Checklist", "- [ ] "),
+    "meeting": ("Meeting notes", "Meeting notes",
+                "**Date:** \n**Attendees:** \n\n## Agenda\n\n- \n\n## Notes\n\n\n\n## Action items\n\n- [ ] "),
+    "meals": ("Meal plan", "Meal plan",
+              "## Monday\n\n- \n\n## Tuesday\n\n- \n\n## Wednesday\n\n- \n\n## Thursday\n\n- \n\n## Friday\n\n- \n\n"
+              "## Weekend\n\n- \n\n## Groceries\n\n- [ ] "),
+    "packing": ("Packing list", "Packing list",
+                "## Clothes\n\n- [ ] \n\n## Toiletries\n\n- [ ] Toothbrush\n- [ ] Toothpaste\n\n## Tech\n\n"
+                "- [ ] Phone charger\n\n## Documents\n\n- [ ] ID\n- [ ] Tickets"),
+}
 
 
 class Conflict(Exception):
@@ -57,9 +73,10 @@ def create(owner, title, body="", tags=(), pinned=False, token=None, author=None
     return note
 
 
-def save(note, by, base_version=None, **fields):
-    """Change title/body/tags (any subset). base_version: the version the editor started from - a newer
-    one in the database raises Conflict (None skips the check: overwrite on purpose, or a bot's append).
+def save(note, by, base_version=None, editor=False, **fields):
+    """Change title/body/tags/sort_checked (any subset). base_version: the version the editor started from - a
+    newer one in the database raises Conflict (None skips the check: overwrite on purpose, or a bot's append).
+    editor: the site's rich editor wrote the body - the first time, the Markdown from before is kept in body_backup.
     Returns the saved note (version bumped)."""
     with transaction.atomic():
         current = Note.objects.select_for_update().get(pk=note.pk)
@@ -69,9 +86,14 @@ def save(note, by, base_version=None, **fields):
         if "title" in fields:
             current.title = (fields["title"] or "").strip()[:200] or UNTITLED
         if "body" in fields:
-            current.body = (fields["body"] or "")[:MAX_BODY]
+            body = (fields["body"] or "")[:MAX_BODY]
+            if editor and current.editor_saved_at is None and body != current.body:
+                current.body_backup, current.editor_saved_at = current.body, timezone.now()
+            current.body = body
         if "tags" in fields:
             current.tags = clean_tags(fields["tags"])
+        if "sort_checked" in fields:
+            current.sort_checked = bool(fields["sort_checked"])
         current.version += 1                         # the row is locked: no one else can bump it meanwhile
         current.updated_by = by[:150]
         current.save()
@@ -104,6 +126,30 @@ def set_checked(note, by, checked, item_id=None, index=None):
     if changed:
         _record_edit(current)
     return current, before
+
+
+def trash(note):
+    """Move a note to Recently deleted (kept TRASH_DAYS days; restore() brings it back)."""
+    Note.all_objects.filter(pk=note.pk).update(deleted_at=timezone.now())
+
+
+def restore(note):
+    Note.all_objects.filter(pk=note.pk).update(deleted_at=None, updated_at=timezone.now())
+
+
+def trashed(owner):
+    return Note.all_objects.filter(owner=owner, deleted_at__isnull=False).order_by("-deleted_at", "-pk")
+
+
+def purge_trash(now=None):
+    """Delete for good every note that's been in Recently deleted longer than TRASH_DAYS (its attachments go
+    with it - albright_labs.attachments' delete signal). Returns how many."""
+    cutoff = (now or timezone.now()) - timedelta(days=TRASH_DAYS)
+    count = 0
+    for note in Note.all_objects.filter(deleted_at__lt=cutoff):
+        note.delete()
+        count += 1
+    return count
 
 
 def _record_edit(note):

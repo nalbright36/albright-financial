@@ -7,6 +7,7 @@ launcher entry; no access for new users; and the app's static files."""
 import json
 import pathlib
 import re
+from datetime import timedelta
 from io import StringIO
 
 from django.conf import settings
@@ -15,6 +16,7 @@ from django.contrib.staticfiles import finders
 from django.core.cache import cache
 from django.core.management import call_command
 from django.urls import reverse
+from django.utils import timezone
 
 from albright_labs.models import ShareGrant
 from django.test import Client, TestCase, override_settings
@@ -104,10 +106,32 @@ class CreateEditTests(Base):
         self.assertTrue(note.archived)
         self.assertNotContains(self.client.get(url("list")), f'id="note-{note.pk}"')
         self.assertContains(self.client.get(url("list") + "?archived=1"), f'id="note-{note.pk}"')
-        page = self.client.get(url("note", note.pk)).content.decode()
-        self.assertIn('data-confirm="Delete', page)
-        self.client.post(url("delete", note.pk))
-        self.assertFalse(Note.objects.exists())
+        response = self.client.post(url("delete", note.pk))
+        self.assertRedirects(response, url("list") + f"?undo={note.pk}", fetch_redirect_response=False)
+        self.assertFalse(Note.objects.exists())                                 # gone from everywhere ...
+        self.assertEqual(self.client.get(url("note", note.pk)).status_code, 302)          # item_page: back to the list
+        deleted = self.client.get(url("list") + "?view=deleted").content.decode()
+        self.assertIn(f'id="note-{note.pk}"', deleted)                         # ... but in Recently deleted
+        self.assertIn("30 days left", deleted)
+        self.client.post(url("restore", note.pk))
+        self.assertTrue(Note.objects.filter(pk=note.pk).exists())
+        self.client.post(url("delete", note.pk), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.client.post(url("purge", note.pk))
+        self.assertFalse(Note.all_objects.filter(pk=note.pk).exists())
+
+    def test_deleting_with_undo_and_the_daily_cleanup(self):
+        note = self.note(title="Keep me?")
+        response = self.client.post(url("delete", note.pk), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.json()["restore_url"], url("restore", note.pk))
+        self.assertEqual(self.client.post(url("purge", self.note().pk)).status_code, 404)   # not deleted: no purge
+        self.client.post(response.json()["restore_url"], HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertIsNone(Note.objects.get(pk=note.pk).deleted_at)
+        notes.trash(note)
+        Note.all_objects.filter(pk=note.pk).update(deleted_at=timezone.now() - timedelta(days=31))
+        fresh = self.note(title="Just deleted")
+        notes.trash(fresh)
+        self.assertEqual(notes.purge_trash(), 1)
+        self.assertEqual(list(Note.all_objects.filter(owner=self.me, deleted_at__isnull=False)), [Note.all_objects.get(pk=fresh.pk)])
 
     def test_list_pinned_first_then_most_recently_updated(self):
         old_pinned = self.note(title="Old pinned", pinned=True)
@@ -125,12 +149,12 @@ class CreateEditTests(Base):
         share_with(note, self.wife, "view")
         links.add(note, links.BY_KEY[("meals", "recipe")], Recipe.objects.create(space=self.kitchen, title="Fish tacos"))
         row = self.client.get(url("list")).content.decode().split(f'id="note-{note.pk}"', 1)[1].split("</a>", 1)[0]
-        self.assertIn("<p>Plan</p>", row)
+        self.assertIn('<p class="nt-note__preview">Plan</p>', row)
         self.assertIn('<span class="nt-tag">food</span>', row)
-        self.assertIn('<span class="nt-chip"><span aria-hidden="true">👥</span> Shared</span>', row)
+        self.assertIn('<span class="nt-meta-ico" title="Shared">', row)
         self.assertIn('<span class="nt-chip"><span aria-hidden="true">🔗</span> Fish tacos</span>', row)
         page = self.client.get(url("note", note.pk)).content.decode()
-        self.assertIn('Edited <span id="nt-updated">just now</span>', page)
+        self.assertRegex(page, r'Edited <time id="nt-updated" datetime="[^"]+">just now</time>')
 
 
 class SearchTagTests(Base):
@@ -192,7 +216,7 @@ class SharingTests(Base):
         note = self.note()
         share_with(note, self.wife, "edit")
         wife = self.as_user(self.wife)
-        self.assertIn('id="nt-body"', wife.get(url("note", note.pk)).content.decode())
+        self.assertIn('id="nt-editor-mount"', wife.get(url("note", note.pk)).content.decode())
         self.assertEqual(self.post_json(url("save", note.pk), {"body": "eggs", "version": 1}, wife).status_code, 200)
         wife.post(reverse("labs:share", args=["albright_notes.Note", note.pk]), {"action": "add", "target": "person", "who": self.stranger.username})
         self.assertEqual(grants_of(note), [(self.wife.pk, "edit")])                  # editors can't reshare
@@ -261,17 +285,19 @@ class ChecklistTests(Base):
         self.assertIn("- [ ] not a task", html)                       # code blocks stay text
         self.assertNotIn("data-task", str(render.render(self.BODY, editable=False)))
 
-    def test_every_list_item_is_numbered_for_editing_in_place(self):
-        body = "Trip\n- x\n1. one\n2. \n- [ ] pack\n    - nested\nafter\n```\n- code\n```\n- "
+    def test_list_fixups_and_empty_lines(self):
+        body = "\n".join(["Trip", "- x", "1. one", "2. ", "- [ ] pack", "    - nested", "after", "```", "- code", "```",
+                          "- ", "", "", "", "end"])
         html = str(render.render(body, editable=True))
-        self.assertEqual(re.findall(r'<li data-li="(\d)"', html), ["0", "1", "2", "3", "4", "5"])
-        self.assertEqual(len(render.list_lines(body)), 6)
         self.assertIn("<p>after</p>", html)                               # a plain line after a list ends it
         self.assertNotIn("<h2>", html)                                     # an empty "- " isn't a heading underline
         self.assertEqual(html.count("<ol>"), 1)                            # "1." after "-" is a list of its own
-        self.assertNotIn("data-li", str(render.render(body, editable=False)))
-        # Counts that don't line up (a "- - -" rule): nothing to edit in place, the Markdown still works.
-        self.assertNotIn("data-li", str(render.render("- a\n- - -", editable=True)))
+        self.assertEqual(html.count('class="nt-empty-line"'), 2)          # the gap someone left stays
+        rich = str(render.render("\n".join(["-# fine print", "", ":::callout 💡", "==hi== ++u++ ~~s~~", ":::", "",
+                                            ":::toggle More", "hidden", ":::"])))
+        for piece in ('<p class="nt-small-text">fine print</p>', '<div class="nt-callout">', "<mark>hi</mark>", "<u>u</u>",
+                      "<del>s</del>", '<details class="nt-toggle"><summary>More</summary>'):
+            self.assertIn(piece, rich)
 
     def test_ticking_rewrites_that_markdown_line(self):
         note = self.note(body=self.BODY)
@@ -539,7 +565,7 @@ class WorkspaceTests(Base):
         self.assertEqual(order, sorted(order))
         self.assertIn('class="nt-panes"', page)
         self.assertIn(f'data-note-id="{newer.pk}"', page)                            # the first in the list is open
-        self.assertIn(f'class="nt-note on" id="note-{newer.pk}"', page)
+        self.assertIn(f'class="nt-item on" data-note-row="{newer.pk}"', page)
         self.assertIn('placeholder="Search notes…  ( / )"', page)
         self.assertIn('<span id="nt-words">3 words</span>', page)
         self.assertIn('<span id="nt-saved" aria-live="polite">Saved ✓</span>', page)
@@ -549,7 +575,7 @@ class WorkspaceTests(Base):
         page = self.client.get(url("list") + "?view=pinned&tag=home").content.decode()
         self.assertIn(f'href="{url("note", a.pk)}?view=pinned&amp;tag=home"', page)
         page = self.client.get(url("note", a.pk) + "?view=pinned").content.decode()
-        self.assertIn('class="nt-folder on" data-folder="pinned" aria-current="page"', page)
+        self.assertIn('class="nt-fchip on" data-chip="pinned" aria-current="page"', page)
 
     def test_sidebar_folders_and_tag_counts(self):
         self.note(title="Pinned one", pinned=True, tags=["home", "reselling"])
@@ -560,25 +586,31 @@ class WorkspaceTests(Base):
         share_with(theirs, self.me, "view")
         page = self.client.get(url("list")).content.decode()
         counts = dict(re.findall(r'data-folder="(\w+)"(?: aria-current="page")?><span>.*?</span> <span class="nt-muted">(\d+)</span>', page))
-        self.assertEqual(counts, {"all": "3", "pinned": "1", "shared": "1", "checklists": "1", "archived": "1"})
+        self.assertEqual(counts, {"archived": "1", "deleted": "0"})
+        self.assertEqual(re.findall(r'data-chip="(\w+)"', page), ["all", "pinned", "shared", "checklists"])
         tags = dict(re.findall(r'data-tag="([\w-]+)"><span># [\w-]+</span> <span class="nt-muted">(\d+)</span>', page))
         self.assertEqual(tags, {"home": "2", "reselling": "1"})                        # archived notes aren't counted
         for view, titles in (("pinned", ["Pinned one"]), ("shared", ["Gift ideas"]), ("checklists", ["List"]),
                              ("archived", ["Old"])):
             with self.subTest(view=view):
                 content = self.client.get(url("list") + "?view=" + view).content.decode()
-                listed = re.findall(r'<a href="/notes/\d+/[^"]*" class="nt-note[^"]*" id="note-\d+"[^>]*>\s*<b>(?:<span[^>]*>[^<]*</span><span[^>]*>[^<]*</span> )?([^<]+)</b>', content)
+                listed = re.findall(r'<b class="nt-note__title">(?:<svg.*?</svg><span[^>]*>[^<]*</span>)?([^<]+)</b>', content)
                 self.assertEqual(listed, titles)
-        self.assertIn("1 of 2 done", self.client.get(url("list") + "?view=checklists").content.decode())
+        self.assertIn('title="Checklist: 1 of 2 done"', self.client.get(url("list") + "?view=checklists").content.decode())
 
     def test_toolbar_and_panels(self):
         note = self.note(title="Plan", body="- [ ] cash")
         page = self.client.get(url("note", note.pk)).content.decode()
-        toolbar = page.split('class="nt-toolbar"', 1)[1].split("</div>", 1)[0]
-        for marker in ('data-fmt="bold"', 'data-fmt="italic"', 'data-fmt="heading"', 'data-fmt="check"',
-                       'data-fmt="bullet"', 'data-fmt="number"',
+        toolbar = page.split('class="nt-toolbar"', 1)[1].split('<section class="nt-pop"', 1)[0]
+        for marker in ('data-fmt="styles"', 'data-fmt="check"', 'data-fmt="bullet"', 'data-fmt="number"', 'data-fmt="image"',
                        'data-pop="nt-pop-link"', 'id="nt-pin"', 'data-pop="nt-pop-share"', 'data-pop="nt-pop-more"'):
             self.assertIn(marker, toolbar)
+        bubble = page.split('id="nt-bubble"', 1)[1].split("</div>", 1)[0]                 # the selection toolbar
+        for kind in ("bold", "italic", "underline", "strike", "highlight", "code", "link"):
+            self.assertIn(f'data-fmt="{kind}"', bubble)
+        phone = page.split('id="nt-mbar"', 1)[1].split("</div>", 1)[0]                   # the bar above the keyboard
+        for kind in ("styles", "check", "bullet", "bold", "italic", "link", "image", "undo", "redo"):
+            self.assertIn(f'data-fmt="{kind}"', phone)
         for panel in ("nt-pop-link", "nt-pop-share", "nt-pop-more"):
             self.assertRegex(page, rf'<section class="nt-pop" id="{panel}"[^>]*hidden>')
         # Someone it's shared with to view: no formatting, no panels, no editor.
@@ -586,7 +618,8 @@ class WorkspaceTests(Base):
         page = self.as_user(self.wife).get(url("note", note.pk)).content.decode()
         self.assertNotIn("data-fmt=", page)
         self.assertNotIn('id="nt-pop-', page)
-        self.assertIn('<h3 class="nt-title">Plan</h3>', page)
+        self.assertIn('<h2 class="nt-title">Plan</h2>', page)
+        self.assertNotIn("note-editor.js", page)                                        # no editor bundle for a reader
 
     def test_new_note_opens_in_the_editor(self):
         response = self.client.post(url("new"))
@@ -594,7 +627,13 @@ class WorkspaceTests(Base):
         self.assertRedirects(response, url("note", note.pk) + "?new=1")
         self.assertEqual((note.title, note.owner), (notes.UNTITLED, self.me))
         page = self.client.get(url("note", note.pk) + "?new=1").content.decode()
-        self.assertIn('data-mode="write"', page)                                        # empty: straight to typing
+        self.assertIn('id="nt-editor-mount"', page)
+        self.assertIn('<script id="nt-source" type="application/json">""</script>', page)
+        for key, (_label, title, body) in notes.TEMPLATES.items():
+            with self.subTest(template=key):
+                self.client.post(url("new"), {"template": key})
+                made = Note.objects.order_by("-pk").first()
+                self.assertEqual((made.title, made.body), (title, body))
 
     def test_word_count(self):
         from albright_notes.views import word_count
@@ -653,7 +692,8 @@ class AccentTests(TestCase):
 
     def test_no_green_or_accent_override_in_notes_files(self):
         greens = ("#10b981", "#34d399", "#047857", "#065f46", "#6ee7b7", "16, 185, 129", "emerald", "--gain")
-        files = [p for p in (settings.BASE_DIR / "albright_notes").rglob("*") if p.suffix in (".css", ".js", ".html")]
+        files = [p for p in (settings.BASE_DIR / "albright_notes").rglob("*") if p.suffix in (".css", ".js", ".html")
+                 and "editor_src" not in p.parts and "vendor" not in p.parts]
         self.assertTrue(files)
         for path in files:
             text = path.read_text(encoding="utf-8").lower()

@@ -1,63 +1,131 @@
 {% extends "albright_notes/base.html" %}
 {% block page_title %}{% if open %}{{ open.title }} · {% endif %}Notes · {% endblock %}
+{% load cache_bust %}
+{% block app_head %}{{ block.super }}{% if can_edit %}
+<script src="{% static_version 'albright_notes/vendor/note-editor.js' %}" defer></script>{% endif %}{% endblock %}
 {% block content %}
 {% comment %}
-Albright Notes - Option A of docs/design/"Albright Notes - design options.html"
-("Three-pane workspace"): folders and tags on the left, the notes in the
-middle, the open note on the right (stacked on phones). Its features, all
-real: folder-style sidebar, tag counts, formatting toolbar, checklists, link
-to records, attachments (albright_labs/_attachments.html - "Insert image" and pasting or dropping an image put
-it in the note as ![name](/attachments/<id>/)), word count, "/" to search. Styles: albright_notes/notes.css (the
-mockup's .a rules, its colors mapped to the site's theme variables);
-behavior: albright_notes/notes.js; views.workspace.
+Albright Notes - the three-pane workspace (Option A of docs/design/"Albright Notes - design options.html"), Eclipse
+styling in Notes pink. Left: "+ New note" (with starter templates), tags, Archived, Recently deleted. Middle: the
+notes - filter chips (All / Pinned / Shared / Has checklist), search with highlighted matches, sort, a Pinned section,
+and per row the title, first line, last edited, checklist progress, attachments and shared icons; swipe a row left
+on a phone (or hover it on a desktop) for Pin and Delete. Right: the open note in the rich editor (the vendored
+TipTap bundle, albright_notes/editor_src) - "/" menu, Aa styles, selection toolbar on a desktop, a formatting bar
+above the keyboard on a phone. A reader who can't edit sees the server's rendering (render.py); both use the same
+note_content.css, so a note looks the same while editing and after saving. Styles: notes.css; behavior: notes.js;
+views.workspace.
 {% endcomment %}
-<div class="container nt" id="notes" data-search-url="{% url 'albright_notes:link_search' %}">
+<div class="container nt" id="notes" data-search-url="{% url 'albright_notes:link_search' %}" data-leave-url="{% url 'albright_notes:leave' %}"
+     {% if undo_note %}data-undo-title="{{ undo_note.title }}" data-undo-url="{% url 'albright_notes:restore' undo_note.pk %}"{% endif %}>
     <h1 class="visually-hidden">Notes</h1>
     <div class="nt-frame"><div class="nt-panes">
-        <nav class="nt-side" aria-label="Folders and tags">
-            <form method="post" action="{% url 'albright_notes:new' %}" class="nt-new">{% csrf_token %}<button type="submit" class="nt-btn primary" id="nt-new">+ New note</button></form>
-            {% for f in folders %}<a href="{{ f.url }}" class="nt-folder{% if f.key == view and not tag %} on{% endif %}" data-folder="{{ f.key }}"{% if f.key == view and not tag %} aria-current="page"{% endif %}><span>{% if f.icon %}<span aria-hidden="true">{{ f.icon }}</span> {% endif %}{{ f.label }}</span> <span class="nt-muted">{{ f.count }}</span></a>
-            {% endfor %}
+        <nav class="nt-side" aria-label="New note, tags and places">
+            <form method="post" action="{% url 'albright_notes:new' %}" class="nt-new">{% csrf_token %}
+                <button type="submit" name="template" value="blank" class="nt-btn primary" id="nt-new">+ New note</button>
+                <details class="nt-tpl">
+                    <summary class="nt-btn primary nt-tpl__btn" aria-label="New note from a template" title="Templates"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+                    <div class="nt-menu nt-tpl__menu" role="menu">
+                        <p class="nt-menu__head">Start from</p>
+                        {% for key, label in templates %}<button type="submit" name="template" value="{{ key }}" class="nt-menu__item" role="menuitem" data-template="{{ key }}">{{ label }}</button>{% endfor %}
+                    </div>
+                </details>
+            </form>
             {% if tags %}<h4>Tags</h4>
             {% for t, count in tags %}<a href="{{ list_url }}?tag={{ t|urlencode }}" class="nt-folder{% if t == tag %} on{% endif %}" data-tag="{{ t }}"{% if t == tag %} aria-current="page"{% endif %}><span># {{ t }}</span> <span class="nt-muted">{{ count }}</span></a>
             {% endfor %}{% endif %}
+            <h4>More</h4>
+            {% for p in places %}<a href="{{ p.url }}" class="nt-folder{% if p.key == view %} on{% endif %}" data-folder="{{ p.key }}"{% if p.key == view %} aria-current="page"{% endif %}><span><span aria-hidden="true">{% if p.key == "deleted" %}🗑{% else %}🗄{% endif %}</span> {{ p.label }}</span> <span class="nt-muted">{{ p.count }}</span></a>
+            {% endfor %}
         </nav>
 
         <div class="nt-list">
             <form method="get" action="{{ list_url }}" class="nt-search" role="search">
                 {% if view != "all" %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
                 {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+                {% if sort != "edited" %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
                 <label for="nt-q" class="visually-hidden">Search notes</label>
                 <input type="search" name="q" id="nt-q" value="{{ q }}" class="nt-input" placeholder="Search notes…  ( / )" autocomplete="off">
             </form>
+            {% if view != "deleted" and view != "archived" %}
+            <div class="nt-filters">
+                <div class="nt-chipbar" role="group" aria-label="Show">
+                    {% for c in filter_chips %}<a href="{{ c.url }}" class="nt-fchip{% if c.key == view %} on{% endif %}" data-chip="{{ c.key }}"{% if c.key == view %} aria-current="page"{% endif %}>{{ c.label }}</a>{% endfor %}
+                </div>
+                <details class="nt-sort">
+                    <summary class="nt-sort__btn" aria-label="Sort">{% for s in sorts %}{% if s.key == sort %}{{ s.label }}{% endif %}{% endfor %} <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+                    <div class="nt-menu nt-sort__menu">{% for s in sorts %}<a href="{{ s.url }}" class="nt-menu__item{% if s.key == sort %} on{% endif %}" data-sort="{{ s.key }}">{{ s.label }}</a>{% endfor %}</div>
+                </details>
+            </div>
+            {% endif %}
+            {% if tag %}<p class="nt-listnote">Tagged <span class="nt-tag">{{ tag }}</span> · <a href="{{ list_url }}">clear</a></p>{% endif %}
+            {% if view == "deleted" %}<p class="nt-listnote">Deleted notes stay here {{ trash_days }} days, then they're gone for good.</p>{% endif %}
+            {% if view == "archived" %}<p class="nt-listnote">Archived notes · <a href="{{ list_url }}">back to all notes</a></p>{% endif %}
             <div class="nt-notes" id="nt-notes">
-            {% for r in rows %}{% with n=r.note %}
+            {% for title, section in sections %}
+                {% if title and section %}<h3 class="nt-section">{{ title }}</h3>{% endif %}
+                {% for r in section %}{% with n=r.note %}
                 {% if view == "shared" %}{% ifchanged r.group %}<h3 class="nt-group">{{ r.group }}</h3>{% endifchanged %}{% endif %}
-                <a href="{% url 'albright_notes:note' n.pk %}{{ query }}" class="nt-note{% if open and open.pk == n.pk %} on{% endif %}" id="note-{{ n.pk }}"{% if open and open.pk == n.pk %} aria-current="true"{% endif %}>
-                    <b>{% if n.pinned %}<span class="nt-pin" aria-hidden="true">📌</span><span class="visually-hidden">Pinned: </span> {% endif %}{{ n.title }}</b>
-                    <p>{{ r.summary }}</p>
-                    {% for t in n.tags|slice:":3" %}<span class="nt-tag">{{ t }}</span> {% endfor %}{% if r.shared %}<span class="nt-chip"><span aria-hidden="true">👥</span> Shared</span> {% endif %}{% if n.from_bot %}<span class="nt-chip"><span aria-hidden="true">🤖</span> {{ n.created_by }}</span> {% endif %}{% for c in r.chips|slice:":2" %}<span class="nt-chip"><span aria-hidden="true">🔗</span> {{ c.label }}</span> {% endfor %}{% if n.attachment_count %}<span class="att-mark nt-att-mark" title="{{ n.attachment_count }} attachment{{ n.attachment_count|pluralize }}" aria-label="{{ n.attachment_count }} attachment{{ n.attachment_count|pluralize }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.4 11.1l-9.2 9.2a6 6 0 01-8.5-8.5l9.2-9.2a4 4 0 015.7 5.7l-9.2 9.2a2 2 0 01-2.8-2.8l8.5-8.5"/></svg>{{ n.attachment_count }}</span>{% endif %}
-                </a>
-            {% endwith %}{% empty %}
-                <p class="nt-empty">{% if q or tag or view != "all" %}No notes here.{% else %}No notes yet - press &ldquo;+ New note&rdquo;.{% endif %}</p>
-            {% endfor %}
+                <div class="nt-item{% if open and open.pk == n.pk %} on{% endif %}" data-note-row="{{ n.pk }}" id="note-{{ n.pk }}">
+                    {% if view == "deleted" %}
+                    <div class="nt-note nt-note--deleted">
+                        <div class="nt-note__top"><b class="nt-note__title">{{ r.title }}</b></div>
+                        {% if r.preview %}<p class="nt-note__preview">{{ r.preview }}</p>{% endif %}
+                        <div class="nt-note__meta"><span>{{ r.when }}</span></div>
+                        <div class="nt-row nt-note__trash">
+                            <form method="post" action="{% url 'albright_notes:restore' n.pk %}">{% csrf_token %}<button type="submit" class="nt-btn sm" data-restore>Restore</button></form>
+                            <form method="post" action="{% url 'albright_notes:purge' n.pk %}" data-confirm="Delete &ldquo;{{ n.title }}&rdquo; forever? This can't be undone.">{% csrf_token %}<button type="submit" class="nt-btn sm danger" data-purge>Delete forever</button></form>
+                        </div>
+                    </div>
+                    {% else %}
+                    {% if r.can_manage %}
+                    <div class="nt-item__actions">
+                        <form method="post" action="{% url 'albright_notes:pin' n.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="nt-act nt-act--pin" data-act="pin" aria-label="{% if n.pinned %}Unpin{% else %}Pin{% endif %} {{ n.title }}" title="{% if n.pinned %}Unpin{% else %}Pin{% endif %}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/></svg><span>{% if n.pinned %}Unpin{% else %}Pin{% endif %}</span></button></form>
+                        <form method="post" action="{% url 'albright_notes:delete' n.pk %}">{% csrf_token %}<button type="submit" class="nt-act nt-act--delete" data-act="delete" aria-label="Delete {{ n.title }}" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span>Delete</span></button></form>
+                    </div>
+                    {% endif %}
+                    <a href="{% url 'albright_notes:note' n.pk %}{{ query }}" class="nt-note"{% if open and open.pk == n.pk %} aria-current="true"{% endif %}>
+                        <div class="nt-note__top">
+                            <b class="nt-note__title">{% if n.pinned %}<svg class="nt-pin" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span class="visually-hidden">Pinned: </span>{% endif %}{{ r.title }}</b>
+                            <time class="nt-note__when" datetime="{{ n.updated_at|date:'c' }}" title="Edited {{ r.updated }}">{{ r.when }}</time>
+                        </div>
+                        <p class="nt-note__preview">{% if r.shared_with_me %}<span class="nt-note__by">{{ r.owner_name }} · </span>{% endif %}{% if r.preview %}{{ r.preview }}{% else %}<span class="nt-muted">No additional text</span>{% endif %}</p>
+                        {% if r.tasks or n.attachment_count or r.shared or n.from_bot or n.tags or r.chips %}
+                        <div class="nt-note__meta">
+                            {% if r.tasks %}<span class="nt-meta-ico{% if r.tasks_done == r.tasks %} is-done{% endif %}" title="Checklist: {{ r.tasks_done }} of {{ r.tasks }} done"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="m8 12 3 3 5-6"/></svg>{{ r.tasks_done }}/{{ r.tasks }}<span class="visually-hidden"> checklist items done</span></span>{% endif %}
+                            {% if n.attachment_count %}<span class="nt-meta-ico" title="{{ n.attachment_count }} attachment{{ n.attachment_count|pluralize }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.4 11.1l-9.2 9.2a6 6 0 01-8.5-8.5l9.2-9.2a4 4 0 015.7 5.7l-9.2 9.2a2 2 0 01-2.8-2.8l8.5-8.5"/></svg>{{ n.attachment_count }}<span class="visually-hidden"> attachment{{ n.attachment_count|pluralize }}</span></span>{% endif %}
+                            {% if r.shared %}<span class="nt-meta-ico" title="Shared"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/></svg><span class="visually-hidden">Shared</span></span>{% endif %}
+                            {% if n.from_bot %}<span class="nt-meta-ico" title="Written by {{ n.created_by }}"><span aria-hidden="true">🤖</span> {{ n.created_by }}</span>{% endif %}
+                            {% for t in n.tags|slice:":2" %}<span class="nt-tag">{{ t }}</span>{% endfor %}
+                            {% for c in r.chips|slice:":1" %}<span class="nt-chip"><span aria-hidden="true">🔗</span> {{ c.label }}</span>{% endfor %}
+                        </div>
+                        {% endif %}
+                    </a>
+                    {% endif %}
+                </div>
+                {% endwith %}{% endfor %}
+            {% empty %}{% endfor %}
+            {% if not rows %}
+                <p class="nt-empty">{% if view == "deleted" %}Nothing in Recently deleted.{% elif q or tag or view != "all" %}No notes here.{% else %}No notes yet - press &ldquo;+ New note&rdquo;.{% endif %}</p>
+            {% endif %}
             </div>
         </div>
 
         {% if open %}
         <article class="nt-editor" id="note" aria-label="{{ open.title }}"
                  data-note-id="{{ open.pk }}" data-version="{{ open.version }}" data-can-edit="{{ can_edit|yesno:'1,0' }}"
-                 data-save-url="{% url 'albright_notes:save' open.pk %}" data-check-url="{% url 'albright_notes:check' open.pk %}">
+                 data-save-url="{% url 'albright_notes:save' open.pk %}" data-check-url="{% url 'albright_notes:check' open.pk %}"
+                 data-delete-url="{% if is_owner %}{% url 'albright_notes:delete' open.pk %}{% endif %}" data-list-url="{{ list_url }}{{ query }}"
+                 data-sort-checked="{{ open.sort_checked|yesno:'1,0' }}">
             <div class="nt-toolbar" role="toolbar" aria-label="Note tools">
                 {% if can_edit %}
-                <button type="button" class="nt-btn sm" data-fmt="bold" title="Bold" aria-label="Bold"><b>B</b></button>
-                <button type="button" class="nt-btn sm" data-fmt="italic" title="Italic" aria-label="Italic"><i>I</i></button>
-                <button type="button" class="nt-btn sm" data-fmt="heading" title="Heading" aria-label="Heading">H</button>
-                <button type="button" class="nt-btn sm nt-list-btn" data-fmt="check" title="Checklist - type [] then space too" aria-label="Checklist" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="4" height="4" rx="1"/><path d="m2.3 11 1 1 1.8-2.2"/><path d="M8 4.5h6M8 11h6"/></svg></button>
-                <button type="button" class="nt-btn sm nt-list-btn" data-fmt="bullet" title="Bulleted list - type - then space too" aria-label="Bulleted list" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="3" cy="4" r=".9" fill="currentColor"/><circle cx="3" cy="8" r=".9" fill="currentColor"/><circle cx="3" cy="12" r=".9" fill="currentColor"/><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/></svg></button>
-                <button type="button" class="nt-btn sm nt-list-btn" data-fmt="number" title="Numbered list - type 1. then space too" aria-label="Numbered list" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><text x="1" y="5.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">1</text><text x="1" y="9.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">2</text><text x="1" y="13.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">3</text></svg></button>
-                <button type="button" class="nt-btn sm" id="nt-insert-image" title="Insert image (or paste / drop one into the note)" aria-label="Insert image"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
-                <input type="file" id="nt-image-input" accept="image/*,.heic,.heif" hidden>
+                <div class="nt-fmtbar" data-fmtbar>
+                    <button type="button" class="nt-btn sm nt-icon-btn nt-aa" data-fmt="styles" title="Text styles and blocks" aria-label="Text styles" aria-haspopup="menu"><span aria-hidden="true">Aa</span></button>
+                    <button type="button" class="nt-btn sm nt-icon-btn" data-fmt="check" title="Checklist - or type [ ] then space" aria-label="Checklist" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="4" height="4" rx="1"/><path d="m2.3 11 1 1 1.8-2.2"/><path d="M8 4.5h6M8 11h6"/></svg></button>
+                    <button type="button" class="nt-btn sm nt-icon-btn" data-fmt="bullet" title="Bulleted list - or type - then space" aria-label="Bulleted list" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="3" cy="4" r=".9" fill="currentColor"/><circle cx="3" cy="8" r=".9" fill="currentColor"/><circle cx="3" cy="12" r=".9" fill="currentColor"/><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/></svg></button>
+                    <button type="button" class="nt-btn sm nt-icon-btn" data-fmt="number" title="Numbered list - or type 1. then space" aria-label="Numbered list" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><path d="M2 3l1-.6V6M1.8 9.2c.3-.5 1.7-.6 1.7.3 0 .7-1.7 1.4-1.7 2h1.8" stroke-width="1.1"/></svg></button>
+                    <button type="button" class="nt-btn sm nt-icon-btn" data-fmt="image" id="nt-insert-image" title="Image or file (or paste / drop one into the note)" aria-label="Insert image or file"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+                </div>
+                <input type="file" id="nt-image-input" multiple hidden>
                 <button type="button" class="nt-btn sm" data-pop="nt-pop-link" aria-expanded="false" aria-controls="nt-pop-link">🔗 Link record</button>
                 {% endif %}
                 <span class="nt-grow"></span>
@@ -90,10 +158,11 @@ behavior: albright_notes/notes.js; views.workspace.
             <section class="nt-pop" id="nt-pop-more" aria-label="More" hidden>
                 <label for="nt-tags" class="nt-label">Tags</label>
                 <input type="text" id="nt-tags" class="nt-input" data-field="tags" value="{{ open.tags|join:', ' }}" placeholder="Comma-separated, e.g. reselling, home">
+                <label class="nt-switch"><input type="checkbox" id="nt-sort-checked" data-field="sort_checked"{% if open.sort_checked %} checked{% endif %}><span class="nt-switch__track" aria-hidden="true"></span> Move checked items to the bottom</label>
                 {% if is_owner %}
                 <div class="nt-row">
                     <form method="post" action="{% url 'albright_notes:archive' open.pk %}">{% csrf_token %}<button type="submit" class="nt-btn sm" id="nt-archive">🗄 {% if open.archived %}Unarchive{% else %}Archive{% endif %}</button></form>
-                    <form method="post" action="{% url 'albright_notes:delete' open.pk %}" data-confirm="Delete &ldquo;{{ open.title }}&rdquo;? This can't be undone.">{% csrf_token %}<button type="submit" class="nt-btn sm danger" id="nt-delete">Delete</button></form>
+                    <form method="post" action="{% url 'albright_notes:delete' open.pk %}" id="nt-delete-form">{% csrf_token %}<button type="submit" class="nt-btn sm danger" id="nt-delete">Delete</button></form>
                 </div>
                 {% endif %}
             </section>
@@ -127,27 +196,69 @@ behavior: albright_notes/notes.js; views.workspace.
 
             {% if can_edit %}
             <label for="nt-title" class="visually-hidden">Title</label>
-            <input type="text" id="nt-title" class="nt-title" value="{{ open.title }}" maxlength="200" data-field="title">
+            <input type="text" id="nt-title" class="nt-title" value="{{ open.title }}" maxlength="200" data-field="title" placeholder="Title">
             {% else %}
-            <h3 class="nt-title">{{ open.title }}</h3>
+            <h2 class="nt-title">{{ open.title }}</h2>
             {% endif %}
-            <div class="nt-small nt-muted nt-meta">Edited <span id="nt-updated">{{ updated }}</span>{% if not is_owner %} &middot; shared by {{ open.owner.get_username }}, {% if my_permission == "edit" %}you can edit{% else %}view only{% endif %}{% endif %}{% if open.from_bot %} &middot; by {{ open.created_by }}{% endif %}{% if open.archived %} &middot; archived{% endif %}
+            {% if not is_owner or open.from_bot or open.archived or open.tags or chips or scheduled %}
+            <div class="nt-small nt-muted nt-meta">{% if not is_owner %}Shared by {{ open.owner.get_username }}, {% if my_permission == "edit" %}you can edit{% else %}view only{% endif %}{% endif %}{% if open.from_bot %}{% if not is_owner %} &middot; {% endif %}by {{ open.created_by }}{% endif %}{% if open.archived %} &middot; archived{% endif %}
                 {% for t in open.tags %} <span class="nt-tag">{{ t }}</span>{% endfor %}
                 {% for c in chips %} <span class="nt-chip"><span aria-hidden="true">🔗</span> {% if c.href %}<a href="{{ c.href }}"{% if c.kind == "Auction lot" %} target="_blank" rel="noopener noreferrer"{% endif %}>{% if c.kind %}{{ c.kind }}: {% endif %}{{ c.label }}</a>{% else %}{{ c.label }}{% endif %}</span>{% endfor %}
                 {% for s in scheduled %} <span class="nt-chip nt-chip--scheduled"><span aria-hidden="true">📅</span> <a href="{{ s.url }}" title="{{ s.item.title }}">Scheduled: {{ s.date|date:"D M j" }}{% if s.repeats %} &#x21bb;{% endif %}</a></span>{% endfor %}
             </div>
+            {% endif %}
 
-            <div class="nt-doc" id="nt-doc" data-mode="{% if can_edit and not open.body %}write{% else %}preview{% endif %}">
-                <div class="nt-md md-body" id="nt-preview"{% if can_edit %} title="Click to edit"{% endif %}>{% if open.body %}{{ html }}{% else %}<p class="nt-muted">Nothing written yet.</p>{% endif %}</div>
+            <div class="nt-doc" id="nt-doc">
+                <div class="note-content nt-read" id="nt-preview"{% if can_edit %} data-editable{% endif %}>{% if open.body %}{{ html }}{% else %}<p class="nt-muted">Nothing written yet.</p>{% endif %}</div>
                 {% if can_edit %}
-                <label for="nt-body" class="visually-hidden">Note (Markdown)</label>
-                <textarea id="nt-body" class="nt-body" data-field="body" spellcheck="true" placeholder="Start writing… or pick a list above (checklist, bullets, numbers)">{{ open.body }}</textarea>
+                <div class="nt-editor-mount" id="nt-editor-mount" hidden></div>
+                {{ open.body|json_script:"nt-source" }}
                 {% endif %}
             </div>
 
+            {% if can_edit %}
+            {# The editor's floating pieces (notes.js shows and places them). #}
+            <div class="nt-bubble" id="nt-bubble" role="toolbar" aria-label="Format selection" hidden>
+                <button type="button" data-fmt="bold" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
+                <button type="button" data-fmt="italic" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
+                <button type="button" data-fmt="underline" aria-label="Underline" title="Underline (Ctrl+U)"><u>U</u></button>
+                <button type="button" data-fmt="strike" aria-label="Strikethrough" title="Strikethrough"><s>S</s></button>
+                <button type="button" data-fmt="highlight" aria-label="Highlight" title="Highlight"><span class="nt-hl-swatch">H</span></button>
+                <button type="button" data-fmt="code" aria-label="Inline code" title="Inline code"><code>&lt;/&gt;</code></button>
+                <button type="button" data-fmt="link" aria-label="Link" title="Link (Ctrl+K)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg></button>
+                <span class="nt-bubble__sep" aria-hidden="true"></span>
+                <button type="button" data-fmt="styles" aria-label="Text styles" title="Text styles"><span>Aa</span></button>
+            </div>
+            <div class="nt-menu nt-blockmenu" id="nt-blockmenu" role="listbox" aria-label="Blocks" hidden></div>
+            <div class="nt-linkbox" id="nt-linkbox" hidden>
+                <label for="nt-linkbox-url" class="visually-hidden">Link address</label>
+                <input type="url" id="nt-linkbox-url" class="nt-input" placeholder="Paste or type a link" autocomplete="off">
+                <button type="button" class="nt-btn sm primary" data-link-save>Save</button>
+                <button type="button" class="nt-btn sm" data-link-remove>Remove</button>
+            </div>
+            <div class="nt-mbar" id="nt-mbar" role="toolbar" aria-label="Formatting" hidden>
+                <button type="button" data-fmt="styles" aria-label="Text styles"><span class="nt-aa">Aa</span></button>
+                <button type="button" data-fmt="check" aria-label="Checklist" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="4" height="4" rx="1"/><path d="m2.3 11 1 1 1.8-2.2"/><path d="M8 4.5h6M8 11h6"/></svg></button>
+                <button type="button" data-fmt="bullet" aria-label="Bulleted list" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="3" cy="4" r=".9" fill="currentColor"/><circle cx="3" cy="8" r=".9" fill="currentColor"/><circle cx="3" cy="12" r=".9" fill="currentColor"/><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/></svg></button>
+                <button type="button" data-fmt="bold" aria-label="Bold" aria-pressed="false"><b>B</b></button>
+                <button type="button" data-fmt="italic" aria-label="Italic" aria-pressed="false"><i>I</i></button>
+                <button type="button" data-fmt="link" aria-label="Link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg></button>
+                <button type="button" data-fmt="image" aria-label="Image or file"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+                <button type="button" data-fmt="undo" aria-label="Undo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+                <button type="button" data-fmt="redo" aria-label="Redo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg></button>
+            </div>
+            {% endif %}
+
             {% include "albright_labs/_attachments.html" %}
 
-            <div class="nt-foot"><span id="nt-saved" aria-live="polite">{% if can_edit %}Saved ✓{% else %}View only{% endif %}</span><span id="nt-words">{{ words }} word{{ words|pluralize }}</span></div>
+            <div class="nt-foot">
+                <span id="nt-saved" aria-live="polite">{% if can_edit %}Saved ✓{% else %}View only{% endif %}</span>
+                <span class="nt-foot__right"><span>Edited <time id="nt-updated" datetime="{{ updated_iso }}">{{ updated }}</time></span> <span aria-hidden="true">·</span> <span id="nt-words">{{ words }} word{{ words|pluralize }}</span></span>
+            </div>
+        </article>
+        {% elif view == "deleted" %}
+        <article class="nt-editor nt-editor--empty">
+            <p class="nt-muted">Restore a note to open it again.</p>
         </article>
         {% else %}
         <article class="nt-editor nt-editor--empty">
@@ -155,5 +266,6 @@ behavior: albright_notes/notes.js; views.workspace.
         </article>
         {% endif %}
     </div></div>
+    <div class="nt-toast" id="nt-toast" role="status" aria-live="polite" hidden><span class="nt-toast__text"></span><button type="button" class="nt-toast__action"></button></div>
 </div>
 {% endblock %}

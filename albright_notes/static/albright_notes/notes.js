@@ -1,30 +1,32 @@
 /*
- * Albright Notes - the three-pane workspace (albright_notes/workspace.html, Option A of
- * docs/design/"Albright Notes - design options.html"). Vanilla JS, loaded by albright_notes/base.html.
+ * Albright Notes - the three-pane workspace (albright_notes/workspace.html). Vanilla JS; the rich editor itself is
+ * the vendored TipTap bundle (window.NoteEditor, albright_notes/static/albright_notes/vendor/note-editor.js, built
+ * from albright_notes/editor_src) - this file wires it into the page.
  *
  *   "/"            focuses the search box (when you're not typing somewhere)
- *   toolbar        B / I / H / ☑ List format the selection in the Markdown (switching to it if needed;
- *                  Ctrl/Cmd+B and +I too) - the shared editor, md_editor.js, which also continues lists;
- *                  🔗 Link record, 👥 Share and ⋯ open their panels
- *   the document   shows the rendered note; click it (not a link or checkbox) to edit the Markdown,
- *                  Esc or clicking away shows it rendered again
- *   autosave       title, body and tags save as you type (debounced): "Saving…" / "Saved ✓". Each save
- *                  sends the version it started from; a 409 means someone else changed the note meanwhile
- *                  and the warning offers "Load their version" or "Keep mine (overwrite)"
- *   checklist      ticking a box flips it at once; that one "- [ ]" line is rewritten on the server by the item's
- *                  stable id (data-item-id) - never the whole note - one request at a time per item, the latest
- *                  tap winning (labs/quicksave.js); a failure puts the box back with "Couldn't save - tap to retry"
- *   saving         one save at a time (checks included); a failed save keeps its changes and retries
- *                  ("Offline - will save"); leaving the page sends what's unsaved with fetch keepalive
- *   word count     the footer's count follows the text
- *   images         Insert image, or paste / drop one on the note: it's attached to the note and goes in the
- *                  Markdown at the cursor as ![name](/attachments/<id>/) (labs/attachments.js uploads it)
+ *   the list       swipe a row left on a phone for Pin and Delete (a full swipe deletes); on a desktop they show on
+ *                  hover. Delete moves the note to Recently deleted with an Undo toast for 5 seconds
+ *   the editor     the note is Markdown underneath (Note.body) - the editor reads it and writes it back on save.
+ *                  Markdown shortcuts while typing (# , ## , ### , - , 1. , [ ] , > , ---, ```), "/" for the block
+ *                  menu, Aa for text styles, a selection toolbar on a desktop and a bar above the keyboard on a
+ *                  phone. Lists continue on Enter; Enter on an empty item ends the list; Tab / Shift+Tab nest.
+ *                  On a phone the note opens in a reading layout; tap the text to edit right there
+ *   autosave       title, body, tags and "Move checked items to the bottom" save as you type (debounced): "Saving…" /
+ *                  "Saved ✓". Each save sends the version it started from; a 409 means someone else changed the
+ *                  note meanwhile and the warning offers "Load their version" or "Keep mine (overwrite)"
+ *   saving         one save at a time; a failed save keeps its changes and retries ("Offline - will save"); leaving
+ *                  the page sends what's unsaved with fetch keepalive
+ *   footer         word count and "Edited 2 min ago", kept current
+ *   images/files   the image button, or paste / drop files on the note: each is attached to the note
+ *                  (labs/attachments.js uploads it) and goes in the text where you were - an image inline, any
+ *                  other file as a 📎 link
  * On a phone the panes stack; opening a note scrolls to it.
  */
 (function () {
     "use strict";
 
     var SAVE_DELAY = 800;
+    var UNDO_MS = 5000;
     var workspace = document.getElementById("notes");
 
     function byId(id) { return document.getElementById(id); }
@@ -52,10 +54,22 @@
     function isTyping(target) {
         return target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
     }
+    if (!workspace) return;
 
-    // Any <select data-autosubmit> (a share's permission) saves on change.
+    // Any <select data-autosubmit> (a share's permission) saves on change; forms with data-confirm ask first.
     document.addEventListener("change", function (event) {
         if (event.target.matches && event.target.matches("select[data-autosubmit]")) event.target.form.submit();
+    });
+    workspace.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (form.matches("form[data-confirm]") && !window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+
+    // Menus made of <details> (templates, sort) close when you click elsewhere.
+    document.addEventListener("click", function (event) {
+        workspace.querySelectorAll("details.nt-tpl[open], details.nt-sort[open]").forEach(function (d) {
+            if (!d.contains(event.target)) d.open = false;
+        });
     });
 
     // "/" to search
@@ -68,20 +82,136 @@
         }
     });
 
+    // ---------- Toast (Undo) ----------
+    var toastEl = byId("nt-toast"), toastTimer = null;
+    function toast(text, actionLabel, action) {
+        if (!toastEl) return;
+        clearTimeout(toastTimer);
+        toastEl.querySelector(".nt-toast__text").textContent = text;
+        var button = toastEl.querySelector(".nt-toast__action");
+        button.hidden = !actionLabel;
+        button.textContent = actionLabel || "";
+        button.onclick = function () { hideToast(); if (action) action(); };
+        toastEl.hidden = false;
+        toastTimer = setTimeout(hideToast, UNDO_MS);
+    }
+    function hideToast() { if (toastEl) toastEl.hidden = true; clearTimeout(toastTimer); }
+    function undoDelete(url, title) {
+        postJson(url, {}).then(function (res) {
+            if (res.ok && res.data.url) window.location.href = res.data.url;
+            else toast("Couldn't restore “" + title + "” - it's in Recently deleted.");
+        }).catch(function () { toast("Couldn't restore - it's in Recently deleted."); });
+    }
+    if (workspace.dataset.undoUrl) {               // just deleted the open note: the list page offers Undo
+        var undoUrl = workspace.dataset.undoUrl, undoTitle = workspace.dataset.undoTitle;
+        var clean = new URL(window.location.href);
+        clean.searchParams.delete("undo");
+        history.replaceState(null, "", clean.pathname + clean.search + clean.hash);
+        toast("Deleted “" + undoTitle + "”", "Undo", function () { undoDelete(undoUrl, undoTitle); });
+    }
+
+    // ---------- The list: Pin / Delete (swipe on a phone, hover on a desktop) ----------
     var root = byId("note");
-    if (!workspace || !root) return;
+
+    function deleteRow(item, form) {
+        var title = (item.querySelector(".nt-note__title") || {}).textContent || "Note";
+        var isOpen = root && root.dataset.noteId === item.dataset.noteRow;
+        item.style.height = item.offsetHeight + "px";
+        postJson(form.action, {}).then(function (res) {
+            if (!res.ok) { toast("Couldn't delete - try again."); resetSwipe(item); return; }
+            if (isOpen) { window.location.href = (root.dataset.listUrl || "/notes/") + (root.dataset.listUrl.indexOf("?") < 0 ? "?" : "&") + "undo=" + item.dataset.noteRow; return; }
+            item.classList.add("is-gone");
+            item.remove();
+            toast("Deleted “" + title.trim() + "”", "Undo", function () { undoDelete(res.data.restore_url, title.trim()); });
+        }).catch(function () { toast("Offline - couldn't delete."); resetSwipe(item); });
+    }
+    function pinRow(item, form) {
+        postJson(form.action, {}).then(function (res) {
+            if (res.ok) window.location.reload();
+            else toast("Couldn't pin - try again.");
+        }).catch(function () { toast("Offline - couldn't pin."); });
+    }
+    var list = byId("nt-notes");
+    if (list) {
+        list.addEventListener("submit", function (event) {
+            var button = event.submitter || event.target.querySelector("[data-act]");
+            var act = button && button.dataset.act, item = event.target.closest(".nt-item");
+            if (!act || !item) return;
+            event.preventDefault();
+            if (act === "delete") deleteRow(item, event.target);
+            else if (act === "pin") pinRow(item, event.target);
+        });
+    }
+
+    // Swipe: drag a row left to show its actions (stops at their width); let go past most of the row to delete.
+    function resetSwipe(item) {
+        var note = item.querySelector(".nt-note");
+        if (note) note.style.transform = "";
+        item.classList.remove("is-open", "is-dragging");
+    }
+    if (list && window.PointerEvent) {
+        var drag = null;
+        list.addEventListener("pointerdown", function (event) {
+            if (event.pointerType === "mouse") return;
+            var item = event.target.closest(".nt-item");
+            var actions = item && item.querySelector(".nt-item__actions");
+            if (!actions || event.target.closest(".nt-item__actions")) return;
+            list.querySelectorAll(".nt-item.is-open").forEach(function (other) { if (other !== item) resetSwipe(other); });
+            drag = {item: item, note: item.querySelector(".nt-note"), x: event.clientX, y: event.clientY, dx: 0,
+                    base: item.classList.contains("is-open") ? -actions.offsetWidth : 0, width: actions.offsetWidth, moving: false};
+        });
+        list.addEventListener("pointermove", function (event) {
+            if (!drag) return;
+            var dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+            if (!drag.moving) {
+                if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }   // scrolling
+                if (Math.abs(dx) < 8) return;
+                drag.moving = true;
+                drag.item.classList.add("is-dragging");
+            }
+            drag.dx = Math.min(0, drag.base + dx);
+            drag.note.style.transform = "translateX(" + drag.dx + "px)";
+        });
+        var endDrag = function () {
+            if (!drag) return;
+            var d = drag;
+            drag = null;
+            d.item.classList.remove("is-dragging");
+            if (!d.moving) return;
+            var full = d.item.offsetWidth * 0.6;
+            if (-d.dx > full) {                                           // a full swipe deletes
+                d.note.style.transform = "translateX(-100%)";
+                var form = d.item.querySelector(".nt-act--delete").form;
+                deleteRow(d.item, form);
+            } else if (-d.dx > d.width / 2) {
+                d.note.style.transform = "translateX(" + (-d.width) + "px)";
+                d.item.classList.add("is-open");
+            } else resetSwipe(d.item);
+        };
+        list.addEventListener("pointerup", endDrag);
+        list.addEventListener("pointercancel", endDrag);
+        // A swiped row: a tap on the note closes it instead of opening the note.
+        list.addEventListener("click", function (event) {
+            var item = event.target.closest(".nt-item.is-open");
+            if (item && !event.target.closest(".nt-item__actions")) { event.preventDefault(); resetSwipe(item); }
+        }, true);
+    }
+
+    if (!root) return;
     var canEdit = root.dataset.canEdit === "1";
     var version = parseInt(root.dataset.version, 10) || 1;
     var doc = byId("nt-doc");
     var preview = byId("nt-preview");
     var saved = byId("nt-saved");
     var words = byId("nt-words");
-    var fields = {title: byId("nt-title"), body: byId("nt-body"), tags: byId("nt-tags")};
+    var updatedEl = byId("nt-updated");
+    var fields = {title: byId("nt-title"), tags: byId("nt-tags"), sort_checked: byId("nt-sort-checked")};
+    var coarse = window.matchMedia("(pointer: coarse)").matches;
+    var narrow = function () { return window.matchMedia("(max-width: 860px)").matches; };
+    var ne = null, editor = null;           // the NoteEditor wrapper and its TipTap editor
 
     // A phone shows the panes stacked: bring the note you picked into view.
-    if (window.matchMedia("(max-width: 860px)").matches && /\/notes\/\d+\//.test(location.pathname)) {
-        root.scrollIntoView({block: "start"});
-    }
+    if (narrow() && /\/notes\/\d+\//.test(location.pathname)) root.scrollIntoView({block: "start"});
 
     // ---------- Panels: Link record, Share, More ----------
     root.addEventListener("click", function (event) {
@@ -93,276 +223,55 @@
         pop.hidden = !open;
         button.setAttribute("aria-expanded", open ? "true" : "false");
         if (open) {
-            var first = pop.querySelector("input:not([type=hidden]), select, button");
+            var first = pop.querySelector("input:not([type=hidden]):not([type=checkbox]), select, button");
             if (first) first.focus();
         }
     });
-    if (location.hash === "#links" && byId("nt-pop-link")) {
-        byId("nt-pop-link").hidden = false;
-    }
+    if (location.hash === "#links" && byId("nt-pop-link")) byId("nt-pop-link").hidden = false;
 
-    // ---------- Word count ----------
+    // The note's own Delete (More panel): to Recently deleted, then the list with Undo.
+    var deleteForm = byId("nt-delete-form");
+    if (deleteForm) deleteForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        flush();
+        postJson(deleteForm.action, {}).then(function (res) {
+            if (!res.ok) { showSaved("Couldn't delete", true); return; }
+            var listUrl = root.dataset.listUrl || "/notes/";
+            window.location.href = listUrl + (listUrl.indexOf("?") < 0 ? "?" : "&") + "undo=" + root.dataset.noteId;
+        });
+    });
+
+    // ---------- Word count, "Edited 2 min ago" ----------
     // A word: anything between spaces with a letter or digit in it (views.word_count counts the same way).
     function countWords(text) {
         return (text || "").split(/\s+/).filter(function (w) { return /[0-9A-Za-zÀ-￿]/.test(w); }).length;
     }
     function showWords() {
-        if (!words || !fields.body) return;
-        var n = countWords(fields.body.value);
+        if (!words || !ne) return;
+        var n = countWords(ne.text());
         words.textContent = n + " word" + (n === 1 ? "" : "s");
     }
-
     var wordsTimer = null;
     function wordsSoon() { clearTimeout(wordsTimer); wordsTimer = setTimeout(showWords, 400); }
 
-    // ---------- Rendered note <-> Markdown ----------
-    function setMode(mode) {
-        if (!canEdit) return;
-        doc.dataset.mode = mode;
-        if (mode === "write") fields.body.focus();
+    function ago(iso) {
+        var then = new Date(iso);
+        if (isNaN(then)) return null;
+        var s = Math.max(0, (Date.now() - then.getTime()) / 1000);
+        if (s < 45) return "just now";
+        if (s < 3600) return Math.round(s / 60) + " min ago";
+        if (s < 86400) { var h = Math.round(s / 3600); return h + " hour" + (h === 1 ? "" : "s") + " ago"; }
+        if (s < 7 * 86400) return then.toLocaleDateString(undefined, {weekday: "long"});
+        return then.toLocaleDateString(undefined, {month: "short", day: "numeric", year: then.getFullYear() === new Date().getFullYear() ? undefined : "numeric"});
     }
-    if (canEdit) {
-        preview.addEventListener("click", function (event) {
-            if (event.target.closest("a, input, label")) return;
-            if (window.getSelection && String(window.getSelection())) return;     // selecting text to copy
-            var item = event.target.closest("li.nt-task");
-            var box = item && item.querySelector("input.nt-check[data-task]");
-            if (box && box.closest("li") === item) { openTask(parseInt(box.dataset.task, 10), null); return; }
-            setMode("write");
-        });
-        fields.body.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") { event.preventDefault(); flush(); setMode("preview"); }
-            else if (MdEditor.shortcut(event, fields.body)) return;                  // Ctrl/Cmd+B, Ctrl/Cmd+I
-            else if (event.key === "Enter") MdEditor.continueList(event, fields.body);   // lists continue
-        });
-        fields.body.addEventListener("blur", function (event) {
-            // Leaving for the toolbar (B / I / H / List) keeps the Markdown open.
-            if (event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest(".nt-toolbar")) return;
-            flush();
-            if (fields.body.value.trim()) setMode("preview");
-        });
-        if (/[?&]new=1/.test(location.search) && fields.title) {
-            fields.title.focus();
-            fields.title.select();
-        }
+    function showUpdated(iso) {
+        if (!updatedEl) return;
+        if (iso) updatedEl.setAttribute("datetime", iso);
+        var text = ago(updatedEl.getAttribute("datetime"));
+        if (text) updatedEl.textContent = text;
     }
-
-    // ---------- Formatting toolbar (the shared editor: albright_trading_app/static/js/md_editor.js) ----------
-    function format(kind) {
-        if (doc.dataset.mode !== "write") setMode("write");
-        MdEditor.format(fields.body, kind);
-    }
-    root.querySelectorAll("[data-fmt]").forEach(function (button) {
-        button.addEventListener("mousedown", function (event) { event.preventDefault(); });   // keep the selection
-        button.addEventListener("click", function () { format(button.dataset.fmt); });
-    });
-
-    // ---------- Images in the note (albright_labs/static/labs/attachments.js does the upload) ----------
-    // "Insert image", pasting an image, or dropping files on the note uploads each as an attachment of this note;
-    // an image then goes in the Markdown at the cursor as ![name](/attachments/<id>/) (the sanitizer only lets
-    // through <img> whose src is an attachment). Other dropped files are attached without going in the text.
-    // The note always exists already ("+ New note" creates it), so there's always a parent.
-    var attSection = root.querySelector("[data-att]");
-    var savedCaret = null;          // where the cursor was when "Insert image" was pressed (the picker blurs it)
-    function rememberCaret() {
-        savedCaret = doc.dataset.mode === "write" && fields.body ?
-            [fields.body.selectionStart, fields.body.selectionEnd] : null;
-    }
-    function insertImage(row) {
-        if (!row || !row.is_image || !fields.body) return;
-        var ta = fields.body, wasWriting = doc.dataset.mode === "write";
-        var caret = savedCaret || (wasWriting ? [ta.selectionStart, ta.selectionEnd] : null);
-        savedCaret = null;
-        if (!wasWriting) setMode("write");
-        var start = caret ? caret[0] : ta.value.length, end = caret ? caret[1] : ta.value.length;
-        var text = "![" + row.name.replace(/[\[\]\n]/g, "") + "](" + row.url + ")";
-        if (!caret && start > 0 && ta.value.charAt(start - 1) !== "\n") text = "\n\n" + text;
-        ta.focus();
-        ta.setRangeText(text, start, end, "end");
-        ta.dispatchEvent(new Event("input", {bubbles: true}));
-    }
-    function attachFiles(files, insert) {
-        if (!attSection || !window.Attachments) return;
-        Array.prototype.slice.call(files || []).forEach(function (file) {
-            var isImage = /^image\//.test(file.type) || /\.(heic|heif)$/i.test(file.name);
-            showSaved("Uploading " + (isImage ? "image" : "file") + "…");
-            window.Attachments.upload(attSection, file, function (row) {
-                showSaved(row ? "Saved ✓" : "Couldn't upload " + file.name, !row);
-                if (row && insert && isImage) insertImage(row);
-            });
-        });
-    }
-    if (canEdit && attSection) {
-        var imageButton = byId("nt-insert-image"), imageInput = byId("nt-image-input");
-        if (imageButton && imageInput) {
-            imageButton.addEventListener("mousedown", function (event) { event.preventDefault(); });   // keep the caret
-            imageButton.addEventListener("click", function () { rememberCaret(); imageInput.click(); });
-            imageInput.addEventListener("change", function () {
-                attachFiles(imageInput.files, true);
-                imageInput.value = "";
-            });
-        }
-        if (fields.body) fields.body.addEventListener("paste", function (event) {
-            var items = (event.clipboardData && event.clipboardData.items) || [];
-            var files = [];
-            Array.prototype.forEach.call(items, function (item) {
-                if (item.kind === "file" && /^image\//.test(item.type)) {
-                    var f = item.getAsFile();
-                    if (f) files.push(f);
-                }
-            });
-            if (!files.length) return;
-            event.preventDefault();
-            attachFiles(files, true);
-        });
-        doc.addEventListener("dragover", function (event) {
-            var types = event.dataTransfer && event.dataTransfer.types;
-            if (!types || Array.prototype.indexOf.call(types, "Files") === -1) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "copy";
-            doc.classList.add("is-dropping");
-        });
-        doc.addEventListener("dragleave", function (event) {
-            if (!doc.contains(event.relatedTarget)) doc.classList.remove("is-dropping");
-        });
-        doc.addEventListener("drop", function (event) {
-            var files = event.dataTransfer && event.dataTransfer.files;
-            doc.classList.remove("is-dropping");
-            if (!files || !files.length) return;
-            event.preventDefault();
-            if (doc.dataset.mode !== "write") setMode("write");
-            attachFiles(files, true);
-        });
-    }
-
-    // ---------- Checklist items edited in place (the rendered note) ----------
-    // Click an item's text to edit it right there. Enter adds a new unchecked item below (splitting at the cursor)
-    // and moves to it; Enter on an empty item ends the list (its marker goes, and the Markdown opens on that
-    // line); Backspace on an empty item removes it and moves to the item above; Esc or clicking away finishes.
-    // Every change rewrites that line of the Markdown and autosaves; the server's rendering replaces the local
-    // one once you've stopped editing.
-    var TASK_LINE = /^((?:[ \t]*>)*[ \t]*[-*+][ \t]+)\[([ xX])\](?=[ \t]|$)/, FENCE = /^[ \t]*(```|~~~)/;
-    var taskEdit = null, pendingHtml = null;
-
-    function taskLines(body) {
-        var out = [], fenced = false;
-        body.split("\n").forEach(function (line, i) {
-            if (FENCE.test(line)) { fenced = !fenced; return; }
-            if (!fenced && TASK_LINE.test(line)) out.push(i);
-        });
-        return out;
-    }
-    function taskBox(index) { return preview.querySelector('input.nt-check[data-task="' + index + '"]'); }
-    function renumber(from, delta) {
-        Array.prototype.slice.call(preview.querySelectorAll("input.nt-check[data-task]")).forEach(function (box) {
-            var n = parseInt(box.dataset.task, 10);
-            if (n >= from) box.dataset.task = String(n + delta);
-        });
-    }
-    function bodyChanged(lines) {
-        fields.body.value = lines.join("\n");
-        dirty.body = true;
-        showSaved("Unsaved changes");
-        showWords();
-        schedule();
-    }
-    // The nodes after an item's checkbox (its text), up to any nested list.
-    function itemText(box) {
-        var nodes = [], node = box.nextSibling;
-        while (node && !(node.nodeType === 1 && /^(UL|OL)$/.test(node.tagName))) { nodes.push(node); node = node.nextSibling; }
-        return nodes;
-    }
-
-    function openTask(index, caret) {
-        var box = taskBox(index), lines = fields.body.value.split("\n"), number = taskLines(fields.body.value)[index];
-        if (!box || number == null) return;
-        closeTask(true);
-        pendingHtml = null;
-        var m = TASK_LINE.exec(lines[number]);
-        var input = el("input", "nt-task-input");
-        input.type = "text";
-        input.value = lines[number].slice(m[0].length).replace(/^[ \t]+/, "");
-        input.setAttribute("aria-label", "Checklist item");
-        var nodes = itemText(box);
-        nodes.forEach(function (node) { node.remove(); });
-        box.after(input);
-        taskEdit = {index: index, input: input};
-        input.focus();
-        var at = caret == null ? input.value.length : caret;
-        input.setSelectionRange(at, at);
-        input.addEventListener("input", function () { setTask(taskEdit.index, input.value); });
-        input.addEventListener("keydown", taskKey);
-        input.addEventListener("blur", function () { if (taskEdit && taskEdit.input === input) closeTask(false); });
-    }
-
-    function closeTask(switching) {
-        if (!taskEdit) return;
-        var input = taskEdit.input;
-        taskEdit = null;
-        input.replaceWith(document.createTextNode(" " + input.value));
-        if (!switching) {
-            flush();
-            if (pendingHtml != null && !Object.keys(dirty).length && !inFlight) {
-                preview.innerHTML = pendingHtml;
-            }
-            pendingHtml = null;
-        }
-    }
-
-    function setTask(index, value) {
-        var lines = fields.body.value.split("\n"), number = taskLines(fields.body.value)[index];
-        if (number == null) return;
-        var m = TASK_LINE.exec(lines[number]);
-        lines[number] = m[1] + "[" + m[2] + "] " + value;
-        bodyChanged(lines);
-    }
-
-    function taskKey(event) {
-        var input = event.target, index = taskEdit.index;
-        var lines = fields.body.value.split("\n"), numbers = taskLines(fields.body.value), number = numbers[index];
-        var box = taskBox(index), item = box.closest("li");
-        if (event.key === "Escape") { event.preventDefault(); input.blur(); return; }
-        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-            event.preventDefault();
-            if (!input.value.trim()) {                                    // an empty item: end the list here
-                lines[number] = "";
-                taskEdit = null;
-                item.remove();
-                renumber(index + 1, -1);
-                bodyChanged(lines);
-                var offset = lines.slice(0, number).join("\n").length + (number ? 1 : 0);
-                setMode("write");
-                fields.body.setSelectionRange(offset, offset);
-                return;
-            }
-            var caret = input.selectionStart, before = input.value.slice(0, caret), after = input.value.slice(input.selectionEnd);
-            var prefix = TASK_LINE.exec(lines[number])[1];
-            lines[number] = prefix + "[" + TASK_LINE.exec(lines[number])[2] + "] " + before;
-            lines.splice(number + 1, 0, prefix + "[ ] " + after);
-            input.value = before;
-            renumber(index + 1, 1);
-            var next = el("li", "nt-task"), check = el("input", "nt-check");
-            check.type = "checkbox";
-            check.dataset.task = String(index + 1);
-            check.setAttribute("aria-label", "Done");
-            next.appendChild(check);
-            next.appendChild(document.createTextNode(" " + after));
-            item.after(next);
-            bodyChanged(lines);
-            openTask(index + 1, 0);
-            return;
-        }
-        if (event.key === "Backspace" && !input.value && input.selectionStart === 0) {   // remove the empty item
-            event.preventDefault();
-            lines.splice(number, 1);
-            taskEdit = null;
-            item.remove();
-            renumber(index + 1, -1);
-            bodyChanged(lines);
-            if (index > 0) openTask(index - 1, null);
-            else flush();
-        }
-    }
+    showUpdated();
+    setInterval(showUpdated, 30000);
 
     // ---------- Autosave ----------
     var dirty = {}, timer = null, inFlight = null, conflict = false;
@@ -372,37 +281,37 @@
         saved.textContent = text;
         saved.classList.toggle("is-error", !!isError);
     }
-
     function values(keys) {
         var out = {};
         keys.forEach(function (key) {
-            if (fields[key]) out[key] = key === "tags" ? fields[key].value.split(",") : fields[key].value;
+            if (key === "body") { if (ne) out.body = ne.getMarkdown(); return; }
+            var input = fields[key];
+            if (!input) return;
+            if (key === "tags") out.tags = input.value.split(",");
+            else if (key === "sort_checked") out.sort_checked = !!input.checked;
+            else out[key] = input.value;
         });
         return out;
     }
-
     function applyState(data, replaceInputs) {
         version = data.version;
         root.dataset.version = String(version);
-        if (data.html != null) {
-            var html = data.html || '<p class="nt-muted">Nothing written yet.</p>';
-            if (taskEdit) pendingHtml = html;                 // don't pull the item being edited out from under you
-            else { preview.innerHTML = html; pendingHtml = null; }
-        }
-        if (data.updated && byId("nt-updated")) byId("nt-updated").textContent = "at " + data.updated;
+        if (!ne && data.html != null) preview.innerHTML = data.html || '<p class="nt-muted">Nothing written yet.</p>';
+        showUpdated(data.updated_iso);
         if (replaceInputs) {
             if (fields.title) fields.title.value = data.title;
-            if (fields.body) fields.body.value = data.body;
+            if (ne) ne.setMarkdown(data.body || "");
             if (fields.tags) fields.tags.value = (data.tags || []).join(", ");
+            if (fields.sort_checked) fields.sort_checked.checked = !!data.sort_checked;
         }
-        if (fields.title) {
-            var row = byId("note-" + root.dataset.noteId);
-            var title = row && row.querySelector("b");
-            if (title) title.lastChild.textContent = (title.childNodes.length > 1 ? " " : "") + (data.title || fields.title.value);
+        var row = byId("note-" + root.dataset.noteId);
+        var title = row && row.querySelector(".nt-note__title");
+        if (title && (data.title || (fields.title && fields.title.value))) {
+            var text = title.lastChild;
+            if (text && text.nodeType === 3) text.textContent = data.title || fields.title.value;
         }
         showWords();
     }
-
     function showConflict(data) {
         conflict = true;
         byId("nt-conflict-who").textContent = data.updated_by || "Someone";
@@ -411,7 +320,6 @@
         byId("nt-conflict")._theirs = data;
         showSaved("Not saved", true);
     }
-
     var retryTimer = null;
     function retryLater() {                    // offline or the server failed: try again in a bit (and when back online)
         clearTimeout(retryTimer);
@@ -443,7 +351,6 @@
                 return;
             }
             applyState(res.data, false);
-            // Typed meanwhile: keep what's in the boxes (applyState only changed the version and the preview).
             showSaved(Object.keys(dirty).length ? "Unsaved changes" : "Saved ✓");
             if (Object.keys(dirty).length) schedule();
         }).catch(function () {
@@ -454,7 +361,6 @@
         });
         return inFlight;
     }
-
     // Leaving (closing the tab, switching apps on a phone): send what's unsaved now, with keepalive so the request
     // outlives the page. sendBeacon can't carry the CSRF header; fetch keepalive can.
     function saveOnLeave() {
@@ -477,7 +383,6 @@
                 });
             }).catch(function () { inFlight = null; keys.forEach(function (k) { dirty[k] = true; }); retryLater(); });
     }
-
     function schedule() {
         clearTimeout(timer);
         timer = setTimeout(function () { save(false); }, SAVE_DELAY);
@@ -486,34 +391,36 @@
         clearTimeout(timer);
         return save(false);
     }
+    function changed(key) {
+        dirty[key] = true;
+        showSaved("Unsaved changes");
+        schedule();
+    }
 
     if (canEdit) {
-        Object.keys(fields).forEach(function (key) {
+        ["title", "tags"].forEach(function (key) {
             var input = fields[key];
             if (!input) return;
-            input.addEventListener("input", function () {
-                dirty[key] = true;
-                showSaved("Unsaved changes");
-                if (key === "body") wordsSoon();      // a long note isn't re-counted on every key
-                schedule();
-            });
-            if (key !== "body") input.addEventListener("blur", flush);
+            input.addEventListener("input", function () { changed(key); });
+            input.addEventListener("blur", flush);
         });
-        // The title box: Enter moves on to the note itself.
+        if (fields.sort_checked) fields.sort_checked.addEventListener("change", function () {
+            changed("sort_checked");
+            if (fields.sort_checked.checked && editor) NoteEditor.sortChecked(editor);
+        });
         if (fields.title) fields.title.addEventListener("keydown", function (event) {
-            if (event.key === "Enter") { event.preventDefault(); setMode("write"); }
+            if (event.key === "Enter") { event.preventDefault(); if (editor) { setReading(false); editor.commands.focus("start"); } }
         });
-        // Leaving: pagehide / hidden send what's unsaved (keepalive); with a save still unfinished the browser asks.
+        if (/[?&]new=1/.test(location.search) && fields.title) {
+            fields.title.focus();
+            fields.title.select();
+        }
         window.addEventListener("pagehide", saveOnLeave);
         document.addEventListener("visibilitychange", function () { if (document.hidden) saveOnLeave(); });
         window.addEventListener("beforeunload", function (event) {
             saveOnLeave();
-            if (Object.keys(dirty).length) {
-                event.preventDefault();
-                event.returnValue = "";
-            }
+            if (Object.keys(dirty).length) { event.preventDefault(); event.returnValue = ""; }
         });
-
         byId("nt-conflict-load").addEventListener("click", function () {
             var theirs = byId("nt-conflict")._theirs;
             conflict = false;
@@ -525,80 +432,332 @@
         byId("nt-conflict-keep").addEventListener("click", function () {
             conflict = false;
             byId("nt-conflict").hidden = true;
-            ["title", "body", "tags"].forEach(function (k) { if (fields[k]) dirty[k] = true; });
+            ["title", "body", "tags", "sort_checked"].forEach(function (k) { dirty[k] = true; });
             save(true);
         });
     }
 
-    // ---------- Checklist: tick a box in the rendered note ----------
-    // The box flips at once; the server rewrites just that line, found by the item's stable id (data-item-id), on the
-    // latest saved text. Per item only the latest tap is sent, one request at a time (labs/quicksave.js). Note writes
-    // go one at a time (the autosave waits for a check and a check for the autosave), so versions stay in step:
-    // after a check the Markdown box gets the same one-line change locally and the new version.
-    function showBox(id, checked) {
-        var box = preview.querySelector('input.nt-check[data-item-id="' + id + '"]');
-        if (!box) return;
-        box.checked = checked;
-        var li = box.closest("li");
-        if (li) li.classList.toggle("done", checked);
+    // ---------- Links in a note go through the site's link check (render.outbound_href does the same) ----------
+    function openLink(href) {
+        if (!href) return;
+        var url;
+        try { url = new URL(href, window.location.href); } catch (e) { return; }
+        if (!/^https?:$|^mailto:$/.test(url.protocol)) return;
+        var target = url.origin === window.location.origin || url.protocol === "mailto:" ? url.href
+            : workspace.dataset.leaveUrl + "?to=" + encodeURIComponent(url.href);
+        window.open(target, "_blank", "noopener");
     }
-    function patchLine(id, checked) {          // the same one-line change in the Markdown box
-        var box = preview.querySelector('input.nt-check[data-item-id="' + id + '"]');
-        if (!box || !fields.body) return;
-        var lines = fields.body.value.split("\n"), number = taskLines(fields.body.value)[parseInt(box.dataset.task, 10)];
-        if (number == null) return;
-        lines[number] = lines[number].replace(TASK_LINE, function (m, prefix) { return prefix + "[" + (checked ? "x" : " ") + "]"; });
-        fields.body.value = lines.join("\n");
-    }
-    function sendCheck(id, checked) {
-        flush();
-        var run = (inFlight || Promise.resolve()).catch(function () {}).then(function () {
-            if (conflict) return {ok: false, status: 409, data: {}};
-            return QuickSave.request(root.dataset.checkUrl, {json: true, body: {item_id: id, checked: checked, version: version}});
+
+    // ---------- The editor ----------
+    function startEditor() {
+        if (!canEdit || !window.NoteEditor || !byId("nt-source")) return;   // a reader keeps the rendered note
+        var mount = byId("nt-editor-mount");
+        var source = JSON.parse(byId("nt-source").textContent || '""');
+        var bubble = byId("nt-bubble");
+        bubble.hidden = false;
+        ne = NoteEditor.create({
+            element: mount,
+            markdown: source,
+            editable: !coarse,
+            bubble: bubble,
+            isCoarse: function () { return coarse; },
+            placeholder: "Start writing… type / for blocks",
+            onReadOnlyChecked: function () { return true; },     // ticking works in the phone's reading view too
+            onFiles: function (files, pos) { attachFiles(files, pos); },
+            onUpdate: function () { changed("body"); wordsSoon(); markActive(); },
+            onSelection: function () { markActive(); },
+            onFocus: function () { showBar(true); },
+            onBlur: function (_ed, event) { onEditorBlur(event); },
+            slash: {onOpen: slashOpen, onUpdate: slashUpdate, onKey: slashKey, onClose: closeBlockMenu, onImage: pickFile},
         });
-        inFlight = run.then(function (res) {
-            inFlight = null;
-            if (res.ok) {
-                if (res.data.body != null) {                       // changed elsewhere meanwhile: catch up
-                    applyState(res.data, false);
-                    if (fields.body && !dirty.body) fields.body.value = res.data.body;
-                } else {
-                    patchLine(id, checked);
-                    version = res.data.version;
-                    root.dataset.version = String(version);
-                }
-                showWords();
-                showSaved(Object.keys(dirty).length ? "Unsaved changes" : "Saved ✓");
-            } else if (res.data && res.data.missing) {
-                applyState(res.data, !Object.keys(dirty).length);
-                showSaved("That item was changed elsewhere - this is the latest");
+        editor = ne.editor;
+        preview.hidden = true;
+        mount.hidden = false;
+        if (coarse) setReading(true);
+        showWords();
+        markActive();
+
+        // Ticked a checklist item: with "Move checked items to the bottom" on, it moves down.
+        mount.addEventListener("change", function (event) {
+            if (event.target.type === "checkbox" && fields.sort_checked && fields.sort_checked.checked) {
+                setTimeout(function () { NoteEditor.sortChecked(editor); }, 0);
             }
-            if (Object.keys(dirty).length) schedule();
-            return res;
-        }, function (err) { inFlight = null; throw err; });
-        return inFlight;
-    }
-    preview.addEventListener("change", function (event) {
-        var box = event.target;
-        if (!box.matches || !box.matches("input.nt-check[data-item-id]")) return;
-        var id = box.dataset.itemId, checked = box.checked;
-        showBox(id, checked);
-        if (!window.QuickSave) return;
-        QuickSave.set("note:" + root.dataset.noteId + ":" + id, checked, function (state) { return sendCheck(id, state); }, {
-            initial: !checked,
-            apply: function (state) { showBox(id, state); },
-            revert: function (state) { showBox(id, state); },
         });
+        // Links: open on Ctrl/Cmd+click while editing, or a plain tap in the reading view.
+        mount.addEventListener("click", function (event) {
+            var a = event.target.closest("a[href]");
+            if (a && (!editor.isEditable || event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                openLink(a.getAttribute("href"));
+                return;
+            }
+            if (!editor.isEditable && !event.target.closest("input, label, button, summary, .nt-callout__icon")) {
+                editAt(event.clientX, event.clientY);
+            }
+        });
+        // Keyboard: Ctrl/Cmd+K for a link.
+        mount.addEventListener("keydown", function (event) {
+            if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key || "").toLowerCase() === "k") {
+                event.preventDefault();
+                openLinkBox();
+            }
+            if (event.key === "Escape" && blockMenu && !blockMenu.hidden && !slashState) closeBlockMenu();
+        });
+        // Dropping files on the note: a dashed outline while over it.
+        doc.addEventListener("dragover", function (event) {
+            var types = event.dataTransfer && event.dataTransfer.types;
+            if (types && Array.prototype.indexOf.call(types, "Files") !== -1) doc.classList.add("is-dropping");
+        });
+        doc.addEventListener("dragleave", function (event) { if (!doc.contains(event.relatedTarget)) doc.classList.remove("is-dropping"); });
+        doc.addEventListener("drop", function () { doc.classList.remove("is-dropping"); });
+    }
+
+    // The phone's reading view: the editor isn't editable (no keyboard while reading or scrolling) until you tap.
+    function setReading(on) {
+        if (!editor) return;
+        editor.setEditable(!on, false);
+        doc.classList.toggle("is-reading", on);
+    }
+    function editAt(x, y) {
+        setReading(false);
+        var at = editor.view.posAtCoords({left: x, top: y});
+        editor.chain().focus().setTextSelection(at ? at.pos : editor.state.doc.content.size).run();
+    }
+    function onEditorBlur(event) {
+        var to = event && event.relatedTarget;
+        if (to && to.closest && to.closest("#nt-mbar, #nt-bubble, #nt-blockmenu, #nt-linkbox, .nt-toolbar")) return;
+        setTimeout(function () {
+            if (editor.isFocused || (document.activeElement && document.activeElement.closest &&
+                document.activeElement.closest("#nt-linkbox"))) return;
+            showBar(false);
+            flush();
+            if (coarse) setReading(true);
+        }, 150);
+    }
+
+    // ---------- Formatting: toolbar, selection toolbar, phone bar ----------
+    var LIST_BLOCKS = {check: "taskList", bullet: "bulletList", number: "orderedList"};
+    function format(kind, anchor) {
+        if (!editor) return;
+        if (!editor.isEditable) setReading(false);
+        var chain = editor.chain().focus();
+        switch (kind) {
+            case "bold": chain.toggleBold().run(); break;
+            case "italic": chain.toggleItalic().run(); break;
+            case "underline": chain.toggleUnderline().run(); break;
+            case "strike": chain.toggleStrike().run(); break;
+            case "highlight": chain.toggleHighlight().run(); break;
+            case "code": chain.toggleCode().run(); break;
+            case "undo": chain.undo().run(); break;
+            case "redo": chain.redo().run(); break;
+            case "link": openLinkBox(); break;
+            case "image": pickFile(); break;
+            case "styles": openStyles(anchor); break;
+            default: NoteEditor.runBlock(editor, kind);
+        }
+        markActive();
+    }
+    function markActive() {
+        if (!editor) return;
+        root.querySelectorAll("[data-fmt]").forEach(function (button) {
+            var kind = button.dataset.fmt, on = null;
+            if (LIST_BLOCKS[kind]) on = editor.isActive(LIST_BLOCKS[kind]);
+            else if (/^(bold|italic|underline|strike|highlight|code|link)$/.test(kind)) on = editor.isActive(kind);
+            if (on !== null) button.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+    }
+    root.addEventListener("mousedown", function (event) {          // keep the editor's selection
+        if (event.target.closest("[data-fmt]")) event.preventDefault();
     });
+    root.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-fmt]");
+        if (button) format(button.dataset.fmt, button);
+    });
+
+    // The phone bar above the keyboard: visualViewport says how much of the screen the keyboard covers.
+    var bar = byId("nt-mbar");
+    function placeBar() {
+        if (!bar || bar.hidden || !window.visualViewport) return;
+        var vv = window.visualViewport;
+        var covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        bar.style.transform = "translateY(" + (-covered) + "px)";
+    }
+    function showBar(on) {
+        if (!bar) return;
+        bar.hidden = !(on && coarse);
+        placeBar();
+    }
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", placeBar);
+        window.visualViewport.addEventListener("scroll", placeBar);
+    }
+
+    // ---------- Block menu: "/" while typing, and the Aa button ----------
+    var blockMenu = byId("nt-blockmenu"), slashState = null, styleAnchor = null;
+    function placeMenu(menu, rect) {
+        if (!rect) return;
+        menu.hidden = false;
+        var width = menu.offsetWidth, height = menu.offsetHeight;
+        var left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+        var top = rect.bottom + 6;
+        if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
+        menu.style.left = left + "px";
+        menu.style.top = top + "px";
+    }
+    function drawMenu(items, active, pick) {
+        blockMenu.textContent = "";
+        if (!items.length) { blockMenu.appendChild(el("p", "nt-menu__empty", "No matching blocks")); return; }
+        items.forEach(function (item, i) {
+            var row = el("button", "nt-menu__item" + (i === active ? " is-active" : ""));
+            row.type = "button";
+            row.setAttribute("role", "option");
+            row.setAttribute("aria-selected", i === active ? "true" : "false");
+            row.appendChild(el("span", "nt-menu__icon", item.icon));
+            var text = el("span", "nt-menu__text");
+            text.appendChild(el("span", "", item.label));
+            text.appendChild(el("small", "", item.hint));
+            row.appendChild(text);
+            row.addEventListener("mousedown", function (event) { event.preventDefault(); });
+            row.addEventListener("click", function () { pick(item); });
+            blockMenu.appendChild(row);
+        });
+        var current = blockMenu.querySelector(".is-active");
+        if (current) current.scrollIntoView({block: "nearest"});
+    }
+    function slashOpen(props) {
+        slashState = {props: props, active: 0};
+        slashUpdate(props);
+    }
+    function slashUpdate(props) {
+        if (!slashState) slashState = {active: 0};
+        slashState.props = props;
+        slashState.active = Math.min(slashState.active, Math.max(0, props.items.length - 1));
+        drawMenu(props.items, slashState.active, function (item) { props.command(item); });
+        placeMenu(blockMenu, props.clientRect && props.clientRect());
+    }
+    function slashKey(props) {
+        if (!slashState) return false;
+        var items = slashState.props.items, key = props.event.key;
+        if (key === "ArrowDown" || key === "ArrowUp") {
+            if (!items.length) return true;
+            slashState.active = (slashState.active + (key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+            slashUpdate(slashState.props);
+            return true;
+        }
+        if (key === "Enter" || key === "Tab") {
+            if (items[slashState.active]) slashState.props.command(items[slashState.active]);
+            return true;
+        }
+        if (key === "Escape") { closeBlockMenu(); return true; }
+        return false;
+    }
+    function closeBlockMenu() {
+        slashState = null;
+        styleAnchor = null;
+        if (blockMenu) blockMenu.hidden = true;
+    }
+    function openStyles(anchor) {
+        if (!editor) return;
+        if (styleAnchor === anchor && !blockMenu.hidden) { closeBlockMenu(); return; }
+        styleAnchor = anchor;
+        var items = NoteEditor.BLOCKS;
+        drawMenu(items, -1, function (item) {
+            closeBlockMenu();
+            if (item.id === "image") pickFile();
+            else NoteEditor.runBlock(editor, item.id);
+            markActive();
+        });
+        var rect = anchor ? anchor.getBoundingClientRect() : null;
+        if (anchor && anchor.closest("#nt-mbar")) {         // above the phone bar
+            blockMenu.hidden = false;
+            rect = {left: rect.left, top: rect.top, bottom: rect.top - blockMenu.offsetHeight - 12};
+        }
+        placeMenu(blockMenu, rect);
+    }
+    document.addEventListener("mousedown", function (event) {
+        if (blockMenu && !blockMenu.hidden && !slashState && !blockMenu.contains(event.target) && !event.target.closest("[data-fmt=styles]")) closeBlockMenu();
+        if (linkBox && !linkBox.hidden && !linkBox.contains(event.target) && !event.target.closest("[data-fmt=link]")) linkBox.hidden = true;
+    });
+
+    // ---------- Link box ----------
+    var linkBox = byId("nt-linkbox"), linkInput = byId("nt-linkbox-url");
+    function openLinkBox() {
+        if (!editor || !linkBox) return;
+        if (!editor.isEditable) setReading(false);
+        var sel = editor.state.selection;
+        var coords = editor.view.coordsAtPos(sel.from);
+        linkInput.value = editor.getAttributes("link").href || "";
+        linkBox.hidden = false;
+        var left = Math.min(Math.max(8, coords.left), window.innerWidth - linkBox.offsetWidth - 8);
+        var top = coords.bottom + 8;
+        if (top + linkBox.offsetHeight > window.innerHeight - 8) top = Math.max(8, coords.top - linkBox.offsetHeight - 8);
+        linkBox.style.left = left + "px";
+        linkBox.style.top = top + "px";
+        linkInput.focus();
+        linkInput.select();
+    }
+    function saveLink() {
+        var href = linkInput.value.trim();
+        linkBox.hidden = true;
+        var chain = editor.chain().focus().extendMarkRange("link");
+        if (!href) { chain.unsetLink().run(); return; }
+        if (!/^(https?:|mailto:|\/)/i.test(href)) href = "https://" + href;
+        if (editor.state.selection.empty && !editor.isActive("link")) {
+            chain.insertContent({type: "text", text: href, marks: [{type: "link", attrs: {href: href}}]}).run();
+        } else chain.setLink({href: href}).run();
+    }
+    if (linkBox) {
+        linkBox.querySelector("[data-link-save]").addEventListener("click", saveLink);
+        linkBox.querySelector("[data-link-remove]").addEventListener("click", function () {
+            linkBox.hidden = true;
+            editor.chain().focus().extendMarkRange("link").unsetLink().run();
+        });
+        linkInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") { event.preventDefault(); saveLink(); }
+            if (event.key === "Escape") { event.preventDefault(); linkBox.hidden = true; editor.commands.focus(); }
+        });
+    }
+
+    // ---------- Images and files (albright_labs/static/labs/attachments.js does the upload) ----------
+    var attSection = root.querySelector("[data-att]");
+    var fileInput = byId("nt-image-input"), pickPos = null;
+    function pickFile() {
+        if (!fileInput) return;
+        pickPos = editor ? editor.state.selection.from : null;
+        fileInput.click();
+    }
+    if (fileInput) fileInput.addEventListener("change", function () {
+        attachFiles(fileInput.files, pickPos);
+        fileInput.value = "";
+    });
+    function insertAttachment(row, pos) {
+        if (!editor || !row) return;
+        var size = editor.state.doc.content.size;
+        var at = pos == null || pos > size ? size : pos;
+        var node = row.is_image ? {type: "image", attrs: {src: row.url, alt: row.name}}
+            : {type: "paragraph", content: [{type: "text", text: "📎 " + row.name, marks: [{type: "link", attrs: {href: row.url}}]}]};
+        editor.chain().focus().insertContentAt(at, node).run();
+    }
+    function attachFiles(files, pos) {
+        if (!attSection || !window.Attachments) { showSaved("Can't attach files here", true); return; }
+        Array.prototype.slice.call(files || []).forEach(function (file) {
+            var isImage = /^image\//.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+            showSaved("Uploading " + (isImage ? "image" : "file") + "…");
+            window.Attachments.upload(attSection, file, function (row) {
+                showSaved(row ? "Saved ✓" : "Couldn't upload " + file.name, !row);
+                if (row) insertAttachment(row, pos);
+            });
+        });
+    }
 
     // ---------- Link record: search the apps you can open ----------
     var picker = byId("nt-picker");
     if (picker) {
-        var input = byId("nt-picker-q"), list = byId("nt-picker-results"), searchTimer = null, lastQuery = "";
-        var renderResults = function (results) {
-            list.textContent = "";
-            if (!results.length) list.appendChild(el("li", "nt-empty", "Nothing found in the apps you can open."));
-            results.forEach(function (r) {
+        var input = byId("nt-picker-q"), results = byId("nt-picker-results"), searchTimer = null, lastQuery = "";
+        var renderResults = function (found) {
+            results.textContent = "";
+            if (!found.length) results.appendChild(el("li", "nt-empty", "Nothing found in the apps you can open."));
+            found.forEach(function (r) {
                 var li = el("li");
                 var form = el("form");
                 form.method = "post";
@@ -614,28 +773,32 @@
                 button.appendChild(el("small", "", r.app_label + " · " + r.kind));
                 form.appendChild(button);
                 li.appendChild(form);
-                list.appendChild(li);
+                results.appendChild(li);
             });
-            list.hidden = false;
+            results.hidden = false;
         };
         input.addEventListener("input", function () {
             clearTimeout(searchTimer);
             var q = input.value.trim();
-            if (q.length < 2) { list.hidden = true; return; }
+            if (q.length < 2) { results.hidden = true; return; }
             searchTimer = setTimeout(function () {
                 lastQuery = q;
                 fetch(workspace.dataset.searchUrl + "?q=" + encodeURIComponent(q), {credentials: "same-origin",
                     headers: {"X-Requested-With": "XMLHttpRequest"}})
                     .then(function (r) { return r.json(); })
                     .then(function (data) { if (q === lastQuery) renderResults(data.results || []); })
-                    .catch(function () { list.hidden = true; });
+                    .catch(function () { results.hidden = true; });
             }, 250);
         });
         input.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") list.hidden = true;
+            if (event.key === "Escape") results.hidden = true;
             if (event.key === "Enter") event.preventDefault();
         });
     }
+
+    // The editor bundle is a deferred script: it has run by DOMContentLoaded.
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startEditor);
+    else startEditor();
 })();
 
 /* Home's "New note" tile links here with ?start=new (albright_labs.home_tiles): press "+ New note" for them, once

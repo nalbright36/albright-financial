@@ -1,0 +1,32 @@
+{
+  "name": "albright-notes-editor",
+  "version": "1.0.0",
+  "description": "Builds albright_notes/static/albright_notes/vendor/note-editor.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node roundtrip.test.mjs && node wiring.test.mjs"
+  },
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@tiptap/core": "3.35.0",
+    "@tiptap/extension-bubble-menu": "3.35.0",
+    "@tiptap/extension-details": "3.35.0",
+    "@tiptap/extension-highlight": "3.35.0",
+    "@tiptap/extension-image": "3.35.0",
+    "@tiptap/extension-list": "3.35.0",
+    "@tiptap/extension-table": "3.35.0",
+    "@tiptap/extensions": "3.35.0",
+    "@tiptap/pm": "3.35.0",
+    "@tiptap/starter-kit": "3.35.0",
+    "@tiptap/suggestion": "3.35.0",
+    "markdown-it": "15.0.3",
+    "markdown-it-ins": "4.0.0",
+    "markdown-it-mark": "4.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jsdom": "31.0.1"
+  },
+  "private": true
+}

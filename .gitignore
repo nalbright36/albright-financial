@@ -33,3 +33,6 @@ Thumbs.db
 *.xlsx
 *.xls
 ~$*.xlsx
+
+# Notes editor build (albright_notes/editor_src) - only the built bundle in static is committed
+node_modules/

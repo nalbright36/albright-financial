@@ -1,11 +1,11 @@
 /*
  * Albright Notes - Option A ("Three-pane workspace") of
- * docs/design/"Albright Notes - design options.html": the mockup's rules,
- * with its colors mapped onto the site's theme variables, so light and dark
- * follow the header's toggle and the accent is Notes' pink (style.css:
- * body[data-app="notes"] - #F472B6 dark, #BE185D light). Loaded by
- * albright_notes/base.html on Notes pages only. Markup: workspace.html;
- * behavior: notes.js.
+ * docs/design/"Albright Notes - design options.html", Eclipse styling: the
+ * mockup's rules with its colors mapped onto the site's theme variables, so
+ * light and dark follow the header's toggle and the accent is Notes' pink
+ * (style.css: body[data-app="notes"] - #F472B6 dark, #BE185D light). Loaded
+ * on Notes pages only. Markup: workspace.html; behavior: notes.js. How a
+ * note's text itself looks (editor and read view alike) is note_content.css.
  *
  * Every <button>, <input>, <select> and <textarea> inside .nt is reset here -
  * nothing falls back to browser-default styling. The resets use :where() (no
@@ -23,8 +23,9 @@
   --nt-accent: var(--accent);
   --nt-accent-soft: var(--accent-soft);
   --nt-on-accent: var(--bg);             /* dark text on light pink (dark mode), light on deep pink (light) */
+  --nt-danger: var(--red);
   color: var(--nt-ink); font-size: 15px; line-height: 1.5;
-  max-width: 1120px; padding-top: 24px; padding-bottom: 80px;
+  max-width: 1180px; padding-top: 24px; padding-bottom: 80px;
 }
 [data-theme="dark"] .nt { color-scheme: dark; }
 [data-theme="light"] .nt { color-scheme: light; }
@@ -40,26 +41,32 @@
 .nt input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 .nt [hidden] { display: none !important; }
 html.js .nt .nt-nojs { display: none; }
+.nt details > summary { list-style: none; }
+.nt details > summary::-webkit-details-marker { display: none; }
 
-/* ---------- The mockup's shared pieces ---------- */
+/* ---------- Shared pieces ---------- */
 .nt .nt-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 14px; color: var(--nt-ink);
-  background: var(--nt-card); border: 1px solid var(--nt-line); border-radius: 10px; padding: 8px 14px;
-  white-space: nowrap; text-decoration: none; line-height: 1.3;
+  background: var(--nt-card); border: 1px solid var(--nt-line); border-radius: 12px; padding: 8px 14px;
+  white-space: nowrap; text-decoration: none; line-height: 1.3; transition: background-color .15s, border-color .15s;
 }
 .nt .nt-btn:hover { background: var(--nt-hover); }
 .nt .nt-btn.primary { background: var(--nt-accent); color: var(--nt-on-accent); border-color: var(--nt-accent); font-weight: 600; }
 .nt .nt-btn.primary:hover { filter: brightness(1.06); }
 .nt .nt-btn.sm { padding: 5px 10px; font-size: 13px; }
-.nt .nt-btn.is-on { background: var(--nt-accent-soft); border-color: var(--nt-accent); }
-.nt .nt-btn.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, var(--nt-line)); }
+.nt .nt-btn.is-on, .nt .nt-btn[aria-pressed="true"] { background: var(--nt-accent-soft); border-color: var(--nt-accent); }
+.nt .nt-btn.danger { color: var(--nt-danger); border-color: color-mix(in srgb, var(--nt-danger) 35%, var(--nt-line)); }
+.nt .nt-icon-btn { min-width: 32px; min-height: 30px; padding: 4px 8px; }
+.nt .nt-icon-btn svg { display: block; }
+.nt .nt-aa { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; }
 .nt .nt-btn:focus-visible, .nt .nt-input:focus-visible, .nt .nt-folder:focus-visible, .nt .nt-note:focus-visible,
-.nt .nt-title:focus-visible, .nt .nt-x:focus-visible { outline: 2px solid var(--nt-accent); outline-offset: 2px; }
+.nt .nt-title:focus-visible, .nt .nt-x:focus-visible, .nt .nt-fchip:focus-visible, .nt .nt-menu__item:focus-visible,
+.nt .nt-act:focus-visible, .nt summary:focus-visible { outline: 2px solid var(--nt-accent); outline-offset: 2px; }
 .nt .nt-input {
   font-size: 14px; color: var(--nt-ink); background: var(--nt-card); border: 1px solid var(--nt-line);
-  border-radius: 10px; padding: 9px 12px; width: 100%;
+  border-radius: 12px; padding: 9px 12px; width: 100%;
 }
-.nt .nt-input::placeholder, .nt .nt-body::placeholder { color: var(--nt-muted); opacity: 1; }
+.nt .nt-input::placeholder { color: var(--nt-muted); opacity: 1; }
 .nt .nt-select {
   width: auto; padding-right: 30px; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--nt-muted) 50%),
@@ -77,19 +84,44 @@ html.js .nt .nt-nojs { display: none; }
 .nt-chip a:hover { color: var(--nt-ink); }
 .nt-muted { color: var(--nt-muted); }
 .nt-small { font-size: 12px; }
-.nt-pin { color: var(--nt-accent); }
+.nt-pin { color: var(--nt-accent); flex: none; }
 .nt-label { display: block; font-size: 12px; color: var(--nt-muted); margin: 0 0 4px; }
 .nt-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0; }
 .nt-row .nt-input:not(.nt-select) { flex: 1 1 200px; width: auto; }
+.nt mark { background: color-mix(in srgb, var(--nt-accent) 30%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
-/* ---------- A: three-pane ---------- */
-.nt-frame { border: 1px solid var(--nt-line); border-radius: 14px; background: var(--nt-card2); overflow: hidden; }
-.nt-panes { display: grid; grid-template-columns: 200px 290px minmax(0, 1fr); min-height: 460px; }
+/* Menus (templates, sort, the "/" and Aa block menu) */
+.nt-menu {
+  display: flex; flex-direction: column; gap: 1px; min-width: 190px; padding: 6px; border-radius: 14px;
+  background: var(--nt-card); border: 1px solid var(--nt-line); box-shadow: var(--shadow-lg, 0 12px 32px rgba(0,0,0,.35)); z-index: 60;
+}
+.nt-menu__head { margin: 2px 8px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--nt-muted); font-weight: 600; }
+.nt .nt-menu__item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 9px; font-size: 14px;
+  color: var(--nt-ink); text-decoration: none; text-align: left;
+}
+.nt .nt-menu__item:hover, .nt .nt-menu__item.is-active { background: var(--nt-hover); text-decoration: none; color: var(--nt-ink); }
+.nt .nt-menu__item.on { color: var(--nt-accent); font-weight: 600; }
+.nt-menu__icon {
+  flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--nt-line); background: var(--nt-bg);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; font-family: var(--font-display);
+}
+.nt-menu__text { display: flex; flex-direction: column; min-width: 0; }
+.nt-menu__text small { color: var(--nt-muted); font-size: 12px; }
+.nt-menu__empty { padding: 8px 10px; color: var(--nt-muted); font-size: 13px; margin: 0; }
+
+/* ---------- Three panes ---------- */
+.nt-frame { border: 1px solid var(--nt-line); border-radius: 20px; background: var(--nt-card2); overflow: hidden; }
+.nt-panes { display: grid; grid-template-columns: 190px 320px minmax(0, 1fr); min-height: 520px; }
 .nt-side { border-right: 1px solid var(--nt-line); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
-.nt-new { margin: 0 4px 10px; display: flex; }
-.nt-new .nt-btn { width: 100%; }
+.nt-new { margin: 0 4px 10px; display: flex; position: relative; }
+.nt-new > .nt-btn { flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.nt-tpl { display: flex; }
+.nt .nt-tpl__btn { height: 100%; padding: 0 9px; border-top-left-radius: 0; border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--nt-on-accent) 25%, transparent); }
+.nt-tpl__menu { position: absolute; top: calc(100% + 6px); left: 0; right: auto; min-width: 200px; }
 .nt-folder {
-  display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 8px; color: var(--nt-ink);
+  display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 10px; color: var(--nt-ink);
   text-decoration: none; font-size: 14px; cursor: pointer;
 }
 .nt-folder > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -97,39 +129,96 @@ html.js .nt .nt-nojs { display: none; }
 .nt-folder.on { background: var(--nt-accent-soft); }
 .nt-side h4 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--nt-muted); margin: 14px 10px 4px; font-weight: 600; }
 
+/* ---------- The notes list ---------- */
 .nt-list { border-right: 1px solid var(--nt-line); display: flex; flex-direction: column; min-width: 0; }
-.nt-search { padding: 12px; border-bottom: 1px solid var(--nt-line); margin: 0; }
-.nt-notes { overflow-y: auto; max-height: calc(100vh - 160px); }
-.nt-note { display: block; padding: 12px 14px; border-bottom: 1px solid var(--nt-line); cursor: pointer; color: var(--nt-ink); text-decoration: none; }
-.nt-note:hover { background: var(--nt-hover); text-decoration: none; color: var(--nt-ink); }
-.nt-note.on { background: var(--nt-accent-soft); box-shadow: inset 3px 0 0 var(--nt-accent); }
-.nt-note b { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-.nt-note p { margin: 2px 0 4px; font-size: 13px; color: var(--nt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nt-empty { padding: 14px; margin: 0; color: var(--nt-muted); font-size: 14px; }
+.nt-search { padding: 12px 12px 8px; margin: 0; }
+.nt-filters { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; border-bottom: 1px solid var(--nt-line); }
+.nt-chipbar { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+.nt-chipbar::-webkit-scrollbar { display: none; }
+.nt-fchip {
+  flex: none; font-size: 13px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--nt-line); color: var(--nt-muted);
+  text-decoration: none; white-space: nowrap;
+}
+.nt-fchip:hover { color: var(--nt-ink); background: var(--nt-hover); text-decoration: none; }
+.nt-fchip.on { background: var(--nt-accent); border-color: var(--nt-accent); color: var(--nt-on-accent); font-weight: 600; }
+.nt-sort { position: relative; flex: none; }
+.nt-sort__btn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--nt-muted); cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.nt-sort__btn:hover { color: var(--nt-ink); background: var(--nt-hover); }
+.nt-sort__menu { position: absolute; right: 0; top: calc(100% + 4px); min-width: 150px; }
+.nt-listnote { margin: 0; padding: 8px 14px; font-size: 12px; color: var(--nt-muted); border-bottom: 1px solid var(--nt-line); }
+.nt-listnote a { color: var(--nt-accent); }
+.nt-notes { overflow-y: auto; max-height: calc(100vh - 210px); }
+.nt-section, .nt-group {
+  margin: 0; padding: 12px 14px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--nt-muted);
+}
 
-.nt-editor { padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* A row: the note on top, Pin / Delete behind it (a phone swipes the row left to show them; a desktop shows them on hover). */
+.nt-item { position: relative; border-bottom: 1px solid var(--nt-line); overflow: hidden; touch-action: pan-y; }
+.nt-item__actions { position: absolute; inset: 0 0 0 auto; display: flex; z-index: 0; }
+.nt-item__actions form { margin: 0; display: flex; }
+.nt .nt-act {
+  width: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 12px; font-weight: 600; color: #fff;
+}
+.nt .nt-act--pin { background: color-mix(in srgb, var(--nt-accent) 85%, #000); }
+.nt .nt-act--delete { background: var(--nt-danger); }
+.nt-note {
+  position: relative; z-index: 1; display: block; padding: 11px 14px 12px; color: var(--nt-ink); text-decoration: none;
+  background: var(--nt-card2); transition: transform .22s cubic-bezier(.2,.8,.2,1), background-color .15s;
+}
+.nt-item.is-dragging .nt-note { transition: none; }
+.nt-note:hover { background: color-mix(in srgb, var(--nt-hover) 70%, var(--nt-card2)); text-decoration: none; color: var(--nt-ink); }
+.nt-item.on .nt-note { background: color-mix(in srgb, var(--nt-accent-soft) 100%, var(--nt-card2)); box-shadow: inset 3px 0 0 var(--nt-accent); }
+.nt-note__top { display: flex; align-items: baseline; gap: 8px; }
+.nt-note__title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; font-size: 14.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-note__when { flex: none; font-size: 12px; color: var(--nt-muted); }
+.nt-note__preview { margin: 2px 0 0; font-size: 13px; color: var(--nt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-note__by { color: var(--nt-ink); }
+.nt-note__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12px; color: var(--nt-muted); }
+.nt-meta-ico { display: inline-flex; align-items: center; gap: 4px; }
+.nt-meta-ico.is-done { color: var(--nt-accent); }
+.nt-note--deleted { cursor: default; }
+.nt-note--deleted:hover { background: var(--nt-card2); }
+.nt-note__trash { margin-top: 8px; }
+.nt-empty { padding: 14px; margin: 0; color: var(--nt-muted); font-size: 14px; }
+@media (hover: hover) and (pointer: fine) {
+  /* Desktop: Pin and Delete appear as small buttons on the row's right while it's hovered or focused. */
+  .nt-item__actions { inset: 8px 8px auto auto; z-index: 2; gap: 4px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+  .nt-item:hover .nt-item__actions, .nt-item:focus-within .nt-item__actions { opacity: 1; pointer-events: auto; }
+  .nt .nt-act { width: 28px; height: 28px; border-radius: 8px; flex-direction: row; background: var(--nt-card); color: var(--nt-muted);
+    border: 1px solid var(--nt-line); }
+  .nt .nt-act span { display: none; }
+  .nt .nt-act--pin:hover { color: var(--nt-accent); background: var(--nt-card); }
+  .nt .nt-act--delete:hover { color: var(--nt-danger); background: var(--nt-card); }
+  .nt-item:hover .nt-note__when { visibility: hidden; }
+}
+
+/* ---------- The open note ---------- */
+.nt-editor { padding: 18px 26px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .nt-editor--empty { justify-content: center; align-items: center; }
 .nt-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--nt-line); padding-bottom: 10px; }
 .nt-toolbar form { margin: 0; display: inline-flex; }
+.nt-fmtbar { display: inline-flex; gap: 4px; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--nt-line); }
 .nt-grow { flex: 1; }
 .nt .nt-title {
-  display: block; width: 100%; font-size: 22px; font-weight: 700; line-height: 1.3; margin: 4px 0 0; color: var(--nt-ink);
-  background: transparent; border-bottom: 1px solid transparent; overflow-wrap: anywhere;
+  display: block; width: 100%; font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
+  line-height: 1.25; margin: 8px 0 0; color: var(--nt-ink); background: transparent; border: 0; overflow-wrap: anywhere;
 }
-.nt input.nt-title:hover { border-bottom-color: var(--nt-line); }
-.nt input.nt-title:focus { outline: none; border-bottom-color: var(--nt-accent); }
+.nt input.nt-title::placeholder { color: var(--nt-muted); opacity: .6; }
+.nt input.nt-title:focus { outline: none; }
 .nt-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
 
 /* The open note's pop-overs (Link record, Share, More) */
-.nt-pop { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-card); }
+.nt-pop { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--nt-line); border-radius: 14px; background: var(--nt-card); }
 .nt-chips, .nt-shares { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .nt-shares { flex-direction: column; }
 .nt-chips form { margin: 0; display: inline-flex; }
 .nt .nt-x { color: var(--nt-muted); font-size: 15px; line-height: 1; padding: 0 2px; border-radius: 4px; }
-.nt .nt-x:hover { color: var(--red); }
+.nt .nt-x:hover { color: var(--nt-danger); }
 .nt-share-who { font-weight: 600; min-width: 110px; }
 .nt-picker { position: relative; }
-.nt-results { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--nt-line); border-radius: 10px; background: var(--nt-card);
+.nt-results { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-card);
   box-shadow: var(--shadow-md); max-height: 280px; overflow-y: auto; }
 .nt-results form { margin: 0; }
 .nt .nt-results button { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 8px; color: var(--nt-ink); }
@@ -138,35 +227,64 @@ html.js .nt .nt-nojs { display: none; }
 .nt-results .nt-empty { padding: 7px 10px; }
 .nt-conflict { border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .nt-conflict p { margin: 0; color: var(--nt-ink); font-size: 14px; }
+/* A switch (More: "Move checked items to the bottom") */
+.nt-switch { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+.nt .nt-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.nt-switch__track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--nt-line); transition: background-color .15s; }
+.nt-switch__track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface-solid); transition: transform .15s; }
+.nt-switch input:checked + .nt-switch__track { background: var(--nt-accent); }
+.nt-switch input:checked + .nt-switch__track::after { transform: translateX(14px); }
+.nt-switch input:focus-visible + .nt-switch__track { outline: 2px solid var(--nt-accent); outline-offset: 2px; }
 
-/* The document: rendered Markdown (click to edit) or the Markdown itself */
-.nt-doc { font-size: 15px; flex: 1; display: flex; flex-direction: column; min-height: 240px; }
-.nt-doc[data-mode="write"] .nt-md, .nt-doc[data-mode="preview"] .nt-body { display: none; }
-.nt-md { overflow-wrap: anywhere; color: var(--nt-ink); }
-.nt-editor[data-can-edit="1"] .nt-md { cursor: text; }
-.nt .nt-body {
-  flex: 1; width: 100%; min-height: 300px; resize: vertical; color: var(--nt-ink); background: var(--nt-card);
-  border: 1px solid var(--nt-line); border-radius: 10px; padding: 10px 12px; line-height: 1.6;
-  font-family: inherit; font-size: 15px;
-}
-.nt .nt-body:focus { outline: none; border-color: var(--nt-accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-/* The rendered Markdown itself (headings, lists, code, checkboxes...) is style.css's shared .md-body. */
-/* A list item being edited in place (notes.js): the item's own text in a soft highlight, same size and spot. */
-.nt .nt-task-input {
-  width: calc(100% + 6px); font: inherit; color: var(--nt-ink); background: var(--nt-hover); border: 0;
-  border-radius: 6px; padding: 1px 6px; margin: -1px 0 -1px -6px; line-height: inherit; vertical-align: baseline;
-}
-.nt .nt-task-input:focus { outline: none; }
-.nt .nt-task-input::placeholder { color: var(--nt-muted); opacity: 1; }
-.nt .nt-list-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; }
-.nt .nt-list-btn svg { display: block; }
-/* Lists in the note: roomier rows, quiet markers, a box that lines up with the first line of text. */
-.nt-md li { margin: 5px 0; line-height: 1.55; }
-.nt-md ul > li::marker, .nt-md ol > li::marker { color: var(--nt-muted); }
-.nt-md li[data-li] { cursor: text; }
+/* The document: the editor (or, for a reader, the rendered note) - both styled by note_content.css */
+.nt-doc { flex: 1; display: flex; flex-direction: column; min-height: 280px; padding-top: 4px; }
+.nt-editor-mount { position: relative; flex: 1; display: flex; flex-direction: column; }
+.nt-editor-mount > .ProseMirror { flex: 1; min-height: 260px; padding-bottom: 40px; }
+.nt-doc.is-reading .ProseMirror { cursor: text; }
+.nt-doc.is-dropping { outline: 2px dashed var(--nt-accent); outline-offset: 4px; border-radius: 8px; }
 
-.nt-foot { margin-top: auto; display: flex; justify-content: space-between; color: var(--nt-muted); font-size: 12px; border-top: 1px solid var(--nt-line); padding-top: 10px; }
-.nt-foot .is-error { color: var(--red); }
+/* Selection toolbar (desktop), block menu, link box */
+.nt-bubble {
+  display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px; z-index: 50;
+  background: var(--nt-card); border: 1px solid var(--nt-line); box-shadow: var(--shadow-lg, 0 10px 28px rgba(0,0,0,.35));
+}
+.nt .nt-bubble button, .nt .nt-mbar button {
+  min-width: 32px; height: 32px; padding: 0 7px; border-radius: 8px; color: var(--nt-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.nt .nt-bubble button:hover { background: var(--nt-hover); }
+.nt .nt-bubble button[aria-pressed="true"], .nt .nt-mbar button[aria-pressed="true"] { background: var(--nt-accent-soft); color: var(--nt-accent); }
+.nt .nt-bubble code { font-size: 12px; background: none; border: 0; }
+.nt-bubble__sep { width: 1px; height: 20px; background: var(--nt-line); margin: 0 3px; }
+.nt-hl-swatch { background: color-mix(in srgb, var(--nt-accent) 30%, transparent); border-radius: 3px; padding: 0 4px; }
+.nt-blockmenu { position: fixed; width: 270px; max-height: 340px; overflow-y: auto; }
+.nt-linkbox {
+  position: fixed; z-index: 70; display: flex; gap: 6px; align-items: center; padding: 6px; width: min(380px, calc(100vw - 24px));
+  background: var(--nt-card); border: 1px solid var(--nt-line); border-radius: 12px; box-shadow: var(--shadow-lg, 0 10px 28px rgba(0,0,0,.35));
+}
+.nt-linkbox .nt-input { flex: 1; padding: 6px 10px; }
+
+/* Phone: the formatting bar that sits just above the keyboard (notes.js keeps it there with visualViewport) */
+.nt-mbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; display: flex; justify-content: space-between; gap: 2px;
+  padding: 6px max(8px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
+  background: var(--nt-card); border-top: 1px solid var(--nt-line); box-shadow: 0 -6px 20px rgba(0,0,0,.18);
+}
+.nt .nt-mbar button { flex: 1; height: 38px; font-size: 16px; }
+.nt .nt-mbar button:active { background: var(--nt-hover); }
+
+/* Footer, toast */
+.nt-foot { margin-top: auto; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--nt-muted); font-size: 12px;
+  border-top: 1px solid var(--nt-line); padding-top: 10px; }
+.nt-foot__right { display: inline-flex; gap: 6px; }
+.nt-foot .is-error { color: var(--nt-danger); }
+.nt-toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 90;
+  display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; border-radius: 14px; font-size: 14px;
+  background: var(--text-primary); color: var(--bg); box-shadow: 0 12px 30px rgba(0,0,0,.35); max-width: calc(100vw - 32px);
+}
+.nt-toast__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt .nt-toast__action { color: var(--nt-accent); font-weight: 700; padding: 4px 8px; border-radius: 8px; }
+.nt .nt-toast__action:hover { background: color-mix(in srgb, var(--bg) 12%, transparent); }
 
 /* The external-link warning page (leave.html) */
 .nt-leave { max-width: 640px; }
@@ -177,8 +295,16 @@ html.js .nt .nt-nojs { display: none; }
 @media (max-width: 860px) {
   .nt-panes { grid-template-columns: 1fr; }
   .nt-side, .nt-list { border-right: 0; border-bottom: 1px solid var(--nt-line); }
+  .nt-side { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 12px; }
+  .nt-side h4 { display: none; }
+  .nt-new { margin: 0 6px 0 0; }
   .nt-notes { max-height: none; }
-  .nt-editor { padding: 16px; }
+  .nt-editor { padding: 16px 18px; }
+  .nt .nt-title { font-size: 26px; }
+  .nt-fmtbar { display: none; }               /* the bar above the keyboard has them */
+  /* The reading layout: bigger, roomier text; tap anywhere to edit there. */
+  .nt-doc .note-content { font-size: 17px; line-height: 1.7; }
+  .nt-frame { border-radius: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .nt * { transition: none !important; } }
 
@@ -187,12 +313,7 @@ html.js .nt .nt-nojs { display: none; }
 .nt-schedule .nt-label { flex: 1 1 140px; margin: 0; }
 .nt-schedule .nt-label .nt-input { display: block; width: 100%; margin-top: 4px; }
 .nt-chip--scheduled { border-color: color-mix(in srgb, var(--app-planner, var(--accent)) 45%, transparent); }
-
-/* "Shared with me", grouped by circle and by person (views._groups). */
-.nt-group { margin: 12px 4px 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-secondary); }
 .nt-pop .share-box { margin: 0; border: 0; padding: 0; background: none; }
 
-/* Dropping files on the note (notes.js: images go in the text, every file is attached) and its Attachments. */
-.nt-doc.is-dropping { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
+/* The note's Attachments section */
 .nt-editor .att { margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
-.nt-att-mark { margin-left: 2px; }

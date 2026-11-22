@@ -3,6 +3,7 @@
     python manage.py prune_activity --dry-run  # just count it
 
 Activity (albright_labs.activity) is kept 90 days (KEEP_DAYS). Run daily (PythonAnywhere Tasks tab).
+It also empties Notes' "Recently deleted" of notes deleted more than 30 days ago (albright_notes.notes.purge_trash).
 """
 from datetime import timedelta
 
@@ -29,3 +30,6 @@ class Command(BaseCommand):
             return
         n = activity.prune()
         self.stdout.write(f"Deleted {n} activity event(s) older than {activity.KEEP_DAYS} days.")
+        from albright_notes.models import TRASH_DAYS
+        from albright_notes.notes import purge_trash
+        self.stdout.write(f"Deleted {purge_trash()} note(s) in Recently deleted for over {TRASH_DAYS} days.")

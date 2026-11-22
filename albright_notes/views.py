@@ -1,10 +1,11 @@
 """Albright Notes (/notes/): one three-pane workspace - Option A of
-docs/design/"Albright Notes - design options.html". The folders and tags
-sidebar (with counts), the notes list with search, and the open note's
-editor (formatting toolbar, Markdown with a tickable checklist, autosave,
-word count, links, sharing, pin / archive / delete). /notes/ opens the first
-note in the list; /notes/<id>/ opens that one. The list's view, tag and
-search stay in the query string as you move between notes.
+docs/design/"Albright Notes - design options.html". The sidebar ("+ New note" with templates, tags, Archived,
+Recently deleted), the notes list (filter chips, search with highlighted matches, sort, a Pinned section, swipe /
+hover actions) and the open note in the rich editor (notes.js + the vendored TipTap bundle, note_editor.js;
+autosave, word count, links, sharing, pin / archive / delete). /notes/ opens the first note in the list;
+/notes/<id>/ opens that one. The list's view, tag, sort and search stay in the query string as you move between
+notes. Deleting moves a note to Recently deleted (Undo for a few seconds; restore or delete forever there; gone
+for good after 30 days).
 
 Who can do what - always checked here, on the server:
   - see a note: its owner and the people it's shared with; anyone else gets 404
@@ -19,10 +20,14 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.db.models.functions import Lower
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
@@ -32,11 +37,14 @@ from albright_labs.links import is_web_url, link_status
 from albright_labs import attachments, sharing
 
 from . import links, notes, render as md
-from .models import Note, NoteLink
+from .models import TRASH_DAYS, Note, NoteLink
 
-# The sidebar's folders: (key, label, icon) - Option A's order and glyphs.
-VIEWS = [("all", "All notes", ""), ("pinned", "Pinned", "\U0001F4CC"), ("shared", "Shared with me", "\U0001F465"),
-         ("checklists", "Checklists", "\u2611"), ("archived", "Archived", "\U0001F5C4")]
+# The list's filter chips, then the sidebar's other places: (key, label).
+CHIPS = [("all", "All"), ("pinned", "Pinned"), ("shared", "Shared"), ("checklists", "Has checklist")]
+PLACES = [("archived", "Archived"), ("deleted", "Recently deleted")]
+VIEW_KEYS = {k for k, _l in CHIPS + PLACES}
+SORTS = [("edited", "Last edited"), ("created", "Created"), ("title", "Title")]
+SORT_ORDER = {"edited": ("-updated_at", "-pk"), "created": ("-created_at", "-pk"), "title": (Lower("title"), "pk")}
 # A Markdown checklist line ("- [ ] ..." / "* [x] ..."), as a PostgreSQL regex (the Checklists folder).
 CHECKLIST_SQL = r"(^|\n)[ \t]*(>[ \t]*)*[-*+][ \t]+\[[ xX]\]"
 WORD = re.compile("[0-9A-Za-zÀ-￿]")     # a word has a letter or digit (as notes.js counts)
@@ -81,6 +89,7 @@ def _state(note, user):
     """What the editor needs after a change."""
     return {"ok": True, "version": note.version, "html": md.render(note.body, editable=note.can_edit(user)),
             "body": note.body, "title": note.title, "tags": note.tags, "updated_by": note.updated_by,
+            "sort_checked": note.sort_checked, "updated_iso": note.updated_at.isoformat(),
             "updated": f"{timezone.localtime(note.updated_at):%I:%M %p}".lstrip("0")}
 
 
@@ -88,22 +97,33 @@ def word_count(text):
     return sum(1 for w in (text or "").split() if WORD.search(w))
 
 
+def _shared_ids(user):
+    """Ids of my own notes that are shared with anyone."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from albright_labs.models import ShareGrant
+    mine = Note.objects.filter(owner=user).values_list("pk", flat=True)
+    return set(ShareGrant.objects.filter(content_type=ContentType.objects.get_for_model(Note),
+                                         object_id__in=mine).values_list("object_id", flat=True))
+
+
 def _folder(qs, view, user):
-    """Notes in one sidebar folder (archived notes only in Archived)."""
+    """Notes under one filter chip or sidebar place (archived notes only in Archived; deleted ones never - they're
+    only in Recently deleted, notes.trashed)."""
     if view == "archived":
         return qs.filter(archived=True)
     qs = qs.filter(archived=False)
     if view == "pinned":
         return qs.filter(pinned=True)
-    if view == "shared":
-        return qs.exclude(owner=user)
+    if view == "shared":                  # shared with me, or mine that I've shared
+        return qs.filter(~Q(owner=user) | Q(pk__in=_shared_ids(user)))
     if view == "checklists":
         return qs.filter(body__regex=CHECKLIST_SQL)
     return qs
 
 
 def _shared_out(notes_list):
-    """Ids of these notes that are shared with anyone (the "Shared" chip on my own)."""
+    """Ids of these notes that are shared with anyone (the "Shared" icon on my own)."""
     from django.contrib.contenttypes.models import ContentType
 
     from albright_labs.models import ShareGrant
@@ -121,20 +141,66 @@ def _groups(user, notes_list):
     return {pk: label or f"From {sharing.person_name(owners[pk])}" for pk, label in out.items() if pk in owners}
 
 
-def _row(note, user, now, allowed, shared_out=(), groups=None):
+def _matcher(q):
+    words = re.findall(r"\w+", q or "")[:notes.SEARCH_WORDS]
+    return re.compile(r"\b(?:" + "|".join(re.escape(w) for w in words) + r")\w*", re.IGNORECASE) if words else None
+
+
+def _mark(text, matcher):
+    """Escaped text with every search match in <mark>."""
+    if not matcher:
+        return escape(text)
+    out, at = [], 0
+    for m in matcher.finditer(text):
+        out += [escape(text[at:m.start()]), "<mark>", escape(m.group(0)), "</mark>"]
+        at = m.end()
+    out.append(escape(text[at:]))
+    return mark_safe("".join(out))
+
+
+def _snippet(body, matcher, limit=120):
+    """The first line of the note with a match in it, cut down around the match."""
+    for line in (body or "").split("\n"):
+        text = md.preview(line, limit=1000)
+        found = text and matcher.search(text)
+        if found:
+            start = max(0, found.start() - 40)
+            cut = ("…" if start else "") + text[start:start + limit].strip()
+            return cut + ("…" if start + limit < len(text) else "")
+    return ""
+
+
+def _date_label(when, now):
+    """Edited today: the time; this week: the weekday; this year: "Nov 3"; else "Nov 3, 2024"."""
+    local, today = timezone.localtime(when), timezone.localtime(now)
+    if local.date() == today.date():
+        return f"{local:%I:%M %p}".lstrip("0")
+    if (today.date() - local.date()).days < 7:
+        return f"{local:%a}"
+    if local.year == today.year:
+        return f"{local:%b} {local.day}"
+    return f"{local:%b} {local.day}, {local.year}"
+
+
+def _row(note, user, now, allowed, shared_out=(), groups=None, matcher=None, view="all"):
     groups = groups or {}
     tasks = md.checklist_lines(note.body)
-    done = sum(1 for _line, checked in tasks if checked)
     shared_with_me = note.owner_id != user.pk
-    if shared_with_me:
-        summary = f"Shared by {sharing.person_name(note.owner)} \u00b7 edited {ago(note.updated_at, now)}"
-    elif tasks:
-        summary = f"{done} of {len(tasks)} done"                       # a checklist shows its progress
+    preview = (_snippet(note.body, matcher) if matcher else "") or md.preview(note.body)
+    if view == "deleted":
+        left = max(0, TRASH_DAYS - (now - note.deleted_at).days)
+        when = f"Deleted {_date_label(note.deleted_at, now)} \u00b7 {left} day{'s' if left != 1 else ''} left"
     else:
-        summary = md.preview(note.body) or f"Edited {ago(note.updated_at, now)}"
-    return {"note": note, "summary": summary, "updated": ago(note.updated_at, now),
-            "shared": shared_with_me or note.pk in shared_out, "chips": links.chips(user, list(note.links.all()), allowed),
-            "group": groups.get(note.pk, "")}
+        when = _date_label(note.updated_at, now)
+    group = ""
+    if view == "shared":
+        group = groups.get(note.pk, "") if shared_with_me else "Shared by you"
+    return {"note": note, "title": _mark(note.title, matcher), "preview": _mark(preview, matcher) if preview else "",
+            "when": when, "updated": ago(note.updated_at, now), "owner_name": sharing.person_name(note.owner) if shared_with_me else "",
+            "tasks_done": sum(1 for _line, checked in tasks if checked), "tasks": len(tasks),
+            "shared": shared_with_me or note.pk in shared_out, "shared_with_me": shared_with_me,
+            "chips": links.chips(user, list(note.links.all()), allowed) if view != "deleted" else [],
+            "group": group, "can_manage": note.owner_id == user.pk}
 
 
 @login_required
@@ -146,36 +212,64 @@ def workspace(request, pk=None):
         view = "archived"
     elif request.GET.get("shared") == "1":
         view = "shared"
-    view = view if view in dict((k, l) for k, l, _i in VIEWS) else "all"
+    view = view if view in VIEW_KEYS else "all"
     q = request.GET.get("q", "").strip()[:200]
     tag = request.GET.get("tag", "").strip().lstrip("#").lower()[:50]
+    sort = request.GET.get("sort", "")
+    sort = sort if sort in SORT_ORDER else "edited"
 
     visible = Note.objects.visible_to(user)
-    qs = _folder(visible, view, user)
-    if tag:
-        qs = qs.filter(tags__contains=[tag])
-    qs = notes.search(qs, q) if q else qs.order_by("-pinned", "-updated_at", "-pk")
+    if view == "deleted":
+        qs = notes.trashed(user)
+        if q:
+            qs = notes.search(qs, q).order_by("-deleted_at", "-pk")
+    else:
+        qs = _folder(visible, view, user)
+        if tag:
+            qs = qs.filter(tags__contains=[tag])
+        qs = notes.search(qs, q) if q else qs.order_by("-pinned", *SORT_ORDER[sort])
     rows = list(attachments.with_counts(qs).select_related("owner").prefetch_related("links")[:LIST_LIMIT])
     shared_out = _shared_out([n for n in rows if n.owner_id == user.pk])
     groups = _groups(user, [n for n in rows if n.owner_id != user.pk]) if view == "shared" else {}
-    if view == "shared":                              # by circle and by person
-        rows.sort(key=lambda n: (groups.get(n.pk, ""), -n.updated_at.timestamp()))
+    if view == "shared":                              # mine first, then by circle and by person
+        rows.sort(key=lambda n: (n.owner_id != user.pk, groups.get(n.pk, ""), not n.pinned))
 
-    open_note = _visible(request, pk) if pk else (rows[0] if rows else None)
+    open_note = None if view == "deleted" else (_visible(request, pk) if pk else (rows[0] if rows else None))
     allowed = links._allowed_apps(user)
     now = timezone.now()
+    matcher = _matcher(q)
+    row_dicts = [_row(n, user, now, allowed, shared_out, groups, matcher, view) for n in rows]
+    # A Pinned section on top (not where everything is pinned anyway, or in Archived / Recently deleted / Shared).
+    sectioned = view in ("all", "checklists") and any(r["note"].pinned for r in row_dicts) \
+        and not all(r["note"].pinned for r in row_dicts)
+    sections = ([("Pinned", [r for r in row_dicts if r["note"].pinned]), ("Notes", [r for r in row_dicts if not r["note"].pinned])]
+                if sectioned else [("", row_dicts)])
     current = visible.filter(archived=False)
     tag_counts = {}
     for tags in current.values_list("tags", flat=True):
         for t in tags or []:
             tag_counts[t] = tag_counts.get(t, 0) + 1
-    keep = {k: v for k, v in (("view", "" if view == "all" else view), ("tag", tag), ("q", q)) if v}
+    keep = {k: v for k, v in (("view", "" if view == "all" else view), ("tag", tag), ("q", q),
+                              ("sort", "" if sort == "edited" else sort)) if v}
     query = ("?" + urlencode(keep)) if keep else ""
+    list_url = reverse("albright_notes:list")
+
+    def link(**changes):
+        params = {**keep, **changes}
+        params = {k: v for k, v in params.items() if v}
+        return list_url + (("?" + urlencode(params)) if params else "")
+    undo = request.GET.get("undo", "")
+    undo_note = notes.trashed(user).filter(pk=undo).first() if undo.isdigit() else None
     context = {
-        "rows": [_row(n, user, now, allowed, shared_out, groups) for n in rows], "view": view, "tag": tag, "q": q, "query": query,
-        "folders": [{"key": k, "label": l, "icon": i, "count": _folder(visible, k, user).count(),
-                     "url": reverse("albright_notes:list") + ("" if k == "all" else "?view=" + k)} for k, l, i in VIEWS],
-        "tags": sorted(tag_counts.items()), "open": open_note, "list_url": reverse("albright_notes:list"),
+        "sections": sections, "rows": row_dicts, "view": view, "tag": tag, "q": q, "sort": sort, "query": query,
+        "filter_chips": [{"key": k, "label": l, "url": link(view="" if k == "all" else k)} for k, l in CHIPS],
+        "places": [{"key": k, "label": l, "url": link(view=k, tag=""),
+                    "count": (notes.trashed(user).count() if k == "deleted" else _folder(visible, k, user).count())}
+                   for k, l in PLACES],
+        "sorts": [{"key": k, "label": l, "url": link(sort="" if k == "edited" else k)} for k, l in SORTS],
+        "templates": [(k, label) for k, (label, _t, _b) in notes.TEMPLATES.items()],
+        "tags": sorted(tag_counts.items()), "open": open_note, "list_url": list_url, "trash_days": TRASH_DAYS,
+        "undo_note": undo_note,
     }
     if open_note:
         context.update(_editor(open_note, user, now, allowed))
@@ -196,6 +290,7 @@ def _editor(note, user, now, allowed):
         "can_edit": can_edit, "is_owner": is_owner, "html": md.render(note.body, editable=can_edit),
         "chips": links.chips(user, list(note.links.all()), allowed), "words": word_count(note.body),
         "share": sharing.control(user, note), "updated": ago(note.updated_at, now),
+        "updated_iso": note.updated_at.isoformat(),
         "my_permission": None if is_owner else sharing.permission_for(user, note),
         "att": attachments.section(user, note, "notes", editable=can_edit,
                                    next_url=reverse("albright_notes:note", args=[note.pk])),
@@ -213,8 +308,10 @@ def note_page(request, pk):
 @login_required
 @require_POST
 def note_new(request):
-    """"+ New note": an empty note, opened in the editor ready to type."""
-    note = notes.create(request.user, notes.UNTITLED)
+    """"+ New note": a note from one of the starters (notes.TEMPLATES - Blank by default), opened in the editor
+    ready to type."""
+    _label, title, body = notes.TEMPLATES.get(request.POST.get("template", ""), notes.TEMPLATES["blank"])
+    note = notes.create(request.user, title, body)
     return redirect(_note_url(note) + "?new=1")
 
 
@@ -235,21 +332,23 @@ def capture(request):
 @login_required
 @require_POST
 def note_save(request, pk):
-    """Autosave (JSON): {title?, body?, tags?, version, force?}. 409 with the newer version's details when
-    someone else saved it since `version` (force: true overwrites on purpose)."""
+    """Autosave (JSON): {title?, body?, tags?, sort_checked?, version, force?}. 409 with the newer version's details
+    when someone else saved it since `version` (force: true overwrites on purpose)."""
     note = _editable(request, pk)
     data = _json(request)
-    fields = {key: data[key] for key in ("title", "body", "tags") if key in data and data[key] is not None}
+    fields = {key: data[key] for key in ("title", "body", "tags", "sort_checked") if key in data and data[key] is not None}
     for key in ("title", "body"):
         if key in fields and not isinstance(fields[key], str):
             return JsonResponse({"ok": False, "error": f"{key} must be text"}, status=400)
+    if "sort_checked" in fields and not isinstance(fields["sort_checked"], bool):
+        return JsonResponse({"ok": False, "error": "sort_checked must be true or false"}, status=400)
     if not fields:
         return JsonResponse({"ok": False, "error": "nothing to save"}, status=400)
     base = None if data.get("force") else data.get("version")
     if base is not None and not isinstance(base, int):
         return JsonResponse({"ok": False, "error": "version must be a number"}, status=400)
     try:
-        note = notes.save(note, notes.user_label(request.user), base_version=base, **fields)
+        note = notes.save(note, notes.user_label(request.user), base_version=base, editor="body" in fields, **fields)
     except notes.Conflict as conflict:
         return JsonResponse({"ok": False, "conflict": True, **_state(conflict.note, request.user)}, status=409)
     return JsonResponse(_state(note, request.user))
@@ -279,12 +378,18 @@ def note_check(request, pk):
     return JsonResponse(out)
 
 
+def _wants_json(request):
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
 @login_required
 @require_POST
 def note_pin(request, pk):
     note = _owned(request, pk)
     note.pinned = not note.pinned
     note.save(update_fields=["pinned", "updated_at"])
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "pinned": note.pinned})
     messages.success(request, "Pinned." if note.pinned else "Unpinned.")
     return _back(request, note)
 
@@ -302,11 +407,42 @@ def note_archive(request, pk):
 @login_required
 @require_POST
 def note_delete(request, pk):
+    """Move the note to Recently deleted. JSON for notes.js (its Undo toast posts to restore_url)."""
     note = _owned(request, pk)
+    notes.trash(note)
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "title": note.title,
+                             "restore_url": reverse("albright_notes:restore", args=[note.pk])})
+    messages.success(request, f"Moved “{note.title}” to Recently deleted.")
+    return redirect(reverse("albright_notes:list") + f"?undo={note.pk}")
+
+
+def _trashed(request, pk):
+    return get_object_or_404(Note.all_objects, pk=pk, owner=request.user, deleted_at__isnull=False)
+
+
+@login_required
+@require_POST
+def note_restore(request, pk):
+    note = _trashed(request, pk)
+    notes.restore(note)
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "url": _note_url(note)})
+    messages.success(request, f"Restored “{note.title}”.")
+    return redirect(_note_url(note))
+
+
+@login_required
+@require_POST
+def note_purge(request, pk):
+    """Delete forever - only from Recently deleted."""
+    note = _trashed(request, pk)
     title = note.title
     note.delete()
-    messages.success(request, f"Deleted “{title}”.")
-    return redirect("albright_notes:list")
+    if _wants_json(request):
+        return JsonResponse({"ok": True})
+    messages.success(request, f"Deleted “{title}” forever.")
+    return redirect(reverse("albright_notes:list") + "?view=deleted")
 
 
 # ---------------------------------------------------------------------------
