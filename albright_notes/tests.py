@@ -177,7 +177,7 @@ class SearchTagTests(Base):
         self.assertIn(f'id="note-{a.pk}"', page)
         self.assertNotIn(f'id="note-{b.pk}"', page)
         self.assertIn('data-tag="car"><span># car</span> <span class="nt-muted">1</span></a>', page)
-        self.assertIn('class="nt-folder on" data-tag="house" aria-current="page"', page)
+        self.assertIn('class="nt-menu__item nt-folder on" data-tag="house" aria-current="page"', page)
 
     def test_tags_are_cleaned(self):
         self.assertEqual(notes.clean_tags("#Taxes, house , , taxes,  Big   Trip"), ["taxes", "house", "big trip"])
@@ -556,17 +556,20 @@ class AppEntryTests(TestCase):
 class WorkspaceTests(Base):
     """Option A of docs/design/"Albright Notes - design options.html": the three panes and their features."""
 
-    def test_three_panes_in_order_and_the_first_note_open(self):
+    def test_two_panes_in_order_and_the_first_note_open(self):
         older = self.note(title="Older")
         newer = self.note(title="Newer", body="Some words here")
         Note.objects.filter(pk=older.pk).update(updated_at="2021-01-01T00:00:00Z")
         page = self.client.get(url("list")).content.decode()
-        order = [page.index(marker) for marker in ('class="nt-frame"', 'class="nt-side"', 'class="nt-list"', 'class="nt-editor"')]
+        order = [page.index(marker) for marker in ('class="nt-frame"', 'class="nt-list"', 'class="nt-places"', 'class="nt-editor"')]
         self.assertEqual(order, sorted(order))
+        self.assertNotIn('class="nt-side"', page)                                     # no sidebar: folders sit under the list
+        self.assertIn('data-screen="list"', page)                                     # phones show the list screen
+        self.assertIn('data-screen="note"', self.client.get(url("note", newer.pk)).content.decode())
         self.assertIn('class="nt-panes"', page)
         self.assertIn(f'data-note-id="{newer.pk}"', page)                            # the first in the list is open
         self.assertIn(f'class="nt-item on" data-note-row="{newer.pk}"', page)
-        self.assertIn('placeholder="Search notes…  ( / )"', page)
+        self.assertIn('placeholder="Search notes"', page)
         self.assertIn('<span id="nt-words">3 words</span>', page)
         self.assertIn('<span id="nt-saved" aria-live="polite">Saved ✓</span>', page)
 
@@ -585,7 +588,7 @@ class WorkspaceTests(Base):
         theirs = self.note(owner=self.wife, title="Gift ideas")
         share_with(theirs, self.me, "view")
         page = self.client.get(url("list")).content.decode()
-        counts = dict(re.findall(r'data-folder="(\w+)"(?: aria-current="page")?><span>.*?</span> <span class="nt-muted">(\d+)</span>', page))
+        counts = dict(re.findall(r'data-folder="(\w+)"(?: aria-current="page")?>.*?<span class="nt-muted">(\d+)</span>', page))
         self.assertEqual(counts, {"archived": "1", "deleted": "0"})
         self.assertEqual(re.findall(r'data-chip="(\w+)"', page), ["all", "pinned", "shared", "checklists"])
         tags = dict(re.findall(r'data-tag="([\w-]+)"><span># [\w-]+</span> <span class="nt-muted">(\d+)</span>', page))
@@ -603,8 +606,11 @@ class WorkspaceTests(Base):
         page = self.client.get(url("note", note.pk)).content.decode()
         toolbar = page.split('class="nt-toolbar"', 1)[1].split('<section class="nt-pop"', 1)[0]
         for marker in ('data-fmt="styles"', 'data-fmt="check"', 'data-fmt="bullet"', 'data-fmt="number"', 'data-fmt="image"',
-                       'data-pop="nt-pop-link"', 'id="nt-pin"', 'data-pop="nt-pop-share"', 'data-pop="nt-pop-more"'):
+                       'id="nt-pin"', 'data-pop="nt-pop-share"', 'data-pop="nt-pop-more"'):
             self.assertIn(marker, toolbar)
+        more = page.split('id="nt-pop-more"', 1)[1].split("</section>", 1)[0]          # the ⋯ menu
+        for marker in ('data-pop="nt-pop-link"', 'data-pop="nt-pop-schedule"', 'id="nt-tags"', 'id="nt-sort-checked"', 'id="nt-archive"', 'id="nt-delete"'):
+            self.assertIn(marker, more)
         bubble = page.split('id="nt-bubble"', 1)[1].split("</div>", 1)[0]                 # the selection toolbar
         for kind in ("bold", "italic", "underline", "strike", "highlight", "code", "link"):
             self.assertIn(f'data-fmt="{kind}"', bubble)

@@ -1,7 +1,6 @@
 /*
- * Albright Notes - Option A ("Three-pane workspace") of
- * docs/design/"Albright Notes - design options.html", Eclipse styling: the
- * mockup's rules with its colors mapped onto the site's theme variables, so
+ * Albright Notes - the two-pane workspace (Option A of the 2026-11-22 cleanup),
+ * Eclipse styling: the mockup's colors mapped onto the site's theme variables, so
  * light and dark follow the header's toggle and the accent is Notes' pink
  * (style.css: body[data-app="notes"] - #F472B6 dark, #BE185D light). Loaded
  * on Notes pages only. Markup: workspace.html; behavior: notes.js. How a
@@ -110,51 +109,70 @@ html.js .nt .nt-nojs { display: none; }
 .nt-menu__text small { color: var(--nt-muted); font-size: 12px; }
 .nt-menu__empty { padding: 8px 10px; color: var(--nt-muted); font-size: 13px; margin: 0; }
 
-/* ---------- Three panes ---------- */
-.nt-frame { border: 1px solid var(--nt-line); border-radius: 20px; background: var(--nt-card2); overflow: hidden; }
-.nt-panes { display: grid; grid-template-columns: 190px 320px minmax(0, 1fr); min-height: 520px; }
-.nt-side { border-right: 1px solid var(--nt-line); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
-.nt-new { margin: 0 4px 10px; display: flex; position: relative; }
-.nt-new > .nt-btn { flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.nt-tpl { display: flex; }
-.nt .nt-tpl__btn { height: 100%; padding: 0 9px; border-top-left-radius: 0; border-bottom-left-radius: 0;
-  border-left: 1px solid color-mix(in srgb, var(--nt-on-accent) 25%, transparent); }
-.nt-tpl__menu { position: absolute; top: calc(100% + 6px); left: 0; right: auto; min-width: 200px; }
-.nt-folder {
-  display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 10px; color: var(--nt-ink);
-  text-decoration: none; font-size: 14px; cursor: pointer;
+/* ---------- Two panes: the list and the open note ---------- */
+.nt-frame { border: 1px solid var(--nt-line); border-radius: 20px; background: var(--nt-card2); overflow: clip; }
+.nt-panes { display: grid; grid-template-columns: 360px minmax(0, 1fr); min-height: calc(100vh - 120px); }
+.nt .nt-ibtn {
+  flex: none; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;
+  color: var(--nt-muted); cursor: pointer; transition: background-color .15s, color .15s;
 }
-.nt-folder > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nt-folder:hover { background: var(--nt-hover); text-decoration: none; color: var(--nt-ink); }
-.nt-folder.on { background: var(--nt-accent-soft); }
-.nt-side h4 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--nt-muted); margin: 14px 10px 4px; font-weight: 600; }
+.nt .nt-ibtn:hover { background: var(--nt-hover); color: var(--nt-ink); }
+.nt .nt-ibtn.is-on, .nt .nt-ibtn[aria-pressed="true"], .nt .nt-ibtn[aria-expanded="true"], .nt details[open] > .nt-ibtn {
+  background: var(--nt-accent-soft); color: var(--nt-accent);
+}
+.nt .nt-btn--pink { background: var(--nt-accent); color: var(--nt-on-accent); border-color: var(--nt-accent); font-weight: 600; }
+.nt .nt-btn--pink:hover { background: var(--nt-accent); filter: brightness(1.06); }
+.nt-new { display: flex; position: relative; flex: none; margin: 0; }
+.nt .nt-new > .nt-btn { gap: 6px; padding: 7px 10px 7px 11px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.nt-tpl { display: flex; }
+.nt .nt-tpl__btn { height: 100%; padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--nt-on-accent) 25%, transparent); }
+.nt-tpl__menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; }
+.nt .nt-ai--list { display: none; }                   /* the list's Ask AI: phones only (a desktop has it on the note) */
 
 /* ---------- The notes list ---------- */
-.nt-list { border-right: 1px solid var(--nt-line); display: flex; flex-direction: column; min-width: 0; }
-.nt-search { padding: 12px 12px 8px; margin: 0; }
-.nt-filters { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; border-bottom: 1px solid var(--nt-line); }
-.nt-chipbar { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
-.nt-chipbar::-webkit-scrollbar { display: none; }
-.nt-fchip {
-  flex: none; font-size: 13px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--nt-line); color: var(--nt-muted);
-  text-decoration: none; white-space: nowrap;
+.nt-list {
+  border-right: 1px solid var(--nt-line); display: flex; flex-direction: column; min-width: 0;
+  position: sticky; top: 72px; align-self: start; height: calc(100vh - 120px);
 }
-.nt-fchip:hover { color: var(--nt-ink); background: var(--nt-hover); text-decoration: none; }
-.nt-fchip.on { background: var(--nt-accent); border-color: var(--nt-accent); color: var(--nt-on-accent); font-weight: 600; }
+.nt-lhead { display: flex; align-items: center; gap: 6px; padding: 16px 14px 10px 18px; }
+.nt-lhead__title {
+  flex: 1; min-width: 0; margin: 0; display: flex; align-items: baseline; gap: 8px; font-family: var(--font-display);
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; color: var(--nt-ink);
+}
+.nt-count { font-family: var(--font-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--nt-muted); }
 .nt-sort { position: relative; flex: none; }
-.nt-sort__btn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--nt-muted); cursor: pointer; padding: 4px 6px; border-radius: 8px; }
-.nt-sort__btn:hover { color: var(--nt-ink); background: var(--nt-hover); }
-.nt-sort__menu { position: absolute; right: 0; top: calc(100% + 4px); min-width: 150px; }
+.nt-sort__menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 220px; }
+.nt-menu__k { margin-left: auto; color: var(--nt-muted); font-size: 12px; font-weight: 500; }
+.nt-menu__head--sep { border-top: 1px solid var(--nt-line); padding-top: 8px; margin-top: 6px; }
+.nt-menu__sep { border: 0; border-top: 1px solid var(--nt-line); margin: 4px 2px; }
+.nt-folder .nt-muted { margin-left: auto; }
+.nt-search { position: relative; padding: 0 14px 10px; margin: 0; }
+.nt-search__ico { position: absolute; left: 26px; top: 10px; display: flex; color: var(--nt-muted); pointer-events: none; }
+.nt .nt-search .nt-input { padding-left: 36px; padding-right: 34px; background: var(--nt-hover); border-color: transparent; }
+.nt-kbd { position: absolute; right: 24px; top: 9px; font: 11px/17px var(--font-sans); color: var(--nt-muted); border: 1px solid var(--nt-line); border-radius: 5px; padding: 0 5px; }
+.nt-filters { padding: 0 14px 12px; border-bottom: 1px solid var(--nt-line); }
+.nt-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border-radius: 10px; background: var(--nt-hover); }
+.nt-fchip {
+  padding: 5px 4px; border-radius: 8px; text-align: center; font-size: 13px; color: var(--nt-muted); text-decoration: none; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.nt-fchip:hover { color: var(--nt-ink); text-decoration: none; }
+.nt-fchip.on { background: var(--nt-card); color: var(--nt-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--nt-line), 0 1px 2px rgba(0,0,0,.2); }
 .nt-listnote { margin: 0; padding: 8px 14px; font-size: 12px; color: var(--nt-muted); border-bottom: 1px solid var(--nt-line); }
 .nt-listnote a { color: var(--nt-accent); }
-.nt-notes { overflow-y: auto; max-height: calc(100vh - 210px); }
+.nt-notes { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
 .nt-section, .nt-group {
-  margin: 0; padding: 12px 14px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--nt-muted);
+  margin: 0; padding: 12px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--nt-muted);
 }
 
-/* A row: the note on top, Pin / Delete behind it (a phone swipes the row left to show them; a desktop shows them on hover). */
-.nt-item { position: relative; border-bottom: 1px solid var(--nt-line); overflow: hidden; touch-action: pan-y; }
-.nt-item__actions { position: absolute; inset: 0 0 0 auto; display: flex; z-index: 0; }
+/* A row: the note on top, Pin / Delete behind it (a touch screen swipes the row left to show them; a desktop shows
+   them on hover). Behind the row they stay hidden until a swipe starts, so nothing can show through the row's face or
+   its rounded corners; they hide again once the row has slid back. */
+.nt-item { position: relative; border-top: 1px solid var(--nt-line); border-radius: 12px; overflow: hidden; touch-action: pan-y; }
+.nt-section + .nt-item, .nt-group + .nt-item, .nt-notes > .nt-item:first-child, .nt-item.on, .nt-item.on + .nt-item { border-top-color: transparent; }
+.nt-item__actions { position: absolute; inset: 0 0 0 auto; display: flex; z-index: 0; visibility: hidden; transition: visibility 0s linear .25s; }
+.nt-item.is-open .nt-item__actions, .nt-item.is-dragging .nt-item__actions { visibility: visible; transition-delay: 0s; }
 .nt-item__actions form { margin: 0; display: flex; }
 .nt .nt-act {
   width: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -163,12 +181,13 @@ html.js .nt .nt-nojs { display: none; }
 .nt .nt-act--pin { background: color-mix(in srgb, var(--nt-accent) 85%, #000); }
 .nt .nt-act--delete { background: var(--nt-danger); }
 .nt-note {
-  position: relative; z-index: 1; display: block; padding: 11px 14px 12px; color: var(--nt-ink); text-decoration: none;
+  position: relative; z-index: 1; display: block; padding: 10px 12px 11px; color: var(--nt-ink); text-decoration: none;
   background: var(--nt-card2); transition: transform .22s cubic-bezier(.2,.8,.2,1), background-color .15s;
 }
 .nt-item.is-dragging .nt-note { transition: none; }
 .nt-note:hover { background: color-mix(in srgb, var(--nt-hover) 70%, var(--nt-card2)); text-decoration: none; color: var(--nt-ink); }
-.nt-item.on .nt-note { background: color-mix(in srgb, var(--nt-accent-soft) 100%, var(--nt-card2)); box-shadow: inset 3px 0 0 var(--nt-accent); }
+/* The open note's row: a SOLID tint (accent mixed into the card), never see-through - Pin / Delete sit right behind it. */
+.nt-item.on .nt-note { background: color-mix(in srgb, var(--nt-accent) 13%, var(--nt-card2)); }
 .nt-note__top { display: flex; align-items: baseline; gap: 8px; }
 .nt-note__title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; font-size: 14.5px; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -182,9 +201,21 @@ html.js .nt .nt-nojs { display: none; }
 .nt-note--deleted:hover { background: var(--nt-card2); }
 .nt-note__trash { margin-top: 8px; }
 .nt-empty { padding: 14px; margin: 0; color: var(--nt-muted); font-size: 14px; }
+/* Archived and Recently deleted: rows at the bottom of the list */
+.nt-places { flex: none; display: flex; gap: 4px; padding: 8px; border-top: 1px solid var(--nt-line); }
+.nt-place {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 9px; font-size: 13px;
+  color: var(--nt-muted); text-decoration: none;
+}
+.nt-place:hover { background: var(--nt-hover); color: var(--nt-ink); text-decoration: none; }
+.nt-place.on { background: var(--nt-accent-soft); color: var(--nt-ink); }
+.nt-place svg { flex: none; }
+.nt-place__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-place .nt-muted { margin-left: auto; }
+.nt-place > svg:last-child { display: none; }          /* the chevron: phones only */
 @media (hover: hover) and (pointer: fine) {
   /* Desktop: Pin and Delete appear as small buttons on the row's right while it's hovered or focused. */
-  .nt-item__actions { inset: 8px 8px auto auto; z-index: 2; gap: 4px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+  .nt-item__actions { inset: 8px 8px auto auto; z-index: 2; gap: 4px; opacity: 0; pointer-events: none; visibility: visible; transition: opacity .12s; }
   .nt-item:hover .nt-item__actions, .nt-item:focus-within .nt-item__actions { opacity: 1; pointer-events: auto; }
   .nt .nt-act { width: 28px; height: 28px; border-radius: 8px; flex-direction: row; background: var(--nt-card); color: var(--nt-muted);
     border: 1px solid var(--nt-line); }
@@ -195,15 +226,48 @@ html.js .nt .nt-nojs { display: none; }
 }
 
 /* ---------- The open note ---------- */
-.nt-editor { padding: 18px 26px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.nt-editor { position: relative; padding: 0 32px 28px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.nt-editor > :not(.nt-toolbar):not(.nt-mbar) { width: 100%; max-width: 720px; align-self: center; }
 .nt-editor--empty { justify-content: center; align-items: center; }
-.nt-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--nt-line); padding-bottom: 10px; }
+/* One toolbar: status on the left; Ask AI, Share, Pin and More on the right; the formatting row under it (desktop). */
+.nt-toolbar {
+  position: sticky; top: 64px; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  margin: 0 -32px 8px; padding: 10px 14px 0 24px; background: var(--nt-card2); border-bottom: 1px solid var(--nt-line);
+}
+.nt-toolbar > :not(.nt-fmtbar) { margin-bottom: 10px; }
 .nt-toolbar form { margin: 0; display: inline-flex; }
-.nt-fmtbar { display: inline-flex; gap: 4px; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--nt-line); }
+.nt-back { display: none; }
+.nt-status { min-width: 0; margin: 0 8px 0 0; font-size: 12.5px; color: var(--nt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-status .is-error { color: var(--nt-danger); }
+.nt .nt-share-btn { gap: 6px; margin-right: 2px; }
+.nt-fmtbar {
+  flex-basis: calc(100% + 38px); display: flex; align-items: center; gap: 2px; margin: 0 -14px 0 -24px; padding: 6px 20px;
+  border-top: 1px solid var(--nt-line);
+}
+.nt .nt-fmtbar .nt-btn { background: none; border-color: transparent; color: var(--nt-muted); min-width: 32px; min-height: 32px; }
+.nt .nt-fmtbar .nt-btn:hover { background: var(--nt-hover); color: var(--nt-ink); }
+.nt .nt-fmtbar .nt-btn[aria-pressed="true"] { background: var(--nt-accent-soft); color: var(--nt-accent); border-color: transparent; }
+.nt-fmtsep { width: 1px; height: 18px; background: var(--nt-line); margin: 0 6px; flex: none; }
+.nt-fmthint { margin-left: auto; padding-left: 12px; font-size: 12px; color: var(--nt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1180px) { .nt-fmthint { display: none; } }
 .nt-grow { flex: 1; }
+/* More (⋯): a menu under its button (notes.js places it) */
+.nt .nt-pop#nt-pop-more {
+  position: fixed; z-index: 75; width: 300px; max-width: calc(100vw - 24px); max-height: calc(100vh - 90px); overflow-y: auto;
+  gap: 1px; padding: 6px; border-radius: 14px; box-shadow: var(--shadow-lg, 0 12px 32px rgba(0,0,0,.35));
+}
+#nt-pop-more form { margin: 0; }
+.nt .nt-menu__item svg { flex: none; color: var(--nt-muted); }
+.nt .nt-menu__item.is-danger, .nt .nt-menu__item.is-danger svg { color: var(--nt-danger); }
+.nt-mfield { display: flex; align-items: center; gap: 10px; padding: 4px 10px; font-size: 14px; color: var(--nt-ink); }
+.nt-mfield svg { flex: none; color: var(--nt-muted); }
+.nt .nt-mfield .nt-input { flex: 1; min-width: 0; padding: 5px 9px; font-size: 13px; border-radius: 9px; }
+#nt-pop-more .nt-switch { flex-direction: row-reverse; justify-content: space-between; padding: 7px 10px; }
+#nt-pop-more .nt-switch__text .nt-small { display: block; }
+.nt-mhint { margin: 2px 10px 4px; }
 .nt .nt-title {
   display: block; width: 100%; font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
-  line-height: 1.25; margin: 8px 0 0; color: var(--nt-ink); background: transparent; border: 0; overflow-wrap: anywhere;
+  line-height: 1.2; margin: 18px 0 0; color: var(--nt-ink); background: transparent; border: 0; overflow-wrap: anywhere;
 }
 .nt input.nt-title::placeholder { color: var(--nt-muted); opacity: .6; }
 .nt input.nt-title:focus { outline: none; }
@@ -245,6 +309,7 @@ html.js .nt .nt-nojs { display: none; }
 
 /* Selection toolbar (desktop), block menu, link box */
 .nt-bubble {
+  position: absolute; visibility: hidden;                /* until TipTap's BubbleMenu shows it (inline visibility) */
   display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px; z-index: 50;
   background: var(--nt-card); border: 1px solid var(--nt-line); box-shadow: var(--shadow-lg, 0 10px 28px rgba(0,0,0,.35));
 }
@@ -269,14 +334,12 @@ html.js .nt .nt-nojs { display: none; }
   padding: 6px max(8px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
   background: var(--nt-card); border-top: 1px solid var(--nt-line); box-shadow: 0 -6px 20px rgba(0,0,0,.18);
 }
-.nt .nt-mbar button { flex: 1; height: 38px; font-size: 16px; }
+.nt .nt-mbar button { flex: 1; min-width: 0; height: 40px; padding: 0 2px; font-size: 16px; }
+.nt .nt-mbar .nt-ai--mbar { color: var(--nt-accent); }
+body:has(#nt-mbar:not([hidden])) .nt-toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
 .nt .nt-mbar button:active { background: var(--nt-hover); }
 
-/* Footer, toast */
-.nt-foot { margin-top: auto; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--nt-muted); font-size: 12px;
-  border-top: 1px solid var(--nt-line); padding-top: 10px; }
-.nt-foot__right { display: inline-flex; gap: 6px; }
-.nt-foot .is-error { color: var(--nt-danger); }
+/* Toast */
 .nt-toast {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 90;
   display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; border-radius: 14px; font-size: 14px;
@@ -293,19 +356,55 @@ html.js .nt .nt-nojs { display: none; }
 .nt-domain { font-size: 20px; font-weight: 600; overflow-wrap: anywhere; margin: 0 0 8px; }
 
 @media (max-width: 860px) {
-  .nt-panes { grid-template-columns: 1fr; }
-  .nt-side, .nt-list { border-right: 0; border-bottom: 1px solid var(--nt-line); }
-  .nt-side { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 12px; }
-  .nt-side h4 { display: none; }
-  .nt-new { margin: 0 6px 0 0; }
-  .nt-notes { max-height: none; }
-  .nt-editor { padding: 16px 18px; }
-  .nt .nt-title { font-size: 26px; }
-  .nt-fmtbar { display: none; }               /* the bar above the keyboard has them */
+  /* One screen at a time: the list at /notes/, the note at /notes/<id>/ ("‹ Notes" goes back). */
+  .nt { padding-top: 6px; }
+  .nt[data-screen="note"] .nt-list, .nt[data-screen="list"] .nt-editor { display: none; }
+  .nt-frame { border: 0; border-radius: 0; background: none; overflow: visible; }
+  .nt-panes { grid-template-columns: 1fr; min-height: 0; }
+  .nt-list { position: static; height: auto; border-right: 0; }
+  .nt-lhead { padding: 4px 0 12px; gap: 2px; }
+  .nt-lhead__title { font-size: 30px; }
+  .nt .nt-lhead .nt-ai--list { display: inline-flex; }
+  body:has(.nt[data-screen="note"]) #nav-back { display: none; }   /* "‹ Notes" is the back button on a note */
+  .nt[data-screen="list"] .nt-item.on .nt-note { background: var(--nt-card2); }   /* no note is open on this screen */
+  .nt .nt-lhead .nt-ibtn { width: 40px; height: 40px; }
+  .nt .nt-new > .nt-btn span { display: none; }
+  .nt-search { padding: 0 0 10px; }
+  .nt-search__ico { left: 12px; top: 11px; }
+  .nt .nt-search .nt-input { font-size: 16px; padding-top: 8px; padding-bottom: 8px; padding-right: 12px; }   /* 16px: no iOS zoom */
+  .nt-kbd { display: none; }
+  .nt-filters { padding: 0 0 14px; border-bottom: 0; }
+  .nt-fchip { font-size: 13.5px; padding: 6px 2px; }
+  .nt-notes { overflow: hidden; padding: 0; border: 1px solid var(--nt-line); border-radius: 14px; background: var(--nt-card2); }
+  .nt-item { border-radius: 0; }
+  .nt-note { padding: 12px 16px 13px; }
+  .nt-note__title { font-size: 15.5px; }
+  .nt-note__preview { font-size: 14px; }
+  .nt-section, .nt-group { padding: 12px 16px 2px; }
+  .nt-places { flex-direction: column; gap: 0; margin: 14px 0 8px; padding: 0; border: 1px solid var(--nt-line); border-radius: 14px; background: var(--nt-card2); overflow: hidden; }
+  .nt-place { padding: 13px 16px; border-radius: 0; font-size: 15px; color: var(--nt-ink); gap: 12px; }
+  .nt-place + .nt-place { border-top: 1px solid var(--nt-line); }
+  .nt-place > svg:last-child { display: block; color: var(--nt-muted); }
+  .nt-place .nt-muted { margin-left: auto; }
+  /* The note screen */
+  .nt-editor { padding: 0 2px calc(84px + env(safe-area-inset-bottom)); }
+  .nt-toolbar { position: static; margin: 0 0 4px; padding: 0 0 6px; gap: 0; background: none; }
+  .nt-toolbar > :not(.nt-fmtbar) { margin-bottom: 0; }
+  .nt-back { display: inline-flex; align-items: center; gap: 1px; margin-left: -6px; padding: 6px 6px 6px 0; color: var(--nt-accent); font-size: 16px; font-weight: 500; text-decoration: none; }
+  .nt-back:hover { text-decoration: none; color: var(--nt-accent); }
+  .nt-status { order: 10; flex-basis: 100%; margin: 0; padding: 2px 0 0; font-size: 12px; }
+  .nt-status__words { display: none; }
+  .nt .nt-toolbar .nt-ibtn { width: 40px; height: 40px; color: var(--nt-accent); }
+  .nt .nt-toolbar .nt-ibtn.is-on, .nt .nt-toolbar .nt-ibtn[aria-pressed="true"] { color: var(--nt-accent); background: var(--nt-accent-soft); }
+  .nt .nt-share-btn { width: 40px; height: 40px; padding: 0; margin: 0; border: 0; background: none; color: var(--nt-accent); }
+  .nt .nt-share-btn span { display: none; }
+  .nt .nt-title { font-size: 26px; margin-top: 10px; }
+  .nt-fmtbar { display: none; }               /* the phone bar at the bottom has them */
   /* The reading layout: bigger, roomier text; tap anywhere to edit there. */
   .nt-doc .note-content { font-size: 17px; line-height: 1.7; }
-  .nt-frame { border-radius: 16px; }
 }
+/* A phone that edits uses the bottom bar's Ask AI, not the toolbar's. */
+@media (pointer: coarse) { .nt-editor[data-can-edit="1"] .nt-ai--bar { display: none; } }
 @media (prefers-reduced-motion: reduce) { .nt * { transition: none !important; } }
 
 /* "Add to schedule" (a Planner item linked to this note) and its "Scheduled: <date>" chips */

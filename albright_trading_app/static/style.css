@@ -2824,9 +2824,13 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   right: max(16px, env(safe-area-inset-right, 0px));
   bottom: calc(max(16px, env(safe-area-inset-bottom, 0px) + 12px) + var(--dock-lift, 0px));
   display: flex; flex-direction: row; align-items: center; gap: 12px;
-  transition: bottom .2s ease;
+  transition: bottom .2s ease, opacity .15s ease, transform .15s ease;
 }
 .fab-dock:empty { display: none; }
+/* Typing on a touch screen (js/fab_dock.js): out of the way until the keyboard closes. */
+.fab-dock.fab-dock--away { opacity: 0; transform: translateY(12px); pointer-events: none; }
+/* While a floating button shows, the page ends with room for it, so it never covers the last content. */
+html.has-fab-dock body { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
 
 /* ---------- Meals: Convert (albright_meals/_converter.html, _converter_fab.html, static/meals/converter.js) ---------- */
 /* Its dock button: a Meals-orange pill, 56px tall like the AI button; an icon-only circle under 480px. */

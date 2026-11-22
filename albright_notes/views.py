@@ -40,7 +40,7 @@ from . import links, notes, render as md, smart
 from .models import TRASH_DAYS, Note, NoteLink, NotesSettings
 
 # The list's filter chips, then the sidebar's other places: (key, label).
-CHIPS = [("all", "All"), ("pinned", "Pinned"), ("shared", "Shared"), ("checklists", "Has checklist")]
+CHIPS = [("all", "All"), ("pinned", "Pinned"), ("shared", "Shared"), ("checklists", "Checklists")]
 PLACES = [("archived", "Archived"), ("deleted", "Recently deleted")]
 VIEW_KEYS = {k for k, _l in CHIPS + PLACES}
 SORTS = [("edited", "Last edited"), ("created", "Created"), ("title", "Title")]
@@ -273,6 +273,8 @@ def workspace(request, pk=None):
         "templates": [(k, label) for k, (label, _t, _b) in notes.TEMPLATES.items()],
         "tags": sorted(tag_counts.items()), "open": open_note, "list_url": list_url, "trash_days": TRASH_DAYS,
         "undo_note": undo_note,
+        # A phone shows one screen at a time (notes.css): the list at /notes/, the note at /notes/<id>/.
+        "screen": "note" if pk and open_note else "list",
     }
     if open_note:
         context.update(_editor(open_note, user, now, allowed))

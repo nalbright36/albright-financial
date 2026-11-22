@@ -1,11 +1,12 @@
 /*
- * Albright Notes - the three-pane workspace (albright_notes/workspace.html). Vanilla JS; the rich editor itself is
+ * Albright Notes - the two-pane workspace (albright_notes/workspace.html). Vanilla JS; the rich editor itself is
  * the vendored TipTap bundle (window.NoteEditor, albright_notes/static/albright_notes/vendor/note-editor.js, built
  * from albright_notes/editor_src) - this file wires it into the page.
  *
  *   "/"            focuses the search box (when you're not typing somewhere)
- *   the list       swipe a row left on a phone for Pin and Delete (a full swipe deletes); on a desktop they show on
- *                  hover. Delete moves the note to Recently deleted with an Undo toast for 5 seconds
+ *   the list       a tap opens the note; swipe a row left on a touch screen for Pin and Delete (a full swipe
+ *                  deletes) - a tap anywhere else or a scroll closes it again; on a desktop they show on hover.
+ *                  Delete moves the note to Recently deleted with an Undo toast for 5 seconds
  *   the editor     the note is Markdown underneath (Note.body) - the editor reads it and writes it back on save.
  *                  Markdown shortcuts while typing (# , ## , ### , - , 1. , [ ] , > , ---, ```), "/" for the block
  *                  menu, Aa for text styles, a selection toolbar on a desktop and a bar above the keyboard on a
@@ -23,7 +24,8 @@
  *   images/files   the image button, or paste / drop files on the note: each is attached to the note
  *                  (labs/attachments.js uploads it) and goes in the text where you were - an image inline, any
  *                  other file as a 📎 link
- * On a phone the panes stack; opening a note scrolls to it.
+ * On a phone the list and the note are separate screens (notes.css, data-screen); the formatting bar stays at the
+ * bottom of the note screen. More (⋯) is a menu placed under its button.
  */
 (function () {
     "use strict";
@@ -198,6 +200,17 @@
             var item = event.target.closest(".nt-item.is-open");
             if (item && !event.target.closest(".nt-item__actions")) { event.preventDefault(); resetSwipe(item); }
         }, true);
+        // ...and a tap anywhere outside the open row, or any scroll, closes it too.
+        var closeOpen = function (except) {
+            list.querySelectorAll(".nt-item.is-open").forEach(function (item) { if (item !== except) resetSwipe(item); });
+        };
+        document.addEventListener("pointerdown", function (event) {
+            var target = event.target.closest ? event.target : null;
+            closeOpen(target && target.closest(".nt-item.is-open"));
+        }, true);
+        var onScroll = function () { if (!drag || !drag.moving) closeOpen(null); };
+        window.addEventListener("scroll", onScroll, {passive: true});
+        list.addEventListener("scroll", onScroll, {passive: true});
     }
 
     if (!root) return;
@@ -210,11 +223,8 @@
     var updatedEl = byId("nt-updated");
     var fields = {title: byId("nt-title"), tags: byId("nt-tags"), sort_checked: byId("nt-sort-checked")};
     var coarse = window.matchMedia("(pointer: coarse)").matches;
-    var narrow = function () { return window.matchMedia("(max-width: 860px)").matches; };
     var ne = null, editor = null;           // the NoteEditor wrapper and its TipTap editor
 
-    // A phone shows the panes stacked: bring the note you picked into view.
-    if (narrow() && /\/notes\/\d+\//.test(location.pathname)) root.scrollIntoView({block: "start"});
 
     // ---------- Panels: Link record, Share, More ----------
     root.addEventListener("click", function (event) {
@@ -225,12 +235,38 @@
         root.querySelectorAll("[data-pop]").forEach(function (b) { b.setAttribute("aria-expanded", "false"); });
         pop.hidden = !open;
         button.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open && pop === more) placeMore(button);
         if (open) {
             var first = pop.querySelector("input:not([type=hidden]):not([type=checkbox]), select, button");
             if (first) first.focus();
         }
     });
     if (location.hash === "#links" && byId("nt-pop-link")) byId("nt-pop-link").hidden = false;
+
+    // More (⋯) is a menu: placed under its button, closed by a click outside, Esc, or picking Ask AI.
+    var more = byId("nt-pop-more"), moreBtn = root.querySelector('[data-pop="nt-pop-more"]');
+    function placeMore(button) {
+        if (!more || !button) return;
+        var r = button.getBoundingClientRect();
+        more.style.top = Math.round(r.bottom + 6) + "px";
+        more.style.right = Math.max(12, Math.round(window.innerWidth - r.right)) + "px";
+    }
+    function closeMore() {
+        if (!more || more.hidden) return;
+        more.hidden = true;
+        if (moreBtn) moreBtn.setAttribute("aria-expanded", "false");
+    }
+    document.addEventListener("click", function (event) {
+        if (!more || more.hidden) return;
+        if (event.target.closest("[data-assistant-open]")) { closeMore(); return; }
+        if (!more.contains(event.target) && !event.target.closest('[data-pop="nt-pop-more"]')) closeMore();
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && more && !more.hidden) { closeMore(); if (moreBtn) moreBtn.focus(); }
+    });
+    ["scroll", "resize"].forEach(function (type) {
+        window.addEventListener(type, function () { if (more && !more.hidden) placeMore(moreBtn); }, {passive: true});
+    });
 
     // The note's own Delete (More panel): to Recently deleted, then the list with Undo.
     var deleteForm = byId("nt-delete-form");
@@ -485,6 +521,7 @@
         preview.hidden = true;
         mount.hidden = false;
         if (coarse) setReading(true);
+        showBar(false);
         showWords();
         markActive();
 
@@ -603,9 +640,10 @@
         var covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
         bar.style.transform = "translateY(" + (-covered) + "px)";
     }
-    function showBar(on) {
+    function showBar(on) {                         // on a phone it stays: at the bottom, or above the keyboard
         if (!bar) return;
-        bar.hidden = !(on && coarse);
+        bar.hidden = !coarse;
+        bar.classList.toggle("is-typing", !!on);
         placeBar();
     }
     if (window.visualViewport) {

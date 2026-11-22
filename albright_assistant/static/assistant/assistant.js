@@ -38,7 +38,9 @@
         target.hidden = true;
         root.classList.remove("is-open");
         fab.setAttribute("aria-expanded", "false");
-        fab.focus();
+        var back = opener && opener.getClientRects().length ? opener : fab;
+        opener = null;
+        back.focus();
     }
     fab.addEventListener("click", function () { isOpen() ? close() : open(); });
     Array.prototype.forEach.call(root.querySelectorAll("[data-assistant-close]"), function (b) {
@@ -47,6 +49,41 @@
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && isOpen()) { e.preventDefault(); close(); }
     });
+
+    // ---------- A page's own "Ask AI" buttons ([data-assistant-open]) ----------
+    // E.g. Notes' toolbar, phone bar and More menu: they open this same drawer. While one is on screen the floating
+    // button steps aside (html.as-inline, assistant.css), so it never sits on top of an editor. data-assistant-prompt
+    // starts the message (the open page - a note - is already in the assistant's context: prompt.page_context).
+    var opener = null;
+    document.addEventListener("click", function (e) {
+        var b = e.target.closest && e.target.closest("[data-assistant-open]");
+        if (!b) return;
+        e.preventDefault();
+        opener = b;
+        if (!isOpen()) open();
+        var text = b.getAttribute("data-assistant-prompt"), box = document.getElementById("assistant-input");
+        if (connected && text && box && !box.value.trim()) {
+            box.value = text;
+            box.dispatchEvent(new Event("input"));
+            box.focus();
+            try { box.setSelectionRange(text.length, text.length); } catch (err) {}
+        }
+    });
+    var inlineQueued = false;
+    function syncInline() {
+        inlineQueued = false;
+        var shown = Array.prototype.some.call(document.querySelectorAll("[data-assistant-open]"), function (b) {
+            return b.getClientRects().length > 0 && getComputedStyle(b).visibility !== "hidden";
+        });
+        document.documentElement.classList.toggle("as-inline", shown);
+    }
+    function queueInline() { if (!inlineQueued) { inlineQueued = true; window.requestAnimationFrame(syncInline); } }
+    window.addEventListener("resize", queueInline);
+    if ("MutationObserver" in window) {
+        new MutationObserver(queueInline).observe(document.body, { childList: true, subtree: true, attributes: true,
+                                                                   attributeFilter: ["hidden", "class"] });
+    }
+    syncInline();
     if (!connected) return;
 
     // ---------- swipe down to close (phones) ----------
