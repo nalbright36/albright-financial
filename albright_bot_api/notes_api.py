@@ -8,6 +8,7 @@ edit"; notes:read lists the owner's own notes (never ones others shared with
 them). If the owner can't open Notes (Admin > Users), every call is a 403.
 Every call is in the Activity log (auth.bot_endpoint)."""
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from albright_labs import attachments
@@ -77,7 +78,10 @@ def _link(request, token, value):
 
 def _note_json(note, request=None, files=None):
     """files: {note id: [...]} from attachments.api_lists (a list); without it this note's own are looked up."""
+    from albright_notes import smart
+    due = smart.next_due(note.body, timezone.localdate()) if "@[date:" in (note.body or "") else None
     return {"id": note.id, "title": note.title, "tags": note.tags, "pinned": note.pinned, "archived": note.archived,
+            "next_due": due[0].isoformat() if due else None,
             "created_by": note.created_by, "created_at": note.created_at.isoformat(),
             "updated_at": note.updated_at.isoformat(),
             "attachments": files.get(note.pk, []) if files is not None else attachments.api_list(note, request)}
@@ -113,7 +117,11 @@ def notes_create(request, token):
     found = _link(request, token, data["link"]) if data.get("link") else None
     from . import share_field
     share_field.validate(token, "notes", data)
+    items = _items(data)
     note = notes.create(token.owner, title, body, tags, pinned=pinned, token=token)
+    added = _add_items(note, items, token) if items else None
+    if added:
+        note = notes.save(note, token.name, actor=token.owner, body=added[0])
     shared = share_field.apply(token, note, data)
     if found:
         links.add(note, *found)
@@ -133,8 +141,9 @@ def note_update(request, token, note_id):
         # Someone else's note, or one this bot didn't write: same answer as a missing one.
         raise ApiError(404, f"No note {note_id} this bot can change.", "rejected: note not found or not the bot's")
     data = json_body(request)
-    if not {"append", "body", "tags"} & set(data):
-        raise ApiError(400, 'Send "append", "body" or "tags".', "rejected: nothing to change")
+    if not {"append", "body", "tags", "items"} & set(data):
+        raise ApiError(400, 'Send "append", "body", "items" or "tags".', "rejected: nothing to change")
+    items = _items(data)
     if "append" in data and "body" in data:
         raise ApiError(400, 'Send "append" or "body", not both.', "rejected: append and body")
     fields, changed = {}, []
@@ -150,8 +159,43 @@ def note_update(request, token, note_id):
     if "tags" in data:
         fields["tags"] = list(note.tags or []) + _tags(data)
         changed.append("added tags")
-    note = notes.save(note, token.name, **fields)
+    if items:
+        if "body" in fields:
+            note.body = fields["body"]                # items go after the new text
+        fields["body"], summary = _add_items(note, items, token)
+        changed.append(f"added {summary['lines']} item(s)")
+    note = notes.save(note, token.name, actor=token.owner, **fields)
     return _note_json(note, request), 200, f"updated note #{note.pk}: {', '.join(changed)}"
+
+
+def _items(data):
+    """Validate {"items": [{"text", "due"?, "time"?, "grocery"?, "checklist"?}]} (at most 50)."""
+    items = data.get("items")
+    if items is None:
+        return []
+    if not isinstance(items, list) or len(items) > 50 or not all(isinstance(i, dict) for i in items):
+        raise ApiError(400, '"items" must be a list of up to 50 objects.', "rejected: bad items")
+    from albright_notes import smart
+    for item in items:
+        if not isinstance(item.get("text"), str) or not item["text"].strip():
+            raise ApiError(400, 'Each item needs "text".', "rejected: item without text")
+        if item.get("due") is not None:
+            try:
+                smart.parse_when(item["due"], item.get("time"))
+            except (TypeError, ValueError):
+                raise ApiError(400, '"due" must be YYYY-MM-DD and "time" HH:MM.', "rejected: bad due date")
+        for flag in ("grocery", "checklist"):
+            if flag in item and not isinstance(item[flag], bool):
+                raise ApiError(400, f'"{flag}" must be true or false.', f"rejected: bad {flag}")
+    return items
+
+
+def _add_items(note, items, token):
+    from albright_notes import smart
+    try:
+        return smart.append_items(note, items, token.owner, token=token)
+    except smart.NoGroceries:
+        raise ApiError(400, "The owner has no grocery list (Meals).", "rejected: no grocery list")
 
 
 @csrf_exempt

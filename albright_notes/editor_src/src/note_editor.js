@@ -18,7 +18,7 @@
  * Keep this file and albright_notes/render.py in step: both read the same Markdown.
  */
 import { Editor, Node, Extension, mergeAttributes, textblockTypeInputRule } from "@tiptap/core";
-import { Plugin } from "@tiptap/pm/state";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskList, TaskItem } from "@tiptap/extension-list";
 import Highlight from "@tiptap/extension-highlight";
@@ -68,6 +68,44 @@ md.core.ruler.push("note_tasks", (state) => {
         });
     }
 });
+
+// Smart-link tokens (albright_notes/smart.py): "@[date:2026-12-03T17:00|task:12]", "@[grocery:45,46]",
+// "@[grocery:45|already]", "@[grocery]", "@[person:7|Sam]" -> a chip the editor parses into a smartChip node.
+const CHIP_RE = /^@\[(date|grocery|person)(?::([^\]|\n]*))?((?:\|[^\]|\n]*)*)\]/;
+export function parseToken(token) {
+    const m = CHIP_RE.exec(token || "");
+    if (!m) return null;
+    const kind = m[1], value = (m[2] || "").trim(), parts = (m[3] || "").split("|").slice(1);
+    const attrs = { kind, date: null, time: null, task: null, ids: "", already: false, pid: null, name: "" };
+    if (kind === "date") {
+        const [day, at] = value.split("T");
+        attrs.date = day || null;
+        attrs.time = at ? at.slice(0, 5) : null;
+        const task = parts.find((p) => p.startsWith("task:"));
+        attrs.task = task && /^\d+$/.test(task.slice(5)) ? Number(task.slice(5)) : null;
+    } else if (kind === "grocery") {
+        attrs.ids = value.split(",").filter((i) => /^\d+$/.test(i.trim())).map((i) => i.trim()).join(",");
+        attrs.already = parts.includes("already");
+    } else {
+        attrs.pid = /^\d+$/.test(value) ? Number(value) : null;
+        attrs.name = (parts[0] || "").trim();
+    }
+    return attrs;
+}
+export function tokenOf(a) {
+    if (a.kind === "date") return "@[date:" + (a.date || "") + (a.time ? "T" + a.time : "") + (a.task ? "|task:" + a.task : "") + "]";
+    if (a.kind === "grocery") return "@[grocery" + (a.ids ? ":" + a.ids : "") + (a.already ? "|already" : "") + "]";
+    return "@[person:" + (a.pid || "") + "|" + String(a.name || "").replace(/[\]|\n]/g, "") + "]";
+}
+md.inline.ruler.before("link", "smart_chip", (state, silent) => {
+    if (state.src.charCodeAt(state.pos) !== 0x40 || state.src.charCodeAt(state.pos + 1) !== 0x5B) return false;
+    const m = CHIP_RE.exec(state.src.slice(state.pos));
+    if (!m) return false;
+    if (!silent) state.push("smart_chip", "", 0).content = m[0];
+    state.pos += m[0].length;
+    return true;
+});
+md.renderer.rules.smart_chip = (tokens, i) => '<span data-chip="' + escapeHtml(tokens[i].content) + '"></span>';
 
 const FENCE = /^[ \t]*(```|~~~)/;
 const LIST_LINE = /^(?:[-*+]|\d{1,9}[.)])[ \t]+(?:[^ \t]|$)/;
@@ -236,6 +274,7 @@ function inline(nodes) {
     };
     (nodes || []).forEach((node) => {
         if (node.type === "hardBreak") { closeTo(0); out += "\n"; return; }
+        if (node.type === "smartChip") { out += tokenOf(node.attrs || {}); return; }
         if (node.type !== "text") return;
         const marks = (node.marks || []).filter((m) => MARK_ORDER.includes(m.type))
             .sort((a, b) => MARK_ORDER.indexOf(a.type) - MARK_ORDER.indexOf(b.type));
@@ -442,6 +481,269 @@ const FileDrop = Extension.create({
 });
 
 // ---------------------------------------------------------------------------------------------------------------
+// Smart links: due dates, grocery tags, mentions (albright_notes/smart.py stores and syncs them)
+// ---------------------------------------------------------------------------------------------------------------
+function isoDay(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function fromIso(text) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text || "");
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+function addDays(d, n) { const out = new Date(d.getFullYear(), d.getMonth(), d.getDate()); out.setDate(out.getDate() + n); return out; }
+function timeLabel(t) {
+    if (!t) return "";
+    const [h, m] = t.split(":").map(Number);
+    return (h % 12 || 12) + (m ? ":" + String(m).padStart(2, "0") : "") + (h < 12 ? " AM" : " PM");
+}
+// "Today", "Tomorrow", "Fri", "Dec 3", "Dec 3, 2027" (+ " 5 PM") - smart.label does the same on the server.
+export function dateLabel(date, time, now) {
+    const day = fromIso(date);
+    if (!day) return "Date";
+    const today = now ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); })();
+    const delta = Math.round((day - today) / 86400000);
+    let text;
+    if (delta === 0) text = "Today";
+    else if (delta === 1) text = "Tomorrow";
+    else if (delta === -1) text = "Yesterday";
+    else if (delta > 1 && delta < 7) text = day.toLocaleDateString("en-US", { weekday: "short" });
+    else if (day.getFullYear() === today.getFullYear()) text = day.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    else text = day.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return text + (time ? " " + timeLabel(time) : "");
+}
+export function chipLabel(a, now) {
+    if (a.kind === "date") return dateLabel(a.date, a.time, now);
+    if (a.kind === "grocery") return !a.ids ? "Grocery list" : a.already ? "Already on list" : "In groceries";
+    return "@" + (a.name || "someone");
+}
+
+const WEEKDAYS = { sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, weds: 3, wednesday: 3,
+    thu: 4, thur: 4, thurs: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6 };
+const MONTHS = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5,
+    jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+
+// Natural dates for "@": "tomorrow", "fri", "next fri", "dec 3", "3 dec", "12/3", "2026-12-03", "next week", "in 3 days",
+// each with an optional time ("5pm", "5:30 pm", "17:00", "at noon"). A time alone is today (tomorrow once it's past).
+// Returns {date: "YYYY-MM-DD", time: "HH:MM"|null} or null.
+export function parseWhen(input, now) {
+    now = now || new Date();
+    let s = String(input || "").toLowerCase().replace(/[,.]/g, " ").replace(/\s+/g, " ").trim();
+    if (!s) return null;
+    let time = null;
+    const tm = /(?:^|\s)(?:at\s+)?(?:(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)|(\d{1,2}):(\d{2})|(noon|midnight))(?=\s|$)/.exec(s);
+    if (tm) {
+        let h, m = 0;
+        if (tm[1]) { h = Number(tm[1]); m = Number(tm[2] || 0); if (h < 1 || h > 12) return null; h = (h % 12) + (tm[3][0] === "p" ? 12 : 0); }
+        else if (tm[4]) { h = Number(tm[4]); m = Number(tm[5]); if (h > 23) return null; }
+        else h = tm[6] === "noon" ? 12 : 0;
+        if (m > 59) return null;
+        time = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+        s = (s.slice(0, tm.index) + " " + s.slice(tm.index + tm[0].length)).replace(/\s+/g, " ").replace(/\bat$/, "").trim();
+    }
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let d = null, m;
+    if (!s) {
+        if (!time) return null;
+        const [h, mi] = time.split(":").map(Number);
+        d = h * 60 + mi > now.getHours() * 60 + now.getMinutes() ? today : addDays(today, 1);
+    } else if (/^(today|tod|tonight)$/.test(s)) d = today;
+    else if (/^(tomorrow|tmrw?|tmr|tom)$/.test(s)) d = addDays(today, 1);
+    else if ((m = /^(next |this )?([a-z]+)$/.exec(s)) && m[2] in WEEKDAYS) {
+        if (m[1] === "next ") {                                   // that day in next week (weeks start Monday)
+            const monday = addDays(today, ((8 - today.getDay()) % 7) || 7);
+            d = addDays(monday, (WEEKDAYS[m[2]] + 6) % 7);
+        } else d = addDays(today, (WEEKDAYS[m[2]] - today.getDay() + 7) % 7);
+    } else if (s === "next week") d = addDays(today, ((8 - today.getDay()) % 7) || 7);
+    else if (s === "weekend" || s === "this weekend") d = addDays(today, (6 - today.getDay() + 7) % 7);
+    else if (s === "next month") d = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    else if ((m = /^in (\d{1,3}) (day|days|week|weeks|month|months)$/.exec(s))) {
+        const n = Number(m[1]);
+        d = m[2][0] === "d" ? addDays(today, n) : m[2][0] === "w" ? addDays(today, n * 7)
+            : new Date(today.getFullYear(), today.getMonth() + n, today.getDate());
+    } else if ((m = /^([a-z]+) (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/.exec(s)) && m[1] in MONTHS) {
+        d = monthDay(today, MONTHS[m[1]], Number(m[2]), m[3]);
+    } else if ((m = /^(\d{1,2})(?:st|nd|rd|th)? ([a-z]+)(?: (\d{4}))?$/.exec(s)) && m[2] in MONTHS) {
+        d = monthDay(today, MONTHS[m[2]], Number(m[1]), m[3]);
+    } else if ((m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/.exec(s))) {
+        d = monthDay(today, Number(m[1]) - 1, Number(m[2]), m[3] && (m[3].length === 2 ? "20" + m[3] : m[3]));
+    } else if ((m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s))) {
+        d = monthDay(today, Number(m[2]) - 1, Number(m[3]), m[1]);
+    }
+    return d ? { date: isoDay(d), time } : null;
+}
+function monthDay(today, month, day, year) {
+    if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+    let d = new Date(year ? Number(year) : today.getFullYear(), month, day);
+    if (d.getMonth() !== month) return null;                    // "feb 30"
+    if (!year && d < today) d = new Date(today.getFullYear() + 1, month, day);
+    return d;
+}
+
+// What "@" offers for what's typed after it: dates, the grocery list, people.
+export function atItems(query, opts) {
+    opts = opts || {};
+    const q = String(query || "").toLowerCase().trim();
+    if (q.length > 30 || q.split(" ").length > 4) return [];
+    const now = opts.now || new Date(), items = [], seen = new Set();
+    const addDate = (when, hint) => {
+        if (!when || seen.has(when.date + when.time)) return;
+        seen.add(when.date + when.time);
+        const day = fromIso(when.date);
+        const full = day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+        items.push({ kind: "date", date: when.date, time: when.time, icon: "📅",
+            label: dateLabel(when.date, when.time, now), hint: hint || full + (when.time ? " · " + timeLabel(when.time) : "") });
+    };
+    addDate(parseWhen(q, now));
+    ["today", "tomorrow", "next week", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        .filter((word) => (q ? word.startsWith(q) : ["today", "tomorrow", "next week"].includes(word)))
+        .forEach((word) => addDate(parseWhen(word, now)));
+    if (!q || "date".startsWith(q) || "pick a date".startsWith(q)) items.push({ kind: "pick", icon: "🗓", label: "Pick a date…", hint: "Due date and time" });
+    if (opts.groceries && (!q || "grocery list".startsWith(q) || q.startsWith("grocer") || "groceries".startsWith(q))) {
+        items.push({ kind: "grocery", icon: "🛒", label: "Grocery list", hint: "Put this line on your grocery list" });
+    }
+    (opts.people || []).filter((p) => !q || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.name.toLowerCase().startsWith(q))
+        .slice(0, 5).forEach((p) => items.push({ kind: "person", pid: p.id, name: p.name, icon: "@", label: p.name, hint: "Mention" }));
+    return items.slice(0, 9);
+}
+
+let chipSeq = 0;
+const SmartChip = Node.create({
+    name: "smartChip",
+    group: "inline",
+    inline: true,
+    atom: true,
+    selectable: true,
+    addAttributes() {
+        const keep = (name, fallback) => ({ default: fallback, rendered: false, parseHTML: (el) => {
+            const a = parseToken(el.getAttribute("data-chip"));
+            return a ? a[name] : fallback;
+        } });
+        return {
+            kind: keep("kind", "date"), date: keep("date", null), time: keep("time", null), task: keep("task", null),
+            ids: keep("ids", ""), already: keep("already", false), pid: keep("pid", null), name: keep("name", ""),
+            uid: { default: null, rendered: false, parseHTML: () => "c" + (++chipSeq) },    // finds it again (not saved)
+            fresh: { default: false, rendered: false, parseHTML: () => false },          // just made: not sent yet
+        };
+    },
+    parseHTML() { return [{ tag: "span[data-chip]" }]; },
+    renderHTML({ node }) {
+        const a = node.attrs;
+        let cls = "nt-smart nt-smart--" + a.kind;
+        if (a.kind === "date") {
+            const day = fromIso(a.date), n = new Date();
+            if (day && day < new Date(n.getFullYear(), n.getMonth(), n.getDate())) cls += " is-overdue";
+            if (a.task) cls += " is-linked";
+        }
+        if (a.kind === "grocery" && !a.ids) cls += " is-pending";
+        return ["span", { "data-chip": tokenOf(a), class: cls, contenteditable: "false" }, chipLabel(a)];
+    },
+    renderText({ node }) { return chipLabel(node.attrs); },
+});
+
+// "@" anywhere a word could start opens the smart-link menu; the page draws it (options.at: onOpen/onUpdate/onKey/
+// onClose, people, groceries, onPick(item, range) for "Pick a date…").
+function atExtension(at) {
+    return Extension.create({
+        name: "atMenu",
+        addProseMirrorPlugins() {
+            return [Suggestion({
+                editor: this.editor,
+                char: "@",
+                pluginKey: new PluginKey("atMenu"),
+                allowSpaces: true,
+                startOfLine: false,
+                allowedPrefixes: [" ", " ", "(", "["],
+                items: ({ query }) => atItems(query, { people: at.people, groceries: at.groceries }),
+                command: ({ editor, range, props }) => insertChip(editor, props, range, at),
+                allow: ({ state }) => !state.selection.$from.parent.type.spec.code,
+                render: () => ({
+                    onStart: (props) => at.onOpen && at.onOpen(props),
+                    onUpdate: (props) => {
+                        if (/^grocer(y|ies) $/i.test(props.query) && at.groceries) {   // "@grocery" then space
+                            props.command({ kind: "grocery" });
+                            return;
+                        }
+                        if (at.onUpdate) at.onUpdate(props);
+                    },
+                    onKeyDown: (props) => (at.onKey ? at.onKey(props) : false),
+                    onExit: () => at.onClose && at.onClose(),
+                }),
+            })];
+        },
+    });
+}
+
+export function insertChip(editor, item, range, at) {
+    if (item.kind === "pick") {
+        if (at && at.onPick) at.onPick(range);
+        return;
+    }
+    const attrs = { kind: item.kind, fresh: true, uid: "c" + (++chipSeq) };
+    if (item.kind === "date") Object.assign(attrs, { date: item.date, time: item.time || null });
+    if (item.kind === "person") Object.assign(attrs, { pid: item.pid, name: item.name });
+    let chain = editor.chain().focus();
+    if (range) chain = chain.deleteRange(range);
+    chain.insertContent([{ type: "smartChip", attrs }, { type: "text", text: " " }]).run();
+}
+
+// Every chip in the document: [{pos, node, key, uid, block (its textblock's position), checked (null or the task item's)}].
+export function findChips(editor) {
+    const out = [];
+    editor.state.doc.descendants((node, pos) => {
+        if (node.type.name !== "smartChip") return true;
+        const $pos = editor.state.doc.resolve(pos);
+        let checked = null, itemPos = null;
+        for (let d = $pos.depth; d > 0; d--) {
+            if ($pos.node(d).type.name === "taskItem") { checked = !!$pos.node(d).attrs.checked; itemPos = $pos.before(d); break; }
+        }
+        const a = node.attrs;
+        const key = a.kind === "date" && a.task ? "task:" + a.task : a.kind === "grocery" && a.ids ? "grocery:" + a.ids : null;
+        out.push({ pos, node, attrs: a, key, uid: a.uid, block: $pos.before($pos.depth), blockEnd: $pos.after($pos.depth),
+                   text: $pos.parent.textContent.trim(), checked, itemPos });
+        return false;
+    });
+    return out;
+}
+
+export function updateChip(editor, uid, changes, meta) {
+    const chip = findChips(editor).find((c) => c.uid === uid);
+    if (!chip) return false;
+    const tr = editor.state.tr.setNodeMarkup(chip.pos, undefined, { ...chip.node.attrs, ...changes });
+    if (meta) tr.setMeta("noteSync", true).setMeta("addToHistory", false);
+    editor.view.dispatch(tr);
+    return true;
+}
+
+export function removeChip(editor, uid) {
+    const chip = findChips(editor).find((c) => c.uid === uid);
+    if (!chip) return false;
+    editor.view.dispatch(editor.state.tr.delete(chip.pos, chip.pos + chip.node.nodeSize));
+    return true;
+}
+
+// What came from the Planner / grocery list ([{key, checked?, date?, time?, unlink?}]) - patched in without moving the
+// cursor or adding to undo.
+export function applySync(editor, sync) {
+    if (!sync || !sync.length) return false;
+    const tr = editor.state.tr;
+    findChips(editor).forEach((c) => {
+        sync.filter((s) => s.key && s.key === c.key).forEach((s) => {
+            const attrs = { ...c.node.attrs };
+            if (s.unlink) attrs.task = null;
+            if (s.date !== undefined) { attrs.date = s.date; attrs.time = s.time || null; }
+            tr.setNodeMarkup(tr.mapping.map(c.pos), undefined, attrs);
+            if (s.checked !== undefined && c.itemPos != null && c.checked !== s.checked) {
+                const at = tr.mapping.map(c.itemPos), item = tr.doc.nodeAt(at);
+                if (item) tr.setNodeMarkup(at, undefined, { ...item.attrs, checked: s.checked });
+            }
+        });
+    });
+    if (!tr.docChanged) return false;
+    editor.view.dispatch(tr.setMeta("noteSync", true).setMeta("addToHistory", false));
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Blocks for the "/" menu and the Aa menu
 // ---------------------------------------------------------------------------------------------------------------
 export const BLOCKS = [
@@ -559,6 +861,7 @@ export function create(options) {
         TableKit.configure({ table: { resizable: false } }),
         SmallText,
         Callout,
+        SmartChip,
         FileDrop.configure({ onFiles: options.onFiles || null }),
         Placeholder.configure({
             includeChildren: true,
@@ -572,6 +875,7 @@ export function create(options) {
         }),
     ];
     if (options.slash) extensions.push(slashExtension(options.slash));
+    if (options.at) extensions.push(atExtension(options.at));
     if (options.bubble) {
         extensions.push(BubbleMenu.configure({
             element: options.bubble,
@@ -592,7 +896,7 @@ export function create(options) {
         editorProps: {
             attributes: { class: "note-content nt-pm", spellcheck: "true", "aria-label": "Note", role: "textbox", "aria-multiline": "true" },
         },
-        onUpdate: options.onUpdate ? ({ editor: ed }) => options.onUpdate(ed) : undefined,
+        onUpdate: options.onUpdate ? ({ editor: ed, transaction }) => options.onUpdate(ed, transaction) : undefined,
         onSelectionUpdate: options.onSelection ? ({ editor: ed }) => options.onSelection(ed) : undefined,
         onFocus: options.onFocus ? ({ editor: ed, event }) => options.onFocus(ed, event) : undefined,
         onBlur: options.onBlur ? ({ editor: ed, event }) => options.onBlur(ed, event) : undefined,

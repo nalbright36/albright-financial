@@ -89,8 +89,9 @@ views.workspace.
                             <time class="nt-note__when" datetime="{{ n.updated_at|date:'c' }}" title="Edited {{ r.updated }}">{{ r.when }}</time>
                         </div>
                         <p class="nt-note__preview">{% if r.shared_with_me %}<span class="nt-note__by">{{ r.owner_name }} · </span>{% endif %}{% if r.preview %}{{ r.preview }}{% else %}<span class="nt-muted">No additional text</span>{% endif %}</p>
-                        {% if r.tasks or n.attachment_count or r.shared or n.from_bot or n.tags or r.chips %}
+                        {% if r.due or r.tasks or n.attachment_count or r.shared or n.from_bot or n.tags or r.chips %}
                         <div class="nt-note__meta">
+                            {% if r.due %}<span class="nt-meta-ico nt-due{% if r.overdue %} is-overdue{% endif %}" title="{% if r.overdue %}Overdue: {% else %}Next due: {% endif %}{{ r.due }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>{{ r.due }}</span>{% endif %}
                             {% if r.tasks %}<span class="nt-meta-ico{% if r.tasks_done == r.tasks %} is-done{% endif %}" title="Checklist: {{ r.tasks_done }} of {{ r.tasks }} done"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="m8 12 3 3 5-6"/></svg>{{ r.tasks_done }}/{{ r.tasks }}<span class="visually-hidden"> checklist items done</span></span>{% endif %}
                             {% if n.attachment_count %}<span class="nt-meta-ico" title="{{ n.attachment_count }} attachment{{ n.attachment_count|pluralize }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.4 11.1l-9.2 9.2a6 6 0 01-8.5-8.5l9.2-9.2a4 4 0 015.7 5.7l-9.2 9.2a2 2 0 01-2.8-2.8l8.5-8.5"/></svg>{{ n.attachment_count }}<span class="visually-hidden"> attachment{{ n.attachment_count|pluralize }}</span></span>{% endif %}
                             {% if r.shared %}<span class="nt-meta-ico" title="Shared"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/></svg><span class="visually-hidden">Shared</span></span>{% endif %}
@@ -115,7 +116,12 @@ views.workspace.
                  data-note-id="{{ open.pk }}" data-version="{{ open.version }}" data-can-edit="{{ can_edit|yesno:'1,0' }}"
                  data-save-url="{% url 'albright_notes:save' open.pk %}" data-check-url="{% url 'albright_notes:check' open.pk %}"
                  data-delete-url="{% if is_owner %}{% url 'albright_notes:delete' open.pk %}{% endif %}" data-list-url="{{ list_url }}{{ query }}"
-                 data-sort-checked="{{ open.sort_checked|yesno:'1,0' }}">
+                 data-sort-checked="{{ open.sort_checked|yesno:'1,0' }}"
+                 data-groceries-url="{% url 'albright_notes:groceries' open.pk %}" data-groceries-remove-url="{% url 'albright_notes:groceries_remove' open.pk %}"
+                 data-planner-url="{% url 'albright_notes:planner' open.pk %}" data-planner-delete-url="{% url 'albright_notes:planner_delete' open.pk 0 %}"
+                 data-state-url="{% url 'albright_notes:state' open.pk %}" data-settings-url="{% url 'albright_notes:settings' %}"
+                 data-planner-item-url="{% if smart.planner %}{% url 'albright_planner:item' 0 %}{% endif %}"
+                 data-grocery-page="{% if smart.groceries %}{% url 'albright_meals:groceries' %}{% endif %}">
             <div class="nt-toolbar" role="toolbar" aria-label="Note tools">
                 {% if can_edit %}
                 <div class="nt-fmtbar" data-fmtbar>
@@ -159,6 +165,8 @@ views.workspace.
                 <label for="nt-tags" class="nt-label">Tags</label>
                 <input type="text" id="nt-tags" class="nt-input" data-field="tags" value="{{ open.tags|join:', ' }}" placeholder="Comma-separated, e.g. reselling, home">
                 <label class="nt-switch"><input type="checkbox" id="nt-sort-checked" data-field="sort_checked"{% if open.sort_checked %} checked{% endif %}><span class="nt-switch__track" aria-hidden="true"></span> Move checked items to the bottom</label>
+                {% if smart.planner %}<label class="nt-switch"><input type="checkbox" id="nt-auto-planner"{% if smart.auto_planner %} checked{% endif %}><span class="nt-switch__track" aria-hidden="true"></span> Always add dated note items to Planner <span class="nt-muted nt-small">(all your notes)</span></label>{% endif %}
+                <p class="nt-small nt-muted">Type <b>@</b> in the note for a due date (&ldquo;@fri 5pm&rdquo;){% if smart.groceries %}, the grocery list (&ldquo;@grocery milk, eggs&rdquo;){% endif %} or a person.</p>
                 {% if is_owner %}
                 <div class="nt-row">
                     <form method="post" action="{% url 'albright_notes:archive' open.pk %}">{% csrf_token %}<button type="submit" class="nt-btn sm" id="nt-archive">🗄 {% if open.archived %}Unarchive{% else %}Archive{% endif %}</button></form>
@@ -213,6 +221,7 @@ views.workspace.
                 {% if can_edit %}
                 <div class="nt-editor-mount" id="nt-editor-mount" hidden></div>
                 {{ open.body|json_script:"nt-source" }}
+                {{ smart|json_script:"nt-smart" }}
                 {% endif %}
             </div>
 
@@ -235,6 +244,27 @@ views.workspace.
                 <input type="url" id="nt-linkbox-url" class="nt-input" placeholder="Paste or type a link" autocomplete="off">
                 <button type="button" class="nt-btn sm primary" data-link-save>Save</button>
                 <button type="button" class="nt-btn sm" data-link-remove>Remove</button>
+            </div>
+            <div class="nt-chippop" id="nt-chippop" role="dialog" aria-label="Smart link" hidden>
+                <div class="nt-chippop__date" data-chippop="date">
+                    <div class="nt-row">
+                        <label class="nt-label">Due<input type="date" class="nt-input" data-chip-date></label>
+                        <label class="nt-label">Time (optional)<input type="time" class="nt-input" data-chip-time></label>
+                    </div>
+                    <div class="nt-row">
+                        <button type="button" class="nt-btn sm primary" data-chip-save>Save</button>
+                        {% if smart.planner %}<button type="button" class="nt-btn sm" data-chip-planner>📅 Add to Planner</button>
+                        <a class="nt-btn sm" data-chip-open-task href="#" hidden>In Planner ✓</a>{% endif %}
+                        <button type="button" class="nt-btn sm danger" data-chip-remove>Remove</button>
+                    </div>
+                </div>
+                <div class="nt-chippop__grocery" data-chippop="grocery">
+                    <p class="nt-small" data-chip-grocery-text></p>
+                    <div class="nt-row">
+                        {% if smart.groceries %}<a class="nt-btn sm" href="{% url 'albright_meals:groceries' %}">🛒 Open grocery list</a>{% endif %}
+                        <button type="button" class="nt-btn sm danger" data-chip-grocery-remove>Remove from groceries</button>
+                    </div>
+                </div>
             </div>
             <div class="nt-mbar" id="nt-mbar" role="toolbar" aria-label="Formatting" hidden>
                 <button type="button" data-fmt="styles" aria-label="Text styles"><span class="nt-aa">Aa</span></button>

@@ -453,22 +453,34 @@ Up to 200. Returns {"notes": [{"id", "title", "tags", "pinned", "archived", "cre
                            "created_by": "Sam", "attachments": []}]}),
     Op("POST", "notes", "addNote", "Save a new note for the owner", """\
 Body: {"title": str (required, <=200), "body": Markdown str (optional, <=100000), "tags": [str] (optional),
-"pinned": bool (optional), "link": {"app", "type", "id"} or {"url"} (optional), "share" (optional - see SHARING)}.
+"pinned": bool (optional), "link": {"app", "type", "id"} or {"url"} (optional), "share" (optional - see SHARING),
+"items": [{"text": str, "due": "YYYY-MM-DD" (optional), "time": "HH:MM" (optional), "grocery": bool (optional - put
+the text on the owner's grocery list; commas split it; anything already on the list isn't added twice),
+"checklist": bool (optional, default true)}] (optional, <=50 - lines added after the body; a dated one also becomes a
+Planner task when the owner has "Always add dated note items to Planner" on)}.
 The note belongs to the owner and shows "by <your token's name>". Returns 201 {"id", ..., "url", "linked"}.""",
        scopes=("notes:write",), section="notes", status=201,
        body={"title": S(maxLength=200), "body": S("Markdown"), "tags": A(S()), "pinned": B(),
-             "link": O('{"app", "type", "id"} or {"url"}'), "share": SHARE},
+             "link": O('{"app", "type", "id"} or {"url"}'), "share": SHARE,
+             "items": A(O('{"text", "due"?: "YYYY-MM-DD", "time"?: "HH:MM", "grocery"?: bool, "checklist"?: bool}'))},
        required=("title",), example={"title": "Gift ideas", "body": "- Board game\n- Scarf", "tags": ["family"]},
        returns={"id": 8, "title": "Gift ideas", "url": "/notes/8/", "linked": None}),
     Op("GET", "notes/{id}", "getNote", "One of the owner's notes, with its text", """One of the owner's own notes (anything else is a 404) with its Markdown "body" (the first 20000 characters;
-"truncated": true when there's more). Returns the note as in listNotes plus "body" and "truncated".""",
+"truncated": true when there's more). Returns the note as in listNotes plus "body", "truncated",
+"due_items": [{"line", "text", "date", "time", "task_id" (its Planner task or null), "done"}] and "grocery_items":
+[{"line", "text", "grocery_ids", "already", "pending", "done"}]. In the body these are tokens: "@[date:2026-12-03]",
+"@[date:2026-12-03T17:00|task:12]", "@[grocery:45,46]", "@[person:7|Sam]" - keep them as they are when you replace
+the body. listNotes rows have "next_due" (the soonest date on a line not ticked off, or null).""",
        scopes=("notes:read",), section="notes",
        returns={"id": 8, "title": "Gift ideas", "tags": ["family"], "body": "- Board game", "truncated": False}),
     Op("PATCH", "notes/{id}", "updateNote", "Add to or replace a note's text, or add tags", """\
 Only notes this token created, or that are shared with the owner to edit (anything else is a 404).
 Body: {"append": str} (added after a blank line) or {"body": str} (replaces it), and/or {"tags": [str]}
-(added to the note's tags). Returns the note.""",
-       scopes=("notes:write",), section="notes", body={"append": S(), "body": S(), "tags": A(S())},
+(added to the note's tags), and/or {"items": [...]} (dated and grocery lines added at the end - as in createNote).
+Ticking a dated or grocery line in "body" ticks its Planner task / grocery line too. Returns the note.""",
+       scopes=("notes:write",), section="notes",
+       body={"append": S(), "body": S(), "tags": A(S()),
+             "items": A(O('{"text", "due"?: "YYYY-MM-DD", "time"?: "HH:MM", "grocery"?: bool, "checklist"?: bool}'))},
        example={"append": "- Candle"}, returns={"id": 8, "title": "Gift ideas", "tags": ["family"]}),
 
     # ----- fitness ---------------------------------------------------------------------------------------------------

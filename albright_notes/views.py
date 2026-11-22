@@ -36,8 +36,8 @@ from albright_labs.links import is_web_url, link_status
 
 from albright_labs import attachments, sharing
 
-from . import links, notes, render as md
-from .models import TRASH_DAYS, Note, NoteLink
+from . import links, notes, render as md, smart
+from .models import TRASH_DAYS, Note, NoteLink, NotesSettings
 
 # The list's filter chips, then the sidebar's other places: (key, label).
 CHIPS = [("all", "All"), ("pinned", "Pinned"), ("shared", "Shared"), ("checklists", "Has checklist")]
@@ -90,6 +90,7 @@ def _state(note, user):
     return {"ok": True, "version": note.version, "html": md.render(note.body, editable=note.can_edit(user)),
             "body": note.body, "title": note.title, "tags": note.tags, "updated_by": note.updated_by,
             "sort_checked": note.sort_checked, "updated_iso": note.updated_at.isoformat(),
+            "link_state": smart.link_states(note.body), "sync": getattr(note, "sync", []),
             "updated": f"{timezone.localtime(note.updated_at):%I:%M %p}".lstrip("0")}
 
 
@@ -192,6 +193,7 @@ def _row(note, user, now, allowed, shared_out=(), groups=None, matcher=None, vie
         when = f"Deleted {_date_label(note.deleted_at, now)} \u00b7 {left} day{'s' if left != 1 else ''} left"
     else:
         when = _date_label(note.updated_at, now)
+    due = smart.next_due(note.body, timezone.localdate()) if view != "deleted" and "@[date:" in (note.body or "") else None
     group = ""
     if view == "shared":
         group = groups.get(note.pk, "") if shared_with_me else "Shared by you"
@@ -200,7 +202,8 @@ def _row(note, user, now, allowed, shared_out=(), groups=None, matcher=None, vie
             "tasks_done": sum(1 for _line, checked in tasks if checked), "tasks": len(tasks),
             "shared": shared_with_me or note.pk in shared_out, "shared_with_me": shared_with_me,
             "chips": links.chips(user, list(note.links.all()), allowed) if view != "deleted" else [],
-            "group": group, "can_manage": note.owner_id == user.pk}
+            "group": group, "can_manage": note.owner_id == user.pk,
+            "due": smart.label(due[0], today=timezone.localdate()) if due else "", "overdue": bool(due and due[1])}
 
 
 @login_required
@@ -276,6 +279,20 @@ def workspace(request, pk=None):
     return render(request, "albright_notes/workspace.html", context)
 
 
+def _people(user):
+    """The people in this person's circles, for "@" mentions: [{id, name}]."""
+    from albright_labs.models import CircleMembership
+    circles = CircleMembership.objects.filter(user=user, status=CircleMembership.ACTIVE).values_list("circle_id", flat=True)
+    members = CircleMembership.objects.filter(circle_id__in=list(circles), status=CircleMembership.ACTIVE) \
+        .exclude(user=user).select_related("user").order_by("user__first_name", "user__username")
+    seen, out = set(), []
+    for m in members:
+        if m.user_id not in seen:
+            seen.add(m.user_id)
+            out.append({"id": m.user_id, "name": sharing.person_name(m.user)})
+    return out[:50]
+
+
 def _editor(note, user, now, allowed):
     can_edit, is_owner = note.can_edit(user), note.owner_id == user.pk
     # The Planner links to notes by id (ScheduleItem.note): "Add to schedule", and a chip per linked item.
@@ -291,6 +308,9 @@ def _editor(note, user, now, allowed):
         "chips": links.chips(user, list(note.links.all()), allowed), "words": word_count(note.body),
         "share": sharing.control(user, note), "updated": ago(note.updated_at, now),
         "updated_iso": note.updated_at.isoformat(),
+        "smart": {"link_state": smart.link_states(note.body), "people": _people(user),
+                  "groceries": "meals" in allowed, "planner": can_schedule,
+                  "auto_planner": smart.auto_planner(user), "today": timezone.localdate().isoformat()} if can_edit else None,
         "my_permission": None if is_owner else sharing.permission_for(user, note),
         "att": attachments.section(user, note, "notes", editable=can_edit,
                                    next_url=reverse("albright_notes:note", args=[note.pk])),
@@ -348,7 +368,9 @@ def note_save(request, pk):
     if base is not None and not isinstance(base, int):
         return JsonResponse({"ok": False, "error": "version must be a number"}, status=400)
     try:
-        note = notes.save(note, notes.user_label(request.user), base_version=base, editor="body" in fields, **fields)
+        link_base = data.get("link_base") if isinstance(data.get("link_base"), dict) else None
+        note = notes.save(note, notes.user_label(request.user), base_version=base, editor="body" in fields,
+                          actor=request.user, link_base=link_base, **fields)
     except notes.Conflict as conflict:
         return JsonResponse({"ok": False, "conflict": True, **_state(conflict.note, request.user)}, status=409)
     return JsonResponse(_state(note, request.user))
@@ -368,7 +390,8 @@ def note_check(request, pk):
         return JsonResponse({"ok": False, "error": "bad request"}, status=400)
     try:
         note, before = notes.set_checked(note, notes.user_label(request.user), checked,
-                                         item_id=item_id if isinstance(item_id, str) else None, index=index)
+                                         item_id=item_id if isinstance(item_id, str) else None, index=index,
+                                         by_user=request.user)
     except notes.NoSuchItem:
         fresh = Note.objects.get(pk=note.pk)
         return JsonResponse({"ok": False, "missing": True, **_state(fresh, request.user)}, status=409)
@@ -503,3 +526,84 @@ def leave(request):
         return redirect(url)
     return render(request, "albright_notes/leave.html", {
         "url": url if is_web_url(url) else "", "domain": domain, "status": status})
+
+
+# ---------------------------------------------------------------------------
+# Smart links in a note (smart.py): groceries, Planner tasks, settings
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+def smart_groceries(request, pk):
+    """"@grocery" on a line: {items: ["milk", "eggs"]} go on the grocery list of the person who typed it. Returns
+    {ids, added (ids newly put on the list - what Undo takes off), already (bool: every one was on it), names}."""
+    _editable(request, pk)
+    data = _json(request)
+    texts = [smart.split_items(t)[0] for t in data.get("items") or [] if isinstance(t, str) and smart.split_items(t)]
+    if not texts:
+        return JsonResponse({"ok": False, "error": "Nothing to add"}, status=400)
+    try:
+        made = smart.add_groceries(request.user, texts[:smart.MAX_GROCERIES])
+    except smart.NoGroceries:
+        return JsonResponse({"ok": False, "error": "You don't have a grocery list (Meals)."}, status=403)
+    return JsonResponse({"ok": True, "ids": [g.pk for g, _s in made], "added": [g.pk for g, s in made if s == "added"],
+                         "already": all(s == "already" for _g, s in made), "names": [g.name for g, _s in made]})
+
+
+@login_required
+@require_POST
+def smart_groceries_remove(request, pk):
+    """Undo an "@grocery", or "Remove from groceries" after the tag or line went: {ids}."""
+    _editable(request, pk)
+    ids = [i for i in _json(request).get("ids") or [] if isinstance(i, int)]
+    return JsonResponse({"ok": True, "removed": smart.remove_groceries(request.user, ids) if ids else 0})
+
+
+@login_required
+@require_POST
+def smart_planner(request, pk):
+    """"Add to Planner" on a date chip: {date, time?, text} -> {task_id, url}."""
+    note = _editable(request, pk)
+    if "planner" not in links._allowed_apps(request.user):
+        return JsonResponse({"ok": False, "error": "You can't open the Planner."}, status=403)
+    data = _json(request)
+    try:
+        day, at = smart.parse_when(data.get("date"), data.get("time"))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Pick a date"}, status=400)
+    task = smart.add_task(note, request.user, day, at, str(data.get("text") or "")[:200])
+    return JsonResponse({"ok": True, "task_id": task.pk,
+                         "url": reverse("albright_planner:item", args=[task.pk]) + f"?date={day.isoformat()}"})
+
+
+@login_required
+@require_POST
+def smart_planner_delete(request, pk, task_id):
+    """The dated line (or its date) went and the person said to delete its Planner task too."""
+    _editable(request, pk)
+    task = smart.planner_task(request.user, task_id)
+    if task is None:
+        return JsonResponse({"ok": False}, status=404)
+    with smart.quiet():
+        task.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_GET
+def smart_state(request, pk):
+    """The note's link states as saved now (a task checked off in the Planner meanwhile, say) - the editor checks
+    when you come back to the tab: {version, link_state}."""
+    note = _visible(request, pk)
+    return JsonResponse({"ok": True, "version": note.version, "link_state": smart.link_states(note.body)})
+
+
+@login_required
+@require_POST
+def smart_settings(request):
+    """{auto_planner: bool} - "Always add dated note items to Planner"."""
+    value = _json(request).get("auto_planner")
+    if not isinstance(value, bool):
+        return JsonResponse({"ok": False, "error": "auto_planner must be true or false"}, status=400)
+    NotesSettings.objects.update_or_create(user=request.user, defaults={"auto_planner": value})
+    return JsonResponse({"ok": True, "auto_planner": value})

@@ -73,20 +73,26 @@ def create(owner, title, body="", tags=(), pinned=False, token=None, author=None
     return note
 
 
-def save(note, by, base_version=None, editor=False, **fields):
+def save(note, by, base_version=None, editor=False, actor=None, link_base=None, **fields):
     """Change title/body/tags/sort_checked (any subset). base_version: the version the editor started from - a
     newer one in the database raises Conflict (None skips the check: overwrite on purpose, or a bot's append).
     editor: the site's rich editor wrote the body - the first time, the Markdown from before is kept in body_backup.
-    Returns the saved note (version bumped)."""
+    A body's smart links (smart.py) are reconciled with their Planner tasks and grocery lines - actor: who's saving
+    (ticks they push are theirs); link_base: the link states the editor last had. Only another person's (or bot's)
+    save since base_version is a conflict: a task / grocery line rewriting the note meanwhile is merged.
+    Returns the saved note (version bumped); note.sync lists what came from the other side, for the editor."""
+    from . import smart
     with transaction.atomic():
         current = Note.objects.select_for_update().get(pk=note.pk)
-        if base_version is not None and current.version != base_version:
+        if base_version is not None and current.version != base_version and current.human_version > base_version:
             raise Conflict(current)
+        sync = []
         before = (current.title, current.body, current.tags)
         if "title" in fields:
             current.title = (fields["title"] or "").strip()[:200] or UNTITLED
         if "body" in fields:
             body = (fields["body"] or "")[:MAX_BODY]
+            body, sync = smart.reconcile(current, body, actor or note.owner, link_base)
             if editor and current.editor_saved_at is None and body != current.body:
                 current.body_backup, current.editor_saved_at = current.body, timezone.now()
             current.body = body
@@ -95,8 +101,10 @@ def save(note, by, base_version=None, editor=False, **fields):
         if "sort_checked" in fields:
             current.sort_checked = bool(fields["sort_checked"])
         current.version += 1                         # the row is locked: no one else can bump it meanwhile
+        current.human_version = current.version
         current.updated_by = by[:150]
         current.save()
+    current.sync = sync
     if (current.title, current.body, current.tags) != before:
         _record_edit(current)                        # after the lock is released
     return current
@@ -106,7 +114,7 @@ class NoSuchItem(Exception):
     """The checklist item isn't in the note any more (its text was edited or it was removed)."""
 
 
-def set_checked(note, by, checked, item_id=None, index=None):
+def set_checked(note, by, checked, item_id=None, index=None, by_user=None):
     """Tick or untick ONE checklist item, by its stable id (render.item_ids) - or, for older callers, its position.
     Always applied to the latest saved text under a row lock, so it never needs the editor's version and never
     overwrites anyone's newer edits: only that one "- [ ]" line changes. Returns (note, version it was before)."""
@@ -117,12 +125,15 @@ def set_checked(note, by, checked, item_id=None, index=None):
         body = render.toggle_id(current.body, item_id, checked) if item_id else             render.toggle(current.body, index, checked) if isinstance(index, int) else None
         if body is None:
             raise NoSuchItem()
+        from . import smart
+        body, _sync = smart.reconcile(current, body, by_user or current.owner)
         changed = body != current.body
         if changed:
             current.body = body
             current.version += 1
+            current.human_version = current.version
             current.updated_by = by[:150]
-            current.save(update_fields=["body", "version", "updated_by", "updated_at"])
+            current.save(update_fields=["body", "version", "human_version", "updated_by", "updated_at"])
     if changed:
         _record_edit(current)
     return current, before

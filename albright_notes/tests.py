@@ -454,7 +454,7 @@ class BotApiTests(TestCase):
         self.assertEqual(sorted(titles), ["Gift ideas", "Water heater"])
         data = self.call("GET", reverse("bot_api_v1:notes") + "?q=anode").json()["notes"]
         self.assertEqual([(n["id"], n["tags"]) for n in data], [(mine.pk, ["house"])])
-        self.assertEqual(set(data[0]), {"id", "title", "tags", "pinned", "archived", "created_by", "created_at", "updated_at", "attachments"})
+        self.assertEqual(set(data[0]), {"id", "title", "tags", "pinned", "archived", "created_by", "created_at", "updated_at", "attachments", "next_due"})
         self.assertEqual([n["title"] for n in self.call("GET", reverse("bot_api_v1:notes") + "?tag=xmas").json()["notes"]], ["Gift ideas"])
 
     def test_patch_only_its_own_notes_or_ones_shared_to_edit(self):

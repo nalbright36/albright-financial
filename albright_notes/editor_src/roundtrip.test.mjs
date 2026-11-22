@@ -18,6 +18,8 @@ const cases = [
   "| a | b |\n| --- | --- |\n| 1 | 2 |",
   "line one\nline two (hard break)",
   "Trip\n- x\nafter",
+  "- [ ] call mom @[date:2026-12-03T17:00|task:12]\n- [x] milk, eggs @[grocery:45,46]\nok @[grocery:7|already] @[grocery] hi @[person:3|Sam Lee]",
+  "**due @[date:2026-12-03]** done",
 ];
 let bad = 0;
 for (const c of cases) {
@@ -33,4 +35,17 @@ for (const c of cases) {
   console.log("OUT:", JSON.stringify(out), stable ? "" : "\n UNSTABLE 2nd: " + JSON.stringify(out2));
   console.log();
 }
+// Natural dates, from Saturday Nov 21 2026 at 10:00.
+const now = new Date(2026, 10, 21, 10, 0);
+const when = [["tomorrow", "2026-11-22", null], ["fri", "2026-11-27", null], ["next fri", "2026-11-27", null], ["next mon", "2026-11-23", null], ["dec 3", "2026-12-03", null],
+  ["3 dec", "2026-12-03", null], ["12/3", "2026-12-03", null], ["next week 5pm", "2026-11-23", "17:00"], ["in 3 days", "2026-11-24", null],
+  ["5pm", "2026-11-21", "17:00"], ["9am", "2026-11-22", "09:00"], ["jan 2", "2027-01-02", null], ["today at noon", "2026-11-21", "12:00"],
+  ["feb 30", null, null], ["sam", null, null]];
+for (const [text, date, time] of when) {
+  const got = NE.parseWhen(text, now);
+  const ok = date === null ? got === null : got && got.date === date && got.time === time;
+  if (!ok) bad++;
+  console.log(ok ? "ok  " : "BAD ", JSON.stringify(text), "->", JSON.stringify(got));
+}
+console.log(JSON.stringify(NE.atItems("gro", { groceries: true, now }).map((i) => i.label)), JSON.stringify(NE.atItems("", { now, people: [{ id: 1, name: "Sam" }] }).map((i) => i.label)));
 process.exit(bad ? 1 : 0);

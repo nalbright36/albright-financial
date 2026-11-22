@@ -11,6 +11,9 @@
  *                  menu, Aa for text styles, a selection toolbar on a desktop and a bar above the keyboard on a
  *                  phone. Lists continue on Enter; Enter on an empty item ends the list; Tab / Shift+Tab nest.
  *                  On a phone the note opens in a reading layout; tap the text to edit right there
+ *   "@"            a due date ("@fri 5pm", "@dec 3" - a chip; tap it to change it or "Add to Planner"), the grocery
+ *                  list ("@grocery milk, eggs" - sent when you leave the line, with Undo), or a person. Linked dates
+ *                  and grocery tags stay in step with their Planner task / grocery line both ways (smart.py)
  *   autosave       title, body, tags and "Move checked items to the bottom" save as you type (debounced): "Saving…" /
  *                  "Saved ✓". Each save sends the version it started from; a 409 means someone else changed the
  *                  note meanwhile and the warning offers "Load their version" or "Keep mine (overwrite)"
@@ -284,7 +287,7 @@
     function values(keys) {
         var out = {};
         keys.forEach(function (key) {
-            if (key === "body") { if (ne) out.body = ne.getMarkdown(); return; }
+            if (key === "body") { if (ne) { out.body = ne.getMarkdown(); out.link_base = linkBase; } return; }
             var input = fields[key];
             if (!input) return;
             if (key === "tags") out.tags = input.value.split(",");
@@ -351,6 +354,8 @@
                 return;
             }
             applyState(res.data, false);
+            if (res.data.link_state) linkBase = res.data.link_state;
+            if (editor && res.data.sync && res.data.sync.length) NoteEditor.applySync(editor, res.data.sync);
             showSaved(Object.keys(dirty).length ? "Unsaved changes" : "Saved ✓");
             if (Object.keys(dirty).length) schedule();
         }).catch(function () {
@@ -464,11 +469,17 @@
             placeholder: "Start writing… type / for blocks",
             onReadOnlyChecked: function () { return true; },     // ticking works in the phone's reading view too
             onFiles: function (files, pos) { attachFiles(files, pos); },
-            onUpdate: function () { changed("body"); wordsSoon(); markActive(); },
-            onSelection: function () { markActive(); },
+            onUpdate: function (_ed, tr) {
+                markActive();
+                if (tr && tr.getMeta("noteSync")) return;           // from the Planner / grocery list: already saved
+                changed("body"); wordsSoon(); watchLinks();
+            },
+            onSelection: function () { markActive(); resolveSoon(); },
             onFocus: function () { showBar(true); },
             onBlur: function (_ed, event) { onEditorBlur(event); },
             slash: {onOpen: slashOpen, onUpdate: slashUpdate, onKey: slashKey, onClose: closeBlockMenu, onImage: pickFile},
+            at: smart ? {people: smart.people || [], groceries: !!smart.groceries, onOpen: atUpdate, onUpdate: atUpdate,
+                         onKey: atKey, onClose: closeBlockMenu, onPick: function (range) { openChipPop(null, range); }} : null,
         });
         editor = ne.editor;
         preview.hidden = true;
@@ -483,6 +494,15 @@
                 setTimeout(function () { NoteEditor.sortChecked(editor); }, 0);
             }
         });
+        knownLinks = linksNow();
+        mount.addEventListener("mousedown", function (event) {
+            var el = event.target.closest(".nt-smart");
+            if (!el) return;
+            event.preventDefault();
+            var pos = editor.view.posAtDOM(el, 0);
+            var chip = NoteEditor.findChips(editor).filter(function (c) { return c.pos === pos || c.pos === pos - 1; })[0];
+            if (chip && chip.attrs.kind !== "person") openChipPop(chip);
+        });
         // Links: open on Ctrl/Cmd+click while editing, or a plain tap in the reading view.
         mount.addEventListener("click", function (event) {
             var a = event.target.closest("a[href]");
@@ -491,7 +511,7 @@
                 openLink(a.getAttribute("href"));
                 return;
             }
-            if (!editor.isEditable && !event.target.closest("input, label, button, summary, .nt-callout__icon")) {
+            if (!editor.isEditable && !event.target.closest("input, label, button, summary, .nt-callout__icon, .nt-smart")) {
                 editAt(event.clientX, event.clientY);
             }
         });
@@ -530,6 +550,7 @@
             if (editor.isFocused || (document.activeElement && document.activeElement.closest &&
                 document.activeElement.closest("#nt-linkbox"))) return;
             showBar(false);
+            resolveChips(true);
             flush();
             if (coarse) setReading(true);
         }, 150);
@@ -653,6 +674,7 @@
     }
     function closeBlockMenu() {
         slashState = null;
+        atState = null;
         styleAnchor = null;
         if (blockMenu) blockMenu.hidden = true;
     }
@@ -717,6 +739,233 @@
             if (event.key === "Escape") { event.preventDefault(); linkBox.hidden = true; editor.commands.focus(); }
         });
     }
+
+    // ---------- Smart links: "@" dates, @grocery, mentions (albright_notes/smart.py) ----------
+    var smart = byId("nt-smart") ? JSON.parse(byId("nt-smart").textContent || "null") : null;
+    var linkBase = (smart && smart.link_state) || {};       // the link states the server last gave us (sent back on save)
+    var atState = null;
+    function atUpdate(props) {
+        if (!props.items.length) { atState = null; if (blockMenu) blockMenu.hidden = true; return; }
+        if (!atState) atState = {active: 0};
+        atState.props = props;
+        atState.active = Math.min(atState.active, props.items.length - 1);
+        drawMenu(props.items, atState.active, function (item) { props.command(item); });
+        placeMenu(blockMenu, props.clientRect && props.clientRect());
+    }
+    function atKey(props) {
+        if (!atState || blockMenu.hidden) return false;
+        var items = atState.props.items, key = props.event.key;
+        if (key === "ArrowDown" || key === "ArrowUp") {
+            atState.active = (atState.active + (key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+            atUpdate(atState.props);
+            return true;
+        }
+        if (key === "Enter" || key === "Tab") { atState.props.command(items[atState.active]); return true; }
+        if (key === "Escape") { atState = null; blockMenu.hidden = true; return true; }
+        return false;
+    }
+
+    function api(url, body) {
+        return postJson(url, body).then(function (res) {
+            if (!res.ok) throw new Error((res.data && res.data.error) || "failed");
+            return res.data;
+        });
+    }
+    function chipBy(uid) {
+        return NoteEditor.findChips(editor).filter(function (c) { return c.uid === uid; })[0] || null;
+    }
+
+    // A chip just made is sent when you leave its line (so "@grocery milk, eggs" is finished first): the grocery
+    // tag puts the line's items on your grocery list; a date becomes a Planner task when that setting is on.
+    var resolveTimer = null, skipPrompt = {};
+    function resolveSoon() { clearTimeout(resolveTimer); resolveTimer = setTimeout(function () { resolveChips(false); }, 120); }
+    function resolveChips(force) {
+        if (!editor || !smart) return;
+        var sel = editor.state.selection.from;
+        NoteEditor.findChips(editor).forEach(function (c) {
+            if (!c.attrs.fresh || (!force && sel >= c.block && sel <= c.blockEnd)) return;
+            if (c.attrs.kind === "grocery" && !c.attrs.ids) {
+                var items = c.text.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+                if (!items.length) return;                                // nothing on the line yet: wait
+                NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
+                api(root.dataset.groceriesUrl, {items: items}).then(function (data) {
+                    NoteEditor.updateChip(editor, c.uid, {ids: data.ids.join(","), already: data.already});
+                    if (data.added.length) {
+                        var n = data.added.length;
+                        toast("Added " + n + " item" + (n === 1 ? "" : "s") + " to groceries", "Undo", function () {
+                            api(root.dataset.groceriesRemoveUrl, {ids: data.added}).then(function () {
+                                var now = chipBy(c.uid);
+                                if (now) { skipPrompt["grocery:" + now.attrs.ids] = true; NoteEditor.removeChip(editor, c.uid); }
+                            });
+                        });
+                    } else toast("Already on your grocery list");
+                }).catch(function (err) {
+                    NoteEditor.updateChip(editor, c.uid, {fresh: true}, true);
+                    toast(err.message === "failed" ? "Couldn't add to groceries" : err.message);
+                });
+            } else if (c.attrs.kind === "date") {
+                NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
+                if (smart.auto_planner && smart.planner && !c.attrs.task) addToPlanner(c);
+            } else NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
+        });
+    }
+    function addToPlanner(c) {
+        return api(root.dataset.plannerUrl, {date: c.attrs.date, time: c.attrs.time, text: c.text})
+            .then(function (data) {
+                NoteEditor.updateChip(editor, c.uid, {task: data.task_id});
+                toast("Added to the Planner");
+            })
+            .catch(function (err) { toast(err.message === "failed" ? "Couldn't add to the Planner" : err.message); });
+    }
+
+    // Taking out a dated line (or its date) that's in the Planner, or a grocery tag: ask about the other side.
+    var knownLinks = {}, linkTimer = null;
+    function linksNow() {
+        var out = {};
+        NoteEditor.findChips(editor).forEach(function (c) { if (c.key) out[c.key] = {text: c.text, attrs: c.attrs}; });
+        return out;
+    }
+    function watchLinks() {
+        clearTimeout(linkTimer);
+        linkTimer = setTimeout(function () {
+            var now = linksNow();
+            Object.keys(knownLinks).forEach(function (key) {
+                if (now[key] || skipPrompt[key]) { delete skipPrompt[key]; return; }
+                var gone = knownLinks[key], what = gone.text ? "“" + gone.text.slice(0, 40) + "”" : "that item";
+                if (key.indexOf("task:") === 0) {
+                    toast("Removed " + what + " - delete its Planner task too?", "Delete task", function () {
+                        api(root.dataset.plannerDeleteUrl.replace("/0/", "/" + gone.attrs.task + "/"), {})
+                            .then(function () { toast("Planner task deleted"); })
+                            .catch(function () { toast("Couldn't delete the Planner task"); });
+                    });
+                } else {
+                    var ids = gone.attrs.ids.split(",").map(Number);
+                    toast("Removed " + what + " - take it off the grocery list?", "Remove", function () {
+                        api(root.dataset.groceriesRemoveUrl, {ids: ids}).then(function () { toast("Removed from groceries"); });
+                    });
+                }
+            });
+            knownLinks = now;
+        }, 700);
+    }
+
+    // Tapping a chip: a date's popover (change it, Add to Planner, remove) or a grocery tag's (open the list, remove).
+    var chipPop = byId("nt-chippop"), chipUid = null, chipRange = null;
+    function placePop(rect) {
+        chipPop.hidden = false;
+        var left = Math.min(Math.max(8, rect.left), window.innerWidth - chipPop.offsetWidth - 8);
+        var top = rect.bottom + 8;
+        if (top + chipPop.offsetHeight > window.innerHeight - 8) top = Math.max(8, rect.top - chipPop.offsetHeight - 8);
+        chipPop.style.left = left + "px";
+        chipPop.style.top = top + "px";
+    }
+    function openChipPop(chip, range) {
+        if (!chipPop) return;
+        chipUid = chip ? chip.uid : null;
+        chipRange = range || null;
+        var kind = chip ? chip.attrs.kind : "date";
+        chipPop.querySelector('[data-chippop="date"]').hidden = kind !== "date";
+        chipPop.querySelector('[data-chippop="grocery"]').hidden = kind !== "grocery";
+        var rect;
+        if (chip) {
+            var dom = editor.view.nodeDOM(chip.pos);
+            rect = dom && dom.getBoundingClientRect ? dom.getBoundingClientRect() : editor.view.coordsAtPos(chip.pos);
+        } else rect = editor.view.coordsAtPos(range ? range.from : editor.state.selection.from);
+        if (kind === "date") {
+            var dateIn = chipPop.querySelector("[data-chip-date]"), timeIn = chipPop.querySelector("[data-chip-time]");
+            dateIn.value = chip ? chip.attrs.date || "" : (smart && smart.today) || "";
+            timeIn.value = chip ? chip.attrs.time || "" : "";
+            var plan = chipPop.querySelector("[data-chip-planner]"), open = chipPop.querySelector("[data-chip-open-task]");
+            if (plan) plan.hidden = !chip || !!chip.attrs.task;
+            if (open) {
+                open.hidden = !chip || !chip.attrs.task;
+                if (chip && chip.attrs.task) open.href = root.dataset.plannerItemUrl.replace("/0/", "/" + chip.attrs.task + "/") + "?date=" + chip.attrs.date;
+            }
+            chipPop.querySelector("[data-chip-remove]").hidden = !chip;
+            placePop(rect);
+            dateIn.focus();
+        } else {
+            chipPop.querySelector("[data-chip-grocery-text]").textContent = chip.attrs.ids
+                ? (chip.attrs.already ? "Already on your grocery list: " : "On your grocery list: ") + (chip.text || "")
+                : "Not sent yet - it goes on the grocery list when you leave this line.";
+            chipPop.querySelector("[data-chip-grocery-remove]").hidden = !chip.attrs.ids;
+            placePop(rect);
+        }
+    }
+    function closeChipPop() { if (chipPop) chipPop.hidden = true; chipUid = null; chipRange = null; }
+    if (chipPop) {
+        chipPop.querySelector("[data-chip-save]").addEventListener("click", function () {
+            var date = chipPop.querySelector("[data-chip-date]").value, time = chipPop.querySelector("[data-chip-time]").value || null;
+            if (!date) return;
+            if (chipUid) NoteEditor.updateChip(editor, chipUid, {date: date, time: time});
+            else NoteEditor.insertChip(editor, {kind: "date", date: date, time: time}, chipRange);
+            closeChipPop();
+            editor.commands.focus();
+        });
+        var planBtn = chipPop.querySelector("[data-chip-planner]");
+        if (planBtn) planBtn.addEventListener("click", function () {
+            var c = chipBy(chipUid);
+            closeChipPop();
+            if (c) addToPlanner(c);
+        });
+        chipPop.querySelector("[data-chip-remove]").addEventListener("click", function () {
+            var uid = chipUid;
+            closeChipPop();
+            NoteEditor.removeChip(editor, uid);                  // a linked one asks about its task (watchLinks)
+        });
+        chipPop.querySelector("[data-chip-grocery-remove]").addEventListener("click", function () {
+            var c = chipBy(chipUid);
+            closeChipPop();
+            if (!c || !c.attrs.ids) return;
+            api(root.dataset.groceriesRemoveUrl, {ids: c.attrs.ids.split(",").map(Number)}).then(function () {
+                skipPrompt["grocery:" + c.attrs.ids] = true;
+                NoteEditor.removeChip(editor, c.uid);
+                toast("Removed from groceries");
+            });
+        });
+        document.addEventListener("mousedown", function (event) {
+            if (!chipPop.hidden && !chipPop.contains(event.target) && !event.target.closest(".nt-smart")) closeChipPop();
+        });
+        chipPop.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") { closeChipPop(); editor.commands.focus(); }
+            if (event.key === "Enter" && event.target.matches("input")) { event.preventDefault(); chipPop.querySelector("[data-chip-save]").click(); }
+        });
+    }
+
+    // Back to the tab: anything checked off or moved in the Planner / grocery list meanwhile shows here (only where
+    // you haven't changed it yourself since).
+    function refreshLinks() {
+        if (!editor || !smart || !root.dataset.stateUrl) return;
+        fetch(root.dataset.stateUrl, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var theirs = data.link_state || {}, sync = [];
+                NoteEditor.findChips(editor).forEach(function (c) {
+                    var base = linkBase[c.key], server = c.key && theirs[c.key];
+                    if (!base || !server) return;
+                    var mine = {checked: c.checked, date: c.attrs.date, time: c.attrs.time};
+                    if (mine.checked !== base.checked || mine.date !== base.date || mine.time !== base.time) return;
+                    if (server.checked !== mine.checked || server.date !== mine.date || server.time !== mine.time) {
+                        var item = {key: c.key};
+                        if (server.checked !== mine.checked && server.checked !== null) item.checked = server.checked;
+                        if (server.date !== mine.date || server.time !== mine.time) { item.date = server.date; item.time = server.time; }
+                        sync.push(item);
+                    }
+                    linkBase[c.key] = server;
+                });
+                NoteEditor.applySync(editor, sync);
+            }).catch(function () {});
+    }
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshLinks(); });
+
+    var autoPlanner = byId("nt-auto-planner");
+    if (autoPlanner) autoPlanner.addEventListener("change", function () {
+        var on = autoPlanner.checked;
+        api(root.dataset.settingsUrl, {auto_planner: on}).then(function () {
+            smart.auto_planner = on;
+            showSaved(on ? "Dated items will go to the Planner" : "Saved ✓");
+        }).catch(function () { autoPlanner.checked = !on; showSaved("Couldn't save that setting", true); });
+    });
 
     // ---------- Images and files (albright_labs/static/labs/attachments.js does the upload) ----------
     var attSection = root.querySelector("[data-att]");

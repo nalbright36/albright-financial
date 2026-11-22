@@ -28,7 +28,9 @@ def note_detail(request, token, note_id):
     if note is None:
         raise ApiError(404, f"No note {note_id} of the owner's.", "rejected: note not found")
     body = note.body or ""
-    out = {**_note_json(note, request), "body": body[:NOTE_BODY_MAX], "truncated": len(body) > NOTE_BODY_MAX}
+    from albright_notes import smart
+    out = {**_note_json(note, request), "body": body[:NOTE_BODY_MAX], "truncated": len(body) > NOTE_BODY_MAX,
+           "due_items": smart.due_items(body), "grocery_items": smart.grocery_items(body)}
     return out, 200, f"read note #{note.pk}"
 
 

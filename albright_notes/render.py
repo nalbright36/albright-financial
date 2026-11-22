@@ -70,6 +70,7 @@ ITEM_LINE = re.compile(r"^(?:[ \t]*>)*[ \t]*(?:[-*+]|\d{1,9}\.)[ \t]")
 # with a no-break space.
 EMPTY_BULLET = re.compile(r"^((?:[ \t]*>)*[ \t]*[-*+])[ \t]+$")
 ORDERED = re.compile(r"^(?:[ \t]*>)*[ \t]*\d{1,9}\.[ \t]")
+SMART_HTML = re.compile(r"@\[(date|grocery|person)(?::([^\]|<\n]*))?((?:\|[^\]|<\n]*)*)\]")
 MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
 PREVIEW_STRIP = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|-#\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)*")
 
@@ -293,7 +294,38 @@ def render(body, editable=False):
         done = " done" if state else ""
         return f'<li class="nt-task{done}">{match.group(1) or ""}<input type="checkbox" class="nt-check"{attrs}{state} ' \
                f'aria-label="Done"> '
-    return mark_safe(CHECK_HTML.sub(box, html))
+    return mark_safe(_chips(CHECK_HTML.sub(box, html)))
+
+
+def _chips(html):
+    """Smart-link tokens (smart.py) -> chips: a due date ("Fri 5 PM", red when overdue), "In groceries" /
+    "Already on list", "@Sam". The tokens are plain text by now (escaped), so their parts are safe."""
+    if "@[" not in html:
+        return html
+    from datetime import date as date_cls
+
+    from django.utils import timezone
+
+    from . import smart
+    today = timezone.localdate()
+
+    def chip(match):
+        c = smart.parse(match)
+        if c["kind"] == "date":
+            try:
+                day = date_cls.fromisoformat(c["date"] or "")
+            except ValueError:
+                return match.group(0)
+            late = " is-overdue" if day < today else ""
+            linked = " is-linked" if c["task"] else ""
+            title = "Due " + smart.label(day, c["time"], today) + (" · in the Planner" if c["task"] else "")
+            return (f'<span class="nt-smart nt-smart--date{late}{linked}" title="{title}">'
+                    f'{smart.label(day, c["time"], today)}</span>')
+        if c["kind"] == "grocery":
+            text = "Grocery list" if not c["ids"] else ("Already on list" if c["already"] else "In groceries")
+            return f'<span class="nt-smart nt-smart--grocery">{text}</span>'
+        return f'<span class="nt-smart nt-smart--person">@{c["name"] or "someone"}</span>'
+    return SMART_HTML.sub(chip, html)
 
 
 def preview(body, limit=140):
@@ -304,6 +336,7 @@ def preview(body, limit=140):
             line = (container.group(2) or "") if container.group(1) == "toggle" else ""
         elif CONTAINER_CLOSE.match(line):
             continue
+        line = SMART_HTML.sub("", line)
         text = PREVIEW_STRIP.sub("", MD_IMAGE.sub("", line)).replace("**", "").replace("`", "").strip()
         if text and not FENCE.match(line):
             return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"

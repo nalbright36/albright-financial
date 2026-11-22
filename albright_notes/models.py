@@ -60,6 +60,9 @@ class Note(models.Model):
     # Bumped on every save - autosave sends the version it started from, so an edit made
     # meanwhile (another person, or a bot) is a conflict, not silently overwritten.
     version = models.PositiveIntegerField(default=1)
+    # The version of the last save a person (or bot) made. A task / grocery line changing rewrites its line of the
+    # note (smart.sync_write) and bumps version only - so the editor's next save is merged, not a conflict.
+    human_version = models.PositiveIntegerField(default=0)
     updated_by = models.CharField(max_length=150, blank=True)    # who saved it last, for the conflict warning
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -99,3 +102,13 @@ class NoteLink(models.Model):
         ordering = ["created_at", "pk"]
         constraints = [models.UniqueConstraint(fields=["note", "app", "object_type", "object_id"],
                                                name="notes_one_link_per_record")]
+
+
+class NotesSettings(models.Model):
+    """A person's Notes settings."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notes_settings")
+    # Every date picked with "@" in a note becomes a Planner task too (smart.add_task).
+    auto_planner = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Notes settings for {self.user}"

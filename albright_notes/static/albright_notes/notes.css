@@ -317,3 +317,15 @@ html.js .nt .nt-nojs { display: none; }
 
 /* The note's Attachments section */
 .nt-editor .att { margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* Smart links: the next due date in the list, and a chip's popover in the editor */
+.nt-due { font-weight: 600; color: var(--nt-ink); }
+.nt-due.is-overdue { color: var(--nt-danger); }
+.nt-chippop {
+  position: fixed; z-index: 75; display: flex; flex-direction: column; gap: 8px; padding: 10px; width: min(360px, calc(100vw - 24px));
+  background: var(--nt-card); border: 1px solid var(--nt-line); border-radius: 14px; box-shadow: var(--shadow-lg, 0 10px 28px rgba(0,0,0,.35));
+}
+.nt-chippop > div { display: flex; flex-direction: column; gap: 8px; }
+.nt-chippop .nt-label { flex: 1 1 130px; margin: 0; }
+.nt-chippop .nt-label .nt-input { display: block; width: 100%; margin-top: 4px; padding: 6px 10px; }
+.nt-chippop p { margin: 0; }
