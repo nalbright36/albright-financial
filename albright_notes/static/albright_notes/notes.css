@@ -147,16 +147,23 @@ html.js .nt .nt-nojs { display: none; }
 .nt .nt-body {
   flex: 1; width: 100%; min-height: 300px; resize: vertical; color: var(--nt-ink); background: var(--nt-card);
   border: 1px solid var(--nt-line); border-radius: 10px; padding: 10px 12px; line-height: 1.6;
-  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px;
+  font-family: inherit; font-size: 15px;
 }
 .nt .nt-body:focus { outline: none; border-color: var(--nt-accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 /* The rendered Markdown itself (headings, lists, code, checkboxes...) is style.css's shared .md-body. */
-/* A checklist item being edited in place (notes.js): the item's own text, underlined in the accent. */
+/* A list item being edited in place (notes.js): the item's own text in a soft highlight, same size and spot. */
 .nt .nt-task-input {
-  width: calc(100% - 28px); font: inherit; color: var(--nt-ink); background: transparent;
-  border-bottom: 1px solid var(--nt-accent); padding: 0 2px; line-height: inherit;
+  width: calc(100% + 6px); font: inherit; color: var(--nt-ink); background: var(--nt-hover); border: 0;
+  border-radius: 6px; padding: 1px 6px; margin: -1px 0 -1px -6px; line-height: inherit; vertical-align: baseline;
 }
 .nt .nt-task-input:focus { outline: none; }
+.nt .nt-task-input::placeholder { color: var(--nt-muted); opacity: 1; }
+.nt .nt-list-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; }
+.nt .nt-list-btn svg { display: block; }
+/* Lists in the note: roomier rows, quiet markers, a box that lines up with the first line of text. */
+.nt-md li { margin: 5px 0; line-height: 1.55; }
+.nt-md ul > li::marker, .nt-md ol > li::marker { color: var(--nt-muted); }
+.nt-md li[data-li] { cursor: text; }
 
 .nt-foot { margin-top: auto; display: flex; justify-content: space-between; color: var(--nt-muted); font-size: 12px; border-top: 1px solid var(--nt-line); padding-top: 10px; }
 .nt-foot .is-error { color: var(--red); }

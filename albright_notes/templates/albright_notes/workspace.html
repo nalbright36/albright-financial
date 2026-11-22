@@ -53,7 +53,9 @@ behavior: albright_notes/notes.js; views.workspace.
                 <button type="button" class="nt-btn sm" data-fmt="bold" title="Bold" aria-label="Bold"><b>B</b></button>
                 <button type="button" class="nt-btn sm" data-fmt="italic" title="Italic" aria-label="Italic"><i>I</i></button>
                 <button type="button" class="nt-btn sm" data-fmt="heading" title="Heading" aria-label="Heading">H</button>
-                <button type="button" class="nt-btn sm" data-fmt="check" title="Checklist">☑ List</button>
+                <button type="button" class="nt-btn sm nt-list-btn" data-fmt="check" title="Checklist - type [] then space too" aria-label="Checklist" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="4" height="4" rx="1"/><path d="m2.3 11 1 1 1.8-2.2"/><path d="M8 4.5h6M8 11h6"/></svg></button>
+                <button type="button" class="nt-btn sm nt-list-btn" data-fmt="bullet" title="Bulleted list - type - then space too" aria-label="Bulleted list" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="3" cy="4" r=".9" fill="currentColor"/><circle cx="3" cy="8" r=".9" fill="currentColor"/><circle cx="3" cy="12" r=".9" fill="currentColor"/><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/></svg></button>
+                <button type="button" class="nt-btn sm nt-list-btn" data-fmt="number" title="Numbered list - type 1. then space too" aria-label="Numbered list" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><text x="1" y="5.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">1</text><text x="1" y="9.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">2</text><text x="1" y="13.6" font-size="5" fill="currentColor" stroke="none" font-family="sans-serif">3</text></svg></button>
                 <button type="button" class="nt-btn sm" id="nt-insert-image" title="Insert image (or paste / drop one into the note)" aria-label="Insert image"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
                 <input type="file" id="nt-image-input" accept="image/*,.heic,.heif" hidden>
                 <button type="button" class="nt-btn sm" data-pop="nt-pop-link" aria-expanded="false" aria-controls="nt-pop-link">🔗 Link record</button>
@@ -139,7 +141,7 @@ behavior: albright_notes/notes.js; views.workspace.
                 <div class="nt-md md-body" id="nt-preview"{% if can_edit %} title="Click to edit"{% endif %}>{% if open.body %}{{ html }}{% else %}<p class="nt-muted">Nothing written yet.</p>{% endif %}</div>
                 {% if can_edit %}
                 <label for="nt-body" class="visually-hidden">Note (Markdown)</label>
-                <textarea id="nt-body" class="nt-body" data-field="body" spellcheck="true" placeholder="Start writing… **bold**, *italic*, ## heading, - [ ] checklist">{{ open.body }}</textarea>
+                <textarea id="nt-body" class="nt-body" data-field="body" spellcheck="true" placeholder="Start writing… or pick a list above (checklist, bullets, numbers)">{{ open.body }}</textarea>
                 {% endif %}
             </div>
 

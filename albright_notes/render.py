@@ -14,7 +14,11 @@ via the "not on your verified list" page).
 Checklist lines ("- [ ] item" / "- [x] item") become checkboxes AFTER
 sanitizing (the sanitizer never lets an <input> through); the Nth checkbox
 is the Nth checklist line of the Markdown, so ticking one rewrites exactly
-that line (toggle())."""
+that line (toggle()).
+
+For someone who may edit, every rendered <li> also gets data-li="N": the Nth list line of the Markdown ("- ",
+"* ", "1. ", "- [ ] "), so notes.js can edit any list item in place - only when the counts line up, like the
+checkboxes."""
 import hashlib
 import re
 from urllib.parse import quote
@@ -38,7 +42,14 @@ CHECK_LINE = re.compile(r"^((?:[ \t]*>)*[ \t]*[-*+][ \t]+)\[([ xX])\](?=[ \t]|$)
 FENCE = re.compile(r"^[ \t]*(```|~~~)")
 # The same item once rendered and sanitized: "<li>[ ] ..." or, in a loose list, "<li>\n<p>[ ] ...".
 CHECK_HTML = re.compile(r"<li>(\s*<p>)?\[([ xX])\][ \t]?")
-LIST_LINE = re.compile(r"^(?:[-*+]|\d{1,9}[.)])[ \t]+\S")
+LIST_LINE = re.compile(r"^(?:[-*+]|\d{1,9}[.)])[ \t]+(?:[^ \t]|$)")
+# Any list item line, also nested or quoted (the same lines notes.js's ITEM_LINE finds).
+ITEM_LINE = re.compile(r"^(?:[ \t]*>)*[ \t]*(?:[-*+]|\d{1,9}\.)[ \t]")
+# "- " with nothing after it: an item just started. Alone it would be a "---" heading underline, so it renders
+# with a no-break space.
+EMPTY_BULLET = re.compile(r"^((?:[ \t]*>)*[ \t]*[-*+])[ \t]+$")
+LI_OPEN = re.compile(r"<li(?=[ >])")
+ORDERED = re.compile(r"^(?:[ \t]*>)*[ \t]*\d{1,9}\.[ \t]")
 MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
 PREVIEW_STRIP = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)*")
 
@@ -126,17 +137,41 @@ def toggle_id(body, item_id, checked):
     return toggle(body, ids.index(item_id), checked)
 
 
+def list_lines(body):
+    """The line numbers of every list item line outside fenced code blocks, in order."""
+    out, fenced = [], False
+    for number, line in enumerate((body or "").split("\n")):
+        if FENCE.match(line):
+            fenced = not fenced
+        elif not fenced and ITEM_LINE.match(line):
+            out.append(number)
+    return out
+
+
+def _indent(line):
+    return re.match(r"^[ \t>]*", line).group(0)
+
+
 def _lists_start_anywhere(body):
     """People type "Shopping:" then "- milk" on the next line - Markdown needs a blank line before a list
-    that follows a paragraph, so add one (outside code blocks). Only for rendering; the saved Markdown is
-    untouched."""
+    that follows a paragraph, so add one (outside code blocks); likewise a plain line typed right after a list
+    is a new paragraph, not more of the last item, and a numbered list right after a bulleted one (or the other
+    way) is a list of its own. Only for rendering; the saved Markdown is untouched."""
     out, fenced, previous = [], False, ""
     for line in (body or "").split("\n"):
         if FENCE.match(line):
             fenced = not fenced
-        elif not fenced and LIST_LINE.match(line) and previous.strip() and not previous[:1].isspace() \
-                and not LIST_LINE.match(previous) and not previous.lstrip().startswith(">"):
-            out.append("")
+        elif not fenced:
+            line = EMPTY_BULLET.sub("\\1 \u00a0", line)
+            if LIST_LINE.match(line) and previous.strip() and not previous[:1].isspace() \
+                    and not LIST_LINE.match(previous) and not previous.lstrip().startswith(">"):
+                out.append("")
+            elif ITEM_LINE.match(line) and ITEM_LINE.match(previous) and _indent(line) == _indent(previous) \
+                    and bool(ORDERED.match(line)) != bool(ORDERED.match(previous)):
+                out.append("")                    # "1. " right after "- " (or the other way): a list of its own
+            elif line.strip() and ITEM_LINE.match(previous) and not ITEM_LINE.match(line) \
+                    and not line[:1].isspace() and not line.startswith(">") and not FENCE.match(previous):
+                out.append("")                    # ... and a plain line right after a list item ends the list
         out.append(line)
         previous = line
     return "\n".join(out)
@@ -158,7 +193,11 @@ def render(body, editable=False):
         done = " done" if state else ""
         return f'<li class="nt-task{done}">{match.group(1) or ""}<input type="checkbox" class="nt-check"{attrs}{state} ' \
                f'aria-label="Done"> '
-    return mark_safe(CHECK_HTML.sub(box, html))
+    html = CHECK_HTML.sub(box, html)
+    if editable and len(LI_OPEN.findall(html)) == len(list_lines(body)):
+        items = iter(range(10 ** 6))
+        html = LI_OPEN.sub(lambda m: f'<li data-li="{next(items)}"', html)
+    return mark_safe(html)
 
 
 def preview(body, limit=140):

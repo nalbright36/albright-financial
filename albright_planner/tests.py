@@ -200,7 +200,7 @@ class ChangeTests(Base):
             "occurrence": "2026-11-04", "title": "Standup moved", "kind": "task", "date": "2026-11-04",
             "start_time": "09:30", "repeat": "daily", "ends": "never", "priority": "none", "scope": "this",
             "next": url("day")})
-        self.assertRedirects(response, url("day"), fetch_redirect_response=False)
+        self.assertTrue(response["Location"].startswith(url("edit", self.series.pk) + "?date=2026-11-04"), response["Location"])   # stays on the page
         exc = ItemException.objects.get()
         self.assertEqual((exc.new_title, exc.new_start_time), ("Standup moved", time(9, 30)))
         self.series.refresh_from_db()

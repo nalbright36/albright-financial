@@ -557,15 +557,17 @@ class DayWeekWeatherTests(WeatherTests):
         self.assertEqual(_wx_chips(page), 7)
         self.assertNotIn("pl-wx__pin", page)
 
-    def test_view_panel_shows_weather_and_an_away_place(self):
+    def test_view_panel_has_no_weather_and_makes_no_weather_request(self):
         self.set_home()
         trip = self.item("Game in Denver", kind=ScheduleItem.EVENT, start_time=time(19, 0))
         self.set_place(trip)
-        page = self.client.get(url("item", trip.pk) + f"?date={TODAY.isoformat()}").content.decode()
-        self.assertIn('id="pl-view-weather"', page)
-        self.assertIn("65°", page)
-        self.assertIn("Rain", page)
-        self.assertIn("Denver, Colorado", page)
+        with mock.patch.object(weather, "attach") as attach:
+            for suffix in ("", "&panel=1"):
+                page = self.client.get(url("item", trip.pk) + f"?date={TODAY.isoformat()}{suffix}").content.decode()
+                self.assertIn("Game in Denver", page)
+                self.assertNotIn("pl-view-weather", page)
+                self.assertNotIn("65°", page)
+        attach.assert_not_called()
 
 
 class AutoLocationTests(WeatherTests):

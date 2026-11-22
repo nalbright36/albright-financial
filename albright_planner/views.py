@@ -647,7 +647,6 @@ def view_item(request, pk):
             return HttpResponse(hit)
     back = _next(request)
     occ = planner.occurrence_for(item, occurrence, request.user)
-    weather.attach(request.user, [occ], [occ.date])
     can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
     rows = checklist.occurrence_rows(item, occurrence)
     shared_with = planner.shared_names(item) if is_owner else []
@@ -813,6 +812,8 @@ def _editor_ticks(request, item, occurrence, rows):
     for row in rows:
         tick = ticks.get(row["pk"]) if row["pk"] else None
         row["checked"] = bool(tick and tick.checked)
+        line = getattr(tick, "grocery_item", None) if tick else None
+        row["cleared"] = bool(line is not None and line.archived_at)
         row["can_tick"] = tick is not None and (not row["grocery"] or meals)
     return rows
 

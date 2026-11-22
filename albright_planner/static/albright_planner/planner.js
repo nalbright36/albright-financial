@@ -496,8 +496,8 @@
     }
     document.addEventListener("submit", forgetPanels, true);
 
-    // The instant first paint, from the link's data-qv (planner/quickview.py): the same panel, read-only for the moment,
-    // with a shimmer where the full panel adds more (weather); no data (a link inside a panel): a skeleton.
+    // The instant first paint, from the link's data-qv (planner/quickview.py): the same panel, read-only for the moment;
+    // no data (a link inside a panel): a skeleton.
     function esc(text) {
         return String(text == null ? "" : text).replace(/[&<>"']/g, function (c) {
             return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
@@ -551,7 +551,7 @@
             html += '<section class="pl-view__section"><h3 class="pl-view__label">Attachments <span class="pl-view__count">' + d.files.length +
                 '</span></h3><ul class="pl-qv__files">' + d.files.map(function (f) { return "<li>" + esc(f) + "</li>"; }).join("") + "</ul></section>";
         }
-        html += '<div class="pl-qv__meta"><span class="pl-qv__wx">' + skel + "</span></div></div>" +
+        html += "</div>" +
             '<footer class="pl-view__foot pl-qv__foot">' +
             (d.edit ? '<a href="' + esc(d.edit + "?date=" + encodeURIComponent(d.date) + "&next=" + encodeURIComponent(back) + "&then=panel") +
                       '" class="pl-qv__editor" data-view-edit>Open full editor &rarr;</a>' : "<span></span>") +

@@ -125,7 +125,7 @@ class LinkedNoteTests(Base):
     def test_header_and_footer_frame_a_scrolling_middle(self):
         panel = self.panel(self.task)
         head, body, foot = panel.index('class="pl-view__head"'), panel.index('class="pl-view__body"'), \
-            panel.index('class="pl-view__foot"')
+            panel.index('class="pl-view__foot')
         self.assertLess(head, body)
         self.assertLess(body, foot)
         middle = panel[panel.rindex("<div", 0, body):foot]

@@ -2728,13 +2728,15 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .md-body table { border-collapse: collapse; display: block; overflow-x: auto; }
 .md-body th, .md-body td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
 .md-body hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
-.md-body li.nt-task { list-style: none; margin-left: -20px; }
+/* A checklist item: the box hangs in the gutter (lined up with the first line), the text wraps under itself. */
+.md-body li.nt-task { list-style: none; position: relative; margin-left: -20px; padding-left: 26px; }
 .md-body li.nt-task > p { display: inline; }
-.md-body li.nt-task.done { color: var(--text-secondary); text-decoration: line-through; }
+.md-body li.nt-task.done { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 60%, transparent); }
+.md-body li.nt-task > .nt-check, .md-body li.nt-task > p > .nt-check { position: absolute; left: 0; top: calc(.8em - 8px); }
 .md-body .nt-check {
-  -webkit-appearance: none; appearance: none; box-sizing: border-box; display: inline-block; width: 15px; height: 15px; margin: 0 8px 0 0;
-  padding: 0; vertical-align: -2px; cursor: pointer; border: 1.5px solid var(--text-secondary); border-radius: 3px;
-  background: transparent;
+  -webkit-appearance: none; appearance: none; box-sizing: border-box; display: inline-block; width: 16px; height: 16px; margin: 0 8px 0 0;
+  padding: 0; vertical-align: -2px; cursor: pointer; border: 1.5px solid var(--text-secondary); border-radius: 4px;
+  background: transparent; transition: background-color var(--transition), border-color var(--transition);
 }
 .md-body .nt-check:checked {
   border-color: var(--accent); background-color: var(--accent);
@@ -3057,7 +3059,7 @@ details[open] > .pl-prop__row .pl-prop__chev, .pl-prop__row[aria-expanded="true"
 .pl-qv__share .share-box { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
 .pl-qv__share .share-box__title { display: none; }
 .pl-qv__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.8125rem; color: var(--text-secondary); }
-.pl-qv__meta:has(.pl-qv__wx:empty):not(:has(.pl-qv__saved:not(:empty))) { display: none; }
+.pl-qv__meta:not(:has(.pl-qv__saved:not(:empty))) { display: none; }
 .pl-qv__saved { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-size: 0.75rem; color: var(--text-muted); }
 .pl-qv__saved.is-saved::before { content: "\2713"; font-weight: 700; color: var(--accent); }
 .pl-qv__saved.is-error { color: var(--red); }
@@ -3075,6 +3077,7 @@ details[open] > .pl-prop__row .pl-prop__chev, .pl-prop__row[aria-expanded="true"
 .pl-ed__titlerow { display: flex; align-items: flex-start; gap: 12px; }
 .pl-ed__titlerow .pl-check-form, .pl-ed__titlerow > .pl-check { margin-top: 7px; }
 .pl-ed__dot { margin: 16px 4px 0; }
+.pl-ed__meta { margin: -8px 0 0; font-size: 0.8125rem; color: var(--text-secondary); }
 .pl-ed__titlebox { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .pl .pl-ed__title { display: block; resize: none; overflow: hidden; width: 100%; margin: 0 0 0 -6px; padding: 4px 6px; border: 0; border-radius: 8px; background: transparent;
   color: var(--text-primary); font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }

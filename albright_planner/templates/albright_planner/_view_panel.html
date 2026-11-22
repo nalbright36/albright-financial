@@ -151,7 +151,6 @@ its checklist boxes tick right here (saved to the note) for someone who can edit
     {% include "albright_labs/_attachments.html" %}
 
     <div class="pl-qv__meta">
-        <span class="pl-qv__wx" id="pl-view-weather">{% if o.weather %}{% include "albright_planner/_weather.html" with wx=o.weather place=o.weather_place show_label=True show_place=True %}{% endif %}</span>
         {% if quick %}<span class="pl-qv__saved" data-qv-status role="status" aria-live="polite"></span>{% endif %}
     </div>
     </div>

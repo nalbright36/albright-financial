@@ -21,7 +21,7 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
 <div class="pl-ed{% if o.done %} is-done{% endif %}" data-edit-page>
     <div class="pl-ed__bar">
         <a href="{{ back_url|default:next }}" class="pl-ed__back" data-ed-back aria-label="Back" title="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></a>
-        <span class="pl-ed__where">{% if item.repeats %}{% if repeat_text %}{% if done %}This one: {{ occurrence|date:"D M j" }} &middot; done{% else %}Due {{ occurrence|date:"D M j" }}{% endif %}{% else %}This occurrence: {{ occurrence|date:"D M j, Y" }}{% if done %} &middot; done{% endif %}{% endif %}{% elif done %}Done{% endif %}{% if done and done_by %}{% if not is_owner or shared_with %} by {{ done_by }}{% endif %}{% endif %}</span>
+        <span class="pl-ed__where"></span>
         <details class="pl-menu" id="pl-ed-menu" data-menu data-menu-scope="pl">
             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
             <div class="pl-menu__panel" data-menu-panel>
@@ -51,6 +51,7 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
         {% else %}<span class="pl-dot pl-ed__dot" aria-hidden="true"></span>{% endif %}
         <div class="pl-ed__titlebox">{{ form.title }}{% for e in form.title.errors %}<span class="pl-error">{{ e }}</span>{% endfor %}</div>
     </div>
+    {% if item.repeats or done %}<p class="pl-ed__meta">{% if repeat_text %}<span id="pl-one-at-a-time">{{ repeat_text }}</span> &middot; {% if done %}this one: {{ occurrence|date:"D M j, Y" }} &middot; done{% else %}due {{ occurrence|date:"D M j, Y" }}{% endif %}{% elif item.repeats %}{{ summary }} &middot; this occurrence: {{ occurrence|date:"D M j, Y" }}{% if done %} &middot; done{% endif %}{% else %}Done{% endif %}{% if done and done_by %}{% if not is_owner or shared_with %} &middot; <span id="pl-done-by">Done by {{ done_by }}</span>{% endif %}{% endif %}</p>{% endif %}
 
     <form method="post" class="pl-form pl-ed__form" id="pl-form" data-edit-form novalidate>{% csrf_token %}
         <input type="hidden" name="next" value="{{ next }}">{% if then %}<input type="hidden" name="then" value="{{ then }}">{% endif %}
@@ -108,20 +109,21 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
             {% endif %}
             <button type="button" class="pl-prop__row pl-prop__row--btn" data-share-open aria-haspopup="dialog" aria-controls="pl-ed-share">
                 <span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="shared" %}Shared</span>
-                <span class="pl-prop__value">{% if not is_owner %}Shared by {{ owner_name }}{% if can_edit %} (you can edit){% else %} (view only){% endif %}{% elif shared_with %}{{ shared_with|join:", " }}{% else %}Only me{% endif %}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}
+                <span class="pl-prop__value">{% if not is_owner %}<span id="pl-shared-by">Shared by {{ owner_name }}</span>{% if can_edit %} (you can edit){% else %} (view only){% endif %}{% elif shared_with %}<span id="pl-shared-with">Shared with {{ shared_with|join:", " }}</span>{% else %}Only me{% endif %}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}
             </button>
             <details class="pl-prop" data-prop="note">
                 <summary class="pl-prop__row"><span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="note" %}Linked note</span><span class="pl-prop__value" data-prop-value data-note-value>{{ note_text }}</span>{% include "albright_planner/_prop_icon.html" with name="chevron" %}</summary>
                 <div class="pl-prop__body">
+                    {% if linked_note.title %}<a href="{{ linked_note.url }}" class="pl-note-card" id="pl-linked-note"><span class="pl-note-card__title">&#x1F4DD; {{ linked_note.title }}</span>{% if linked_note.preview %}<span class="pl-note-card__preview">{{ linked_note.preview }}</span>{% endif %}</a>{% endif %}
                     {% if can_note %}
-                    <label for="pl-note-pick" class="visually-hidden">Linked note</label>
+                    <label for="pl-note-pick" class="visually-hidden">Attach note, or change the linked note</label>
                     <select name="note_choice" id="pl-note-pick" class="pl-input pl-select">
                         <option value="keep" selected data-label="{{ note_text }}">{% if linked_note.title %}{{ linked_note.title }}{% else %}{{ note_text }}{% endif %}</option>
                         {% if item.note_id %}<option value="none" data-label="None">No note</option>{% endif %}
                         {% for n in note_choices %}{% if n.pk != item.note_id %}<option value="{{ n.pk }}" data-label="{{ n.title }}">{{ n.title }}</option>{% endif %}{% endfor %}
                         <option value="new" data-label="New note (made when you save)">New note, titled from this item</option>
                     </select>
-                    {% else %}<p class="pl-muted pl-small">{% if linked_note.hidden %}A note is linked, but it isn&rsquo;t shared with you.{% elif linked_note.deleted %}The linked note was deleted.{% elif not linked_note %}No note linked.{% endif %}</p>{% endif %}
+                    {% else %}<p class="pl-muted pl-small">{% if linked_note.hidden %}A note is linked, but it isn't shared with you.{% elif linked_note.deleted %}The linked note was deleted.{% elif not linked_note %}No note linked.{% endif %}</p>{% endif %}
                     <a href="{{ linked_note.url|default:'#' }}" class="pl-prop__link" data-note-link{% if not linked_note.url %} hidden{% endif %}>Open in Notes &rarr;</a>
                 </div>
             </details>
@@ -147,7 +149,7 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
             {% if not is_owner or item.from_bot %}
             <div class="pl-prop__row pl-prop__row--info">
                 <span class="pl-prop__label">{% include "albright_planner/_prop_icon.html" with name="owner" %}Owner</span>
-                <span class="pl-prop__value">{% if not is_owner %}<span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> <span id="pl-shared-by">{{ owner_name }}</span>{% else %}You{% endif %}{% if item.from_bot %} &middot; added by {{ item.created_by }}{% endif %}</span>
+                <span class="pl-prop__value">{% if not is_owner %}<span class="pl-avatar" style="--pl-avatar: {{ item.owner|avatar_color }};" aria-hidden="true">{{ item.owner|initial }}</span> {{ owner_name }}{% else %}You{% endif %}{% if item.from_bot %} &middot; added by {{ item.created_by }}{% endif %}</span>
             </div>
             {% endif %}
         </div>
@@ -160,12 +162,19 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
             <span class="pl-help">Markdown: **bold**, *italic*, ## heading, - list, 1. list, - [ ] checklist, [link](https://&hellip;).</span>
         </section>
 
+        {% if not can_edit %}{% if checklist %}
+        <section class="pl-ed__blk" aria-labelledby="pl-cl-view-h">
+            <h2 class="pl-ed__label" id="pl-cl-view-h">Checklist {% if checklist_progress %}<span class="pl-ed__count" id="pl-cl-progress" title="{{ checklist_progress.title }}" data-cl-progress>{{ checklist_progress.label }}</span>{% endif %}</h2>
+            <ul class="pl-cl__rows pl-cl__rows--full">{% for row in checklist %}{% include "albright_planner/_checklist_row.html" with task=item back=request.get_full_path day=occurrence can_toggle=False %}{% endfor %}</ul>
+        </section>
+        {% endif %}{% else %}
         <section class="pl-ed__blk pl-cl-edit" id="pl-cl-edit" data-kind-only="task" aria-labelledby="pl-cl-edit-h">
-            <h2 class="pl-ed__label" id="pl-cl-edit-h">Checklist {% if checklist_progress %}<span class="pl-ed__count" title="{{ checklist_progress.title }}" data-cl-progress>{{ checklist_progress.label }}</span>{% endif %}</h2>
+            <h2 class="pl-ed__label" id="pl-cl-edit-h">Checklist {% if checklist_progress %}<span class="pl-ed__count" id="pl-cl-progress" title="{{ checklist_progress.title }}" data-cl-progress>{{ checklist_progress.label }}</span>{% endif %}</h2>
             <input type="hidden" name="cl_section" value="1">
             <ol class="pl-cl-edit__rows" id="pl-cl-edit-rows" aria-labelledby="pl-cl-edit-h">{% include "albright_planner/_ed_checklist.html" with can_tick=can_tick %}</ol>
             <span class="pl-help">{% if checklist and checklist.0.grocery_item_id %}These are lines on the Meals grocery list: checking one here checks it there. {% endif %}A tick saves at once{% if item.repeats %} (for {{ occurrence|date:"D M j" }} only){% endif %}; new, renamed, reordered or removed items save with Save. Drag the handle, or use the arrows, to reorder.</span>
         </section>
+        {% endif %}
         </fieldset>
     </form>
 

@@ -261,6 +261,18 @@ class ChecklistTests(Base):
         self.assertIn("- [ ] not a task", html)                       # code blocks stay text
         self.assertNotIn("data-task", str(render.render(self.BODY, editable=False)))
 
+    def test_every_list_item_is_numbered_for_editing_in_place(self):
+        body = "Trip\n- x\n1. one\n2. \n- [ ] pack\n    - nested\nafter\n```\n- code\n```\n- "
+        html = str(render.render(body, editable=True))
+        self.assertEqual(re.findall(r'<li data-li="(\d)"', html), ["0", "1", "2", "3", "4", "5"])
+        self.assertEqual(len(render.list_lines(body)), 6)
+        self.assertIn("<p>after</p>", html)                               # a plain line after a list ends it
+        self.assertNotIn("<h2>", html)                                     # an empty "- " isn't a heading underline
+        self.assertEqual(html.count("<ol>"), 1)                            # "1." after "-" is a list of its own
+        self.assertNotIn("data-li", str(render.render(body, editable=False)))
+        # Counts that don't line up (a "- - -" rule): nothing to edit in place, the Markdown still works.
+        self.assertNotIn("data-li", str(render.render("- a\n- - -", editable=True)))
+
     def test_ticking_rewrites_that_markdown_line(self):
         note = self.note(body=self.BODY)
         response = self.post_json(url("check", note.pk), {"index": 2, "checked": True, "version": 1})
@@ -564,6 +576,7 @@ class WorkspaceTests(Base):
         page = self.client.get(url("note", note.pk)).content.decode()
         toolbar = page.split('class="nt-toolbar"', 1)[1].split("</div>", 1)[0]
         for marker in ('data-fmt="bold"', 'data-fmt="italic"', 'data-fmt="heading"', 'data-fmt="check"',
+                       'data-fmt="bullet"', 'data-fmt="number"',
                        'data-pop="nt-pop-link"', 'id="nt-pin"', 'data-pop="nt-pop-share"', 'data-pop="nt-pop-more"'):
             self.assertIn(marker, toolbar)
         for panel in ("nt-pop-link", "nt-pop-share", "nt-pop-more"):

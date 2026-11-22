@@ -116,7 +116,7 @@ class MarkdownTests(Base):
     def test_the_view_renders_headings_bold_and_lists(self):
         item = self.item("Trip", notes="## Plan\n**Pack** the *car*\n\n- tent\n- stove\n\n1. drive\n2. camp\n\n- [x] tickets")
         panel = self.panel(item)
-        notes = re.search(r'<div class="pl-view__notes md-body" data-clamp>(.*?)</div>', panel, re.S).group(1)
+        notes = re.search(r'<div class="pl-view__notes md-body" data-clamp[^>]*>(.*?)</div>', panel, re.S).group(1)
         self.assertIn("<h2>Plan</h2>", notes)
         self.assertIn("<strong>Pack</strong>", notes)
         self.assertIn("<em>car</em>", notes)
@@ -132,7 +132,7 @@ class MarkdownTests(Base):
         item = self.item("Trip", notes='<script>alert("x")</script>\n\n[click](javascript:alert(1))\n\n'
                                        '<iframe src="https://example.com"></iframe>\n\n'
                                        '<a href="/planner/" onclick="steal()">home</a> <img src=x onerror="bad()">')
-        notes = re.search(r'<div class="pl-view__notes md-body" data-clamp>(.*?)</div>', self.panel(item), re.S).group(1)
+        notes = re.search(r'<div class="pl-view__notes md-body" data-clamp[^>]*>(.*?)</div>', self.panel(item), re.S).group(1)
         for bad in ("<script", "javascript:", "<iframe", "onclick", "onerror", "<img"):
             self.assertNotIn(bad, notes.lower())
         self.assertIn("click", notes)                                  # the link's text stays, as text
@@ -180,4 +180,4 @@ class SharedEditorTests(Base):
         self.assertIn("background: var(--glass-bg-solid", rule)
         self.assertIn("backdrop-filter: none", rule)
         self.assertNotIn("glass-bg-dialog", rule)
-        self.assertIn(".pl-view-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }", css)
+        self.assertIn(".pl-view-dialog::backdrop { background: var(--backdrop); }", css)

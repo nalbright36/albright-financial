@@ -102,7 +102,7 @@ class LayoutTests(Fixtures):
                          priority="high", start_time="18:00", end_time="19:00")
         panel = self.panel(item, d(11, 9))
         self.assertIn("Mon, Nov 9", panel)
-        self.assertIn("6:00 PM&ndash;7:00 PM", panel)
+        self.assertIn("6:00 PM\u20137:00 PM", panel)
         self.assertIn("Every Monday until Dec 31", panel)
         self.assertRegex(panel, r'class="pl-badge pl-badge--high" id="pl-view-priority">High<')
         several = self.item("Run", recurrence="FREQ=WEEKLY;BYDAY=MO,WE,FR", recurrence_count=9)
@@ -111,9 +111,13 @@ class LayoutTests(Fixtures):
     def test_empty_sections_are_hidden(self):
         item = self.item("Plain")
         panel = self.panel(item)
-        for section in ('id="pl-view-checklist"', 'id="pl-view-notes"', 'id="pl-view-note"', 'id="pl-view-shared"',
-                        'id="pl-view-repeat"', 'id="pl-view-priority"', 'id="pl-view-skip"'):
+        for section in ('id="pl-view-note"', 'id="pl-view-priority"', 'id="pl-view-skip"'):
             self.assertNotIn(section, panel)
+        # The property rows are always there (tap to set them); an editor gets "Add item" and "Add notes".
+        self.assertIn('id="pl-view-shared">Only me<', panel)
+        self.assertIn('id="pl-view-repeat">Doesn&#x27;t repeat<', panel)
+        self.assertIn("data-qv-add", panel)
+        self.assertIn("data-qv-notes-add", panel)
         self.assertIn('id="pl-view-edit"', panel)
         self.assertIn('id="pl-view-duplicate"', panel)
 
@@ -133,7 +137,7 @@ class LayoutTests(Fixtures):
         self.assertIn("Bring the big tent", panel)
         self.assertIn(f'href="{reverse("albright_notes:note", args=[note.pk])}" class="pl-view__open-note">Open in Notes',
                       panel)
-        self.assertRegex(panel, r'id="pl-view-shared">.*Shared with sam')
+        self.assertIn('id="pl-view-shared">sam<', panel)
 
     def test_shared_by_shows_the_owner(self):
         item = self.item("Groceries", owner=self.wife)
@@ -150,8 +154,10 @@ class LayoutTests(Fixtures):
     def test_menu(self):
         series = self.item("Standup", recurrence="FREQ=DAILY", recurrence_count=10)
         panel = self.panel(series)
-        for action in ("pl-view-skip", "pl-view-move", "pl-view-duplicate", "pl-view-delete"):
+        for action in ("pl-view-skip", "pl-view-duplicate", "pl-view-delete"):
             self.assertIn(f'id="{action}"', panel)
+        self.assertNotIn('id="pl-view-move"', panel)                     # the Date row moves it now
+        self.assertIn('data-qv-field="date"', panel)
         self.assertIn("Delete all occurrences", panel)
         self.assertNotIn('id="pl-view-skip"', self.panel(self.item("One-off")))
 
@@ -222,7 +228,7 @@ class EditTests(Fixtures):
     def test_edit_button_opens_the_form_for_that_occurrence(self):
         item = self.item("Standup", recurrence="FREQ=DAILY", recurrence_count=10)
         panel = self.panel(item, d(11, 6), next="/planner/week/")
-        edit = re.search(r'<a href="([^"]+)" class="pl-btn pl-btn--primary" id="pl-view-edit" data-view-edit', panel)
+        edit = re.search(r'<a href="([^"]+)" class="pl-qv__editor" id="pl-view-edit" data-view-edit', panel)
         self.assertIsNotNone(edit)
         href = edit.group(1).replace("&amp;", "&")
         parts = urlsplit(href)
@@ -232,7 +238,7 @@ class EditTests(Fixtures):
         self.assertIn('id="pl-form"', form)
         self.assertIn('name="then" value="view"', form)
         back = view(item, d(11, 6), next="/planner/week/").replace("&", "&amp;")
-        self.assertIn(f'href="{back}" class="pl-btn pl-btn--ghost" data-form-cancel>Cancel', form.replace("%2F", "/"))   # Cancel returns to the panel
+        self.assertIn(f'href="{back}" class="pl-ed__back" data-ed-back', form.replace("%2F", "/"))   # Back returns to the panel
         self.assertNotIn('class="pl-back">&larr; Back', form)        # the header's back chip is the one back control
 
     def test_e_shortcut_targets_the_edit_button(self):
@@ -252,8 +258,8 @@ class EditTests(Fixtures):
         item = self.item("Call mom")
         response = self.client.post(url("edit", item.pk), self.form(item, title="Call mom back", date="2026-11-07",
                                                                     then="view"))
-        target = view(item, d(11, 7), next="/planner/day/").replace("/planner/day/", "%2Fplanner%2Fday%2F")
-        self.assertRedirects(response, target, fetch_redirect_response=False)
+        # Saving stays on the edit page (its floating Save), for where the occurrence is now.
+        self.assertEqual(response["Location"], url("edit", item.pk) + "?date=2026-11-07&next=%2Fplanner%2Fday%2F&then=view")
         page = self.client.get(response["Location"]).content.decode()
         self.assertIn("Call mom back", page)
         self.assertIn("Sat, Nov 7", page)
@@ -261,8 +267,7 @@ class EditTests(Fixtures):
     def test_from_the_dialog_saving_reopens_it_over_the_calendar(self):
         item = self.item("Call mom")
         response = self.client.post(url("edit", item.pk), self.form(item, title="Call dad", then="panel"))
-        self.assertRedirects(response, f"/planner/day/#pl-view={item.pk}-{TODAY.isoformat()}",
-                             fetch_redirect_response=False)
+        self.assertEqual(response["Location"], url("edit", item.pk) + f"?date={TODAY.isoformat()}&next=%2Fplanner%2Fday%2F&then=panel")
         self.assertIn("Call dad", self.panel(item))
 
     def test_saving_a_series_from_this_occurrence_on_views_the_new_series(self):
@@ -271,12 +276,12 @@ class EditTests(Fixtures):
                          scope="following", occurrence="2026-11-06", then="view")
         response = self.client.post(url("edit", item.pk), data)
         new = ScheduleItem.objects.get(title="Standup v2")
-        self.assertIn(f"/planner/item/{new.pk}/?date=2026-11-06", response["Location"])
+        self.assertIn(f"/planner/{new.pk}/?date=2026-11-06", response["Location"])
 
     def test_without_then_the_form_still_goes_to_next(self):
         item = self.item("Call mom")
         response = self.client.post(url("edit", item.pk), self.form(item, title="Call"))
-        self.assertRedirects(response, "/planner/day/", fetch_redirect_response=False)
+        self.assertEqual(response["Location"], url("edit", item.pk) + f"?date={TODAY.isoformat()}&next=%2Fplanner%2Fday%2F")
 
 
 class PermissionTests(Fixtures):

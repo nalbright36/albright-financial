@@ -5,6 +5,9 @@
  *   MdEditor.format(box, kind)      bold / italic / heading / bullet / number / check / link on the selection
  *   MdEditor.continueList(e, box)   Enter continues a list ("- ", "- [ ] ", "1. "); Enter on an empty item ends it
  *   MdEditor.shortcut(e, box)       Ctrl/Cmd+B and Ctrl/Cmd+I; true if it handled the key
+ *   MdEditor.listKeys(e, box)       in a list line: Backspace right after the marker removes the whole marker
+ *                                   ("- [ ] " goes in one press), Tab / Shift+Tab nest / un-nest the item, and
+ *                                   "[] " or "[ ] " at the start of a line becomes "- [ ] "; true if handled
  *   MdEditor.autogrow(box)          the box grows with its text (CSS caps it, then it scrolls)
  *
  * A [data-md-editor] block (the Planner's) gets all of that plus its toolbar ([data-fmt] buttons) and the
@@ -59,7 +62,9 @@
             var range = lineRange(text, start, end);
             var lines = text.slice(range[0], range[1]).split("\n");
             var test = {check: CHECK, bullet: BULLET, number: NUMBER}[kind];
-            var all = test && lines.every(function (line) { return !line.trim() || test.test(line); });
+            // Already that list (every written line is one): turn it off. Blank lines alone start one.
+            var all = test && lines.some(function (line) { return line.trim(); }) &&
+                lines.every(function (line) { return !line.trim() || test.test(line); });
             var n = 0;
             lines = lines.map(function (line) {
                 if (kind === "heading") return /^#{1,6}\s/.test(line) ? line.replace(/^#{1,6}\s+/, "") : "## " + line;
@@ -101,6 +106,39 @@
         replaceText(box, start, lineEnd, "\n" + indent + marker + rest, start + 1 + indent.length + marker.length);
     }
 
+    function listKeys(event, box) {
+        if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return false;
+        var text = box.value, start = box.selectionStart, end = box.selectionEnd;
+        var lineStart = text.lastIndexOf("\n", start - 1) + 1, before = text.slice(lineStart, start);
+        if (event.key === " " && start === end && /^[ \t]*\[ ?\]$/.test(before)) {    // "[] " / "[ ] ": a checklist item
+            event.preventDefault();
+            var lead = before.match(/^[ \t]*/)[0];
+            replaceText(box, lineStart, start, lead + "- [ ] ", lineStart + lead.length + 6);
+            return true;
+        }
+        var lineEnd = text.indexOf("\n", start), m = LIST_ITEM.exec(text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd));
+        if (!m) return false;
+        if (event.key === "Backspace" && start === end && start - lineStart === m[0].length && !event.shiftKey) {
+            event.preventDefault();                                      // the marker goes as one piece
+            replaceText(box, lineStart, start, "", lineStart);
+            return true;
+        }
+        if (event.key === "Tab") {                                       // nest (4 spaces - Markdown's step) / un-nest
+            var range = lineRange(text, start, end), lines = text.slice(range[0], range[1]).split("\n"), moved = 0;
+            lines = lines.map(function (line, i) {
+                if (!LIST_ITEM.test(line)) return line;
+                var out = event.shiftKey ? line.replace(/^(?: {1,4}|\t)/, "") : "    " + line;
+                if (i === 0) moved = out.length - line.length;
+                return out;
+            });
+            event.preventDefault();
+            var block = lines.join("\n");
+            replaceText(box, range[0], range[1], block, Math.max(range[0], start + moved));
+            return true;
+        }
+        return false;
+    }
+
     function shortcut(event, box) {
         if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return false;
         var key = (event.key || "").toLowerCase();
@@ -135,7 +173,7 @@
         if (bar) bar.hidden = false;
         autogrow(box);
         box.addEventListener("keydown", function (event) {
-            if (shortcut(event, box)) return;
+            if (shortcut(event, box) || listKeys(event, box)) return;
             if (event.key === "Enter") continueList(event, box);
         });
         root.querySelectorAll("[data-fmt]").forEach(function (button) {
@@ -178,7 +216,7 @@
         });
     }
 
-    window.MdEditor = {format: format, continueList: continueList, shortcut: shortcut, autogrow: autogrow,
+    window.MdEditor = {format: format, continueList: continueList, shortcut: shortcut, listKeys: listKeys, autogrow: autogrow,
                        replaceText: replaceText, init: init};          // init: an editor added later (planner.js)
     function start() { document.querySelectorAll("[data-md-editor]").forEach(init); }
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

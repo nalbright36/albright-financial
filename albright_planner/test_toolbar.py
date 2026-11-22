@@ -90,7 +90,7 @@ class ToolbarTests(Base):
         css = static("albright_planner/planner.css")
         sheet = css[css.index(".pl-sheet { "):css.index(".pl-sheet--new {")]
         self.assertIn("background: var(--pl-sheet-bg)", sheet)
-        self.assertIn("--pl-sheet-bg: var(--glass-bg-solid, var(--surface))", sheet)
+        self.assertIn("--pl-sheet-bg: var(--glass-bg-solid, var(--surface-solid))", sheet)
         self.assertIn("backdrop-filter: none", sheet)
         phone = css[css.index(".pl-sheet, .pl-sheet--new { width: 100%"):]
         self.assertIn("margin: auto 0 0;", phone[:200])                            # pinned to the bottom
