@@ -1,4 +1,4 @@
-/* The floating AI assistant (albright_assistant/_widget.html). Sends a message (POST /assistant/send/), then polls
+/* The AI assistant (albright_assistant/_widget.html), opened from its header button (_nav_button.html). Sends a message (POST /assistant/send/), then polls
    /assistant/runs/<id>/ about once a second - each poll advances the run one step on the server (runner.py) and
    returns the new messages, action chips and any approval card. Assistant replies arrive as sanitized HTML from the
    server; everything else goes in as text. Close with X, Esc, or a swipe down on a phone.
@@ -9,13 +9,11 @@
     "use strict";
     var root = document.getElementById("assistant");
     if (!root) return;
-    var fab = document.getElementById("assistant-fab");
+    var btn = document.getElementById("assistant-button");
     var VISUALS_JS = document.currentScript && document.currentScript.getAttribute("data-visuals-js");
     var connected = root.dataset.connected === "1";
     var target = document.getElementById(connected ? "assistant-panel" : "assistant-connect-card");
     var POLL_MS = 1000;
-
-    // The button sits in the floating dock (index.html); js/fab_dock.js lifts the dock over fixed bottom bars.
 
     // ---------- open / close ----------
     function isOpen() { return target && !target.hidden; }
@@ -23,7 +21,7 @@
         if (!target) return;
         target.hidden = false;
         root.classList.add("is-open");
-        fab.setAttribute("aria-expanded", "true");
+        if (btn) btn.setAttribute("aria-expanded", "true");
         if (connected) {
             loadState();
             var input = document.getElementById("assistant-input");
@@ -37,12 +35,12 @@
         if (!target || target.hidden) return;
         target.hidden = true;
         root.classList.remove("is-open");
-        fab.setAttribute("aria-expanded", "false");
-        var back = opener && opener.getClientRects().length ? opener : fab;
+        if (btn) btn.setAttribute("aria-expanded", "false");
+        var back = opener && opener.getClientRects().length ? opener : btn;
         opener = null;
-        back.focus();
+        if (back) back.focus();
     }
-    fab.addEventListener("click", function () { isOpen() ? close() : open(); });
+    if (btn) btn.addEventListener("click", function () { opener = null; isOpen() ? close() : open(); });
     Array.prototype.forEach.call(root.querySelectorAll("[data-assistant-close]"), function (b) {
         b.addEventListener("click", close);
     });
@@ -51,9 +49,8 @@
     });
 
     // ---------- A page's own "Ask AI" buttons ([data-assistant-open]) ----------
-    // E.g. Notes' toolbar, phone bar and More menu: they open this same drawer. While one is on screen the floating
-    // button steps aside (html.as-inline, assistant.css), so it never sits on top of an editor. data-assistant-prompt
-    // starts the message (the open page - a note - is already in the assistant's context: prompt.page_context).
+    // E.g. Notes' toolbar, phone bar and More menu: they open this same drawer. data-assistant-prompt starts the
+    // message (the open page - a note - is already in the assistant's context: prompt.page_context).
     var opener = null;
     document.addEventListener("click", function (e) {
         var b = e.target.closest && e.target.closest("[data-assistant-open]");
@@ -69,21 +66,6 @@
             try { box.setSelectionRange(text.length, text.length); } catch (err) {}
         }
     });
-    var inlineQueued = false;
-    function syncInline() {
-        inlineQueued = false;
-        var shown = Array.prototype.some.call(document.querySelectorAll("[data-assistant-open]"), function (b) {
-            return b.getClientRects().length > 0 && getComputedStyle(b).visibility !== "hidden";
-        });
-        document.documentElement.classList.toggle("as-inline", shown);
-    }
-    function queueInline() { if (!inlineQueued) { inlineQueued = true; window.requestAnimationFrame(syncInline); } }
-    window.addEventListener("resize", queueInline);
-    if ("MutationObserver" in window) {
-        new MutationObserver(queueInline).observe(document.body, { childList: true, subtree: true, attributes: true,
-                                                                   attributeFilter: ["hidden", "class"] });
-    }
-    syncInline();
     if (!connected) return;
 
     // ---------- swipe down to close (phones) ----------

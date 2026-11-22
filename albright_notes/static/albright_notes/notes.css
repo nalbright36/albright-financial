@@ -128,7 +128,6 @@ html.js .nt .nt-nojs { display: none; }
 .nt .nt-tpl__btn { height: 100%; padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0;
   border-left: 1px solid color-mix(in srgb, var(--nt-on-accent) 25%, transparent); }
 .nt-tpl__menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; }
-.nt .nt-ai--list { display: none; }                   /* the list's Ask AI: phones only (a desktop has it on the note) */
 
 /* ---------- The notes list ---------- */
 .nt-list {
@@ -364,7 +363,6 @@ body:has(#nt-mbar:not([hidden])) .nt-toast { bottom: calc(76px + env(safe-area-i
   .nt-list { position: static; height: auto; border-right: 0; }
   .nt-lhead { padding: 4px 0 12px; gap: 2px; }
   .nt-lhead__title { font-size: 30px; }
-  .nt .nt-lhead .nt-ai--list { display: inline-flex; }
   body:has(.nt[data-screen="note"]) #nav-back { display: none; }   /* "‹ Notes" is the back button on a note */
   .nt[data-screen="list"] .nt-item.on .nt-note { background: var(--nt-card2); }   /* no note is open on this screen */
   .nt .nt-lhead .nt-ibtn { width: 40px; height: 40px; }

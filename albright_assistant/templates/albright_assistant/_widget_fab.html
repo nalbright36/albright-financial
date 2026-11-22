@@ -1,9 +1,0 @@
-{% comment %}The AI assistant's round button - always the LAST item in the floating dock (templates/index.html .fab-dock),
-so it's the rightmost; it opens _widget.html's drawer or "Connect your AI" card. Only rendered for people with
-"Can use AI assistant" (context_processors.assistant).{% endcomment %}{% with w=assistant_widget %}
-<button type="button" class="as-fab" id="assistant-fab" aria-expanded="false"
-            aria-controls="{% if w.connected %}assistant-panel{% else %}assistant-connect-card{% endif %}"
-            aria-label="{% if w.connected %}Open the AI assistant{% else %}Set up the AI assistant{% endif %}">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
-    </button>
-{% endwith %}

@@ -6,7 +6,7 @@
 {% block content %}
 {% comment %}
 Albright Notes - the two-pane workspace (Option A of the 2026-11-22 cleanup), Eclipse styling in Notes pink.
-Left: the list - a header (title + count, Ask AI on a phone, a View menu for sort and tags, "New" with starter
+Left: the list - a header (title + count, a View menu for sort and tags, "New" with starter
 templates), search, a segmented All / Pinned / Shared / Checklists filter, a Pinned section, and Archived and Recently
 deleted as rows at the bottom. Swipe a row left on a touch screen for Pin and Delete (hover on a desktop). Right: the
 open note - one toolbar (status, Ask AI, Share, Pin, More) with the formatting row under it on a desktop; More holds
@@ -22,7 +22,6 @@ note_content.css. Styles: notes.css; behavior: notes.js; views.workspace.
         <div class="nt-list">
             <div class="nt-lhead">
                 <h2 class="nt-lhead__title">{% if view == "archived" %}Archived{% elif view == "deleted" %}Recently deleted{% else %}Notes{% endif %} <span class="nt-count">{{ rows|length }}</span></h2>
-                {% if assistant_widget %}<button type="button" class="nt-ibtn nt-ai nt-ai--list" data-assistant-open aria-label="Ask AI" title="Ask AI"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9z"/><path d="M19 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></button>{% endif %}
                 {% if view != "deleted" %}<details class="nt-sort nt-view">
                     <summary class="nt-ibtn{% if tag or sort != "edited" %} is-on{% endif %}" aria-label="Sort and tags" title="Sort and tags"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16M7 12h10M10 18h4"/></svg></summary>
                     <div class="nt-menu nt-sort__menu">

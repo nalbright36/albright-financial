@@ -1,28 +1,16 @@
-/* The AI assistant: the floating button and its drawer (albright_assistant/_widget.html, assistant.js), and the
-   Your AI assistant setup page (setup.html). App tokens from style.css, so it's in the current app's accent and
-   follows light/dark. The button lives in the floating dock (index.html .fab-dock, style.css) - it has no position of its
-   own; --dock-lift (js/fab_dock.js) is how far the dock rises to clear a fixed bottom bar. */
+/* The AI assistant: its header button and its drawer (albright_assistant/_nav_button.html, _widget.html, assistant.js),
+   and the Your AI assistant setup page (setup.html). App tokens from style.css, so it's in the current app's accent and
+   follows light/dark. The button is the header's icon-button box (labs/launcher.css .app-launcher__button). */
 
-/* ---------- The button ---------- */
-.as-fab {
-  flex-shrink: 0; width: 56px; height: 56px; border-radius: 50%; border: 0; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--accent-solid); color: var(--on-accent); cursor: pointer;
-  box-shadow: var(--glow-primary);
-  transition: transform .15s ease;
-}
-.as-fab:hover { transform: translateY(-1px); filter: brightness(1.06); }
-.as-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.as-fab[aria-expanded="true"] { transform: scale(.94); }
-.as-fab[aria-expanded="true"] { visibility: hidden; }      /* its drawer / card is open above the dock */
-/* The page has its own Ask AI button on screen (e.g. Notes' toolbar / phone bar - [data-assistant-open]): no
-   floating button on top of it (assistant.js sets html.as-inline). */
-.as-inline .as-fab { display: none; }
+/* ---------- The header button: the sparkle in the app's accent; lit while its drawer / card is open. ---------- */
+html .navbar__ai { position: relative; color: var(--accent); }
+.navbar__ai::before { content: ""; position: absolute; inset: -3px; }      /* a 44px touch target around the 38px box */
+html .navbar__ai[aria-expanded="true"] { background: var(--accent-soft); border-color: rgba(var(--accent-rgb), 0.45); }
 
 /* ---------- Connect card (not connected yet) ---------- */
 .as-connect {
   position: fixed; z-index: 1100; right: max(16px, env(safe-area-inset-right, 0px));
-  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px) + 12px) + var(--dock-lift, 0px) + 68px);   /* above the dock */
+  top: 80px;                                       /* just under the header's button (8px below the bar) */
   width: min(340px, calc(100vw - 32px)); box-sizing: border-box; padding: 18px 18px 16px;
   background: var(--surface-raised, var(--surface-solid)); color: var(--text-primary); border: 1px solid var(--border);
   border-radius: 16px; box-shadow: var(--overlay-shadow);
@@ -42,6 +30,7 @@
 }
 .as-panel[hidden] { display: none; }
 @media (max-width: 640px) {
+  .as-connect { top: 72px; }
   .as-panel { width: 100vw; border-left: 0; padding-top: env(safe-area-inset-top, 0px); }
 }
 .as-panel__head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--border);
@@ -174,8 +163,6 @@
 .as-foot { margin: 6px 16px 10px; font-size: .6875rem; color: var(--text-tertiary, var(--text-secondary)); }
 
 @media (prefers-reduced-motion: reduce) {
-  .as-fab { transition: none; }
-  .as-fab:hover { transform: none; }
   .as-typing span { animation: none; opacity: .7; }
   .as-tray__item.is-loading { animation: none; }
 }

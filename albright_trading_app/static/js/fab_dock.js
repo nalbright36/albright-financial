@@ -1,7 +1,7 @@
-/* The floating dock (templates/index.html, .fab-dock in style.css): every floating button - a page's own (the
-   {% block fab_items %}, e.g. Meals' Convert) and the AI assistant's, always last - sits in one fixed row at the
-   bottom right, so they can never overlap. This lifts the dock (and the panels that open from it) above any fixed bar
-   at the bottom of the screen - Save/Cancel bars, the workout bar, a bottom sheet - by setting --dock-lift on <html>.
+/* The floating dock (templates/index.html, .fab-dock in style.css): a page's floating buttons (the
+   {% block fab_items %}, e.g. Meals' Convert, the Planner's Save) sit in one fixed row at the bottom right, so they
+   can never overlap. Empty on most pages - then this does nothing. (The AI assistant is a header button.)
+   This lifts the dock (and the panels that open from it) above any fixed bar at the bottom of the screen - Save/Cancel bars, the workout bar, a bottom sheet - by setting --dock-lift on <html>.
    A bar opts in with data-dock-avoid if it isn't one of the known ones below.
    It also: steps aside on a touch screen while you type (an input or editor is focused - the keyboard is up), and
    sets html.has-fab-dock while a button shows, so the page ends with room for it (style.css) and the last content
@@ -44,9 +44,6 @@
         document.addEventListener("focusout", function () {
             setTimeout(function () { dock.classList.toggle("fab-dock--away", typing(document.activeElement)); }, 60);
         });
-    }
-    if ("MutationObserver" in window) {           // html.as-inline (assistant.js) hides the AI button: re-measure
-        new MutationObserver(queue).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     }
     lift();
 })();

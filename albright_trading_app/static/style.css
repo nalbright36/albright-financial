@@ -135,8 +135,8 @@
   --glow-flare: rgba(255, 255, 255, 0.10);
   /* The header: a floating glass bar (header_options_CE.html, Option E) - the design's .e gradient, highlight and
      hairline; once the page scrolls, a darker base under the same glass so what scrolls beneath stays readable. */
-  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)), rgba(0, 0, 0, 0.35);
-  --bar-bg-scrolled: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)), rgba(8, 9, 11, 0.8);
+  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)), #050607;
+  --bar-bg-scrolled: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)), #08090B;
   --bar-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   --bar-shadow-scrolled: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 10px 30px rgba(0, 0, 0, 0.5);
   --on-badge: #000;           /* text on an app-color badge */
@@ -237,8 +237,8 @@
   --title-gradient: linear-gradient(180deg, #0E1116, #4A5361);
   --glow-top: rgba(170, 182, 200, 0.28);
   --glow-flare: rgba(255, 255, 255, 0.9);
-  --bar-bg: rgba(255, 255, 255, 0.72);
-  --bar-bg-scrolled: rgba(255, 255, 255, 0.9);
+  --bar-bg: #FFFFFF;
+  --bar-bg-scrolled: #FFFFFF;
   --bar-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08), 0 4px 16px rgba(15, 23, 42, 0.06);
   --bar-shadow-scrolled: inset 0 0 0 1px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.1);
   --on-badge: #07090C;
@@ -593,9 +593,7 @@ a:hover { color: var(--accent-hover); }
   z-index: 100;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
@@ -1623,21 +1621,30 @@ table.holdings thead th,
 table.ledger-view-table .ledger-item-cell,
 table.ledger-view-table tfoot td:first-child { background: var(--glass-bg-solid); }
 
-/* ---------- Header: black glass, a hairline under it; icon buttons are glass squares with hairline borders; the app
-   chip is the current app's accent tint. ---------- */
+/* ---------- Header: a solid black bar with a glass sheen and a hairline edge (no backdrop blur - on iOS Safari a
+   see-through, blurred bar over the page reads as soft and smeared); icon buttons are glass squares with hairline
+   borders; the app chip is the current app's accent tint. ---------- */
 .navbar {
   background: var(--bar-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border-bottom: 0;
   box-shadow: var(--bar-shadow);
   transition: background-color var(--transition), box-shadow var(--transition);
 }
 .navbar--scrolled {
   background: var(--bar-bg-scrolled);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  backdrop-filter: blur(20px) saturate(150%);
   box-shadow: var(--bar-shadow-scrolled);
+}
+/* The strip across the very top of the screen (index.html .navbar-cap), under the floating bar: solid page color,
+   full width, pinned. Safari 26 paints the iPhone status bar from a pinned, full-width element at the top edge (it
+   ignores theme-color); with nothing there it showed the page scrolling behind the clock, blurred, and that haze ran
+   onto the bar. It also hides the page in the gap above the bar. 16px covers the gap (8px phones, 12px desktop) and
+   tucks under the bar; never a target, so taps go to the bar. */
+.navbar-cap {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 16px;
+  background-color: var(--bg);
+  pointer-events: none;
 }
 .theme-toggle,
 .navbar__toggle,
@@ -2816,9 +2823,9 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 .meals-nut-manual__form .btn { grid-column: 1 / -1; justify-self: start; }
 
 /* ---------- The floating dock (templates/index.html, js/fab_dock.js) ---------- */
-/* Every floating button in one fixed row, bottom right, above the iPhone's home indicator and lifted over any fixed
-   bottom bar (--dock-lift). A page's own buttons ({% block fab_items %}) come first; the AI assistant's is always last,
-   so it's the rightmost - and without it, the next one takes the corner. Items never position themselves. */
+/* A page's floating buttons ({% block fab_items %}, e.g. Meals' Convert) in one fixed row, bottom right, above the
+   iPhone's home indicator and lifted over any fixed bottom bar (--dock-lift). Items never position themselves. (The AI
+   assistant is a header button - albright_assistant/_nav_button.html.) */
 .fab-dock {
   position: fixed; z-index: 95;
   right: max(16px, env(safe-area-inset-right, 0px));
@@ -3512,14 +3519,6 @@ html .nt-results {
   box-shadow: var(--overlay-shadow);
 }
 
-/* ---------- The AI button: a silver orb with a soft halo. ---------- */
-html .as-fab {
-  background: var(--fab-bg);
-  color: var(--fab-text);
-  box-shadow: var(--fab-halo);
-}
-html .as-fab:focus-visible { outline: 2px solid var(--focus-border); }
-
 /* ---------- Planner controls: buttons and inputs like the site's. ---------- */
 html .pl .pl-btn {
   background: var(--btn-ghost-bg);
@@ -3615,4 +3614,7 @@ html .navbar .notif-panel { top: calc(100% + 8px); right: 0; left: auto; }
 }
 @media (max-width: 370px) {
   .navbar__main-row { padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+  /* Small phones (320-370px): Home, AI, bell, apps and the hamburger still fit on one row. */
+  .navbar__main-row, .navbar__tools, .navbar--collapsed .navbar__tools { gap: 4px; }
+  html .navbar .app-launcher__button { width: 34px; height: 34px; }
 }

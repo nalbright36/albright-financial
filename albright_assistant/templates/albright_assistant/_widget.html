@@ -1,9 +1,9 @@
 {% comment %}
-The floating AI assistant (templates/index.html, every signed-in app page - only for people with "Can use AI
+The AI assistant (templates/index.html, every signed-in app page - only for people with "Can use AI
 assistant": context_processors.assistant). Not connected: the button opens a short "Connect your AI" card. Connected:
 a drawer on the right (a full-screen sheet on phones) - the chat, past chats, starter chips, the composer. Every
-answer is fetched by polling /assistant/runs/<id>/ (albright_assistant.runner). The round button itself is
-_widget_fab.html, the last item in the floating dock (index.html .fab-dock); this is everything it opens.
+answer is fetched by polling /assistant/runs/<id>/ (albright_assistant.runner). The button itself is
+_nav_button.html, in the header (index.html .navbar__tools); this is everything it opens.
 {% endcomment %}
 {% with w=assistant_widget %}
 <div class="as-widget" id="assistant" data-connected="{{ w.connected|yesno:'1,0' }}"

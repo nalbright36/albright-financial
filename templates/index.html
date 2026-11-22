@@ -11,7 +11,7 @@
         {# The current app's own stylesheet (apps_registry.App.stylesheet) - on every page of that app. #}
         {% if app_stylesheet %}<link rel="stylesheet" href="{% static_version app_stylesheet %}">{% endif %}
         {# Anything else a page needs in <head> (e.g. Home's Today panel borrows the Planner's stylesheet). #}
-        {# The floating AI assistant (albright_assistant: only for people with "Can use AI assistant"). #}
+        {# The AI assistant (albright_assistant: only for people with "Can use AI assistant"). #}
         {% if assistant_widget %}<link rel="stylesheet" href="{% static_version 'assistant/assistant.css' %}"><link rel="stylesheet" href="{% static_version 'assistant/visuals.css' %}">{% endif %}
         {% block app_head %}{% endblock %}
         <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Labs" }}</title>
@@ -40,6 +40,10 @@
 
     <body data-app="{{ current_app|default:"labs" }}">
 
+        {% comment %}A solid strip across the very top, under the floating bar (style.css .navbar-cap): Safari 26 colors
+        the status bar from a pinned, full-width element at the top edge - without one it shows the page blurred behind
+        the clock, and that haze bleeds onto the bar.{% endcomment %}
+        <div class="navbar-cap" aria-hidden="true"></div>
         <nav class="navbar">
             <div class="navbar__main-row">
                 {# The logo and the current app's name; both go to the Home app picker (/ when signed out - plain "/" would follow the remembered app). Under 640px the chip shows only the app's icon (style.css); the name stays its label and tooltip. #}
@@ -194,7 +198,7 @@
                     </div>
                 </div>
 
-                {# Far right in every app: the theme toggle, the notification bell, the app launcher, the account menu. On phones only the bell and launcher stay here, with the hamburger after them. #}
+                {# Far right in every app: the theme toggle, the AI assistant (if allowed), the notification bell, the app launcher, the account menu. On phones Home, the AI button, the bell and launcher stay here, with the hamburger after them. #}
                 <div class="navbar__tools">
                     <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme">
                         <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
@@ -208,6 +212,7 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V9.5"/></svg>
                     </a>
                     {% endwith %}
+                    {% if assistant_widget %}{% include "albright_assistant/_nav_button.html" %}{% endif %}
                     {# The notification bell (labs/notifications.js, labs/launcher.css): unread count - none during quiet hours - and a panel of recent notifications, fetched when it opens (albright_labs.activity_views.panel). Left of the launcher. #}
                     <div class="notif-bell" id="notif-bell" data-panel-url="{% url 'labs:notifications_panel' %}" data-activity-url="{% url 'labs:activity' %}">
                         <button type="button" class="app-launcher__button notif-bell__button" id="notif-bell-button" aria-label="Notifications{% if notification_count %} - {{ notification_count }} unread{% endif %}" aria-haspopup="true" aria-expanded="false" aria-controls="notif-panel">
@@ -498,10 +503,11 @@
         {% if user.is_authenticated %}<script src="{% static_version 'labs/quicksave.js' %}"></script>{% endif %}
         {% if app_script %}<script src="{% static_version app_script %}"></script>{% endif %}
         {% block app_scripts %}{% endblock %}
-        {% comment %}The floating dock: every floating button in one fixed row at the bottom right (style.css .fab-dock,
-        js/fab_dock.js lifts it above fixed bottom bars) - the page's own ({% block fab_items %}, e.g. Meals' Convert)
-        on the left, the AI assistant's always last. Empty, it renders as an empty element that takes no space.{% endcomment %}
-        {% if user.is_authenticated %}{% spaceless %}<div class="fab-dock" id="fab-dock">{% block fab_items %}{% endblock %}{% if assistant_widget %}{% include "albright_assistant/_widget_fab.html" %}{% endif %}</div>{% endspaceless %}
+        {% comment %}The floating dock: a page's own floating buttons in one fixed row at the bottom right (style.css .fab-dock,
+        js/fab_dock.js lifts it above fixed bottom bars) - {% block fab_items %}, e.g. Meals' Convert. The AI assistant
+        is a header button now (albright_assistant/_nav_button.html). Empty, it renders as an empty element that takes no
+        space.{% endcomment %}
+        {% if user.is_authenticated %}{% spaceless %}<div class="fab-dock" id="fab-dock">{% block fab_items %}{% endblock %}</div>{% endspaceless %}
         <script src="{% static_version 'js/fab_dock.js' %}" defer></script>{% endif %}
         {% if assistant_widget %}{% include "albright_assistant/_widget.html" %}<script src="{% static_version 'assistant/assistant.js' %}" defer data-visuals-js="{% static_version 'assistant/visuals.js' %}"></script>{% endif %}
     </body>

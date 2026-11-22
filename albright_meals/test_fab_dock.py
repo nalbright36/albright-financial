@@ -1,5 +1,5 @@
-"""The floating dock (templates/index.html .fab-dock): a page's floating buttons and the AI assistant's in one fixed row,
-the AI button always last - so Meals' Convert can never sit under it again. Only the dock is position: fixed."""
+"""The floating dock (templates/index.html .fab-dock): a page's floating buttons in one fixed row. The AI assistant is
+a header button (albright_assistant/_nav_button.html), never in the dock. Only the dock is position: fixed."""
 import re
 from pathlib import Path
 
@@ -42,22 +42,23 @@ class DockTests(TestCase):
     def recipe_page(self):
         return self.client.get(reverse("albright_meals:recipe", args=[self.recipe.pk])).content.decode()
 
-    def test_permitted_user_gets_converter_then_ai_button(self):
+    def test_permitted_user_gets_converter_and_the_ai_button_in_the_header(self):
         self.allow_assistant()
         page = self.recipe_page()
-        self.assertEqual(dock_ids(page), ["meals-convert-open", "assistant-fab"])     # AI rightmost
+        self.assertEqual(dock_ids(page), ["meals-convert-open"])                      # AI is in the header now
+        self.assertIn('id="assistant-button"', page.split('<nav class="navbar">', 1)[1].split("</nav>", 1)[0])
         self.assertIn('aria-label="Measurement converter"', dock(page))
         self.assertIn('id="assistant"', page)                          # its drawer / connect card, outside the dock
         self.assertNotIn('id="assistant"', dock(page))
         self.assertIn("assistant/assistant.js", page)
         # The add/edit page has the converter in the dock too.
         page = self.client.get(reverse("albright_meals:recipe_edit", args=[self.recipe.pk])).content.decode()
-        self.assertEqual(dock_ids(page), ["meals-convert-open", "assistant-fab"])
+        self.assertEqual(dock_ids(page), ["meals-convert-open"])
 
     def test_user_without_permission_gets_only_the_converter(self):
         page = self.recipe_page()
         self.assertEqual(dock_ids(page), ["meals-convert-open"])
-        for absent in ('id="assistant-fab"', 'id="assistant"', "assistant/assistant.js", "assistant/assistant.css",
+        for absent in ('id="assistant-button"', 'id="assistant"', "assistant/assistant.js", "assistant/assistant.css",
                        'class="as-'):
             self.assertNotIn(absent, page)
 
@@ -67,17 +68,18 @@ class DockTests(TestCase):
         css = Path(finders.find("style.css")).read_text(encoding="utf-8")
         self.assertRegex(css, r"\.fab-dock:empty\s*\{\s*display:\s*none;\s*\}")
 
-    def test_permitted_user_gets_just_the_ai_button_elsewhere(self):
+    def test_permitted_user_gets_an_empty_dock_elsewhere(self):
         self.allow_assistant()
         page = self.client.get(reverse("albright_notes:list")).content.decode()
-        self.assertEqual(dock_ids(page), ["assistant-fab"])
+        self.assertEqual(dock(page), "")
+        self.assertNotIn("assistant-fab", page)
 
     def test_only_the_dock_is_position_fixed(self):
         sheets = [Path(finders.find("style.css")).read_text(encoding="utf-8"),
                   Path(finders.find("assistant/assistant.css")).read_text(encoding="utf-8")]
         rules = [(sel.strip(), body) for css in sheets
                  for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", css, flags=re.S))]
-        for item in (".meals-convert-fab", ".as-fab"):
+        for item in (".meals-convert-fab", ".navbar__ai"):
             mine = [(sel, body) for sel, body in rules if item in sel]
             self.assertTrue(mine, item)
             for sel, body in mine:

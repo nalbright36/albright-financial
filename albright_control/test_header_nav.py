@@ -318,3 +318,27 @@ class PhoneHeaderTests(Base):
         content = self.page(reverse("trading_home"))
         self.assertIn("if (collapse && !phone.matches && overflows()) nav.classList.add('navbar--stacked');", content)
         self.assertIn("['theme-toggle', 'theme-toggle-menu'].forEach(", content)
+
+
+class CrispHeaderTests(Base):
+    """iOS Safari 26 colors the status bar from a pinned, full-width element at the top edge (it ignores theme-color).
+    The floating bar sits 8px down, so without the cap Safari showed the page blurred behind the clock and the haze ran
+    onto the see-through bar. The cap is solid; the bar is opaque with no backdrop blur."""
+
+    def test_every_page_has_the_solid_top_cap_before_the_bar(self):
+        content = self.page(reverse("trading_home"))
+        self.assertIn('<div class="navbar-cap" aria-hidden="true"></div>\n        <nav class="navbar">', content)
+
+    def test_cap_and_bar_css(self):
+        css = re.sub(r"/\*.*?\*/", "", STYLE.read_text(encoding="utf-8"), flags=re.S)
+        cap = re.search(r"\n\.navbar-cap \{([^}]*)\}", css).group(1)
+        for rule in ("position: fixed; top: 0; left: 0; right: 0;", "height: 16px;", "background-color: var(--bg);",
+                     "pointer-events: none;"):
+            self.assertIn(rule, cap)
+        self.assertNotRegex(cap, r"opacity|backdrop-filter|rgba")
+        bars = [body for sel, body in re.findall(r"\n(\.navbar(?:--scrolled)?) \{([^}]*)\}", css)]
+        self.assertTrue(bars)
+        for body in bars:
+            self.assertNotRegex(body, r"backdrop-filter:\s*blur")
+        for token in re.findall(r"--bar-bg(?:-scrolled)?: ([^;]+);", css):
+            self.assertNotRegex(token.split("),")[-1], r"rgba\(0, 0, 0, 0\.\d+\)|rgba\(255, 255, 255, 0\.\d+\)\s*$", token)

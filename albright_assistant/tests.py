@@ -6,10 +6,12 @@ read operations in the Bot API catalog."""
 import json
 import logging
 from datetime import timedelta
+from pathlib import Path
 from unittest import mock
 
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
+from django.contrib.staticfiles import finders
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -494,13 +496,24 @@ class WidgetTests(Base):
     def test_hidden_without_the_permission(self):
         allow(self.pat, False)
         page = self.client.get(reverse("labs:hub")).content.decode()
-        self.assertNotIn('id="assistant-fab"', page)
+        self.assertNotIn('id="assistant-button"', page)
         self.assertEqual(self.client.get(reverse("assistant:setup")).status_code, 404)
         self.assertEqual(self.client.get(reverse("assistant:state")).status_code, 404)
 
+    def test_the_button_is_in_the_header_not_floating(self):
+        page = self.client.get(reverse("labs:hub")).content.decode()
+        nav = page.split('<nav class="navbar">', 1)[1].split("</nav>", 1)[0]
+        self.assertIn('id="assistant-button"', nav)
+        self.assertIn('aria-label="AI Assistant"', nav)
+        self.assertLess(nav.index('id="assistant-button"'), nav.index('id="notif-bell"'))    # left of the bell
+        self.assertNotIn("assistant-fab", page)
+        self.assertNotIn("as-fab", page)
+        for name in ("assistant/assistant.css", "assistant/assistant.js", "js/fab_dock.js"):
+            self.assertNotIn("as-inline", Path(finders.find(name)).read_text(encoding="utf-8"), name)
+
     def test_not_connected_shows_the_connect_card(self):
         page = self.client.get(reverse("labs:hub")).content.decode()
-        self.assertIn('id="assistant-fab"', page)
+        self.assertIn('id="assistant-button"', page)
         self.assertIn('id="assistant-connect-card"', page)
         self.assertIn(reverse("assistant:setup"), page)
 
