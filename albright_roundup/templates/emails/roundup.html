@@ -1,0 +1,13 @@
+{% extends "emails/_base.html" %}
+{% block body %}
+<p style="margin:0 0 12px;">Hi {{ name }},</p>
+<p style="margin:0 0 4px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#2DD4BF;">{{ p.title }} · {{ p.range }}</p>
+<p style="margin:0 0 16px; line-height:1.55;">{{ summary }}</p>
+{% for d in p.days %}{% if d.items %}
+<p style="margin:14px 0 4px; font-size:13px; font-weight:700; color:#8B94A1;">{{ d.label }}{% if d.weather %} · {{ d.weather.high }}°{% endif %}</p>
+<ul style="margin:0; padding-left:20px;">{% for r in d.items %}<li style="margin:0 0 4px;">{% if r.time %}<span style="color:#8B94A1;">{{ r.time }}</span> {% endif %}{{ r.title }}</li>{% endfor %}</ul>
+{% endif %}{% endfor %}
+{% endblock %}
+{% block after %}
+<p style="margin:20px 0 0; font-size:13px; color:#8B94A1;">You get this because your briefing's email is on. <a href="{{ settings_link }}" style="color:#E8EAED;">Change it</a>.</p>
+{% endblock %}

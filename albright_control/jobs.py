@@ -107,7 +107,7 @@ def job_run_events(queryset):
 INTERVALS = {   # expected hours between runs; settings.CONTROL_JOB_INTERVALS_HOURS can override any of these
     "watchlist_alerts": 1, "track_closed": 24, "fetch_spot_prices": 24, "alert_digest": 24,
     "calibrate": 24 * 7, "prune_lots": 24 * 7, "prune_activity": 24,
-    "send_activity_digest": 24,
+    "send_activity_digest": 24, "send_roundups": 1,
 }
 
 
@@ -120,7 +120,8 @@ def interval_for(job):
 RESELLING_JOBS = (("watchlist_alerts", "Watchlist alerts"), ("track_closed", "Track closed lots"),
                   ("fetch_spot_prices", "Fetch spot prices"), ("alert_digest", "Daily digest"),
                   ("calibrate", "Calibrate max bids"), ("prune_lots", "Prune old lots"))
-SITE_JOBS = (("prune_activity", "Prune old activity"), ("send_activity_digest", "Activity digest emails"))
+SITE_JOBS = (("prune_activity", "Prune old activity"), ("send_activity_digest", "Activity digest emails"),
+             ("send_roundups", "Briefings (roundups)"))
 
 
 def health_rows(now=None):

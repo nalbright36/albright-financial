@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from . import schedule, service
+from . import deliver, schedule, service
 from .models import EMAIL, MONTH, PUSH, SCOPES, TODAY, WEEK, Roundup, RoundupIssue
 
 SCOPE_KEYS = [k for k, _ in SCOPES]
@@ -71,6 +71,8 @@ def home_card(request):
         return {"intro": True}
     if not any(r.enabled for r in rows):
         return None
+    deliver.catch_up(user)                   # a due one is made now if the scheduled task hasn't (no ping)
+    rows = list(Roundup.objects.filter(owner=user))
     issue = service.current(user, enabled=True) or service.current(user)
     nxt = min((r.next_run_at for r in rows if r.enabled and r.next_run_at), default=None)
     card = {"next": schedule.local(user, nxt) if nxt else None}
@@ -87,6 +89,7 @@ def home_card(request):
 def briefing(request):
     _need(request)
     user = request.user
+    deliver.catch_up(user)
     issue = None
     if request.GET.get("issue"):
         try:

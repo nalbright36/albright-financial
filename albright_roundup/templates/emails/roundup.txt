@@ -1,0 +1,15 @@
+{% autoescape off %}Hi {{ name }},
+
+{{ p.title }} ({{ p.range }})
+
+{{ summary }}
+{% for d in p.days %}{% if d.items %}
+{{ d.label }}{% if d.weather %} - {{ d.weather.high }}°{% endif %}
+{% for r in d.items %}  - {% if r.time %}{{ r.time }} {% endif %}{{ r.title }}
+{% endfor %}{% endif %}{% endfor %}
+Open it: {{ link }}
+
+Change when it comes, or turn email off: {{ settings_link }}
+
+- Albright Labs
+{{ site_url }}{% endautoescape %}

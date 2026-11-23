@@ -98,7 +98,18 @@ def hub(request):
         "adding": request.GET.get("add") == "1",
         "editing": request.GET.get("edit") == "1", "home_url": landing.home_url(),
         "planner_today": _planner_today(request, pref) if pref.show_today_panel else None,
+        "roundup_card": _roundup_card(request),
         **_settings_context(request)})
+
+
+def _roundup_card(request):
+    """Home's Briefing card (albright_roundup.views.home_card) - a failure hides it, never Home."""
+    try:
+        from albright_roundup.views import home_card
+        return home_card(request)
+    except Exception:  # noqa: BLE001 - the card must never break Home
+        log.exception("Home's Briefing card failed")
+        return None
 
 
 def _planner_today(request, pref):

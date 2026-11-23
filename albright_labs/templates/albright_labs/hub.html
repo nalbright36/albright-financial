@@ -2,8 +2,8 @@
 {% load static %}
 {% load cache_bust %}
 {% block page_title %}Home · {% endblock %}
-{% block app_head %}{% if planner_today %}<link rel="stylesheet" href="{% static_version 'albright_planner/planner.css' %}">{% endif %}{% endblock %}
-{% block app_scripts %}{% if planner_today %}<script src="{% static_version 'albright_planner/planner.js' %}"></script>{% endif %}{% endblock %}
+{% block app_head %}{% if planner_today %}<link rel="stylesheet" href="{% static_version 'albright_planner/planner.css' %}">{% endif %}{% if roundup_card %}<link rel="stylesheet" href="{% static_version 'roundup/roundup.css' %}">{% endif %}{% endblock %}
+{% block app_scripts %}{% if planner_today %}<script src="{% static_version 'albright_planner/planner.js' %}"></script>{% endif %}{% if roundup_card %}<script src="{% static_version 'roundup/roundup.js' %}" defer></script>{% endif %}{% endblock %}
 {% block content %}
 {% comment %}
 Home (labs.views.hub): a greeting, the Today panel, and "My tiles" - the user's own tiles, any page from any app or a
@@ -21,6 +21,7 @@ fetch (labs:save_picker). Without JS the buttons submit the forms and "+ Add" op
         {% if editing %}<button type="submit" form="picker-form" class="btn btn-primary btn-sm labs-picker__edit" id="picker-edit">Done</button>{% else %}<a href="{{ home_url }}&amp;edit=1" class="btn btn-secondary btn-sm labs-picker__edit" id="picker-edit" data-view-only>Edit</a>{% endif %}
     </div>
 
+    {% if roundup_card %}{% include "roundup/_home_card.html" %}{% endif %}
     {% if planner_today %}{% include "albright_planner/_today_panel.html" %}{% endif %}
 
     <form method="post" action="{% url 'labs:save_picker' %}" id="picker-form">

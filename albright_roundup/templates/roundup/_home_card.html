@@ -1,0 +1,30 @@
+{% comment %}Home's Briefing card (labs.views.hub -> roundup.views.home_card): the intro (Turn on / Not now) before
+they've chosen, else the latest briefing - its short version, chips, and a mini week chart.{% endcomment %}
+{% if roundup_card.intro %}
+<section class="card rb-home rb-home--intro" aria-labelledby="rb-home-title">
+    <div class="rb-home__text">
+        <h2 class="rb-home__title" id="rb-home-title"><span class="rb-ibox">{% include "roundup/_icon.html" with name="news" size=14 %}</span>Get a briefing of your week</h2>
+        <p class="rb-home__sum">Every Sunday at 6 PM, a short rundown of what's coming, made from your Planner, meals and weather. No AI needed.</p>
+        <div class="rb-home__row">
+            <form method="post" action="{% url 'roundup:turn_on' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="btn btn-primary btn-sm">Turn on</button></form>
+            <form method="post" action="{% url 'roundup:not_now' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="btn btn-secondary btn-sm">Not now</button></form>
+        </div>
+    </div>
+</section>
+{% elif roundup_card %}
+<section class="card rb-home" aria-labelledby="rb-home-title">
+    <div class="rb-home__text">
+        <h2 class="rb-home__title" id="rb-home-title"><span class="rb-ibox">{% include "roundup/_icon.html" with name="news" size=14 %}</span>{% if roundup_card.issue %}{{ roundup_card.p.title }}{% else %}Your briefing{% endif %}{% if roundup_card.issue and not roundup_card.issue.read_at %}<span class="rb-dot" aria-label="New"></span>{% endif %}<span class="rb-home__when">{% if roundup_card.issue %}{{ roundup_card.p.range }}{% elif roundup_card.next_text %}next {{ roundup_card.next_text }}{% endif %}</span></h2>
+        {% if roundup_card.issue %}<p class="rb-home__sum">{{ roundup_card.short }}</p>{% else %}<p class="rb-home__sum">Your next briefing is made {{ roundup_card.next_text|default:"soon" }}.</p>{% endif %}
+        <div class="rb-home__row">
+            <a href="{% url 'roundup:briefing' %}{% if roundup_card.issue %}?issue={{ roundup_card.issue.pk }}{% endif %}" class="btn btn-primary btn-sm">Open briefing</a>
+            {% if roundup_card.p.counts.overdue %}<span class="rb-chip is-red">{{ roundup_card.p.counts.overdue }} overdue</span>{% endif %}
+            {% if roundup_card.p.counts.events %}<span class="rb-chip">{{ roundup_card.p.counts.events }} event{{ roundup_card.p.counts.events|pluralize }}</span>{% endif %}
+            {% if roundup_card.p.rain %}<span class="rb-chip">Rain {{ roundup_card.p.rain|join:"/" }}</span>{% endif %}
+            <button type="button" class="rb-home__sched" data-rb-open aria-label="Briefing schedule">{% include "roundup/_icon.html" with name="gear" size=15 %}</button>
+        </div>
+    </div>
+    {% if roundup_card.bars %}<div class="rb-bars" aria-hidden="true">{% for b in roundup_card.bars %}<span class="rb-bar{% if b.top %} is-top{% endif %}"><i style="height:{{ b.h }}px"></i>{{ b.dow|slice:":1" }}</span>{% endfor %}</div>{% endif %}
+</section>
+{% include "roundup/_sheet.html" with next=request.get_full_path %}
+{% endif %}
