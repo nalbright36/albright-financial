@@ -205,3 +205,30 @@ a.mn-list__main:hover { color: var(--accent); text-decoration: none; }
 .mn-overview { padding: 8px 0; border-top: 1px solid var(--border); }
 .mn-overview:first-of-type { border-top: 0; }
 .mn-overview__head { display: flex; justify-content: space-between; gap: 10px; font-weight: 700; margin-bottom: 4px; }
+
+/* Budget plans (Money > Budget > Plans) */
+.mn-subnav { margin: 0 0 var(--space-4); }
+.mn-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 8px;
+  font-size: var(--text-sm); color: var(--text-secondary); }
+.mn-crumb a { color: var(--accent); text-decoration: none; }
+.mn-crumb__now { color: var(--text-primary); font-weight: 600; }
+.mn-plan-list { display: flex; flex-direction: column; gap: 0; }
+.mn-plan-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: var(--space-3) 0;
+  border-top: 1px solid var(--border); text-decoration: none; color: inherit; }
+.mn-card .mn-plan-row:first-of-type { border-top: 0; }
+.mn-plan-row:hover { color: inherit; }
+.mn-plan-row__name { font-weight: 600; flex: 1 1 auto; }
+.mn-plan-row__nums { font-size: var(--text-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.mn-plan-row .mn-bar { flex-basis: 100%; margin: 0; }
+.mn-templates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mn-template { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-solid);
+  color: inherit; font: inherit; cursor: pointer; }
+.mn-template:hover { border-color: var(--accent); }
+.mn-template.is-on { border-color: var(--accent); background: var(--accent-soft); }
+.mn-template__name { font-weight: 600; }
+.mn-pline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: var(--space-3) 0;
+  border-top: 1px solid var(--border); }
+.mn-card .mn-pline:first-of-type { border-top: 0; }
+.mn-pline__name { flex: 1 1 auto; }
+@media (min-width: 640px) { .mn-templates { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

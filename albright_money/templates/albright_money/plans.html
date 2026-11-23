@@ -1,0 +1,45 @@
+{% extends "albright_money/base.html" %}{% load money_extras %}
+{% block page_title %}Plans · Budget · {% endblock %}
+{% block money %}
+{% include "albright_money/_budget_tabs.html" %}
+<div class="mn-head">
+    <div><h1 class="mn-head__title">Plans</h1>
+        <p class="mn-head__sub">{% if space.circle_id %}{{ space.name }}'s plans{% else %}Your personal plans{% endif %} — a gift list, a trip, a project. They don't change This month unless you reserve them.</p></div>
+</div>
+{% include "albright_labs/_space_switch.html" %}
+
+<section class="card mn-card" aria-labelledby="mn-new-plan-h">
+    <h2 class="mn-card__title" id="mn-new-plan-h">New plan</h2>
+    <form method="post" action="{% url 'albright_money:budget_plans' %}" class="mn-draft">{% csrf_token %}
+        <input type="hidden" name="action" value="create">
+        <input type="hidden" name="space" value="{{ space.pk }}">
+        <div class="mn-draft__fields">
+            <label class="mn-draft__field"><span class="mn-label">Name</span>
+                <input type="text" name="name" class="ledger-input" required maxlength="60" placeholder="Christmas Gifts"></label>
+            <label class="mn-draft__field"><span class="mn-label">Template</span>
+                <select name="template" class="ledger-input">
+                    {% for key, label in templates %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                </select></label>
+            <label class="mn-draft__field"><span class="mn-label">Due (optional)</span>
+                <input type="date" name="due_date" class="ledger-input"></label>
+        </div>
+        <div class="mn-actions">
+            <button type="submit" class="btn btn-primary btn-sm">Start plan</button>
+        </div>
+    </form>
+</section>
+
+<section class="card mn-card" aria-labelledby="mn-plans-h">
+    <h2 class="mn-card__title" id="mn-plans-h">Your plans {% if plans %}<span class="mn-count">{{ plans|length }}</span>{% endif %}</h2>
+    {% if not plans %}<p class="mn-empty">No plans yet. Start one above, or type @budget on a line in a note.</p>
+    {% else %}<div class="mn-plan-list">
+        {% for row in plans %}<a href="{% url 'albright_money:budget_plan' row.plan.pk %}?space={{ space.pk }}" class="mn-plan-row">
+            <span class="mn-plan-row__name">{{ row.plan.name }}</span>
+            {% if row.plan.get_template_display and row.plan.template != 'blank' %}<span class="mn-tag">{{ row.plan.get_template_display }}</span>{% endif %}
+            {% if row.plan.is_reserved %}<span class="mn-tag mn-tag--quiet">In {{ row.plan.line.budget.month|date:"M" }} · {{ row.plan.line.category.name }}</span>{% endif %}
+            <span class="mn-plan-row__nums">{% if row.count %}{{ row.spent|usd }} of {{ row.planned|usd }}{% if row.plan.due_date %} · due {{ row.plan.due_date|date:"M j" }}{% endif %}{% elif row.plan.planned %}Cap {{ row.plan.planned|usd }}{% else %}No lines yet{% endif %}</span>
+            {% if row.planned %}<div class="mn-bar" role="img" aria-label="{{ row.pct }}% used"><span style="width: {{ row.pct }}%;"></span></div>{% endif %}
+        </a>{% endfor %}
+    </div>{% endif %}
+</section>
+{% endblock %}

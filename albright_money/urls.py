@@ -23,6 +23,8 @@ urlpatterns = [
     path("rules/", views.rules, name="rules"),
     path("rules/<int:pk>/delete/", views.rule_delete, name="rule_delete"),
     path("budget/", views.budget, name="budget"),
+    path("budget/plans/", views.budget_plans, name="budget_plans"),
+    path("budget/plans/<int:pk>/", views.budget_plan, name="budget_plan"),
     path("budget/drafts/<int:pk>/", views.budget_draft, name="budget_draft"),
     path("household/", views.household, name="household"),
 ]

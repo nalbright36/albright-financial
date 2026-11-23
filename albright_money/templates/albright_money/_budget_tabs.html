@@ -1,0 +1,8 @@
+{% comment %}This month vs Plans, under Money > Budget (budget.html, plans.html, plan.html).{% endcomment %}
+<nav class="space-switch mn-subnav" aria-label="Budget view">
+    <span class="space-switch__label">Budget</span>
+    <span class="space-switch__tabs">
+        <a href="{% url 'albright_money:budget' %}?space={{ space.pk }}{% if month %}&amp;month={{ month|date:'Y-m' }}{% endif %}" class="space-switch__item{% if tab == 'month' %} is-on{% endif %}"{% if tab == 'month' %} aria-current="true"{% endif %}>This month</a>
+        <a href="{% url 'albright_money:budget_plans' %}?space={{ space.pk }}" class="space-switch__item{% if tab == 'plans' %} is-on{% endif %}"{% if tab == 'plans' %} aria-current="true"{% endif %}>Plans</a>
+    </span>
+</nav>

@@ -451,12 +451,10 @@ def budget_draft(user, draft_id):
     d = BudgetDraft.objects.visible_to(user).select_related("line__category", "line__budget").filter(pk=draft_id).first()
     if d is None:
         return None
-    url = reverse("albright_money:budget") + f"?space={d.space_id}"
-    if d.line_id:
-        url += f"&month={d.line.budget.month:%Y-%m}"
+    from albright_money.budget import plan_url
     return {"name": d.name, "planned": str(d.planned) if d.planned is not None else None,
             "confirmed": not d.is_draft, "category": d.line.category.name if d.line_id else None,
-            "url": url + ("" if d.line_id else f"#mn-draft-{d.pk}")}
+            "url": plan_url(d)}
 
 
 def add_task(note, user, day, at=None, text=""):

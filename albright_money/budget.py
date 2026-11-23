@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from . import money
-from .models import ZERO, Budget, BudgetDraft, BudgetLine, Category, Split, Transaction
+from .models import ZERO, Budget, BudgetDraft, BudgetLine, BudgetPlanLine, Category, Split, Transaction
 
 NEAR = Decimal("0.9")
 
@@ -192,10 +192,12 @@ def split_amount(text):
 
 
 def create_draft(user, text, note=None):
-    """A draft budget item from a note's line, in the writer's current Money space. Returns it."""
+    """A budget plan from a note's line, in the writer's current Money space. The amount (if any) is the cap.
+    Starts blank (no lines) so the person can pick a template or add lines. Returns the plan."""
     space = money.current_space(user)
     name, planned = split_amount(text)
-    return BudgetDraft.objects.create(owner=user, space=space, name=name, planned=planned, note=note)
+    return BudgetDraft.objects.create(owner=user, space=space, name=name, planned=planned, note=note,
+                                      template=BudgetDraft.BLANK)
 
 
 def open_drafts(space):
@@ -237,3 +239,90 @@ def notes_for_lines(user, budget):
         if d.note_id in visible and (d.note_id, visible[d.note_id]) not in out.get(d.line.category_id, []):
             out.setdefault(d.line.category_id, []).append((d.note_id, visible[d.note_id]))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Plans (BudgetDraft + BudgetPlanLine): templates, listing, totals, the plan URL
+# ---------------------------------------------------------------------------
+
+TEMPLATE_LINES = {
+    BudgetDraft.BLANK: [],
+    BudgetDraft.GIFTS: ["Person or event"],
+    BudgetDraft.TRIP: ["Flights", "Hotel", "Food", "Activities", "Transport", "Other"],
+    BudgetDraft.EVENT: ["Venue", "Food", "Drinks", "Decor", "Favors", "Other"],
+    BudgetDraft.HOME: ["Materials", "Labor", "Permits", "Furniture", "Other"],
+}
+
+
+def plan_url(plan):
+    """The plan page, in its own space."""
+    return reverse("albright_money:budget_plan", args=[plan.pk]) + f"?space={plan.space_id}"
+
+
+def plans_for(space):
+    """The space's plans, newest first, with their note and any reserved monthly line."""
+    return BudgetDraft.objects.filter(space=space).select_related("note", "line__category", "line__budget")
+
+
+def create_plan(user, name, template=BudgetDraft.BLANK, planned=None, due_date=None, note=None, space=None):
+    """A new plan in `space` (or the writer's current Money space), with starter lines from `template`."""
+    space = space or money.current_space(user)
+    key = template if template in dict(BudgetDraft.TEMPLATES) else BudgetDraft.BLANK
+    plan = BudgetDraft.objects.create(
+        owner=user, space=space, name=(name or "Budget plan").strip()[:60] or "Budget plan",
+        planned=planned, template=key, due_date=due_date, note=note)
+    apply_template(plan, key, replace=True)
+    return plan
+
+
+def apply_template(plan, template, replace=False):
+    """Set `plan.template` and add its starter lines (name only, planned $0, To buy). If the plan already has
+    lines, does nothing unless `replace` is True and no line has spent money — then the empty lines are replaced.
+    Returns the number of lines added, or None if it was left alone."""
+    key = template if template in TEMPLATE_LINES else BudgetDraft.BLANK
+    existing = list(plan.plan_lines.all())
+    if existing and not replace:
+        return None
+    if existing and any(line.spent and line.spent > 0 for line in existing):
+        return None
+    if existing:
+        plan.plan_lines.all().delete()
+    names = TEMPLATE_LINES[key]
+    lines = [BudgetPlanLine(plan=plan, name=name, order=i) for i, name in enumerate(names)]
+    if lines:
+        BudgetPlanLine.objects.bulk_create(lines)
+    if plan.template != key:
+        plan.template = key
+        plan.save(update_fields=["template"])
+    return len(lines)
+
+
+def plan_totals(plan):
+    """Summary numbers for a plan: planned and spent (sum of lines), remaining, % used, bought / to-buy counts,
+    days left until due_date, and a weekly pace (remaining / weeks left) when there is a future due date."""
+    lines = list(plan.plan_lines.all())
+    planned = sum((line.planned or ZERO) for line in lines) if lines else ZERO
+    spent = sum((line.spent or ZERO) for line in lines) if lines else ZERO
+    remaining = planned - spent
+    pct = int(spent / planned * 100) if planned > 0 else (100 if spent > 0 else 0)
+    bought = sum(1 for line in lines if line.status == BudgetPlanLine.BOUGHT)
+    to_buy = len(lines) - bought
+    today = timezone.localdate()
+    days_left = (plan.due_date - today).days if plan.due_date else None
+    pace = None
+    if days_left is not None and days_left > 0 and remaining > 0:
+        weeks = Decimal(days_left) / Decimal(7)
+        pace = (remaining / weeks).quantize(Decimal("0.01"))
+    cap = plan.planned
+    cap_over = (planned - cap) if cap and planned > cap else None
+    return {
+        "lines": lines, "planned": planned, "spent": spent, "remaining": remaining, "pct": min(pct, 100),
+        "bought": bought, "to_buy": to_buy, "count": len(lines), "days_left": days_left, "pace": pace,
+        "cap": cap, "cap_over": cap_over, "over": remaining < 0,
+    }
+
+
+def visible_plan(user, pk):
+    """The plan `user` can see in Money, or None (callers 404)."""
+    return BudgetDraft.objects.visible_to(user).filter(pk=pk).select_related(
+        "note", "line__category", "line__budget", "space").first()

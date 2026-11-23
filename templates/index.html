@@ -130,7 +130,7 @@
                         {% with page=request.resolver_match.url_name %}
                         <a href="{% url 'albright_money:dashboard' %}"{% if page == 'dashboard' %} class="active" aria-current="page"{% endif %}>{% nav_icon "dashboard" %}Dashboard</a>
                         <a href="{% url 'albright_money:transactions' %}"{% if page in 'transactions transaction transfer' %} class="active" aria-current="page"{% endif %}>{% nav_icon "arrows" %}Transactions</a>
-                        <a href="{% url 'albright_money:budget' %}"{% if page == 'budget' %} class="active" aria-current="page"{% endif %}>{% nav_icon "pie-chart" %}Budget</a>
+                        <a href="{% url 'albright_money:budget' %}"{% if page == 'budget' or page == 'budget_plans' or page == 'budget_plan' %} class="active" aria-current="page"{% endif %}>{% nav_icon "pie-chart" %}Budget</a>
                         <a href="{% url 'albright_money:accounts' %}"{% if page in 'accounts account import' %} class="active" aria-current="page"{% endif %}>{% nav_icon "landmark" %}Accounts</a>
                         <a href="{% url 'albright_money:categories' %}"{% if page in 'categories rules' %} class="active" aria-current="page"{% endif %}>{% nav_icon "tags" %}Categories</a>
                         {% endwith %}

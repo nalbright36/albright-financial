@@ -186,13 +186,24 @@ class BudgetLine(models.Model):
 
 
 class BudgetDraft(Scoped):
-    """A budget item started from a note: "@budget Christmas gifts 300" on a line (albright_notes.smart) makes one in
-    the writer's current Money space, with the line's amount as its planned amount. It's a draft - on the Budget page
-    under "From notes", not in any total - until someone finishes it there: picks (or names) a category and confirms
-    the amount for a month (budget.confirm_draft). Then it points at that BudgetLine and stays as the link between
-    the two: the note's chip ("@[budget:<id>]") finds the budget, and the budget line finds its note."""
+    """A budget plan: a named list of lines (people, trip costs, …) that can span months. "@budget Christmas gifts 300"
+    on a note (albright_notes.smart) makes one in the writer's current Money space; the amount is an optional cap
+    (`planned`), not a monthly category line. The plan lives under Money > Budget > Plans and is what the note's chip
+    opens. It does not change a month's category budget unless someone reserves it (budget.confirm_draft / reserve_plan):
+    then `line` points at that BudgetLine and `confirmed_at` is set, and the plan stays as the breakdown and the link
+    back to the note. `template` is which starter lines were applied (Gifts & holiday, Trip, …)."""
+    BLANK, GIFTS, TRIP, EVENT, HOME = "blank", "gifts", "trip", "event", "home"
+    TEMPLATES = [
+        (BLANK, "Start blank"),
+        (GIFTS, "Gifts & holiday"),
+        (TRIP, "Trip"),
+        (EVENT, "Event / party"),
+        (HOME, "Home project"),
+    ]
     name = models.CharField(max_length=60)
-    planned = models.DecimalField(null=True, blank=True, **MONEY)
+    planned = models.DecimalField(null=True, blank=True, **MONEY)   # optional cap (e.g. the amount from the note)
+    template = models.CharField(max_length=20, choices=TEMPLATES, default=BLANK)
+    due_date = models.DateField(null=True, blank=True)
     note = models.ForeignKey("albright_notes.Note", on_delete=models.SET_NULL, null=True, blank=True,
                              related_name="budget_drafts")
     line = models.ForeignKey(BudgetLine, on_delete=models.SET_NULL, null=True, blank=True, related_name="drafts")
@@ -207,4 +218,29 @@ class BudgetDraft(Scoped):
 
     @property
     def is_draft(self):
+        """Not yet reserved in a monthly category."""
         return self.confirmed_at is None
+
+    @property
+    def is_reserved(self):
+        return self.confirmed_at is not None
+
+
+class BudgetPlanLine(models.Model):
+    """One row on a budget plan: a person, a trip cost, etc. `spent` is entered by hand (linking Money
+    transactions is a later step). Status is To buy or Bought."""
+    TO_BUY, BOUGHT = "to-buy", "bought"
+    STATUSES = [(TO_BUY, "To buy"), (BOUGHT, "Bought")]
+    plan = models.ForeignKey(BudgetDraft, on_delete=models.CASCADE, related_name="plan_lines")
+    name = models.CharField(max_length=80)
+    planned = models.DecimalField(default=ZERO, **MONEY)
+    spent = models.DecimalField(default=ZERO, **MONEY)
+    status = models.CharField(max_length=10, choices=STATUSES, default=TO_BUY)
+    notes = models.CharField(max_length=200, blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return self.name

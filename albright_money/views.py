@@ -640,6 +640,115 @@ def budget_draft(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Budget plans (BudgetDraft + BudgetPlanLine)
+# ---------------------------------------------------------------------------
+
+def _plan(request, pk):
+    """The plan `request.user` can see, or 404. Sets the page's space to the plan's space."""
+    plan = budgets.visible_plan(request.user, pk)
+    if plan is None:
+        raise Http404
+    request.spaces = money.visible_spaces(request.user)
+    request.space = plan.space
+    return plan
+
+
+@login_required
+@never_cache
+def budget_plans(request):
+    """Money > Budget > Plans: the space's plans, and a form to start a new one from a template."""
+    user, space = _scope(request)
+    here = _in(space, reverse("albright_money:budget_plans"))
+    if request.method == "POST" and request.POST.get("action") == "create":
+        posted = request.POST.get("space")
+        if posted:
+            try:
+                sid = int(posted)
+            except (TypeError, ValueError):
+                raise Http404
+            if sid not in {s.pk for s in request.spaces}:
+                raise Http404
+            space = next(s for s in request.spaces if s.pk == sid)
+            here = _in(space, reverse("albright_money:budget_plans"))
+        name = (request.POST.get("name") or "").strip()[:60]
+        if not name:
+            messages.error(request, "Give the plan a name.")
+            return redirect(here)
+        template = request.POST.get("template") or BudgetDraft.BLANK
+        due = request.POST.get("due_date") or ""
+        try:
+            due_date = date.fromisoformat(due) if due else None
+        except ValueError:
+            messages.error(request, "Due date must be a real date.")
+            return redirect(here)
+        plan = budgets.create_plan(user, name, template=template, due_date=due_date, space=space)
+        messages.success(request, f"Started “{plan.name}”.")
+        return redirect(budgets.plan_url(plan))
+    rows = []
+    for plan in budgets.plans_for(space):
+        rows.append({"plan": plan, **budgets.plan_totals(plan)})
+    return render(request, "albright_money/plans.html", {
+        "space": space, "plans": rows, "templates": BudgetDraft.TEMPLATES,
+        "tab": "plans", "month": budgets.this_month(), "here": here})
+
+
+@login_required
+@never_cache
+def budget_plan(request, pk):
+    """One plan: pick a template (if it has no spend yet), later also edit lines and reserve in a month."""
+    plan = _plan(request, pk)
+    space = plan.space
+    here = budgets.plan_url(plan)
+    if request.method == "POST":
+        action = request.POST.get("action") or ""
+        if action == "apply_template":
+            added = budgets.apply_template(plan, request.POST.get("template") or "", replace=True)
+            if added is None:
+                messages.error(request, "This plan already has spending on a line, so its template was left alone.")
+            else:
+                label = plan.get_template_display()
+                messages.success(request, f"Applied the {label} template." if plan.template != BudgetDraft.BLANK
+                                 else "Cleared the starter lines.")
+            return redirect(here)
+        if action == "save_meta":
+            name = (request.POST.get("name") or "").strip()[:60]
+            if not name:
+                messages.error(request, "Give the plan a name.")
+                return redirect(here)
+            due = request.POST.get("due_date") or ""
+            try:
+                plan.due_date = date.fromisoformat(due) if due else None
+            except ValueError:
+                messages.error(request, "Due date must be a real date.")
+                return redirect(here)
+            cap = request.POST.get("planned")
+            if cap not in (None, ""):
+                amount = money.to_decimal(cap)
+                if amount is None or amount < 0:
+                    messages.error(request, "The cap must be a number of 0 or more.")
+                    return redirect(here)
+                plan.planned = amount or None
+            else:
+                plan.planned = None
+            plan.name = name
+            plan.save(update_fields=["name", "due_date", "planned"])
+            messages.success(request, "Plan saved.")
+            return redirect(here)
+        # Line editing and reserve are evening 2.
+        messages.error(request, "Nothing to do.")
+        return redirect(here)
+    totals = budgets.plan_totals(plan)
+    note_visible = False
+    if plan.note_id:
+        from albright_notes.models import Note
+        note_visible = Note.objects.visible_to(request.user).filter(pk=plan.note_id).exists()
+    return render(request, "albright_money/plan.html", {
+        "plan": plan, "space": space, "tab": "plans", "month": budgets.this_month(),
+        "templates": BudgetDraft.TEMPLATES, "note_visible": note_visible,
+        "here": here, **totals})
+
+
+# ---------------------------------------------------------------------------
 # The old Household page -> Circles
 # ---------------------------------------------------------------------------
 
