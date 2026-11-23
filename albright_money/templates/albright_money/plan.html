@@ -20,7 +20,7 @@
 </div>
 {% include "albright_labs/_space_switch.html" %}
 
-<section class="mn-stats" aria-label="Totals">
+<section class="mn-stats mn-stats--plan" aria-label="Totals">
     <div class="card mn-stat"><span class="card__label">Spent</span>
         <span class="mn-stat__value">{{ spent|usd }}</span>
         <span class="mn-stat__note">of {{ planned|usd }} planned</span></div>
@@ -38,10 +38,10 @@
 </p>
 {% if cap_over %}<p class="mn-help">The cap is {{ cap|usd }} — lines are now <span class="mn-flag">{{ cap_over|usd }} over</span> that cap. You can raise the cap or trim a line.</p>{% endif %}
 
-{% if not spent or spent == 0 %}
+{% if not count %}
 <section class="card mn-card" aria-labelledby="mn-tmpl-h">
-    <h2 class="mn-card__title" id="mn-tmpl-h">{% if count %}Change template{% else %}Start from a template{% endif %}</h2>
-    <p class="mn-help">{% if count %}Replacing the lines is fine while nothing has been spent.{% else %}Pick a template to add starter lines, or add your own below.{% endif %}</p>
+    <h2 class="mn-card__title" id="mn-tmpl-h">Start from a template</h2>
+    <p class="mn-help">Pick a template to add starter lines, or add your own below.</p>
     <form method="post">{% csrf_token %}
         <input type="hidden" name="action" value="apply_template">
         <div class="mn-templates">
@@ -65,55 +65,66 @@
             <label class="mn-pline__name"><span class="visually-hidden">Name</span>
                 <input type="text" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_name" value="{{ line.name }}" required maxlength="80"></label>
             <label class="mn-pline__status"><span class="visually-hidden">Status</span>
-                <select class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_status">
+                <select class="ledger-input mn-pline__pill" form="mn-lines" name="line_{{ line.pk }}_status">
                     {% for val, lab in statuses %}<option value="{{ val }}"{% if line.status == val %} selected{% endif %}>{{ lab }}</option>{% endfor %}
                 </select></label>
-            <div class="mn-pline__amounts">
-                <label class="mn-bline__input mn-pline__planned"><span class="mn-label">Planned</span><span aria-hidden="true">$</span>
-                    <input type="text" inputmode="decimal" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_planned" value="{{ line.planned }}"></label>
-                <label class="mn-bline__input mn-pline__spent"><span class="mn-label">Spent</span><span aria-hidden="true">$</span>
-                    <input type="text" inputmode="decimal" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_spent" value="{{ line.spent }}"></label>
-                <span class="mn-pline__left">{% if row.left < 0 %}{{ row.left|usd }} over{% else %}{{ row.left|usd }} left{% endif %}</span>
-            </div>
-            <div class="mn-bar mn-bar--{{ row.status }}" role="img" aria-label="{{ row.pct }}% of {{ line.planned|usd }} used"><span style="width: {{ row.pct }}%;"></span></div>
-            <div class="mn-pline__meta">
-                <input type="text" class="ledger-input mn-pline__note" form="mn-lines" name="line_{{ line.pk }}_notes" value="{{ line.notes }}" maxlength="200" placeholder="Notes (optional)" aria-label="Notes">
+            <div class="mn-pline__tools">
+                <button type="button" class="mn-pline__notes-btn{% if line.notes %} has-notes{% endif %}" data-mn-notes hidden aria-expanded="false" aria-controls="mn-note-{{ line.pk }}" title="Notes" aria-label="Notes">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4"/><path d="M8 13h8M8 17h5"/></svg>
+                </button>
                 <form method="post" class="mn-inline">{% csrf_token %}
                     <input type="hidden" name="action" value="delete_line">
                     <input type="hidden" name="line" value="{{ line.pk }}">
-                    <button type="submit" class="mn-link-btn">Remove</button>
+                    <button type="submit" class="mn-pline__remove" aria-label="Remove {{ line.name }}" title="Remove">&times;</button>
                 </form>
             </div>
+            <div class="mn-pline__amounts">
+                <label class="mn-pline__planned"><span class="mn-label">Planned</span>
+                    <span class="mn-pline__money"><span aria-hidden="true">$</span>
+                    <input type="text" inputmode="decimal" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_planned" value="{{ line.planned }}"></span></label>
+                <label class="mn-pline__spent"><span class="mn-label">Spent</span>
+                    <span class="mn-pline__money"><span aria-hidden="true">$</span>
+                    <input type="text" inputmode="decimal" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_spent" value="{{ line.spent }}"></span></label>
+                <span class="mn-pline__left">{% if row.left < 0 %}{{ row.left|usd }} over{% else %}{{ row.left|usd }} left{% endif %}</span>
+            </div>
+            <div class="mn-bar mn-bar--{{ row.status }}" role="img" aria-label="{{ row.pct }}% of {{ line.planned|usd }} used"><span style="width: {{ row.pct }}%;"></span></div>
+            <input type="text" class="ledger-input mn-pline__note" id="mn-note-{{ line.pk }}" form="mn-lines" name="line_{{ line.pk }}_notes" value="{{ line.notes }}" maxlength="200" placeholder="Notes (optional)" aria-label="Notes">
         </div>
         {% endwith %}{% endfor %}
-        <div class="mn-actions">
-            <button type="submit" form="mn-lines" class="btn btn-primary btn-sm">Save lines</button>
-        </div>
     {% endif %}
     <form method="post" class="mn-add-line">{% csrf_token %}
         <input type="hidden" name="action" value="add_line">
-        <div class="mn-draft__fields">
-            <label class="mn-draft__field"><span class="mn-label">Name</span>
-                <input type="text" name="name" class="ledger-input" maxlength="80" placeholder="Person or event"></label>
-            <label class="mn-draft__field"><span class="mn-label">Planned</span>
-                <span class="mn-bline__input"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned" class="ledger-input" placeholder="0.00"></span></label>
-        </div>
-        <div class="mn-actions"><button type="submit" class="btn btn-secondary btn-sm">+ Add a person or event</button></div>
+        <label class="visually-hidden" for="mn-add-name">Name</label>
+        <input type="text" id="mn-add-name" name="name" class="ledger-input" maxlength="80" placeholder="Person or event">
+        <label class="visually-hidden" for="mn-add-planned">Planned</label>
+        <span class="mn-pline__money"><span aria-hidden="true">$</span>
+            <input type="text" id="mn-add-planned" inputmode="decimal" name="planned" class="ledger-input" placeholder="0.00"></span>
+        <button type="submit" class="btn btn-secondary btn-sm">Add</button>
     </form>
+    {% if count %}
+    <div class="mn-actions mn-actions--lines">
+        <button type="submit" form="mn-lines" class="btn btn-primary">Save lines</button>
+    </div>
+    {% endif %}
 </section>
 
-<form method="post" class="card mn-card" aria-labelledby="mn-plan-meta-h">{% csrf_token %}
+<form method="post" class="card mn-card mn-plan-meta">{% csrf_token %}
     <input type="hidden" name="action" value="save_meta">
-    <h2 class="mn-card__title" id="mn-plan-meta-h">Plan details</h2>
-    <div class="mn-draft__fields">
-        <label class="mn-draft__field"><span class="mn-label">Name</span>
-            <input type="text" name="name" class="ledger-input" required maxlength="60" value="{{ plan.name }}"></label>
-        <label class="mn-draft__field"><span class="mn-label">Cap (optional)</span>
-            <span class="mn-bline__input"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned" class="ledger-input" value="{{ plan.planned|default_if_none:'' }}" placeholder="0.00"></span></label>
-        <label class="mn-draft__field"><span class="mn-label">Due</span>
-            <input type="date" name="due_date" class="ledger-input" value="{{ plan.due_date|date:'Y-m-d' }}"></label>
-    </div>
-    <div class="mn-actions"><button type="submit" class="btn btn-primary btn-sm">Save plan</button></div>
+    <details class="mn-plan-meta__box" open>
+        <summary class="mn-plan-meta__summary" id="mn-plan-meta-h">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+            Plan details
+        </summary>
+        <div class="mn-draft__fields">
+            <label class="mn-draft__field"><span class="mn-label">Name</span>
+                <input type="text" name="name" class="ledger-input" required maxlength="60" value="{{ plan.name }}"></label>
+            <label class="mn-draft__field"><span class="mn-label">Cap (optional)</span>
+                <span class="mn-pline__money"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned" class="ledger-input" value="{{ plan.planned|default_if_none:'' }}" placeholder="0.00"></span></label>
+            <label class="mn-draft__field"><span class="mn-label">Due</span>
+                <input type="date" name="due_date" class="ledger-input" value="{{ plan.due_date|date:'Y-m-d' }}"></label>
+        </div>
+        <div class="mn-actions"><button type="submit" class="btn btn-primary btn-sm">Save plan</button></div>
+    </details>
 </form>
 
 <section class="card mn-card" aria-labelledby="mn-reserve-h">

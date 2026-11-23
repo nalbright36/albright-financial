@@ -128,4 +128,21 @@
         map.addEventListener("change", showStyle);
         showStyle();
     }
+
+    // Plan lines: on a phone, notes sit behind the icon (the field stays visible without JS,
+    // and on a wide screen CSS shows it anyway).
+    var meta = document.querySelector(".mn-plan-meta__box");
+    if (meta && window.matchMedia("(max-width: 639px)").matches) meta.open = false;
+
+    document.querySelectorAll("[data-mn-notes]").forEach(function (btn) {
+        var box = document.getElementById(btn.getAttribute("aria-controls"));
+        if (!box) return;
+        btn.hidden = false;
+        box.hidden = true;
+        btn.addEventListener("click", function () {
+            var on = btn.getAttribute("aria-expanded") !== "true";
+            btn.setAttribute("aria-expanded", on ? "true" : "false");
+            box.hidden = !on;
+        });
+    });
 })();

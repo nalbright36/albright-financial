@@ -128,3 +128,28 @@ class PlanUITests(TestCase):
         self.assertFalse(self.plan.plan_lines.filter(name="Nope").exists())
         self.plan.refresh_from_db()
         self.assertFalse(self.plan.is_reserved)
+
+    def test_phone_layout_keeps_amounts_apart_and_hides_templates_when_there_are_lines(self):
+        page = self.client.get(url("budget_plan", self.plan.pk)).content.decode()
+        # Planned / Spent are separate fields, not .mn-bline__input (that grid-area stacked them).
+        self.assertIn("mn-pline__planned", page)
+        self.assertIn("mn-pline__spent", page)
+        self.assertIn(f'name="line_{self.lexi.pk}_planned"', page)
+        self.assertIn(f'name="line_{self.lexi.pk}_spent"', page)
+        start = page.find(f'name="line_{self.lexi.pk}_name"')
+        end = page.find("mn-pline", start + 1)
+        block = page[start:end if end > start else start + 1800]
+        self.assertNotIn("mn-bline__input", block)
+        self.assertNotIn("Start from a template", page)
+        self.assertNotIn("Change template", page)
+        self.assertIn("mn-plan-meta__summary", page)
+        self.assertIn("Plan details", page)
+        self.assertIn("data-mn-notes", page)
+        self.assertIn("data-share-sheet-open", page)
+        self.assertIn("Save lines", page)
+        self.assertIn('id="mn-add-name"', page)
+        empty = budget.create_plan(self.me, "Empty trip", template=BudgetDraft.BLANK, space=personal(self.me))
+        blank = self.client.get(url("budget_plan", empty.pk)).content.decode()
+        self.assertIn("Start from a template", blank)
+        self.assertIn("mn-templates", blank)
+        self.assertNotIn("Save lines", blank)
