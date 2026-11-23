@@ -6,8 +6,9 @@ One at a time: a repeating task that never ends (ScheduleItem.one_at_a_time)
 shows only its current occurrence - the earliest not done or skipped - plus
 the ones already done, on their days. A past one stays on Today as overdue
 (no new copy appears). Checking it off or skipping it moves it on:
-  - on schedule (default): the first scheduled date after the later of its
-    date and today - missed ones are skipped, not stacked up;
+  - on schedule (default): the first scheduled date after its date, but
+    never before today - missed ones are skipped, not stacked up, and
+    today's own occurrence is never skipped by a late check-off;
   - repeat_from_completion: today plus the repeat interval (step_from), and
     the chain counts on from each check-off (repeat_anchor).
 Unchecking puts it back. next_due is on the item, so a check-off on a
@@ -213,7 +214,10 @@ def _move_on(item, occurrence_date, on_day):
         item.repeat_anchor = on_day
         item.next_due = recurrence.step_from(item, on_day)
     else:
-        later = max(occurrence_date, on_day)
+        # Missed days are skipped, but today never is: an overdue one checked off (or skipped) today - or after
+        # midnight from a page opened yesterday - leaves today's occurrence showing. Only checking off today's own
+        # occurrence (or an early one) moves it past today.
+        later = max(occurrence_date, on_day - timedelta(days=1))
         item.next_due = recurrence.first_after(item, later) or later + timedelta(days=1)
     item.save(update_fields=["next_due", "repeat_anchor", "updated_at"])
 

@@ -379,6 +379,12 @@
             : postJson(root.dataset.saveUrl, body);
         inFlight = send.then(function (res) {
             inFlight = null;
+            if (res.status === 409 && res.data && ne && res.data.body === ne.getMarkdown() &&
+                    (!fields.title || res.data.title === fields.title.value)) {
+                applyState(res.data, false);                   // already saved just like this (a leave-save got there first)
+                showSaved(Object.keys(dirty).length ? "Unsaved changes" : "Saved ✓");
+                return;
+            }
             if (res.status === 409) {
                 keys.forEach(function (k) { dirty[k] = true; });
                 showConflict(res.data);
@@ -407,9 +413,14 @@
     // outlives the page. sendBeacon can't carry the CSRF header; fetch keepalive can.
     function saveOnLeave() {
         var keys = Object.keys(dirty);
-        if (!keys.length || inFlight || conflict || !window.fetch) return;
+        if (!keys.length || conflict || !window.fetch) return;
+        // A save still on its way (a tick, then leaving right away): send everything now as well, marked as following
+        // that save (after_own_save), instead of waiting for it and being lost with the page.
+        var behind = !!inFlight;
+        if (behind) keys = ["title", "body", "tags", "sort_checked"];
         var body = values(keys);
         body.version = version;
+        if (behind) body.after_own_save = true;
         var text = JSON.stringify(body);
         if (text.length > 60000) { flush(); return; }          // keepalive bodies are capped at 64 KB
         clearTimeout(timer);
@@ -526,8 +537,11 @@
         showWords();
         markActive();
 
-        // Ticked a checklist item: with "Move checked items to the bottom" on, it moves down.
+        // Ticked a checklist item: in the phone's reading view TipTap only flips the box (the document - and so the
+        // save - never heard of it), so write it into the document here. Then, with "Move checked items to the
+        // bottom" on, it moves down.
         mount.addEventListener("change", function (event) {
+            if (event.target.type === "checkbox" && !editor.isEditable) tickReadOnly(event.target);
             if (event.target.type === "checkbox" && fields.sort_checked && fields.sort_checked.checked) {
                 setTimeout(function () { NoteEditor.sortChecked(editor); }, 0);
             }
@@ -571,6 +585,23 @@
     }
 
     // The phone's reading view: the editor isn't editable (no keyboard while reading or scrolling) until you tap.
+    function tickReadOnly(box) {
+        var li = box.closest("li");                         // the task item's node view: li > label + div
+        var content = li && li.parentElement && li.parentElement.getAttribute("data-type") === "taskList"
+            && li.querySelector(":scope > div");
+        if (!content) return;
+        var at;
+        try { at = editor.state.doc.resolve(editor.view.posAtDOM(content, 0)); } catch (e) { return; }
+        for (var depth = at.depth; depth > 0; depth--) {
+            var node = at.node(depth);
+            if (node.type.name !== "taskItem") continue;
+            if (!!node.attrs.checked !== box.checked) {
+                editor.view.dispatch(editor.state.tr.setNodeMarkup(at.before(depth), undefined,
+                    Object.assign({}, node.attrs, {checked: box.checked})));
+            }
+            return;
+        }
+    }
     function setReading(on) {
         if (!editor) return;
         editor.setEditable(!on, false);
@@ -1011,11 +1042,22 @@
 
     // Back to the tab: anything checked off or moved in the Planner / grocery list meanwhile shows here (only where
     // you haven't changed it yourself since).
+    // Saved since (another device, someone it's shared with) and nothing unsaved here: load that copy, so this
+    // older page can't save over it later (their ticks coming undone).
     function refreshLinks() {
-        if (!editor || !smart || !root.dataset.stateUrl) return;
-        fetch(root.dataset.stateUrl, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+        if (!editor || !root.dataset.stateUrl) return;
+        var asked = version;
+        fetch(root.dataset.stateUrl + "?version=" + asked, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
             .then(function (r) { return r.json(); })
             .then(function (data) {
+                if (data.body != null && data.version > version && version === asked && !Object.keys(dirty).length
+                        && !inFlight && !conflict && !editor.isFocused) {
+                    applyState(data, true);
+                    if (data.link_state) linkBase = data.link_state;
+                    knownLinks = linksNow();
+                    return;
+                }
+                if (!smart) return;
                 var theirs = data.link_state || {}, sync = [];
                 NoteEditor.findChips(editor).forEach(function (c) {
                     var base = linkBase[c.key], server = c.key && theirs[c.key];
@@ -1034,6 +1076,7 @@
             }).catch(function () {});
     }
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refreshLinks(); });
+    window.addEventListener("pageshow", function (event) { if (event.persisted) refreshLinks(); });   // back/forward cache
 
     // ---------- Images and files (albright_labs/static/labs/attachments.js does the upload) ----------
     var attSection = root.querySelector("[data-att]");

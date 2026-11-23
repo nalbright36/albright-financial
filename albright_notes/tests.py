@@ -805,3 +805,52 @@ class SmartPlannerTests(Base):
         self.assertEqual(summary["planner_tasks"], 2)
         self.assertEqual(self.Item.objects.filter(note=note).count(), 2)
         self.assertEqual(len(smart.due_items(body)), 2)
+
+
+class TicksStickTests(Base):
+    """Checklist ticks aren't lost: a save sent on leaving while the previous one is still on its way lands (but
+    never over someone else's), a page left open elsewhere catches up on the newer copy, and the phone's reading
+    view writes a tick into the document (notes.js tickReadOnly)."""
+    BODY = "- [ ] milk\n- [ ] eggs"
+
+    def save(self, note, body, version, client=None, **extra):
+        return self.post_json(url("save", note.pk), {"body": body, "version": version, **extra}, client)
+
+    def test_leave_save_right_after_own_save_lands(self):
+        note = self.note(body=self.BODY)
+        self.assertEqual(self.save(note, "- [x] milk\n- [ ] eggs", note.version).status_code, 200)   # in flight
+        leave = self.save(note, "- [x] milk\n- [x] eggs", note.version, after_own_save=True)          # same base
+        self.assertEqual(leave.status_code, 200)
+        note.refresh_from_db()
+        self.assertEqual(note.body, "- [x] milk\n- [x] eggs")
+        # Without the mark it's still a conflict, as before.
+        self.assertEqual(self.save(note, "x", note.version - 2).status_code, 409)
+
+    def test_leave_save_never_skips_someone_elses_save(self):
+        note = self.note(body=self.BODY)
+        share_with(note, self.wife, "edit")
+        self.assertEqual(self.save(note, "hers", note.version, client=self.as_user(self.wife)).status_code, 200)
+        self.assertEqual(self.save(note, "mine", note.version, after_own_save=True).status_code, 409)
+        note.refresh_from_db()
+        self.assertEqual(note.body, "hers")
+
+    def test_leave_save_two_saves_behind_is_a_conflict(self):
+        note = self.note(body=self.BODY)
+        self.save(note, "one", note.version)
+        self.save(note, "two", note.version + 1)
+        self.assertEqual(self.save(note, "stale", note.version, after_own_save=True).status_code, 409)
+
+    def test_state_sends_the_whole_note_to_a_page_that_is_behind(self):
+        note = self.note(body=self.BODY)
+        old = note.version
+        self.save(note, "- [x] milk\n- [ ] eggs", old)
+        behind = self.client.get(url("state", note.pk) + f"?version={old}").json()
+        self.assertEqual((behind["body"], behind["version"]), ("- [x] milk\n- [ ] eggs", old + 1))
+        current = self.client.get(url("state", note.pk) + f"?version={old + 1}").json()
+        self.assertNotIn("body", current)
+        self.assertNotIn("body", self.client.get(url("state", note.pk)).json())
+
+    def test_notes_js_writes_reading_view_ticks(self):
+        js = pathlib.Path(finders.find("albright_notes/notes.js")).read_text(encoding="utf-8")
+        self.assertIn("tickReadOnly(event.target)", js)
+        self.assertIn("after_own_save", js)

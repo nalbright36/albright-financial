@@ -369,6 +369,11 @@ def note_save(request, pk):
     base = None if data.get("force") else data.get("version")
     if base is not None and not isinstance(base, int):
         return JsonResponse({"ok": False, "error": "version must be a number"}, status=400)
+    # The page sent this while its previous save was still on the way (leaving right after a tick): that save -
+    # one version on, by this person - isn't someone else's change. notes.save re-checks under the row lock.
+    if base is not None and data.get("after_own_save") is True and note.version == base + 1 \
+            and note.updated_by == notes.user_label(request.user)[:150]:
+        base = note.version
     try:
         link_base = data.get("link_base") if isinstance(data.get("link_base"), dict) else None
         note = notes.save(note, notes.user_label(request.user), base_version=base, editor="body" in fields,
@@ -596,8 +601,12 @@ def smart_planner_delete(request, pk, task_id):
 @require_GET
 def smart_state(request, pk):
     """The note's link states as saved now (a task checked off in the Planner meanwhile, say) - the editor checks
-    when you come back to the tab: {version, link_state}."""
+    when you come back to the tab: {version, link_state}. ?version=N older than the saved one: the whole note
+    (_state), so a page left open elsewhere catches up instead of saving an older copy over it."""
     note = _visible(request, pk)
+    asked = request.GET.get("version", "")
+    if asked.isdigit() and int(asked) < note.version:
+        return JsonResponse(_state(note, request.user))
     return JsonResponse({"ok": True, "version": note.version, "link_state": smart.link_states(note.body)})
 
 
