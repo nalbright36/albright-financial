@@ -9,7 +9,7 @@ switch, each workout's days and exercises; the "…" menu: Archive / Restore and
 <div class="fx-narrow">
 <div class="fx-head fx-program-head"><div><h1 class="fx-head__title">{{ p.name }}</h1>
     <p class="fx-head__sub" id="fx-program-status">{% if p.is_draft %}Draft - not set up yet{% elif not p.active %}Paused{% else %}{% if p.start_date and p.start_date > today %}Starts {{ p.start_date|date:"D M j" }}{% elif p.start_date %}Since {{ p.start_date|date:"M j" }}{% else %}On{% endif %}{% endif %}{% if ends %} &middot; until {{ ends|date:"M j" }}{% elif not p.is_draft %} &middot; no end{% endif %}{% if p.archived_at %} &middot; Archived{% endif %}{% if p.copied_from_owner %} &middot; Copied from {{ p.copied_from_owner.first_name|default:p.copied_from_owner.username }}{% endif %}</p></div>
-    {% include "albright_fitness/_program_menu.html" %}</div>
+    <div class="fx-head__actions">{% include "albright_labs/_share_button.html" %}{% include "albright_fitness/_program_menu.html" %}</div></div>
 {% if p.archived_at %}<div class="card fx-card fx-program-archived" id="fx-program-archived"><p>Archived - it's off your Programs list and paused. Nothing was deleted.</p>
     <form method="post" action="{% url 'albright_fitness:program_archive' p.pk %}">{% csrf_token %}<input type="hidden" name="restore" value="1"><button type="submit" class="btn btn-secondary btn-sm">Restore</button></form></div>{% endif %}
 
@@ -47,8 +47,7 @@ switch, each workout's days and exercises; the "…" menu: Archive / Restore and
 {# Sharing (albright_labs.sharing): the plan only - days, exercises, targets, schedule - never your workouts or weights. Each person picks Add to my planner (their own copy) or Join (follows this program and its schedule; your edits reach their future tasks). #}
 <section class="card fx-card fx-program-share" id="fx-program-share" aria-labelledby="fx-share-h">
     <h2 class="fx-card__title" id="fx-share-h">Share</h2>
-    <p class="fx-help">Shares the plan only - days, exercises, sets and reps, schedule. Never your logged workouts or weights. Each person chooses to copy it or join it as a shared workout.</p>
-    {% include "albright_labs/_share.html" %}
+    <p class="fx-help">Shares the plan only - days, exercises, sets and reps, schedule. Never your logged workouts or weights. Each person chooses to copy it or join it as a shared workout. Use Share in the header to change who sees the plan.</p>
     {% if members or copies %}<h3 class="fx-subtitle">Who's doing it</h3>
     <ul class="fx-list" id="fx-program-people">
         {% for m in members %}<li class="fx-row"><span class="fx-row__title">{{ m.user.first_name|default:m.user.username }}</span><span class="fx-row__ind">{% if m.ended_at %}<span class="fx-pill fx-pill--off">Deciding</span>{% else %}<span class="fx-pill">Joined</span>{% endif %} since {{ m.joined_at|date:"M j" }}</span></li>{% endfor %}

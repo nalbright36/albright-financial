@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from albright_labs import sharing
+from albright_labs import sharing, sheet
 
 from ..models import Visual
 from . import render as vrender
@@ -90,7 +90,7 @@ def detail(request, pk):
     return render(request, "albright_assistant/visual.html", {
         "visual": visual, "card": vrender.card(visual, request.user),
         "info": json.dumps(vrender.card(visual, request.user)), "mine": mine,
-        **({"share": sharing.control(request.user, visual)} if mine else {})})
+        "share": sheet.sheet(request.user, visual)})
 
 
 @require_POST

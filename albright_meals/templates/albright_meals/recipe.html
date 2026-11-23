@@ -27,10 +27,15 @@
             </div>
         </form>
         {% if others %}<p class="meals-stamps" id="recipe-stamps" aria-label="Ratings from this recipe's space">{% for r in others %}{% include "albright_meals/_stamp.html" %}{% endfor %}</p>{% endif %}
+        <div class="meals-head">
+            <div>
         <h1 class="meals-head__title">{{ recipe.title }}{% if recipe.needs_review %} <span class="badge warn meals-review-badge" title="The AI read this from the page's text - check it against the original">Needs review</span>{% endif %}</h1>
         <p class="meals-head__sub">
             {% if recipe.prep_minutes %}Prep {{ recipe.prep_minutes }} min &middot; {% endif %}{% if recipe.cook_minutes %}Cook {{ recipe.cook_minutes }} min &middot; {% endif %}{% if recipe.total_time_minutes %}Total {{ recipe.total_time_minutes }} min &middot; {% endif %}{% if recipe.servings %}Serves {{ recipe.servings }} &middot; {% endif %}Added by <span class="meals-by">{{ recipe.author_label|default:"someone" }}</span>{% if recipe.saved_from_name %} &middot; <span id="recipe-saved-from">Saved from {{ recipe.saved_from_name }}</span>{% endif %}{% if editable and recipe.visibility == "library" %} &middot; <span class="meals-chip">In the shared library</span>{% endif %}
         </p>
+            </div>
+            {% include "albright_labs/_share_button.html" %}
+        </div>
         {% if source_link %}<p class="meals-source" id="recipe-source">Source: <a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">{{ recipe.source_name|default:source_host }}</a>{% if recipe.author %} &middot; by {{ recipe.author }}{% endif %}</p>{% elif recipe.author %}<p class="meals-source">By {{ recipe.author }}</p>{% endif %}
         {% if recipe.needs_review %}<p class="meals-hint">The AI read this recipe from the page's text because the page had no recipe data - check it against the original, then untick "Needs review" in Edit.</p>{% endif %}
         {% if recipe.image_url %}<img src="{{ recipe.image_url }}" alt="" class="meals-recipe__image" loading="lazy" referrerpolicy="no-referrer">{% endif %}
@@ -57,11 +62,6 @@
                     <input type="hidden" name="visibility" value="{% if recipe.visibility == 'library' %}household{% else %}library{% endif %}">
                     <button type="submit" class="btn btn-secondary btn-sm" id="recipe-visibility">{% if recipe.visibility == "library" %}Take out of the library{% else %}Put in the shared library{% endif %}</button>
                 </form>
-                {% if move_spaces %}<form method="post" action="{% url 'albright_meals:recipe_move' recipe.pk %}" class="meals-inline-form" id="recipe-move" data-confirm="Move {{ recipe.title }}? It will belong to the space you pick - its people see and change it there. (Sharing instead only shows it to them.)">{% csrf_token %}
-                    <label for="recipe-move-to" class="visually-hidden">Move to space</label>
-                    <select name="to" id="recipe-move-to" class="ledger-input">{% for s in move_spaces %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select>
-                    <button type="submit" class="btn btn-secondary btn-sm">Move to space</button>
-                </form>{% endif %}
             </div>
         </div>{% endif %}
 
@@ -98,7 +98,6 @@
         <p class="meals-hint">{% if source_link %}<a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">Original recipe</a>{% if editable %} &middot; {% endif %}{% endif %}{% if editable %}<a href="{% url 'albright_meals:recipe_edit' recipe.pk %}">Edit this recipe</a>{% endif %}</p>
     </article>
 </div>
-{% include "albright_labs/_share.html" %}
 {% include "albright_meals/_converter.html" %}
 <script src="{% static_version 'meals/recipe.js' %}" defer></script>
 <script src="{% static_version 'meals/ratings.js' %}" defer></script>

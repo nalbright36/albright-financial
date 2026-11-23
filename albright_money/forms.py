@@ -36,14 +36,14 @@ class AccountForm(forms.ModelForm):
                                                    "maxlength": 4, "autocomplete": "off", "placeholder": "1234"}),
                    "starting_date": forms.DateInput(attrs={**INPUT, "type": "date"}, format="%Y-%m-%d")}
 
-    def __init__(self, *args, spaces=(), current=None, **kwargs):
+    def __init__(self, *args, spaces=(), current=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.spaces = {s.pk: s for s in spaces}
         self.current = self.instance.space if self.instance.pk else current
         self.fields["space"].choices = [(s.pk, s.name) for s in spaces]
         self.fields["space"].widget.attrs.update(INPUT)
         self.fields["space"].initial = self.instance.space_id if self.instance.pk else (current.pk if current else None)
-        if len(self.spaces) < 2:
+        if len(self.spaces) < 2 or (self.instance.pk and user is not None and self.instance.owner_id != user.pk):
             self.fields["space"].widget = forms.HiddenInput()
         if self.instance.pk and self.instance.is_credit:
             self.initial["starting_balance"] = -self.instance.starting_balance

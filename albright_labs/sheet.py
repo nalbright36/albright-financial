@@ -63,14 +63,96 @@ def _plan_kind():
     )
 
 
-# Budget plan (e1). Evening 2 adds Account, Recipe (space + grants), MealIdea.
+def _account_kind():
+    from albright_money.models import Account
+
+    def can_view(user, obj):
+        return Account.objects.visible_to(user).filter(pk=obj.pk).exists()
+
+    def assign(obj, space):
+        was = obj.space_id
+        if was == space.pk:
+            return
+        obj.space = space
+        obj.save(update_fields=["space"])
+        from albright_money import money
+        from albright_money.views import _rescope
+        money.forget_account_activity(obj)
+        if obj.transactions.exists():
+            _rescope(obj)
+
+    def url(obj):
+        return reverse("albright_money:account", args=[obj.pk])
+
+    return SpaceKind(
+        "albright_money.Account", "money", "account",
+        lambda u, o: o.owner_id == u.pk,
+        can_view,
+        lambda o: o.owner,
+        lambda o: o.name,
+        url,
+        lambda o: o.space,
+        assign,
+    )
+
+
+def _recipe_kind():
+    from albright_meals import scope
+    from albright_meals.models import Recipe
+
+    def can_view(user, obj):
+        return scope.readable(user).filter(pk=obj.pk).exists()
+
+    def assign(obj, space):
+        if obj.space_id != space.pk:
+            obj.space = space
+            obj.save(update_fields=["space", "updated_at"])
+
+    return SpaceKind(
+        "albright_meals.Recipe", "meals", "recipe",
+        lambda u, o: o.created_by_id == u.pk,
+        can_view,
+        lambda o: o.created_by,
+        lambda o: o.title,
+        lambda o: reverse("albright_meals:recipe", args=[o.pk]),
+        lambda o: o.space,
+        assign,
+    )
+
+
+def _idea_kind():
+    from albright_meals import scope
+    from albright_meals.models import MealIdea
+
+    def can_view(user, obj):
+        return obj.space_id in scope.space_ids(user)
+
+    def assign(obj, space):
+        if obj.space_id != space.pk:
+            obj.space = space
+            obj.save(update_fields=["space", "updated_at"])
+
+    return SpaceKind(
+        "albright_meals.MealIdea", "meals", "idea",
+        lambda u, o: o.added_by_id == u.pk,
+        can_view,
+        lambda o: o.added_by,
+        lambda o: o.title,
+        lambda o: reverse("albright_meals:ideas"),
+        lambda o: o.space,
+        assign,
+    )
+
+
+# Budget plan (e1); Account, Recipe (space + grants), MealIdea (e2).
 SPACE_KINDS = {}
 
 
 def _ensure():
     if not SPACE_KINDS:
-        kind = _plan_kind()
-        SPACE_KINDS[kind.label] = kind
+        for factory in (_plan_kind, _account_kind, _recipe_kind, _idea_kind):
+            kind = factory()
+            SPACE_KINDS[kind.label] = kind
 
 
 def space_kind_of(obj):

@@ -12,7 +12,7 @@ vibrates where the phone can). Someone it's shared with sees it read-only.
         <h1 class="fx-head__title">{{ w.title }}</h1>
         <p class="fx-head__sub">{{ w.date|date:"l, M j" }}{% if w.start_time %} &middot; started {{ w.start_time|time:"g:i A" }}{% endif %}{% if not editable %} &middot; {{ owner_name }}'s workout (view only){% endif %}{% if w.planner_item_id %} &middot; from your Planner{% endif %}{% if w.finished %} &middot; finished{% endif %}</p>
     </div>
-    {% if editable and w.finished %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="btn btn-secondary btn-sm">Summary</a>{% endif %}
+    <div class="fx-head__actions">{% include "albright_labs/_share_button.html" %}{% if editable and w.finished %}<a href="{% url 'albright_fitness:summary' w.pk %}" class="btn btn-secondary btn-sm">Summary</a>{% endif %}</div>
 </div>
 
 {% if editable and not w.finished %}
@@ -55,7 +55,6 @@ vibrates where the phone can). Someone it's shared with sees it read-only.
         <div class="field"><label for="fx-w-notes">Notes</label><textarea name="notes" id="fx-w-notes" class="ledger-input" rows="3" maxlength="4000">{{ w.notes }}</textarea></div>
         <button type="submit" class="btn btn-secondary btn-sm">Save</button>
     </form>
-    {% include "albright_labs/_share.html" %}
     {% if is_owner %}<form method="post" action="{% url 'albright_fitness:delete_workout' w.pk %}" class="fx-delete" data-confirm="Delete this workout and its sets?">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm fx-danger">Delete workout</button></form>{% endif %}
 </details>
 

@@ -6,7 +6,7 @@
 <div class="mn-head">
     <div><h1 class="mn-head__title">{{ a.name }}</h1>
         <p class="mn-head__sub">{{ label }} <strong class="mn-amount">{{ shown|usd }}</strong> &middot; {{ count }} transaction{{ count|pluralize }}</p></div>
-    <div class="mn-head__actions"><a href="{% url 'albright_money:transactions' %}?account={{ a.pk }}" class="btn btn-secondary btn-sm">Transactions</a></div>
+    <div class="mn-head__actions">{% include "albright_labs/_share_button.html" %}<a href="{% url 'albright_money:transactions' %}?account={{ a.pk }}" class="btn btn-secondary btn-sm">Transactions</a></div>
 </div>
 <form method="post" class="card mn-form" novalidate>{% csrf_token %}
     {% include "albright_money/_account_form.html" %}

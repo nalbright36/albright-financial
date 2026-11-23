@@ -163,3 +163,129 @@ class ShareSheetTests(TestCase):
         self.assertIn("data-share-sheet-open", html)
         self.assertIn("Personal", html)
         self.assertIn("Albright house", html)
+
+
+class ShareSheetEvening2Tests(ShareSheetTests):
+    """Remaining apps and the planner quick view (evening 2). Same kitchen / people."""
+
+    def account(self, space=None, name="Checking", owner=None):
+        from albright_money.models import Account
+        owner = owner or self.me
+        return Account.objects.create(name=name, owner=owner, space=space or self.mine,
+                                      starting_date=timezone.localdate())
+
+    def recipe(self, space=None, title="Family chili", created_by=None):
+        from albright_meals.models import Recipe
+        return Recipe.objects.create(space=space or self.mine, title=title,
+                                     created_by=created_by or self.me)
+
+    def idea(self, space=None, title="Try the new bakery", added_by=None):
+        from albright_meals.models import MealIdea
+        return MealIdea.objects.create(space=space or self.mine, title=title,
+                                       added_by=added_by or self.me)
+
+    def test_account_page_has_a_share_button(self):
+        a = self.account()
+        html = self.client.get(reverse("albright_money:account", args=[a.pk])).content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        self.assertIn("Personal", html)
+        self.assertIn("Albright house", html)
+
+    def test_owner_can_move_an_account_to_a_circle_and_back(self):
+        a = self.account()
+        self.assertEqual(self.post_share(a, {"action": "set_space", "target": f"space:{self.house.pk}"}).status_code, 302)
+        a.refresh_from_db()
+        self.assertEqual(a.space_id, self.house.pk)
+        self.assertEqual(self.post_share(a, {"action": "set_space", "target": "personal"}).status_code, 302)
+        a.refresh_from_db()
+        self.assertEqual(a.space_id, self.mine.pk)
+
+    def test_circle_member_cannot_move_someone_elses_account(self):
+        a = self.account(space=self.house)
+        sam_personal = personal(self.wife)
+        self.post_share(a, {"action": "set_space", "target": "personal"}, user=self.wife)
+        a.refresh_from_db()
+        self.assertEqual(a.space_id, self.house.pk)
+        # The account form is locked the same way.
+        sam = self.as_user(self.wife)
+        sam.post(reverse("albright_money:account", args=[a.pk]), {
+            "name": a.name, "kind": a.kind, "starting_balance": "0.00",
+            "starting_date": a.starting_date.isoformat(), "space": sam_personal.pk,
+        })
+        a.refresh_from_db()
+        self.assertEqual(a.space_id, self.house.pk)
+
+    def test_cannot_move_an_account_to_a_circle_the_user_is_not_in(self):
+        a = self.account()
+        self.post_share(a, {"action": "set_space", "target": f"space:{self.kims.pk}"})
+        a.refresh_from_db()
+        self.assertEqual(a.space_id, self.mine.pk)
+
+    def test_recipe_page_has_share_radios_and_no_move_dropdown(self):
+        recipe = self.recipe()
+        html = self.client.get(reverse("albright_meals:recipe", args=[recipe.pk])).content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        self.assertIn("Personal", html)
+        self.assertIn("Albright house", html)
+        self.assertNotIn("recipe-move", html)
+        self.assertNotIn("Move to space", html)
+
+    def test_author_can_move_a_recipe_to_a_circle_and_back(self):
+        recipe = self.recipe()
+        self.assertEqual(self.post_share(recipe, {"action": "set_space", "target": f"space:{self.house.pk}"}).status_code, 302)
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.space_id, self.house.pk)
+        self.post_share(recipe, {"action": "set_space", "target": "personal"})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.space_id, self.mine.pk)
+
+    def test_circle_member_cannot_move_someone_elses_recipe(self):
+        recipe = self.recipe(space=self.house)
+        self.post_share(recipe, {"action": "set_space", "target": "personal"}, user=self.wife)
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.space_id, self.house.pk)
+        self.as_user(self.wife).post(reverse("albright_meals:recipe_move", args=[recipe.pk]),
+                                     {"to": personal(self.wife).pk})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.space_id, self.house.pk)
+
+    def test_cannot_move_a_recipe_to_a_circle_the_user_is_not_in(self):
+        recipe = self.recipe()
+        self.post_share(recipe, {"action": "set_space", "target": f"space:{self.kims.pk}"})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.space_id, self.mine.pk)
+
+    def test_idea_author_can_move_and_a_member_cannot(self):
+        idea = self.idea(space=self.house)
+        html = self.client.get(reverse("albright_meals:ideas") + f"?space={self.house.pk}").content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        self.assertIn(idea.title, html)
+        self.post_share(idea, {"action": "set_space", "target": "personal"})
+        idea.refresh_from_db()
+        self.assertEqual(idea.space_id, self.mine.pk)
+        idea = self.idea(space=self.house, title="Sam must not move this")
+        self.post_share(idea, {"action": "set_space", "target": "personal"}, user=self.wife)
+        idea.refresh_from_db()
+        self.assertEqual(idea.space_id, self.house.pk)
+
+    def test_workout_program_and_visual_pages_have_a_share_button(self):
+        from albright_assistant.models import Visual
+        from albright_fitness.models import Program, Workout
+        w = Workout.objects.create(owner=self.me, date=timezone.localdate(), name="Push day")
+        html = self.client.get(reverse("albright_fitness:workout", args=[w.pk])).content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        self.assertIn("Personal", html)
+        p = Program.objects.create(owner=self.me, name="Strength")
+        html = self.client.get(reverse("albright_fitness:program", args=[p.pk])).content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        visual = Visual.objects.create(owner=self.me, title="Spending this month", saved=True)
+        html = self.client.get(reverse("assistant:visual", args=[visual.pk])).content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        self.assertIn("Personal", html)
+
+    def test_planner_quick_view_has_a_share_button(self):
+        item = ScheduleItem.objects.create(owner=self.me, title="Buy wrapping paper", date=timezone.localdate())
+        html = self.client.get(reverse("albright_planner:item", args=[item.pk]), {"panel": "1"}).content.decode()
+        self.assertIn("data-share-sheet-open", html)
+        self.assertIn("Personal", html)
+        self.assertIn("Albright house", html)

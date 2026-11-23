@@ -367,8 +367,14 @@ def _save_account(form, request, account=None):
     account = form.save(commit=False)
     if account.pk is None:
         account.owner = request.user
-    was = account.space_id
-    account.space = form.cleaned_data["space"]
+        was = None
+        account.space = form.cleaned_data["space"]
+    else:
+        was = account.space_id
+        # Only the owner may move it. A circle member must not walk a household
+        # account into their Personal space (or anywhere else) via this form.
+        if account.owner_id == request.user.pk:
+            account.space = form.cleaned_data["space"]
     account.save()
     if was is not None and was != account.space_id:
         money.forget_account_activity(account)          # its circle events go with it
@@ -396,14 +402,15 @@ def account(request, pk):
     user = request.user
     a = get_object_or_404(_accounts(user).select_related("space__circle"), pk=pk)
     space = a.space
-    form = AccountForm(request.POST or None, instance=a, spaces=money.visible_spaces(user))
+    form = AccountForm(request.POST or None, instance=a, spaces=money.visible_spaces(user), user=user)
     if request.method == "POST" and form.is_valid():
         _save_account(form, request, a)
         messages.success(request, "Saved.")
         return redirect("albright_money:accounts")
     label, shown = money.shown_balance(a, money.balance(a))
     return render(request, "albright_money/account.html", {"a": a, "form": form, "label": label, "shown": shown,
-                                                           "count": a.transactions.count(), "space": space})
+                                                           "count": a.transactions.count(), "space": space,
+                                                           "share": sheet.sheet(user, a)})
 
 
 # ---------------------------------------------------------------------------

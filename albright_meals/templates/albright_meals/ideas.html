@@ -33,6 +33,7 @@
         <li class="card meals-idea meals-idea--{{ idea.status }}">
             <div class="meals-idea__head">
                 <strong class="meals-idea__title">{{ idea.title }}</strong>
+                {% include "albright_labs/_share_button.html" with share=idea.share %}
                 {% if idea.status != "new" %}<span class="badge {% if idea.status == 'planned' %}gain{% else %}neutral{% endif %}">{{ idea.get_status_display }}</span>{% endif %}
             </div>
             {% if idea.notes %}<p class="meals-notes">{{ idea.notes|linebreaksbr }}</p>{% endif %}

@@ -14,8 +14,9 @@ this chart drawn from the owner's data - only this chart.
     <div style="margin-top: 12px;">
         <div data-visual-url="{{ card.data_url }}" data-visual-page data-visual-height="420" data-visual-info="{{ info }}"></div>
     </div>
-    {% if mine %}
     <div class="vz-item__tools" style="margin-top: 16px;">
+        {% include "albright_labs/_share_button.html" %}
+        {% if mine %}
         <form method="post" action="{% url 'assistant:visual_rename' visual.pk %}">{% csrf_token %}
             <label class="visually-hidden" for="visual-title">Name</label>
             <input type="text" id="visual-title" name="title" value="{{ visual.title }}" maxlength="120" class="ledger-input">
@@ -24,9 +25,8 @@ this chart drawn from the owner's data - only this chart.
         <form method="post" action="{% url 'assistant:visual_delete' visual.pk %}" data-confirm="Delete this visual?">{% csrf_token %}
             <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
         </form>
+        {% endif %}
     </div>
-    <p class="as-muted" style="margin-top: 12px;">Sharing shows people this chart drawn from <strong>your</strong> data (including weight or food, if it charts them) - only this chart, updated each time they open it.</p>
-    {% endif %}
+    {% if mine %}<p class="as-muted" style="margin-top: 12px;">Sharing shows people this chart drawn from <strong>your</strong> data (including weight or food, if it charts them) - only this chart, updated each time they open it.</p>{% endif %}
 </div>
-{% if mine %}{% include "albright_labs/_share.html" %}{% endif %}
 {% endblock %}

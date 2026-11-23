@@ -28,7 +28,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import attachments, sharing
+from albright_labs import attachments, sharing, sheet
 
 from . import checklist, planner, quickadd, quickview, recurrence, sources, weather
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
@@ -662,7 +662,9 @@ def view_item(request, pk):
     # In the dialog (JavaScript) the costliest parts load only when their row is opened: the Share control (its
     # circles and people) and the notes you can link. The page (no JavaScript) has them inline.
     lazy = panel
-    share_ctl = None if lazy else sharing.control(request.user, item)
+    # Share lives in the header button (and the Shared row opens the same sheet),
+    # including in the quick-view dialog - no longer lazy-loaded.
+    share_ctl = sheet.sheet(request.user, item)
     linked = planner.linked_note(item, request.user, full=True)
     rule = recurrence.describe(item.recurrence)
     response = render(request, template, {
@@ -670,7 +672,7 @@ def view_item(request, pk):
         "props": _props(item, occ, planner.today(request.user)), "note_text": _note_text(linked),
         "can_note": can_note, "note_choices": planner.attachable_notes(request.user) if can_note and not lazy else [],
         "notes_url": reverse("albright_planner:note_choices", args=[item.pk]) if can_note and lazy else "",
-        "share_url": reverse("albright_planner:share_box", args=[item.pk]) if lazy and (is_owner or quick) else "",
+        "share_url": "",
         "repeat_choices": recurrence.REPEATS, "repeat_now": rule["repeat"] if item.recurrence else "none",
         "can_checklist": quick and item.kind == ScheduleItem.TASK, "notes_max": NOTES_MAX,
         "item": item, "o": occ, "occurrence": occurrence, "can_edit": can_edit, "is_owner": is_owner,

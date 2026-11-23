@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import sharing
+from albright_labs import sharing, sheet
 
 from . import body, glossary, insights, nutrition, programs, stats, training
 from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord,
@@ -299,7 +299,7 @@ def workout(request, pk):
     return render(request, "albright_fitness/workout.html", {
         "w": w, "editable": editable, "blocks": _blocks(w, request.user, editable), "library": library,
         "kinds": Exercise.KINDS, "owner_name": _person(w.owner),
-        "is_owner": w.owner_id == request.user.pk, "share": sharing.control(request.user, w),
+        "is_owner": w.owner_id == request.user.pk, "share": sheet.sheet(request.user, w),
         "guide": [glossary.get(k) for k in ("set_types", "done", "rpe")]})
 
 

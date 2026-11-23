@@ -25,7 +25,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import sharing
+from albright_labs import sharing, sheet
 from albright_labs.sharing import person_name
 
 from . import programs, training
@@ -202,7 +202,7 @@ def program(request, pk):
         "start_url": programs.start_url(nxt) if nxt else "",
         "scheduled": log_views.scheduled_for(request.user, program=p),   # older one-off sessions: still listed to remove
         # Sharing (the plan only): the Share control, who joined / copied it, Stop sharing.
-        "share": sharing.control(request.user, p), "members": list(p.members.select_related("user")),
+        "share": sheet.sheet(request.user, p), "members": list(p.members.select_related("user")),
         "copies": list(p.copies.select_related("owner").order_by("pk")),
         "is_shared": bool(sharing.grants(p)) or p.members.filter(ended_at__isnull=True).exists()})
 

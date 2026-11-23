@@ -32,7 +32,7 @@
 /* Account > Visuals */
 .vz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; margin: 0 0 24px; }
 .vz-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.vz-item__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vz-item__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; position: relative; }
 .vz-item__tools form { display: flex; gap: 6px; margin: 0; }
 .vz-item__tools input[type="text"] { min-width: 0; flex: 1; }
 .vz-empty { color: var(--text-secondary); }

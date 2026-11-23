@@ -23,7 +23,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import circles, sharing
+from albright_labs import circles, sharing, sheet
 from albright_labs.models import ShareGrant
 
 from . import groceries, importer, plan, recipe_nutrition, scope, signals
@@ -361,8 +361,11 @@ def ideas(request):
     mine = MealIdea.objects.filter(space=request.space)
     qs = mine.select_related("added_by", "planned_entry")
     qs = qs.filter(status="new") if show == "new" else qs.exclude(status="new")
+    rows = list(qs)
+    for idea in rows:
+        idea.share = sheet.sheet(request.user, idea)
     return render(request, "albright_meals/ideas.html", {
-        "form": form, "ideas": qs, "show": show, "slots": SLOTS, "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
+        "form": form, "ideas": rows, "show": show, "slots": SLOTS, "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
         "new_count": mine.filter(status="new").count(), "notices": _notices(request)})
 
 
@@ -535,7 +538,7 @@ def recipe(request, pk):
         "my_rating": mine, "others": others, "rating_levels": RecipeRating.choices(), "needs_tweaks": RecipeRating.NEEDS_TWEAKS,
         "standard_tags": [labels[key] for key in obj.standard_tags or [] if key in labels],
         "recipe": obj, "editable": editable, "owned": owned, "shared_grant": shared_grant, "ingredients": ingredients,
-        "share": sharing.control(request.user, obj), "move_spaces": [s for s in request.spaces if s.pk != obj.space_id] if owned else [],
+        "share": sheet.sheet(request.user, obj), "move_spaces": [s for s in request.spaces if s.pk != obj.space_id] if owned else [],
         "step_groups": importer.step_groups(obj.steps),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
@@ -702,6 +705,9 @@ def recipe_move(request, pk):
     """Move to space: the recipe itself goes into another of my spaces (Personal or a circle) - unlike sharing, which
     only shows it to others. Its ratings then show to that space's people; copies others saved stay theirs."""
     obj = scope.owned_recipe(request.user, pk)
+    if obj.created_by_id != request.user.pk:
+        messages.error(request, "Only the person who added this recipe can move it.")
+        return redirect("albright_meals:recipe", pk=pk)
     target = next((s for s in request.spaces if str(s.pk) == request.POST.get("to")), None)
     if target is None:
         messages.error(request, "Pick one of your spaces.")
