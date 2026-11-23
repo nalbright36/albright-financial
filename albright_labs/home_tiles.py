@@ -84,6 +84,7 @@ PAGES = (
     Tile("planner.today", "Today", "cal", "planner", "albright_planner:day", "Open tasks today", badge="tasks_today"),
     Tile("planner.week", "Week", "cal", "planner", "albright_planner:week", "This week at a glance"),
     Tile("planner.month", "Month", "cal", "planner", "albright_planner:month", "The month view"),
+    Tile("planner.briefing", "Briefing", "list", "planner", "roundup:briefing", "Your week ahead, in short"),
     Tile("planner.new", "New task", "plus", "planner", "albright_planner:new", "Add a task or event"),
     # Notes
     Tile("notes.list", "All notes", "note", "notes", "albright_notes:list", "Every note"),

@@ -1,0 +1,1 @@
+{% if w %}<span class="rb-wx{% if w.pop >= 50 %} is-wet{% endif %}" title="{{ w.label }}, {{ w.high }}° / {{ w.low }}°F{% if w.pop is not None %}, {{ w.pop }}% chance of rain{% endif %}"><span class="rb-wx__icon">{% include "albright_planner/_weather_icon.html" with icon=w.icon %}</span>{{ w.high }}°{% if w.pop >= 50 %} · {{ w.pop }}%{% endif %}</span>{% endif %}

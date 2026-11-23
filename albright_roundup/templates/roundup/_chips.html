@@ -1,0 +1,7 @@
+<div class="rb-chips">
+    {% for o in p.overdue|slice:":1" %}<a class="rb-chip is-red" href="{{ o.url }}">{% include "roundup/_icon.html" with name="alert" size=13 %} {{ o.title }} · due {{ o.due }}{% if p.overdue|length > 1 %} (+{{ p.overdue|length|add:"-1" }}){% endif %}</a>{% endfor %}
+    {% if p.repeats %}<span class="rb-chip">{% include "roundup/_icon.html" with name="repeat" size=13 %} Every day: {% for r in p.repeats %}{{ r.title }}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+    {% if p.groceries %}<a class="rb-chip" href="{% url 'albright_meals:groceries' %}">{% include "roundup/_icon.html" with name="cart" size=13 %} {{ p.groceries }} on the grocery list</a>{% endif %}
+    {% if p.money %}<a class="rb-chip" href="{% url 'albright_money:budget' %}">{% include "roundup/_icon.html" with name="wallet" size=13 %} {{ p.money.text }}</a>{% endif %}
+    {% if p.shared %}<a class="rb-chip" href="{% url 'labs:activity' %}?unread=1">{% include "roundup/_icon.html" with name="users" size=13 %} {{ p.shared.count }} new in shared things</a>{% endif %}
+</div>

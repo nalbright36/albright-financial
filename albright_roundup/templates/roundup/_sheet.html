@@ -1,0 +1,27 @@
+{% comment %}The schedule sheet (a <dialog>: a bottom sheet on phones, a small panel on desktop - roundup.js opens it from
+[data-rb-open]; without JS, ?schedule=1 renders it open). Each roundup: on/off and when; push / email for all.{% endcomment %}
+<dialog class="rb-sheet" id="rb-sheet" aria-labelledby="rb-sheet-title"{% if sheet_open %} open{% endif %}>
+    <form method="post" action="{% url 'roundup:schedule' %}" class="rb-sheet__panel">
+        {% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+        <div class="rb-sheet__grab" aria-hidden="true"></div>
+        <div class="rb-sheet__head"><h2 id="rb-sheet-title">Briefing schedule</h2>
+            <button type="button" class="rb-sheet__x" data-rb-close aria-label="Close">{% include "roundup/_icon.html" with name="x" size=16 %}</button></div>
+        <p class="rb-sheet__note">Your briefing is always on Home. These say when a new one is made, and whether you get pinged.</p>
+        {% for r in rb_rows %}
+        <div class="rb-sheet__row">
+            <label class="toggle-switch"><input type="checkbox" name="r{{ r.pk }}_on" value="1"{% if r.enabled %} checked{% endif %} aria-label="{{ r.name }}"><span class="toggle-slider"></span></label>
+            <span class="rb-sheet__name">{{ r.name }}</span>
+            <span class="rb-sheet__when">
+                {% if r.scope == "week" %}<select name="r{{ r.pk }}_day" class="ledger-input" aria-label="{{ r.name }} day">{% for n, label in rb_days %}<option value="{{ n }}"{% if n in r.weekdays %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+                {% elif r.scope == "today" %}<select name="r{{ r.pk }}_freq" class="ledger-input" aria-label="{{ r.name }} days"><option value="weekdays"{% if r.freq == "weekdays" %} selected{% endif %}>Weekdays</option><option value="daily"{% if r.freq == "daily" %} selected{% endif %}>Every day</option></select>
+                {% else %}<select name="r{{ r.pk }}_mday" class="ledger-input" aria-label="{{ r.name }} day of the month">{% for n in rb_month_days %}<option value="{{ n }}"{% if n == r.month_day %} selected{% endif %}>{{ n }}{% if n == 1 %}st{% elif n == 2 %}nd{% elif n == 3 %}rd{% elif n == 21 %}st{% elif n == 22 %}nd{% elif n == 23 %}rd{% else %}th{% endif %}</option>{% endfor %}</select>{% endif %}
+                <select name="r{{ r.pk }}_time" class="ledger-input" aria-label="{{ r.name }} time">{% for value, label in rb_times %}<option value="{{ value }}"{% if value == r.send_time|time:"H:i" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </span>
+        </div>
+        {% endfor %}
+        <div class="rb-sheet__row rb-sheet__ping"><span class="rb-sheet__name">Ping me</span>
+            <label class="rb-pick"><input type="checkbox" name="push" value="1"{% if rb_push %} checked{% endif %}> Push</label>
+            <label class="rb-pick"><input type="checkbox" name="email" value="1"{% if rb_email %} checked{% endif %}> Email</label></div>
+        <div class="rb-sheet__actions"><button type="submit" class="btn btn-primary">Save</button></div>
+    </form>
+</dialog>

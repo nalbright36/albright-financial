@@ -1,0 +1,82 @@
+{% extends "index.html" %}
+{% load cache_bust %}
+{% block page_title %}Briefing · {% endblock %}
+{% block app_head %}<link rel="stylesheet" href="{% static_version 'roundup/roundup.css' %}">{% endblock %}
+{% block content %}
+{% comment %}The briefing (albright_roundup.views.briefing): a saved issue's snapshot - the short version, chips, the days
+(Week: a 7-day strip; Today: one list; Month: the days that have something) and the Meals / Fitness / Weather cards.
+History down the side (phones: the clock button). The schedule sheet is roundup/_sheet.html.{% endcomment %}
+<div class="container rb" id="rb">
+    <aside class="rb-hist" aria-labelledby="rb-hist-title">
+        <h2 class="rb-label" id="rb-hist-title">{% include "roundup/_icon.html" with name="history" size=13 %} History</h2>
+        <ul class="rb-hist__list">
+            {% for h in history %}<li><a href="?issue={{ h.pk }}" class="rb-hist__row{% if h.pk == issue.pk %} is-on{% endif %}"{% if h.pk == issue.pk %} aria-current="page"{% endif %}><span>{{ h.payload.title }}</span><span class="rb-hist__when">{{ h.payload.range }}</span></a></li>{% endfor %}
+        </ul>
+        <button type="button" class="btn btn-secondary btn-sm rb-hist__sched" data-rb-open>{% include "roundup/_icon.html" with name="gear" size=13 %} Schedule</button>
+    </aside>
+
+    <div class="rb-main">
+        <div class="rb-head">
+            <div class="rb-head__text">
+                <p class="rb-eyebrow">{{ name }} · {{ built }}</p>
+                <h1 class="rb-title">{{ p.range }}</h1>
+            </div>
+            <div class="rb-head__tools">
+                <nav class="rb-tabs" aria-label="Briefing">
+                    {% for key, label in scopes %}<a href="?scope={{ key }}" class="rb-tab{% if key == scope %} is-on{% endif %}"{% if key == scope %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+                </nav>
+                <form method="post" action="{% url 'roundup:refresh' %}" class="rb-refresh">{% csrf_token %}<input type="hidden" name="scope" value="{{ scope }}">
+                    <button type="submit" class="btn btn-secondary btn-sm" aria-label="Refresh">{% include "roundup/_icon.html" with name="refresh" size=14 %}<span class="rb-hide-m"> Refresh</span></button></form>
+                <details class="rb-hist-m">
+                    <summary class="btn btn-secondary btn-sm" aria-label="History">{% include "roundup/_icon.html" with name="history" size=15 %}</summary>
+                    <div class="rb-hist-m__menu">
+                        {% for h in history %}<a href="?issue={{ h.pk }}" class="rb-hist__row{% if h.pk == issue.pk %} is-on{% endif %}"><span>{{ h.payload.title }}</span><span class="rb-hist__when">{{ h.payload.range }}</span></a>{% endfor %}
+                        <button type="button" class="btn btn-secondary btn-sm" data-rb-open>{% include "roundup/_icon.html" with name="gear" size=13 %} Schedule</button>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <section class="rb-short" aria-label="The short version">
+            <div class="rb-short__head">{% include "roundup/_icon.html" with name="spark" size=15 %}<span class="rb-short__label">The short version</span><span class="rb-short__src">{% if issue.summary_source == "ai" %}Written by your AI{% else %}From your Planner · no AI{% endif %}</span></div>
+            <p class="rb-short__text">{{ issue.summary }}</p>
+        </section>
+
+        {% include "roundup/_chips.html" %}
+
+        {% if scope == "week" %}
+        <div class="rb-strip" role="list">
+            {% for d in days %}<div class="rb-col{% if d.today %} is-today{% endif %}{% if not d.items %} is-free{% endif %}" role="listitem">
+                <div class="rb-col__head"><b>{{ d.dow }}</b><span>{{ d.num }}</span></div>
+                {% include "roundup/_wx.html" with w=d.weather %}
+                {% for r in d.items %}{% include "roundup/_item.html" %}{% empty %}<p class="rb-free">Free day</p>{% endfor %}
+            </div>{% endfor %}
+        </div>
+        {% elif scope == "today" %}
+        <div class="card rb-day">
+            {% for d in days %}<div class="rb-day__head"><b>{{ d.label }}</b>{% include "roundup/_wx.html" with w=d.weather %}</div>
+            <div class="rb-day__list">{% for r in d.items %}{% include "roundup/_item.html" %}{% empty %}<p class="rb-free">Nothing scheduled.</p>{% endfor %}</div>{% endfor %}
+        </div>
+        {% else %}
+        <div class="card rb-agenda">
+            {% for d in busy_days %}<div class="rb-agenda__day"><div class="rb-agenda__head"><b>{{ d.label }}</b>{% include "roundup/_wx.html" with w=d.weather %}</div>
+                <div class="rb-agenda__list">{% for r in d.items %}{% include "roundup/_item.html" %}{% endfor %}{% for m in d.meals %}<span class="rb-it rb-it--meal"><span class="rb-it__t">{{ m.slot }}</span><span class="rb-it__title">{{ m.title }}</span></span>{% endfor %}</div></div>
+            {% empty %}<p class="rb-free">Nothing on the calendar this month yet.</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="rb-cards">
+            {% if meals %}<div class="card rb-card"><h2 class="rb-card__head"><span class="rb-ibox is-meals">{% include "roundup/_icon.html" with name="fork" size=14 %}</span>Meals{% if p.groceries %}<a href="{% url 'albright_meals:groceries' %}">{{ p.groceries }} on the grocery list</a>{% endif %}</h2>
+                <p>{% for m in meals|slice:":8" %}{{ m.title }}{% if not forloop.last %} · {% endif %}{% endfor %}</p></div>{% endif %}
+            {% if workouts or weigh_ins %}<div class="card rb-card"><h2 class="rb-card__head"><span class="rb-ibox is-fitness">{% include "roundup/_icon.html" with name="dumb" size=14 %}</span>Fitness</h2>
+                <p>{% if workouts %}{{ workouts|length }} workout{{ workouts|length|pluralize }}{% if scope != "today" %}: {{ workouts|join:", " }}{% endif %}{% endif %}{% if weigh_ins %}{% if workouts %} · {% endif %}Weigh-in{% if scope != "today" %} {{ weigh_ins|join:", " }}{% endif %}{% endif %}</p></div>{% endif %}
+            {% if p.temps %}<div class="card rb-card"><h2 class="rb-card__head"><span class="rb-ibox is-weather">{% include "albright_planner/_weather_icon.html" with icon="partly" %}</span>Weather</h2>
+                <p>Highs up to {{ p.temps.1 }}°, lows down to {{ p.temps.0 }}°.{% if p.rain %} Rain likely {{ p.rain|join:", " }}.{% endif %}</p></div>{% endif %}
+            {% if p.shared %}<div class="card rb-card"><h2 class="rb-card__head"><span class="rb-ibox is-notes">{% include "roundup/_icon.html" with name="users" size=14 %}</span>Shared with you</h2>
+                <p>{% for line in p.shared.lines %}{{ line }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</p></div>{% endif %}
+        </div>
+    </div>
+</div>
+{% include "roundup/_sheet.html" with next=here %}
+<script src="{% static_version 'roundup/roundup.js' %}" defer></script>
+{% endblock %}

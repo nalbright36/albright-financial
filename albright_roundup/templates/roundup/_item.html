@@ -1,0 +1,1 @@
+<a class="rb-it rb-it--{{ r.kind }}" href="{{ r.url }}">{% if r.time %}<span class="rb-it__t">{{ r.time }}</span>{% endif %}<span class="rb-it__title">{{ r.title }}</span>{% if r.by or r.place %}<span class="rb-it__meta">{% if r.by %}from {{ r.by }}{% endif %}{% if r.by and r.place %} · {% endif %}{{ r.place }}</span>{% endif %}</a>
