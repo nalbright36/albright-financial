@@ -18,6 +18,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
+from albright_labs import sheet
+
 from . import budget as budgets
 from . import imports, money, quickadd
 from .forms import AccountForm, CategoryForm, MappingForm, RuleForm, SplitRows, TransactionForm, TransferForm, UploadForm
@@ -814,6 +816,7 @@ def budget_plan(request, pk):
         "reserve_categories": reserve_categories,
         "reserve_months": [this, budgets.add_months(this, 1)],
         "statuses": BudgetPlanLine.STATUSES,
+        "share": sheet.sheet(request.user, plan),
         "here": here, **totals})
 
 

@@ -3009,6 +3009,41 @@ select.share-add__target, select[data-share-target], select[data-share-mode] {
 }
 .pl-view-dialog .share-box { flex: 0 0 auto; }
 
+.share-chips__label { list-style: none; margin: 10px 0 4px; padding: 0; font-size: var(--text-sm); font-weight: 700; color: var(--text-secondary); }
+.share-vis { display: flex; flex-direction: column; gap: 8px; margin: 0 0 var(--space-3); }
+.share-choice { margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-solid); }
+.share-choice.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.share-choice__btn, .share-choice:not(form) { display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.share-choice:not(form) { cursor: default; }
+.share-choice__radio { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; border: 2px solid var(--border-strong); border-radius: 50%; }
+.share-choice.is-on .share-choice__radio { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 5px, transparent 6px); }
+.share-choice__name { display: block; font-weight: 700; }
+.share-choice__meta { display: block; font-size: var(--text-sm); color: var(--text-secondary); }
+
+.share-launch { position: relative; display: inline-flex; }
+.share-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid); color: var(--text-primary);
+  font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.share-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.share-sheet-scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.55); }
+.share-sheet { z-index: 41; background: var(--bg-elevated, var(--surface-solid)); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px; box-shadow: 0 16px 48px rgba(0,0,0,.45); }
+.share-sheet .share-box { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.share-sheet .share-box__title { display: none; }
+.share-sheet__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.share-sheet__title { margin: 0; font-size: var(--text-lg); font-weight: 700; }
+.share-sheet__close { width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-secondary); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+@media (max-width: 640px) {
+  .share-sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 86vh; overflow: auto;
+    border-radius: 16px 16px 0 0; }
+}
+@media (min-width: 641px) {
+  .share-sheet-scrim { background: transparent; }
+  .share-sheet { position: absolute; top: calc(100% + 8px); right: 0; width: min(420px, 92vw); }
+}
+
 /* ---------- Planner: a task's quick view and edit page (docs/design/planner_task_options.html - "Quick view" and
    Option C "Property list"). Property rows (Date, Time, Repeat, Shared, Linked note...) you tap to change: on the
    quick view each opens a small picker and saves on its own; on the edit page each opens its fields, saved with the

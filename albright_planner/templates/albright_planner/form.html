@@ -22,6 +22,10 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
     <div class="pl-ed__bar">
         <a href="{{ back_url|default:next }}" class="pl-ed__back" data-ed-back aria-label="Back" title="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></a>
         <span class="pl-ed__where"></span>
+        {% if share %}<button type="button" class="share-btn pl-ed__share" data-share-open aria-haspopup="dialog" aria-controls="pl-ed-share">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/></svg>
+            <span>Share</span>
+        </button>{% endif %}
         <details class="pl-menu" id="pl-ed-menu" data-menu data-menu-scope="pl">
             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
             <div class="pl-menu__panel" data-menu-panel>

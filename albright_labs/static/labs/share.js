@@ -239,6 +239,54 @@
         });
     });
 
+    function launchOf(el) {
+        return el && el.closest && el.closest("[data-share-launch]");
+    }
+    function setLaunch(root, on) {
+        if (!root) return;
+        var sheet = root.querySelector(".share-sheet");
+        var scrim = root.querySelector("[data-share-scrim]");
+        var btn = root.querySelector("[data-share-sheet-open]");
+        if (sheet) sheet.hidden = !on;
+        if (scrim) scrim.hidden = !on;
+        if (btn) btn.setAttribute("aria-expanded", on ? "true" : "false");
+    }
+    document.addEventListener("click", function (event) {
+        var openBtn = event.target.closest("[data-share-sheet-open]");
+        if (openBtn) {
+            event.preventDefault();
+            var root = launchOf(openBtn);
+            if (!root) {
+                var scope = openBtn.closest(".pl-view, article, .mn-head, .fx-head, .meals-head") || document;
+                root = scope.querySelector("[data-share-launch]") || document.querySelector("[data-share-launch]");
+            }
+            var expanded = openBtn.getAttribute("aria-expanded") === "true";
+            document.querySelectorAll("[data-share-launch]").forEach(function (el) {
+                if (el !== root) setLaunch(el, false);
+            });
+            setLaunch(root, !expanded);
+            return;
+        }
+        if (event.target.closest("[data-share-sheet-close]") || event.target.closest("[data-share-scrim]")) {
+            setLaunch(launchOf(event.target) || event.target.closest("[data-share-launch]"), false);
+            if (event.target.closest("[data-share-scrim]")) {
+                document.querySelectorAll("[data-share-launch]").forEach(function (el) { setLaunch(el, false); });
+            }
+            return;
+        }
+        // Desktop: click outside the open popover closes it (the phone sheet uses the scrim).
+        if (window.matchMedia && window.matchMedia("(min-width: 641px)").matches) {
+            document.querySelectorAll("[data-share-launch]").forEach(function (el) {
+                if (!el.contains(event.target)) setLaunch(el, false);
+            });
+        }
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            document.querySelectorAll("[data-share-launch]").forEach(function (el) { setLaunch(el, false); });
+        }
+    });
+
     function enhance(node) {
         if (!node || !node.querySelector) return;
         if (node.matches && (node.matches("[data-share]") || node.matches("[data-share-new]"))) bindPicker(node);
@@ -309,6 +357,7 @@
                 return {ok: false, error: "Not saved" + hint + " - try again."};
             });
         }).then(function (data) {
+            if (data.redirect) { window.location.href = data.redirect; return; }
             if (data.html && box) {
                 var holder = document.createElement("div");
                 holder.innerHTML = data.html;

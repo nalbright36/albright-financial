@@ -15,6 +15,7 @@
     <div class="mn-head__actions">
         {% if note_visible %}<a href="{% url 'albright_notes:note' plan.note_id %}" class="mn-draft__note mn-small">📝 {{ plan.note.title|default:"Untitled" }}</a>
         {% elif plan.note_id %}<span class="mn-muted mn-small">A note you can't open</span>{% endif %}
+        {% include "albright_labs/_share_button.html" %}
     </div>
 </div>
 {% include "albright_labs/_space_switch.html" %}

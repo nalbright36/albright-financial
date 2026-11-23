@@ -1,0 +1,23 @@
+{% comment %}
+Share button that opens the one Share sheet (albright_labs/_share.html) as a popover on
+desktop and a bottom sheet on a phone. Used on item pages that didn't already have a
+Notes-style Share control. data-share-sheet-open is distinct from Planner's data-share-open
+(which opens the edit-page dialog). The sheet id is unique so a list (meal ideas) can
+have one button per row.
+{% endcomment %}
+{% if share %}
+<div class="share-launch" data-share-launch>
+    <button type="button" class="share-btn" data-share-sheet-open aria-expanded="false" aria-controls="share-sheet-{{ share.label }}-{{ share.obj.pk }}" aria-haspopup="dialog">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/></svg>
+        <span>Share</span>
+    </button>
+    <div class="share-sheet-scrim" data-share-scrim hidden></div>
+    <div class="share-sheet" id="share-sheet-{{ share.label }}-{{ share.obj.pk }}" role="dialog" aria-label="Share" hidden>
+        <div class="share-sheet__head">
+            <h2 class="share-sheet__title">Share</h2>
+            <button type="button" class="share-sheet__close" data-share-sheet-close aria-label="Close">&times;</button>
+        </div>
+        {% include "albright_labs/_share.html" %}
+    </div>
+</div>
+{% endif %}

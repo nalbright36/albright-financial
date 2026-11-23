@@ -15,7 +15,7 @@ html.js .mn .mn-nojs { display: none; }
 .mn [hidden] { display: none !important; }
 
 /* ---------- Page head ---------- */
-.mn-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
+.mn-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
   margin-bottom: var(--space-4); }
 .mn-head__title { margin: 0; font-size: 1.5rem; }
 .mn-head__sub { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
@@ -260,3 +260,6 @@ a.mn-list__main:hover { color: var(--accent); text-decoration: none; }
   .mn-pline__left { grid-area: left; grid-column: auto; padding-bottom: 8px; white-space: nowrap; }
   .mn-pline__amounts { display: contents; }
 }
+
+.mn-head__actions { align-items: center; position: relative; }
+.mn-head__actions .share-launch { flex-shrink: 0; }

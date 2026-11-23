@@ -16,7 +16,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from . import activity, apps_registry, connections, sharing
+from . import activity, apps_registry, connections, sharing, sheet
 from .models import SharingDefault
 from .ratelimit import client_ip
 
@@ -37,15 +37,23 @@ def _next(request, fallback):
 @login_required
 @require_POST
 def share(request, label, pk):
-    kind = sharing.KINDS.get(label)
-    if kind is None:
-        raise Http404
-    obj = kind.model.objects.filter(pk=pk).first()
-    if obj is None or not sharing.can_view(request.user, obj):
+    """Add / change / remove a person or circle share, set Personal vs a circle, or move a
+    space-backed item. Anyone who can't see the item gets a 404. Only the owner (or the
+    existing mover rule) can change sharing; a circle or space they aren't in is rejected
+    and the item is left alone."""
+    obj, kind, space_kind = sheet.resolve(label, pk)
+    if obj is None or not sheet.can_view(request.user, obj, kind, space_kind):
         raise Http404
     action, result = request.POST.get("action"), {"ok": True}
     try:
-        if action == "add":
+        if action == "set_space":
+            message, url = sheet.set_space(request.user, obj, request.POST.get("target") or "", space_kind)
+            result["message"], result["redirect"] = message, url
+        elif action == "set_visibility":
+            result["message"] = sharing.set_visibility(request.user, obj, request.POST.get("target") or "")
+        elif action == "add":
+            if kind is None:
+                raise sharing.ShareError("This item is shared by moving it to a circle.")
             target = request.POST.get("target", "person")
             circle_id = target.split(":", 1)[1] if target.startswith("circle:") else None
             user_id = target.split(":", 1)[1] if target.startswith("user:") else None
@@ -55,20 +63,26 @@ def share(request, label, pk):
             result["message"] = sharing.explain(kind, grant)
             activity.shared(grant, request.user)
         elif action == "permission":
+            if kind is None:
+                raise sharing.ShareError("This item is shared by moving it to a circle.")
             sharing.set_permission(request.user, obj, request.POST.get("grant") or 0, request.POST.get("permission"))
             result["message"] = "Saved."
         elif action == "remove":
+            if kind is None:
+                raise sharing.ShareError("This item is shared by moving it to a circle.")
             sharing.unshare(request.user, obj, request.POST.get("grant") or 0)
             result["message"] = "Stopped sharing."
         else:
             raise sharing.ShareError("Nothing to do.")
     except sharing.ShareError as exc:
         result = {"ok": False, "error": str(exc)}
+    ctx = {"share": sheet.sheet(request.user, obj)}
+    fallback = (kind.url(obj) if kind is not None else space_kind.url(obj))
     if _json(request):
-        html = render_to_string("albright_labs/_share.html", {"share": sharing.control(request.user, obj)}, request=request)
+        html = render_to_string("albright_labs/_share.html", ctx, request=request)
         return JsonResponse({**result, "html": html}, status=200 if result["ok"] else 400)
     (messages.success if result["ok"] else messages.error)(request, result.get("message") or result.get("error"))
-    return redirect(_next(request, kind.url(obj)))
+    return redirect(result.get("redirect") or _next(request, fallback))
 
 
 @login_required

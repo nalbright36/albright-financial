@@ -14,8 +14,29 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
 <section class="share-box" data-share id="share-box" aria-labelledby="share-box-h">
     <h2 class="share-box__title" id="share-box-h">Sharing</h2>
     {% if not share.owner %}<p class="share-box__note">Shared with you by <strong>{{ share.owner_name }}</strong>. Only they can change who sees it.</p>{% endif %}
-    {% if share.rows %}
-    <ul class="share-chips" role="list">{% for r in share.rows %}
+    {% if share.visibility %}
+    <div class="share-vis" role="radiogroup" aria-label="Who can see this">
+        {% for opt in share.visibility %}
+        {% if share.can_move %}
+        <form method="post" action="{{ share.url }}" class="share-choice{% if opt.on %} is-on{% endif %}" data-share-form>{% csrf_token %}
+            <input type="hidden" name="action" value="{{ share.visibility_action }}"><input type="hidden" name="target" value="{{ opt.target }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="share-choice__btn" role="radio" aria-checked="{{ opt.on|yesno:'true,false' }}">
+                <span class="share-choice__radio" aria-hidden="true"></span>
+                <span><span class="share-choice__name">{{ opt.name }}</span><span class="share-choice__meta">{{ opt.meta }}</span></span>
+            </button>
+        </form>
+        {% else %}
+        <div class="share-choice{% if opt.on %} is-on{% endif %}">
+            <span class="share-choice__radio" aria-hidden="true"></span>
+            <span><span class="share-choice__name">{{ opt.name }}</span><span class="share-choice__meta">{{ opt.meta }}</span></span>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% with rows=share.chip_rows %}
+    {% if rows %}
+    <ul class="share-chips" role="list">{% if share.visibility %}<li class="share-chips__label" id="share-people-h">People</li>{% endif %}{% for r in rows %}
         <li class="share-chip" data-grant="{{ r.grant.pk }}">
             <span class="share-chip__who">{% if r.is_circle %}<span class="share-chip__icon" aria-hidden="true">&#9711;</span>{% else %}<span class="share-chip__avatar" aria-hidden="true">{{ r.initials }}</span>{% endif %}<span class="share-chip__name">{{ r.name }}</span></span>
             {% if share.owner %}
@@ -36,8 +57,9 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
             <span class="share-chip__explain">{{ r.explain }}</span>
         </li>{% endfor %}
     </ul>
-    {% else %}<p class="share-box__only" data-share-only>Only {% if share.owner %}me{% else %}its owner{% endif %}</p>{% endif %}
-    {% if share.owner %}
+    {% elif not share.visibility %}<p class="share-box__only" data-share-only>Only {% if share.owner %}me{% else %}its owner{% endif %}</p>{% endif %}
+    {% endwith %}
+    {% if share.owner and share.kind %}
     <form method="post" action="{{ share.url }}" class="share-add" data-share-form data-share-add>{% csrf_token %}
         <input type="hidden" name="action" value="add"><input type="hidden" name="next" value="{{ request.get_full_path }}">
         <label class="visually-hidden" for="share-target">Share with</label>

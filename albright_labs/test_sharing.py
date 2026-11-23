@@ -178,11 +178,15 @@ class ControlTests(Base):
         box = page.split('id="share-box"', 1)[1].split("</section>", 1)[0]
         self.assertIn(f'value="circle:{c.pk}"', box)
         self.assertNotIn(f'value="circle:{other.pk}"', box)
-        self.assertIn("Only me", box)
+        # Personal radio is the "only me" state (the old "Only me" line is hidden when radios are shown).
+        self.assertIn("Personal", box)
+        self.assertIn("share-choice is-on", box)
         self.client.post(reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk]),
                          {"action": "add", "target": f"circle:{c.pk}", "permission": "edit"})
         box = self.client.get(self.page_of("planner", item)).content.decode().split('id="share-box"', 1)[1]
-        self.assertIn("Albright Family members who use Planner can see and check off and change this item.", box)
+        # Circle grants show as the selected visibility radio, not a chip with the old explain line.
+        self.assertIn("Albright Family members who use Planner", box)
+        self.assertIn("share-choice is-on", box)
         response = self.client.post(reverse("labs:share", args=["albright_planner.ScheduleItem", item.pk]),
                                     {"action": "add", "target": f"circle:{other.pk}"}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 400)

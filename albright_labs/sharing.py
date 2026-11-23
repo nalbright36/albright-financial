@@ -402,6 +402,60 @@ def explain(kind, grant):
     return f"{person_name(grant.user)} {verb}."
 
 
+def grant_visibility(user, obj, kind=None):
+    """Personal + each circle this owner can share with, for the Share sheet radios.
+
+    Personal is on when the item has no circle grants (people grants stay). A circle is on when
+    it is the only circle grant. Several circle grants (unusual) leaves no radio on so nothing
+    is hidden — those grants still show as chips.
+    """
+    if obj is None or never_shared(obj):
+        return []
+    kind = kind or kind_of(obj)
+    if kind is None:
+        return []
+    circle_ids = {g.circle_id for g in grants(obj) if g.circle_id}
+    options = [{
+        "target": "personal",
+        "name": "Personal",
+        "meta": f"Only you can see this {kind.noun}" if is_owner(user, obj) else "Only its owner",
+        "on": not circle_ids,
+    }]
+    for circle in shareable_circles(user, kind.app):
+        options.append({
+            "target": f"circle:{circle.pk}",
+            "name": circle.name,
+            "meta": f"{circle.name} members who use {app_label(kind.app)}",
+            "on": circle_ids == {circle.pk},
+        })
+    return options
+
+
+def set_visibility(user, obj, target):
+    """Personal: drop every circle grant (people grants stay). A circle: share with that one
+    circle (View) and drop other circle grants. Only the owner; a circle the person isn't in
+    is a ShareError and the item is left alone.
+    """
+    _owner_only(user, obj)
+    if never_shared(obj):
+        raise ShareError("Weigh-ins are private - they can't be shared.")
+    kind = kind_of(obj)
+    if target in ("personal", "me", ""):
+        for grant in list(grants(obj)):
+            if grant.circle_id:
+                unshare(user, obj, grant.pk)
+        return "Only you can see this now."
+    if not str(target).startswith("circle:"):
+        raise ShareError("Pick Personal or one of your circles.")
+    circle_id = target.split(":", 1)[1]
+    grant = share(user, obj, VIEW, circle_id=circle_id)
+    keep = grant.circle_id
+    for other in list(grants(obj)):
+        if other.circle_id and other.circle_id != keep:
+            unshare(user, obj, other.pk)
+    return f"Shared with {grant.circle.name}."
+
+
 def control(user, obj=None, app=None):
     """Everything the Share control (albright_labs/_share.html) shows, for an existing thing or a "New" form."""
     kind = kind_of(obj) if obj is not None else APPS[app]
@@ -421,7 +475,12 @@ def control(user, obj=None, app=None):
                 {"target": "default", "name": f"Default: {default_text(user, kind.app)}", "meta": "", "already": False},
                 {"target": "me", "name": "Only me", "meta": "", "already": False},
             ]
-    return {"obj": obj, "kind": kind, "owner": owner, "rows": rows, "label": kind.label,
+    people_rows = [r for r in rows if not r["is_circle"]] if obj is not None else []
+    visibility = grant_visibility(user, obj, kind) if obj is not None else []
+    return {"obj": obj, "kind": kind, "owner": owner, "can_move": owner, "rows": rows, "people_rows": people_rows,
+            "chip_rows": people_rows if visibility else rows,
+            "visibility": visibility, "visibility_action": "set_visibility",
+            "label": kind.label,
             "circles": shareable_circles(user, kind.app) if owner else [],
             "people": people,
             "choices": choices,

@@ -19,6 +19,7 @@ its checklist boxes tick right here (saved to the note) for someone who can edit
         {% else %}<span class="pl-dot pl-view__dot" aria-hidden="true"></span>{% endif %}
         {% if quick %}<h2 class="pl-view__title pl-qv__titlebox"><label for="pl-view-title" class="visually-hidden">Title</label><textarea class="pl-qv__title" id="pl-view-title" rows="1" maxlength="200" spellcheck="true" data-qv-title data-saved="{{ o.title }}">{{ o.title }}</textarea></h2>
         {% else %}<h2 class="pl-view__title" id="pl-view-title">{{ o.title }}</h2>{% endif %}
+        {% if share %}{% include "albright_labs/_share_button.html" %}{% endif %}
         <details class="pl-menu" id="pl-view-menu" data-menu data-menu-scope="pl">
             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
             <div class="pl-menu__panel" data-menu-panel>
