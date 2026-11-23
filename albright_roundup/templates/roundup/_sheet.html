@@ -22,6 +22,9 @@
         <div class="rb-sheet__row rb-sheet__ping"><span class="rb-sheet__name">Ping me</span>
             <label class="rb-pick"><input type="checkbox" name="push" value="1"{% if rb_push %} checked{% endif %}> Push</label>
             <label class="rb-pick"><input type="checkbox" name="email" value="1"{% if rb_email %} checked{% endif %}> Email</label></div>
+        {% if rb_can_ai %}<div class="rb-sheet__row rb-sheet__ai">
+            <label class="toggle-switch"><input type="checkbox" name="ai" value="1"{% if rb_ai %} checked{% endif %} aria-label="Short version by my AI"><span class="toggle-slider"></span></label>
+            <span class="rb-sheet__name">Short version by my AI<small>Uses your AI key, a few times a day at most. Off: written from your Planner.</small></span></div>{% endif %}
         <div class="rb-sheet__actions"><button type="submit" class="btn btn-primary">Save</button></div>
     </form>
 </dialog>

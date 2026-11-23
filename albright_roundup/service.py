@@ -7,7 +7,7 @@ from django.utils import timezone
 from albright_planner import planner
 
 from . import build, schedule
-from .models import RULES, RoundupIssue
+from .models import AI, RULES, RoundupIssue
 
 
 def can_use(user):
@@ -21,7 +21,13 @@ def make_payload(roundup, start, end):
 
 
 def write_summary(roundup, payload):
-    """(text, source) - the rule-based summary (AI comes later, and always falls back to this)."""
+    """(text, source) - their own AI's when it's on and works (payload["ai_by"] says which), else the rules'."""
+    if roundup.ai_summary:
+        from . import ai
+        written = ai.write(roundup.owner, payload)
+        if written:
+            payload["ai_by"] = written[1]
+            return written[0], AI
     return build.summary(payload), RULES
 
 

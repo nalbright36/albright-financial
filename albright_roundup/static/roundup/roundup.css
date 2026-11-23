@@ -112,6 +112,8 @@ a.rb-it:hover { background: var(--surface-hover); }
 .rb-sheet__note { margin: 2px 0 8px; font-size: 12.5px; color: var(--text-muted); }
 .rb-sheet__row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--hairline); flex-wrap: wrap; }
 .rb-sheet__name { flex: 1; font-size: 14px; min-width: 90px; }
+.rb-sheet__name small { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.35; }
+.rb-sheet__ai .rb-sheet__name { flex: 1 1 0; }
 .rb-sheet__when { display: flex; gap: 6px; }
 .rb-sheet__when .ledger-input { width: auto; height: 34px; padding: 0 8px; font-size: 13px; }
 .rb-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--hairline-strong); }

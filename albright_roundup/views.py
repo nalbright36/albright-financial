@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from . import deliver, schedule, service
+from . import ai, deliver, schedule, service
 from .models import EMAIL, MONTH, PUSH, SCOPES, TODAY, WEEK, Roundup, RoundupIssue
 
 SCOPE_KEYS = [k for k, _ in SCOPES]
@@ -58,7 +58,8 @@ def sheet_context(user):
     first = rows[0] if rows else None
     return {"rb_rows": rows, "rb_times": [(t.strftime("%H:%M"), schedule.clock(t)) for t in schedule.TIME_CHOICES],
             "rb_days": list(enumerate(schedule.DAY_NAMES)), "rb_month_days": list(range(1, 29)),
-            "rb_push": bool(first and PUSH in first.channels), "rb_email": bool(first and EMAIL in first.channels)}
+            "rb_push": bool(first and PUSH in first.channels), "rb_email": bool(first and EMAIL in first.channels),
+            "rb_can_ai": ai.available(user) is not None, "rb_ai": bool(first and first.ai_summary)}
 
 
 def home_card(request):
@@ -138,6 +139,7 @@ def save_schedule(request):
     _need(request)
     post = request.POST
     channels = [c for c, on in ((PUSH, post.get("push")), (EMAIL, post.get("email"))) if on]
+    can_ai = ai.available(request.user) is not None
     for r in schedule.ensure_presets(request.user):
         k = f"r{r.pk}_"
         r.enabled = bool(post.get(k + "on"))
@@ -149,6 +151,8 @@ def save_schedule(request):
         if r.scope == MONTH and (post.get(k + "mday") or "").isdigit():
             r.month_day = min(max(int(post[k + "mday"]), 1), 28)
         r.channels = channels
+        if can_ai:
+            r.ai_summary = bool(post.get("ai"))
         schedule.reschedule(r, save=False)
         r.save()
     return _back(request, reverse("roundup:briefing"))

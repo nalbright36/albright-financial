@@ -38,7 +38,7 @@ History down the side (phones: the clock button). The schedule sheet is roundup/
         </div>
 
         <section class="rb-short" aria-label="The short version">
-            <div class="rb-short__head">{% include "roundup/_icon.html" with name="spark" size=15 %}<span class="rb-short__label">The short version</span><span class="rb-short__src">{% if issue.summary_source == "ai" %}Written by your AI{% else %}From your Planner · no AI{% endif %}</span></div>
+            <div class="rb-short__head">{% include "roundup/_icon.html" with name="spark" size=15 %}<span class="rb-short__label">The short version</span><span class="rb-short__src">{% if issue.summary_source == "ai" %}Written by your AI{% if issue.payload.ai_by %} · {{ issue.payload.ai_by }}{% endif %}{% else %}From your Planner · no AI{% endif %}</span></div>
             <p class="rb-short__text">{{ issue.summary }}</p>
         </section>
 
