@@ -352,7 +352,9 @@ def quick_add(request):
         messages.error(request, "Type what to add, e.g. “Call dentist tomorrow 3pm”.")
         return redirect(_next(request))
     text, subtasks = quickadd.split_checklist(text)
-    fields = quickadd.parse(text, planner.today(request.user))
+    # Optional posted date (Week's + Add, the New item dialog): parse relative to that day so
+    # "Buy milk" on Thursday lands on Thursday, not today. A date in the text still wins.
+    fields = quickadd.parse(text, _day(request.POST.get("date"), planner.today(request.user)))
     if subtasks:
         fields.update(kind=ScheduleItem.TASK, checkable=True)
     item = ScheduleItem.objects.create(owner=request.user, created_by=request.user.get_username(),

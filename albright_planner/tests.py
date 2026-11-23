@@ -276,7 +276,7 @@ class ViewTests(Base):
         by_col = {c: page.split(f'data-drop-date="{c}"', 1)[1].split("</section>", 1)[0] for c in cols}
         for col, titles in (("2026-11-02", ["Gym"]), ("2026-11-04", ["Gym"]), ("2026-11-05", ["Dentist"]),
                             ("2026-11-06", ["Gym"]), ("2026-11-03", [])):
-            self.assertEqual(re.findall(r'class="pl-item__title">([^<]+)<', by_col[col]), titles)
+            self.assertEqual(re.findall(r'class="pl-item__title(?: rb-it__title)?">([^<]+)<', by_col[col]), titles)
         self.assertNotIn("Next week thing", page)
         self.assertIn('draggable="true"', page)
         self.assertIn('id="pl-scope"', page)

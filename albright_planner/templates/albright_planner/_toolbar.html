@@ -81,6 +81,7 @@ Keys (desktop): D / W / M switch views, T today, N New item, Left / Right previo
             <div class="pl-sheet__body">
                 <form method="post" action="{% url 'albright_planner:quick_add' %}" class="pl-quick" id="pl-quick">{% csrf_token %}
                     <input type="hidden" name="next" value="{{ here }}">
+                    <input type="hidden" name="date" id="pl-quick-date" value="{{ day|date:'Y-m-d' }}">
                     <label for="pl-quick-text" class="pl-label">Quick add</label>
                     <div class="pl-quick__row">
                         <input type="text" name="text" id="pl-quick-text" class="pl-input" maxlength="500" autocomplete="off" required placeholder="Gym Mon Wed Fri 6am">

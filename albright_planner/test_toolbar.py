@@ -350,7 +350,7 @@ class ViewSwitchTests(Base):
 
     def test_week_and_month_day_headers_open_that_day(self):
         week = self.client.get(url("week") + "?date=2026-11-12").content.decode()
-        self.assertRegex(week, r'href="/planner/day/\?date=2026-11-12(?:&amp;[^"]*)?" class="pl-col__head"')
+        self.assertRegex(week, r'href="/planner/day/\?date=2026-11-12(?:&amp;[^"]*)?" class="pl-col__head(?: rb-col__head)?"')
         month = self.client.get(url("month") + "?date=2026-11-12").content.decode()
         self.assertIn('href="/planner/day/?date=2026-11-12" class="pl-cell__num"', month)
 

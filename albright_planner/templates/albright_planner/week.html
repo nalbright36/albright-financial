@@ -2,16 +2,17 @@
 {% block page_title %}Week of {{ title }} · {% endblock %}
 {% block planner %}
 {% include "albright_planner/_toolbar.html" %}
-<div class="pl-week" id="pl-week">
+<div class="pl-week rb-strip" id="pl-week">
     {% for d in days %}
-    <section class="pl-col{% if d.is_today %} is-today{% endif %}" data-drop-date="{{ d.date|date:'Y-m-d' }}" aria-label="{{ d.date|date:'l, F j' }}">
-        <a href="{% url 'albright_planner:day' %}?date={{ d.date|date:'Y-m-d' }}{% if query %}&amp;{{ query }}{% endif %}" class="pl-col__head" aria-label="{{ d.date|date:'l, F j' }}">
+    <section class="pl-col rb-col{% if d.is_today %} is-today{% endif %}" data-drop-date="{{ d.date|date:'Y-m-d' }}" aria-label="{{ d.date|date:'l, F j' }}">
+        <a href="{% url 'albright_planner:day' %}?date={{ d.date|date:'Y-m-d' }}{% if query %}&amp;{{ query }}{% endif %}" class="pl-col__head rb-col__head" aria-label="{{ d.date|date:'l, F j' }}">
             <span class="pl-col__dow">{{ d.date|date:"D" }}</span> <span class="pl-col__num">{{ d.date|date:"j" }}</span>
             {% if d.weather %}{% include "albright_planner/_weather.html" with wx=d.weather week=True %}{% endif %}
         </a>
         <ul class="pl-list pl-col__top">{% for o in d.top %}{% include "albright_planner/_occ.html" with drag=True %}{% endfor %}</ul>
         <ul class="pl-list pl-col__timed">{% for o in d.timed %}{% include "albright_planner/_occ.html" with drag=True %}{% endfor %}</ul>
-        {% if not d.top and not d.timed %}<p class="pl-empty">&mdash;</p>{% endif %}
+        {% if not d.top and not d.timed %}<p class="pl-empty rb-free">Free day</p>{% endif %}
+        <a href="{% url 'albright_planner:new' %}?date={{ d.date|date:'Y-m-d' }}&amp;next={{ here|urlencode }}" class="pl-col__add" data-date="{{ d.date|date:'Y-m-d' }}">+ Add</a>
     </section>
     {% endfor %}
 </div>

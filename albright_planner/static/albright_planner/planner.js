@@ -832,13 +832,40 @@
     // ---------- The toolbar: New item (quick add, then "More options") ----------
     var newDialog = document.getElementById("pl-new-dialog"), newBtn = document.getElementById("pl-new");
     var more = document.getElementById("pl-new-more"), full = document.getElementById("pl-new-full");
+    function setNewDate(iso) {
+        var hidden = document.getElementById("pl-quick-date");
+        if (hidden && iso) hidden.value = iso;
+        if (more && iso) {
+            var href = more.getAttribute("href") || "";
+            more.setAttribute("href", href.replace(/(date=)[^&]*/, "$1" + iso));
+        }
+        var form = full && full.querySelector("#pl-form");
+        if (form && form.elements.date && iso) form.elements.date.value = iso;
+        if (form && iso) {
+            var action = form.getAttribute("action") || "";
+            form.setAttribute("action", action.replace(/(date=)[^&]*/, "$1" + iso));
+        }
+    }
     function openNew() {
         if (!newDialog || !newDialog.showModal) { if (newBtn) window.location.href = newBtn.href; return; }
         newDialog.showModal();
         document.getElementById("pl-quick-text").focus();
     }
     if (newDialog && newDialog.showModal && newBtn) {
-        newBtn.addEventListener("click", function (event) { event.preventDefault(); openNew(); });
+        newBtn.addEventListener("click", function (event) {
+            event.preventDefault();
+            var fallback = (newBtn.href.match(/date=([^&]+)/) || [])[1];
+            setNewDate(fallback);
+            openNew();
+        });
+        var week = document.getElementById("pl-week");
+        if (week) week.addEventListener("click", function (event) {
+            var add = event.target.closest(".pl-col__add");
+            if (!add) return;
+            event.preventDefault();
+            setNewDate(add.getAttribute("data-date"));
+            openNew();
+        });
         newDialog.addEventListener("click", function (event) {
             if (event.target === newDialog || event.target.closest("[data-new-close]")) { newDialog.close(); return; }
             if (event.target.closest("#pl-new-full [data-form-cancel]")) { event.preventDefault(); newDialog.close(); }
