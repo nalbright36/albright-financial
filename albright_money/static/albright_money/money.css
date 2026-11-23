@@ -182,6 +182,19 @@ a.mn-list__main:hover { color: var(--accent); text-decoration: none; }
 .mn-bline__nums { grid-area: nums; font-size: var(--text-sm); color: var(--text-secondary); }
 .mn-bline .mn-bar { grid-area: bar; margin: 0; }
 .mn-bline__roll { grid-area: roll; min-height: 28px; font-size: var(--text-xs); color: var(--text-secondary); }
+.mn-bline__note { margin-left: 4px; text-decoration: none; vertical-align: 1px; }
+/* Budget: "From notes" drafts (@budget in a note) - outside the totals until added */
+.mn-drafts { border-style: dashed; }
+.mn-drafts__help { margin: -6px 0 var(--space-2); }
+.mn-draft { padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.mn-draft:first-of-type { border-top: 0; }
+.mn-draft__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.mn-draft__name { font-weight: 600; }
+.mn-draft__note { color: var(--accent); text-decoration: none; }
+.mn-draft__fields { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+.mn-draft__field { flex: 1 1 180px; min-width: 0; }
+.mn-draft__field .ledger-input { width: 100%; }
+.mn-draft .mn-actions { margin-top: var(--space-2); }
 .mn-bline--near .mn-bline__left { color: var(--warn); }
 .mn-bline--over .mn-bline__left { color: var(--loss); }
 @media (min-width: 760px) {

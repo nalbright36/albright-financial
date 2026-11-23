@@ -70,7 +70,7 @@ ITEM_LINE = re.compile(r"^(?:[ \t]*>)*[ \t]*(?:[-*+]|\d{1,9}\.)[ \t]")
 # with a no-break space.
 EMPTY_BULLET = re.compile(r"^((?:[ \t]*>)*[ \t]*[-*+])[ \t]+$")
 ORDERED = re.compile(r"^(?:[ \t]*>)*[ \t]*\d{1,9}\.[ \t]")
-SMART_HTML = re.compile(r"@\[(date|grocery|person)(?::([^\]|<\n]*))?((?:\|[^\]|<\n]*)*)\]")
+SMART_HTML = re.compile(r"@\[(date|grocery|person|budget)(?::([^\]|<\n]*))?((?:\|[^\]|<\n]*)*)\]")
 MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
 PREVIEW_STRIP = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|-#\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)*")
 
@@ -299,7 +299,7 @@ def render(body, editable=False):
 
 def _chips(html):
     """Smart-link tokens (smart.py) -> chips: a due date ("Fri 5 PM", red when overdue), "In groceries" /
-    "Already on list", "@Sam". The tokens are plain text by now (escaped), so their parts are safe."""
+    "Already on list", "Budget draft", "@Sam". The tokens are plain text by now (escaped), so their parts are safe."""
     if "@[" not in html:
         return html
     from datetime import date as date_cls
@@ -324,6 +324,9 @@ def _chips(html):
         if c["kind"] == "grocery":
             text = "Grocery list" if not c["ids"] else ("Already on list" if c["already"] else "In groceries")
             return f'<span class="nt-smart nt-smart--grocery">{text}</span>'
+        if c["kind"] == "budget":
+            pending = "" if c["draft"] else " is-pending"
+            return f'<span class="nt-smart nt-smart--budget{pending}">{"Budget draft" if c["draft"] else "Budget"}</span>'
         return f'<span class="nt-smart nt-smart--person">@{c["name"] or "someone"}</span>'
     return SMART_HTML.sub(chip, html)
 

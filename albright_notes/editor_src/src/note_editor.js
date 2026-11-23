@@ -70,13 +70,14 @@ md.core.ruler.push("note_tasks", (state) => {
 });
 
 // Smart-link tokens (albright_notes/smart.py): "@[date:2026-12-03T17:00|task:12]", "@[grocery:45,46]",
-// "@[grocery:45|already]", "@[grocery]", "@[person:7|Sam]" -> a chip the editor parses into a smartChip node.
-const CHIP_RE = /^@\[(date|grocery|person)(?::([^\]|\n]*))?((?:\|[^\]|\n]*)*)\]/;
+// "@[grocery:45|already]", "@[grocery]", "@[budget:9]", "@[budget]", "@[person:7|Sam]" -> a chip the editor parses into
+// a smartChip node.
+const CHIP_RE = /^@\[(date|grocery|person|budget)(?::([^\]|\n]*))?((?:\|[^\]|\n]*)*)\]/;
 export function parseToken(token) {
     const m = CHIP_RE.exec(token || "");
     if (!m) return null;
     const kind = m[1], value = (m[2] || "").trim(), parts = (m[3] || "").split("|").slice(1);
-    const attrs = { kind, date: null, time: null, task: null, ids: "", already: false, pid: null, name: "" };
+    const attrs = { kind, date: null, time: null, task: null, ids: "", already: false, pid: null, name: "", bid: null };
     if (kind === "date") {
         const [day, at] = value.split("T");
         attrs.date = day || null;
@@ -86,6 +87,8 @@ export function parseToken(token) {
     } else if (kind === "grocery") {
         attrs.ids = value.split(",").filter((i) => /^\d+$/.test(i.trim())).map((i) => i.trim()).join(",");
         attrs.already = parts.includes("already");
+    } else if (kind === "budget") {
+        attrs.bid = /^\d+$/.test(value) ? Number(value) : null;
     } else {
         attrs.pid = /^\d+$/.test(value) ? Number(value) : null;
         attrs.name = (parts[0] || "").trim();
@@ -95,6 +98,7 @@ export function parseToken(token) {
 export function tokenOf(a) {
     if (a.kind === "date") return "@[date:" + (a.date || "") + (a.time ? "T" + a.time : "") + (a.task ? "|task:" + a.task : "") + "]";
     if (a.kind === "grocery") return "@[grocery" + (a.ids ? ":" + a.ids : "") + (a.already ? "|already" : "") + "]";
+    if (a.kind === "budget") return "@[budget" + (a.bid ? ":" + a.bid : "") + "]";
     return "@[person:" + (a.pid || "") + "|" + String(a.name || "").replace(/[\]|\n]/g, "") + "]";
 }
 md.inline.ruler.before("link", "smart_chip", (state, silent) => {
@@ -514,6 +518,7 @@ export function dateLabel(date, time, now) {
 export function chipLabel(a, now) {
     if (a.kind === "date") return dateLabel(a.date, a.time, now);
     if (a.kind === "grocery") return !a.ids ? "Grocery list" : a.already ? "Already on list" : "In groceries";
+    if (a.kind === "budget") return a.bid ? "Budget draft" : "Budget";
     return "@" + (a.name || "someone");
 }
 
@@ -579,7 +584,7 @@ function monthDay(today, month, day, year) {
     return d;
 }
 
-// What "@" offers for what's typed after it: dates, the grocery list, people.
+// What "@" offers for what's typed after it: dates, the grocery list, a budget draft, people.
 export function atItems(query, opts) {
     opts = opts || {};
     const q = String(query || "").toLowerCase().trim();
@@ -601,6 +606,9 @@ export function atItems(query, opts) {
     if (opts.groceries && (!q || "grocery list".startsWith(q) || q.startsWith("grocer") || "groceries".startsWith(q))) {
         items.push({ kind: "grocery", icon: "🛒", label: "Grocery list", hint: "Put this line on your grocery list" });
     }
+    if (opts.budget && (!q || "budget".startsWith(q) || q.startsWith("budget"))) {
+        items.push({ kind: "budget", icon: "💰", label: "Budget draft", hint: "Start a budget item in Money from this line" });
+    }
     (opts.people || []).filter((p) => !q || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.name.toLowerCase().startsWith(q))
         .slice(0, 5).forEach((p) => items.push({ kind: "person", pid: p.id, name: p.name, icon: "@", label: p.name, hint: "Mention" }));
     return items.slice(0, 9);
@@ -621,6 +629,7 @@ const SmartChip = Node.create({
         return {
             kind: keep("kind", "date"), date: keep("date", null), time: keep("time", null), task: keep("task", null),
             ids: keep("ids", ""), already: keep("already", false), pid: keep("pid", null), name: keep("name", ""),
+            bid: keep("bid", null),
             uid: { default: null, rendered: false, parseHTML: () => "c" + (++chipSeq) },    // finds it again (not saved)
             fresh: { default: false, rendered: false, parseHTML: () => false },          // just made: not sent yet
         };
@@ -635,6 +644,7 @@ const SmartChip = Node.create({
             if (a.task) cls += " is-linked";
         }
         if (a.kind === "grocery" && !a.ids) cls += " is-pending";
+        if (a.kind === "budget" && !a.bid) cls += " is-pending";
         return ["span", { "data-chip": tokenOf(a), class: cls, contenteditable: "false" }, chipLabel(a)];
     },
     renderText({ node }) { return chipLabel(node.attrs); },
@@ -653,7 +663,7 @@ function atExtension(at) {
                 allowSpaces: true,
                 startOfLine: false,
                 allowedPrefixes: [" ", " ", "(", "["],
-                items: ({ query }) => atItems(query, { people: at.people, groceries: at.groceries }),
+                items: ({ query }) => atItems(query, { people: at.people, groceries: at.groceries, budget: at.budget }),
                 command: ({ editor, range, props }) => insertChip(editor, props, range, at),
                 allow: ({ state }) => !state.selection.$from.parent.type.spec.code,
                 render: () => ({
@@ -661,6 +671,10 @@ function atExtension(at) {
                     onUpdate: (props) => {
                         if (/^grocer(y|ies) $/i.test(props.query) && at.groceries) {   // "@grocery" then space
                             props.command({ kind: "grocery" });
+                            return;
+                        }
+                        if (/^budget $/i.test(props.query) && at.budget) {             // "@budget" then space
+                            props.command({ kind: "budget" });
                             return;
                         }
                         if (at.onUpdate) at.onUpdate(props);
@@ -697,7 +711,8 @@ export function findChips(editor) {
             if ($pos.node(d).type.name === "taskItem") { checked = !!$pos.node(d).attrs.checked; itemPos = $pos.before(d); break; }
         }
         const a = node.attrs;
-        const key = a.kind === "date" && a.task ? "task:" + a.task : a.kind === "grocery" && a.ids ? "grocery:" + a.ids : null;
+        const key = a.kind === "date" && a.task ? "task:" + a.task : a.kind === "grocery" && a.ids ? "grocery:" + a.ids
+            : a.kind === "budget" && a.bid ? "budget:" + a.bid : null;
         out.push({ pos, node, attrs: a, key, uid: a.uid, block: $pos.before($pos.depth), blockEnd: $pos.after($pos.depth),
                    text: $pos.parent.textContent.trim(), checked, itemPos });
         return false;

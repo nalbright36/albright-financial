@@ -183,3 +183,28 @@ class BudgetLine(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["budget", "category"], name="money_one_line_per_category")]
+
+
+class BudgetDraft(Scoped):
+    """A budget item started from a note: "@budget Christmas gifts 300" on a line (albright_notes.smart) makes one in
+    the writer's current Money space, with the line's amount as its planned amount. It's a draft - on the Budget page
+    under "From notes", not in any total - until someone finishes it there: picks (or names) a category and confirms
+    the amount for a month (budget.confirm_draft). Then it points at that BudgetLine and stays as the link between
+    the two: the note's chip ("@[budget:<id>]") finds the budget, and the budget line finds its note."""
+    name = models.CharField(max_length=60)
+    planned = models.DecimalField(null=True, blank=True, **MONEY)
+    note = models.ForeignKey("albright_notes.Note", on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name="budget_drafts")
+    line = models.ForeignKey(BudgetLine, on_delete=models.SET_NULL, null=True, blank=True, related_name="drafts")
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_draft(self):
+        return self.confirmed_at is None

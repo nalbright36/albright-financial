@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from . import money
-from .models import ZERO, Budget, BudgetLine, Split, Transaction
+from .models import ZERO, Budget, BudgetDraft, BudgetLine, Category, Split, Transaction
 
 NEAR = Decimal("0.9")
 
@@ -170,3 +170,70 @@ def left_this_month(user):
     if not views:
         return None
     return sum((v["remaining"] for _label, _space, v in views), ZERO)
+
+
+# ---------------------------------------------------------------------------
+# Drafts from notes ("@budget Christmas gifts 300" - albright_notes.smart)
+# ---------------------------------------------------------------------------
+
+def split_amount(text):
+    """ "Christmas gifts 300" -> ("Christmas gifts", Decimal("300.00")); no amount -> (text, None). The amount is the
+    first or last word, as in quick add ("$300", "1,200.50")."""
+    from .quickadd import AMOUNT
+    words = (text or "").split()
+    raw = None
+    if words and AMOUNT.match(words[-1]):
+        raw, words = words[-1], words[:-1]
+    elif words and AMOUNT.match(words[0]):
+        raw, words = words[0], words[1:]
+    amount = money.to_decimal(raw.lstrip("+-")) if raw else None
+    name = " ".join(words).strip(" -–:,") or "Budget item"
+    return name[:60], (amount if amount and amount > 0 else None)
+
+
+def create_draft(user, text, note=None):
+    """A draft budget item from a note's line, in the writer's current Money space. Returns it."""
+    space = money.current_space(user)
+    name, planned = split_amount(text)
+    return BudgetDraft.objects.create(owner=user, space=space, name=name, planned=planned, note=note)
+
+
+def open_drafts(space):
+    """The space's drafts not yet finished, newest first."""
+    return BudgetDraft.objects.filter(space=space, confirmed_at__isnull=True).select_related("note")
+
+
+def confirm_draft(draft, user, month, planned, category=None, new_name=""):
+    """Finish a draft: its amount goes on `month`'s budget for `category` (or a new spending category named
+    new_name / the draft's name) - added to what that category already plans. Returns the BudgetLine."""
+    space = draft.space
+    if category is None:
+        name = (new_name or draft.name).strip()[:60] or draft.name
+        category = Category.objects.filter(space=space, name__iexact=name, archived=False).first()
+        if category is None:
+            category = Category.objects.create(owner=user, space=space, name=name, kind=Category.EXPENSE,
+                                               order=Category.objects.filter(space=space).count())
+    budget, _ = Budget.objects.get_or_create(space=space, month=month, defaults={"owner": user})
+    line, _ = BudgetLine.objects.get_or_create(budget=budget, category=category)
+    line.planned = (line.planned or ZERO) + planned
+    line.save(update_fields=["planned"])
+    draft.line, draft.planned, draft.confirmed_at = line, planned, timezone.now()
+    draft.save(update_fields=["line", "planned", "confirmed_at"])
+    money.record_activity(space, "budget", f"updated the {month:%B} budget", group=f"budget:{month:%Y-%m}",
+                          url=reverse("albright_money:budget") + f"?month={month:%Y-%m}&space={space.pk}")
+    return line
+
+
+def notes_for_lines(user, budget):
+    """{category pk: [(note pk, title)]} - the notes this month's budget lines came from (only notes `user` can
+    open), for the "From note" links on the Budget page."""
+    if budget is None:
+        return {}
+    from albright_notes.models import Note
+    drafts = BudgetDraft.objects.filter(line__budget=budget, note__isnull=False).select_related("line")
+    visible = dict(Note.objects.visible_to(user).filter(pk__in=[d.note_id for d in drafts]).values_list("pk", "title"))
+    out = {}
+    for d in drafts:
+        if d.note_id in visible and (d.note_id, visible[d.note_id]) not in out.get(d.line.category_id, []):
+            out.setdefault(d.line.category_id, []).append((d.note_id, visible[d.note_id]))
+    return out

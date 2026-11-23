@@ -14,7 +14,8 @@
  *                  On a phone the note opens in a reading layout; tap the text to edit right there
  *   "@"            a due date ("@today call mom", "@fri 5pm" - a chip; the line goes to the Planner when you leave
  *                  it, with Undo; tap the chip to change it or open the task), the grocery list ("@grocery milk,
- *                  eggs" - sent when you leave the line, with Undo), or a person. Linked dates
+ *                  eggs" - sent when you leave the line, with Undo), a draft budget item in Money ("@budget Christmas
+ *                  gifts 300" - sent when you leave the line, with Undo; the amount prefills it), or a person. Linked dates
  *                  and grocery tags stay in step with their Planner task / grocery line both ways (smart.py)
  *   autosave       title, body, tags and "Move checked items to the bottom" save as you type (debounced): "Saving…" /
  *                  "Saved ✓". Each save sends the version it started from; a 409 means someone else changed the
@@ -526,7 +527,7 @@
             onFocus: function () { showBar(true); },
             onBlur: function (_ed, event) { onEditorBlur(event); },
             slash: {onOpen: slashOpen, onUpdate: slashUpdate, onKey: slashKey, onClose: closeBlockMenu, onImage: pickFile},
-            at: smart ? {people: smart.people || [], groceries: !!smart.groceries, onOpen: atUpdate, onUpdate: atUpdate,
+            at: smart ? {people: smart.people || [], groceries: !!smart.groceries, budget: !!smart.budget, onOpen: atUpdate, onUpdate: atUpdate,
                          onKey: atKey, onClose: closeBlockMenu, onPick: function (range) { openChipPop(null, range); }} : null,
         });
         editor = ne.editor;
@@ -898,6 +899,23 @@
                     NoteEditor.updateChip(editor, c.uid, {fresh: true}, true);
                     toast(err.message === "failed" ? "Couldn't add to groceries" : err.message);
                 });
+            } else if (c.attrs.kind === "budget" && !c.attrs.bid) {
+                var line = c.text.replace(/\s+/g, " ").trim();
+                if (!line) return;                                        // nothing on the line yet: wait
+                NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
+                api(root.dataset.budgetUrl, {text: line}).then(function (data) {
+                    NoteEditor.updateChip(editor, c.uid, {bid: data.id});
+                    var amount = data.planned ? " · $" + Number(data.planned).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2}) : "";
+                    toast("Draft budget in Money: " + data.name + amount, "Undo", function () {
+                        api(root.dataset.budgetRemoveUrl, {id: data.id}).then(function () {
+                            var now = chipBy(c.uid);
+                            if (now) { skipPrompt["budget:" + data.id] = true; NoteEditor.removeChip(editor, c.uid); }
+                        });
+                    });
+                }).catch(function (err) {
+                    NoteEditor.updateChip(editor, c.uid, {fresh: true}, true);
+                    toast(err.message === "failed" ? "Couldn't make the budget draft" : err.message);
+                });
             } else if (c.attrs.kind === "date" && smart.planner && !c.attrs.task) {
                 if (!c.text) return;                                      // nothing on the line yet: wait
                 NoteEditor.updateChip(editor, c.uid, {fresh: false}, true);
@@ -946,6 +964,12 @@
                             .then(function () { toast("Planner task deleted"); })
                             .catch(function () { toast("Couldn't delete the Planner task"); });
                     });
+                } else if (key.indexOf("budget:") === 0) {
+                    toast("Removed " + what + " - remove its budget draft too?", "Remove draft", function () {
+                        api(root.dataset.budgetRemoveUrl, {id: gone.attrs.bid}).then(function (data) {
+                            toast(data.removed ? "Budget draft removed" : "It's already in your budget - kept it there");
+                        });
+                    });
                 } else {
                     var ids = gone.attrs.ids.split(",").map(Number);
                     toast("Removed " + what + " - take it off the grocery list?", "Remove", function () {
@@ -974,6 +998,8 @@
         var kind = chip ? chip.attrs.kind : "date";
         chipPop.querySelector('[data-chippop="date"]').hidden = kind !== "date";
         chipPop.querySelector('[data-chippop="grocery"]').hidden = kind !== "grocery";
+        var budgetPop = chipPop.querySelector('[data-chippop="budget"]');
+        if (budgetPop) budgetPop.hidden = kind !== "budget";
         var rect;
         if (chip) {
             var dom = editor.view.nodeDOM(chip.pos);
@@ -992,6 +1018,28 @@
             chipPop.querySelector("[data-chip-remove]").hidden = !chip;
             placePop(rect);
             dateIn.focus();
+        } else if (kind === "budget") {
+            if (!budgetPop) return;
+            var btext = budgetPop.querySelector("[data-chip-budget-text]"), bopen = budgetPop.querySelector("[data-chip-budget-open]");
+            var bremove = budgetPop.querySelector("[data-chip-budget-remove]");
+            bremove.hidden = true;
+            if (!chip.attrs.bid) {
+                btext.textContent = "Not sent yet - it becomes a draft budget item in Money when you leave this line.";
+            } else {
+                btext.textContent = "Loading…";
+                fetch(root.dataset.budgetInfoUrl.replace("/0/", "/" + chip.attrs.bid + "/"),
+                      {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+                    .then(function (r) { if (!r.ok) throw new Error("gone"); return r.json(); })
+                    .then(function (d) {
+                        var amount = d.planned ? " ($" + Number(d.planned).toLocaleString("en-US") + ")" : "";
+                        btext.textContent = d.confirmed ? "In your budget: " + d.name + amount + (d.category ? " under " + d.category : "")
+                            : "Draft in Money > Budget: " + d.name + amount + ". Finish it there to add it to a month.";
+                        if (bopen) bopen.href = d.url;
+                        bremove.hidden = d.confirmed;
+                    })
+                    .catch(function () { btext.textContent = "This budget draft was dismissed in Money."; });
+            }
+            placePop(rect);
         } else {
             chipPop.querySelector("[data-chip-grocery-text]").textContent = chip.attrs.ids
                 ? (chip.attrs.already ? "Already on your grocery list: " : "On your grocery list: ") + (chip.text || "")
@@ -1029,6 +1077,17 @@
                 skipPrompt["grocery:" + c.attrs.ids] = true;
                 NoteEditor.removeChip(editor, c.uid);
                 toast("Removed from groceries");
+            });
+        });
+        var budgetRemove = chipPop.querySelector("[data-chip-budget-remove]");
+        if (budgetRemove) budgetRemove.addEventListener("click", function () {
+            var c = chipBy(chipUid);
+            closeChipPop();
+            if (!c || !c.attrs.bid) return;
+            api(root.dataset.budgetRemoveUrl, {id: c.attrs.bid}).then(function () {
+                skipPrompt["budget:" + c.attrs.bid] = true;
+                NoteEditor.removeChip(editor, c.uid);
+                toast("Budget draft removed");
             });
         });
         document.addEventListener("mousedown", function (event) {

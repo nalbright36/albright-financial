@@ -6,6 +6,8 @@ The month's budget (views.budget, budget.month_view) - the space being shown (th
 planned vs received, and "left to budget" (planned income minus planned spending). Then each spending category:
 planned, spent and what's left (rollover adds last month's leftover - or takes its overspend), with a bar: green
 under 90%, amber 90-100%, red over. "Copy last month" fills in last month's amounts.
+"From notes": drafts made by "@budget ..." on a note's line (BudgetDraft) - not in any total until finished here
+(a category and an amount for this month: views.budget_draft). A line that came from a note links back to it.
 {% endcomment %}
 <div class="mn-head">
     <div><h1 class="mn-head__title">{{ v.month|date:"F Y" }}</h1><p class="mn-head__sub">{% if space.circle_id %}{{ space.name }}'s budget{% else %}Your personal budget{% endif %}</p></div>
@@ -26,6 +28,31 @@ under 90%, amber 90-100%, red over. "Copy last month" fills in last month's amou
         <span class="mn-stat__value{% if v.remaining < 0 %} is-over{% endif %}">{{ v.remaining|usd }}</span><span class="mn-stat__note">{{ v.spent|usd }} spent of {{ v.available|usd }}</span></div>
 </section>
 
+{% if drafts %}<section class="card mn-card mn-drafts" id="mn-drafts" aria-labelledby="mn-drafts-h">
+    <h2 class="mn-card__title" id="mn-drafts-h">From notes <span class="mn-count">{{ drafts|length }}</span></h2>
+    <p class="mn-help mn-drafts__help">Started with @budget in a note. They don't count toward any total until you add them to {{ v.month|date:"F" }}'s budget.</p>
+    {% for d in drafts %}<form method="post" action="{% url 'albright_money:budget_draft' d.pk %}" class="mn-draft" id="mn-draft-{{ d.pk }}">{% csrf_token %}
+        <input type="hidden" name="month" value="{{ v.month|date:'Y-m' }}"><input type="hidden" name="next" value="{{ here }}">
+        <div class="mn-draft__head">
+            <span class="mn-draft__name">{{ d.name }}</span> <span class="mn-tag">From notes</span>
+            {% if d.note_visible %}<a href="{% url 'albright_notes:note' d.note_id %}" class="mn-draft__note mn-small">📝 {{ d.note.title|default:"Untitled" }}</a>{% elif d.note_id %}<span class="mn-muted mn-small">A note you can't open</span>{% else %}<span class="mn-muted mn-small">Its note was deleted</span>{% endif %}
+        </div>
+        <div class="mn-draft__fields">
+            <label class="mn-draft__field"><span class="mn-label">Category</span>
+                <select name="category" class="ledger-input">
+                    <option value="new">New: {{ d.name }}</option>
+                    {% for c in draft_categories %}<option value="{{ c.pk }}"{% if c.name|lower == d.name|lower %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                </select></label>
+            <label class="mn-draft__field"><span class="mn-label">Planned for {{ v.month|date:"F" }}</span>
+                <span class="mn-bline__input"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned" class="ledger-input" value="{{ d.planned|default_if_none:'' }}" placeholder="0.00" required></span></label>
+        </div>
+        <div class="mn-actions">
+            <button type="submit" name="action" value="confirm" class="btn btn-primary btn-sm">Add to budget</button>
+            <button type="submit" name="action" value="dismiss" class="btn btn-secondary btn-sm" formnovalidate>Dismiss</button>
+        </div>
+    </form>{% endfor %}
+</section>{% endif %}
+
 <form method="post" class="mn-budget" id="mn-budget">{% csrf_token %}
     <input type="hidden" name="scope" value="{{ scope }}"><input type="hidden" name="month" value="{{ v.month|date:'Y-m' }}">
     {% if v.income %}<section class="card mn-card" aria-labelledby="mn-inc-h">
@@ -42,7 +69,7 @@ under 90%, amber 90-100%, red over. "Copy last month" fills in last month's amou
         {% for r in v.rows %}<div class="mn-bline mn-bline--{{ r.status }}" data-category="{{ r.category.pk }}">
             <label for="mn-plan-{{ r.category.pk }}" class="mn-bline__name">{{ r.category.name }}</label>
             <span class="mn-bline__input"><span aria-hidden="true">$</span><input type="text" inputmode="decimal" name="planned_{{ r.category.pk }}" id="mn-plan-{{ r.category.pk }}" class="ledger-input" value="{{ r.planned }}"></span>
-            <span class="mn-bline__nums">{{ r.spent|usd }} spent &middot; <strong class="mn-bline__left">{{ r.remaining|usd }} {% if r.remaining < 0 %}over{% else %}left{% endif %}</strong>{% if r.carry %} <span class="mn-muted mn-small">({{ r.carry|signed }} rolled over)</span>{% endif %}</span>
+            <span class="mn-bline__nums">{{ r.spent|usd }} spent &middot; <strong class="mn-bline__left">{{ r.remaining|usd }} {% if r.remaining < 0 %}over{% else %}left{% endif %}</strong>{% if r.carry %} <span class="mn-muted mn-small">({{ r.carry|signed }} rolled over)</span>{% endif %}{% for pk, title in r.from_notes %} <a href="{% url 'albright_notes:note' pk %}" class="mn-tag mn-tag--quiet mn-bline__note" title="This came from a note">📝 {{ title|truncatechars:28 }}</a>{% endfor %}</span>
             <div class="mn-bar mn-bar--{{ r.status }}" role="img" aria-label="{{ r.pct }}% of {{ r.available|usd }} used"><span style="width: {{ r.pct }}%;"></span></div>
             <label class="mn-check mn-bline__roll"><input type="checkbox" name="rollover" value="{{ r.category.pk }}"{% if r.category.rollover %} checked{% endif %}> Roll over</label>
         </div>{% endfor %}

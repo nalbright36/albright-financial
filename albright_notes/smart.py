@@ -8,6 +8,9 @@ They live in the note's Markdown as small tokens, so notes stay Markdown (the Bo
     @[grocery:45,46]                      the line's items on the grocery list (lines 45 and 46)
     @[grocery:45|already]                 it was already on the list - nothing was added
     @[person:7|Sam Lee]                   a mention
+    @[budget]                             a budget tag not yet sent (sent when you leave the line, like @grocery)
+    @[budget:9]                           the line became Money's budget draft 9 (albright_money.BudgetDraft) - a
+                                          draft until it's finished on the Budget page; it links back to the note
 
 The editor (editor_src/src/note_editor.js: smartChip) shows each as a chip; render.py does the same for readers.
 
@@ -30,7 +33,7 @@ from django.db.models import F
 from django.urls import reverse
 from django.utils import timezone
 
-CHIP = re.compile(r"@\[(date|grocery|person)(?::([^\]|\n]*))?((?:\|[^\]|\n]*)*)\]")
+CHIP = re.compile(r"@\[(date|grocery|person|budget)(?::([^\]|\n]*))?((?:\|[^\]|\n]*)*)\]")
 FENCE = re.compile(r"^[ \t]*(```|~~~)")
 CHECK_LINE = re.compile(r"^((?:[ \t]*>)*[ \t]*[-*+][ \t]+)\[([ xX])\](?=[ \t]|$)")
 MARKERS = re.compile(r"^\s*(?:>\s*)*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|#{1,6}\s+|-#\s+)?")
@@ -70,6 +73,8 @@ def parse(match):
     elif kind == "grocery":
         chip["ids"] = [int(i) for i in value.split(",") if i.strip().isdigit()]
         chip["already"] = "already" in parts
+    elif kind == "budget":
+        chip["draft"] = int(value) if value.isdigit() else None
     else:
         chip["pid"] = int(value) if value.isdigit() else None
         chip["name"] = (parts[0] if parts else "").strip()
@@ -85,6 +90,10 @@ def date_token(day, at=None, task=None):
 
 def grocery_token(ids, already=False):
     return "@[grocery" + (":" + ",".join(str(i) for i in ids) if ids else "") + ("|already" if already else "") + "]"
+
+
+def budget_token(draft_id=None):
+    return "@[budget" + (f":{draft_id}" if draft_id else "") + "]"
 
 
 def _lines(body):
@@ -147,6 +156,11 @@ def due_items(body):
 def grocery_items(body):
     return [{"line": c["line"], "text": c["text"], "grocery_ids": c["ids"], "already": c["already"],
              "pending": not c["ids"], "done": bool(c["checked"])} for c in chips(body) if c["kind"] == "grocery"]
+
+
+def budget_items(body):
+    return [{"line": c["line"], "text": c["text"], "draft_id": c["draft"], "pending": not c["draft"]}
+            for c in chips(body) if c["kind"] == "budget"]
 
 
 def _day(text):
@@ -409,6 +423,40 @@ def remove_groceries(user, ids):
     from albright_meals.models import GroceryItem
     spaces = circles.space_ids(user, "meals")
     return GroceryItem.objects.filter(pk__in=ids, space_id__in=spaces).delete()[0]
+
+
+class NoMoney(Exception):
+    """This person can't open Money (no budget to put a draft in)."""
+
+
+def add_budget_draft(note, user, text):
+    """ "@budget Christmas gifts 300": a draft budget item in the writer's current Money space - named from the line,
+    its amount (the first or last word) the planned amount - linked to this note. Returns the draft."""
+    from albright_money import budget
+    from albright_money.money import can_open
+    if not can_open(user):
+        raise NoMoney()
+    return budget.create_draft(user, " ".join((text or "").split())[:200], note=note)
+
+
+def remove_budget_draft(user, draft_id):
+    """Undo an "@budget", or "Remove draft": only a draft still unfinished, in a space this person sees in Money."""
+    from albright_money.models import BudgetDraft
+    return BudgetDraft.objects.visible_to(user).filter(pk=draft_id, confirmed_at__isnull=True).delete()[0]
+
+
+def budget_draft(user, draft_id):
+    """{name, planned, confirmed, category, url} for a chip's popover, or None when it's gone / not theirs to see."""
+    from albright_money.models import BudgetDraft
+    d = BudgetDraft.objects.visible_to(user).select_related("line__category", "line__budget").filter(pk=draft_id).first()
+    if d is None:
+        return None
+    url = reverse("albright_money:budget") + f"?space={d.space_id}"
+    if d.line_id:
+        url += f"&month={d.line.budget.month:%Y-%m}"
+    return {"name": d.name, "planned": str(d.planned) if d.planned is not None else None,
+            "confirmed": not d.is_draft, "category": d.line.category.name if d.line_id else None,
+            "url": url + ("" if d.line_id else f"#mn-draft-{d.pk}")}
 
 
 def add_task(note, user, day, at=None, text=""):

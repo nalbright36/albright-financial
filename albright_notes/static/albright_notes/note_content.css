@@ -162,7 +162,7 @@ img.ProseMirror-separator { display: inline !important; border: none !important;
   .note-content p.nt-small-text { font-size: 13px; }
 }
 
-/* Smart links (albright_notes/smart.py): due dates, grocery tags, mentions - the same chip in the editor and when read */
+/* Smart links (albright_notes/smart.py): due dates, grocery tags, budget drafts, mentions - the same chip in the editor and when read */
 .note-content .nt-smart {
   display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; margin: 0 1px; border-radius: 999px;
   font-size: 0.82em; font-weight: 600; line-height: 1.6; vertical-align: 0.06em; white-space: nowrap;
@@ -179,6 +179,10 @@ img.ProseMirror-separator { display: inline !important; border: none !important;
   background: color-mix(in srgb, var(--app-meals, #F97316) 12%, transparent); }
 .note-content .nt-smart--grocery::before { content: "🛒"; font-size: 0.9em; }
 .note-content .nt-smart--grocery.is-pending { border-style: dashed; }
+.note-content .nt-smart--budget { color: var(--app-money); border-color: color-mix(in srgb, var(--app-money) 45%, transparent);
+  background: color-mix(in srgb, var(--app-money) 12%, transparent); }
+.note-content .nt-smart--budget::before { content: "💰"; font-size: 0.9em; }
+.note-content .nt-smart--budget.is-pending { border-style: dashed; }
 .note-content .nt-smart--person { color: var(--nc-accent); background: var(--nc-soft); border-color: transparent; }
 .ProseMirror .nt-smart { cursor: pointer; }
 .ProseMirror .nt-smart.ProseMirror-selectednode { outline: 2px solid var(--nc-accent); outline-offset: 1px; }

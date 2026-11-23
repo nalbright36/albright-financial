@@ -21,7 +21,7 @@ from django.views.decorators.http import require_POST
 from . import budget as budgets
 from . import imports, money, quickadd
 from .forms import AccountForm, CategoryForm, MappingForm, RuleForm, SplitRows, TransactionForm, TransferForm, UploadForm
-from .models import ZERO, Account, Category, Rule, Split, Transaction
+from .models import ZERO, Account, BudgetDraft, Category, Rule, Split, Transaction
 
 LIST_LIMIT = 300
 
@@ -592,9 +592,51 @@ def budget(request):
         messages.success(request, "Budget saved.")
         return redirect(here)
     view = budgets.month_view(owner, space, month)
+    from_notes = budgets.notes_for_lines(user, view["budget"])
+    for row in view["rows"] + view["income"]:
+        row["from_notes"] = from_notes.get(row["category"].pk, [])
+    drafts = list(budgets.open_drafts(space))
+    from albright_notes.models import Note
+    visible = set(Note.objects.visible_to(user).filter(pk__in=[d.note_id for d in drafts if d.note_id])
+                  .values_list("pk", flat=True))
+    for d in drafts:
+        d.note_visible = d.note_id in visible
     return render(request, "albright_money/budget.html", {
         "v": view, "space": space, "prev": budgets.add_months(month, -1),
-        "next": budgets.add_months(month, 1), "is_this_month": month == budgets.this_month()})
+        "next": budgets.add_months(month, 1), "is_this_month": month == budgets.this_month(),
+        "drafts": drafts, "draft_categories": [c for c in money.ensure_categories(owner, space) if not c.is_income],
+        "here": here})
+
+
+@login_required
+@require_POST
+def budget_draft(request, pk):
+    """A draft from a note (Budget page, "From notes"): action=confirm puts its amount on the month's budget for the
+    picked category (or a new one named after it); action=dismiss deletes it (the note's chip then shows it gone)."""
+    draft = get_object_or_404(BudgetDraft.objects.visible_to(request.user), pk=pk, confirmed_at__isnull=True)
+    month = _month(request.POST.get("month"), budgets.this_month())
+    back = _next(request, "albright_money:budget")
+    if request.POST.get("action") == "dismiss":
+        draft.delete()
+        messages.success(request, f"Dismissed “{draft.name}”.")
+        return redirect(back)
+    amount = money.to_decimal(request.POST.get("planned") or "")
+    if amount is None or amount <= 0:
+        messages.error(request, f"Give “{draft.name}” a planned amount over $0.")
+        return redirect(back)
+    category, new_name = None, ""
+    picked = request.POST.get("category") or "new"
+    if picked.isdigit():
+        category = Category.objects.filter(space=draft.space, pk=int(picked), archived=False,
+                                           kind=Category.EXPENSE).first()
+        if category is None:
+            messages.error(request, "Pick a spending category.")
+            return redirect(back)
+    else:
+        new_name = request.POST.get("new_name") or draft.name
+    line = budgets.confirm_draft(draft, request.user, month, amount, category=category, new_name=new_name)
+    messages.success(request, f"Added {amount:,.2f} to {line.category.name} for {month:%B}.")
+    return redirect(back)
 
 
 # ---------------------------------------------------------------------------

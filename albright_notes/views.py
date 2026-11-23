@@ -311,7 +311,7 @@ def _editor(note, user, now, allowed):
         "share": sharing.control(user, note), "updated": ago(note.updated_at, now),
         "updated_iso": note.updated_at.isoformat(),
         "smart": {"link_state": smart.link_states(note.body), "people": _people(user),
-                  "groceries": "meals" in allowed, "planner": can_schedule,
+                  "groceries": "meals" in allowed, "planner": can_schedule, "budget": "money" in allowed,
                   "auto_planner": smart.auto_planner(user), "today": timezone.localdate().isoformat()} if can_edit else None,
         "my_permission": None if is_owner else sharing.permission_for(user, note),
         "att": attachments.section(user, note, "notes", editable=can_edit,
@@ -564,6 +564,46 @@ def smart_groceries_remove(request, pk):
     _editable(request, pk)
     ids = [i for i in _json(request).get("ids") or [] if isinstance(i, int)]
     return JsonResponse({"ok": True, "removed": smart.remove_groceries(request.user, ids) if ids else 0})
+
+
+@login_required
+@require_POST
+def smart_budget(request, pk):
+    """"@budget" on a line: {text: "Christmas gifts 300"} becomes a draft budget item in Money (the amount prefills
+    its planned amount), linked to this note. Returns {id, name, planned, url}."""
+    note = _editable(request, pk)
+    text = " ".join(str(_json(request).get("text") or "").split())
+    if not text:
+        return JsonResponse({"ok": False, "error": "Nothing to add"}, status=400)
+    if "money" not in links._allowed_apps(request.user):
+        return JsonResponse({"ok": False, "error": "You can't open Money."}, status=403)
+    try:
+        draft = smart.add_budget_draft(note, request.user, text)
+    except smart.NoMoney:
+        return JsonResponse({"ok": False, "error": "You can't open Money."}, status=403)
+    info = smart.budget_draft(request.user, draft.pk)
+    return JsonResponse({"ok": True, "id": draft.pk, "name": draft.name, "planned": info["planned"], "url": info["url"]})
+
+
+@login_required
+@require_POST
+def smart_budget_remove(request, pk):
+    """Undo an "@budget", or "Remove draft" after the tag or line went: {id} - only a draft not finished yet."""
+    _editable(request, pk)
+    draft_id = _json(request).get("id")
+    removed = smart.remove_budget_draft(request.user, draft_id) if isinstance(draft_id, int) else 0
+    return JsonResponse({"ok": True, "removed": removed})
+
+
+@login_required
+@require_GET
+def smart_budget_info(request, pk, draft_id):
+    """A budget chip's popover: {name, planned, confirmed, category, url}, or 404 when the draft's gone."""
+    _visible(request, pk)
+    info = smart.budget_draft(request.user, draft_id)
+    if info is None:
+        return JsonResponse({"ok": False}, status=404)
+    return JsonResponse({"ok": True, **info})
 
 
 @login_required

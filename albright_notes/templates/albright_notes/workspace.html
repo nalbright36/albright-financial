@@ -124,6 +124,7 @@ note_content.css. Styles: notes.css; behavior: notes.js; views.workspace.
                  data-delete-url="{% if is_owner %}{% url 'albright_notes:delete' open.pk %}{% endif %}" data-list-url="{{ list_url }}{{ query }}"
                  data-sort-checked="{{ open.sort_checked|yesno:'1,0' }}"
                  data-groceries-url="{% url 'albright_notes:groceries' open.pk %}" data-groceries-remove-url="{% url 'albright_notes:groceries_remove' open.pk %}"
+                 data-budget-url="{% url 'albright_notes:budget' open.pk %}" data-budget-remove-url="{% url 'albright_notes:budget_remove' open.pk %}" data-budget-info-url="{% url 'albright_notes:budget_info' open.pk 0 %}"
                  data-planner-url="{% url 'albright_notes:planner' open.pk %}" data-planner-delete-url="{% url 'albright_notes:planner_delete' open.pk 0 %}"
                  data-state-url="{% url 'albright_notes:state' open.pk %}" data-settings-url="{% url 'albright_notes:settings' %}"
                  data-planner-item-url="{% if smart.planner %}{% url 'albright_planner:item' 0 %}{% endif %}"
@@ -184,7 +185,7 @@ note_content.css. Styles: notes.css; behavior: notes.js; views.workspace.
                 <hr class="nt-menu__sep">
                 <label for="nt-tags" class="nt-mfield"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/></svg><span>Tags</span><input type="text" id="nt-tags" class="nt-input" data-field="tags" value="{{ open.tags|join:', ' }}" placeholder="home, taxes"></label>
                 <label class="nt-switch"><input type="checkbox" id="nt-sort-checked" data-field="sort_checked"{% if open.sort_checked %} checked{% endif %}><span class="nt-switch__track" aria-hidden="true"></span> <span class="nt-switch__text">Move checked items to the bottom</span></label>
-                <p class="nt-small nt-muted nt-mhint">Type <b>@</b> in the note for a due date (&ldquo;@today call mom&rdquo;{% if smart.planner %} - the line goes to your Planner{% endif %}){% if smart.groceries %}, the grocery list (&ldquo;@grocery milk, eggs&rdquo;){% endif %} or a person.</p>
+                <p class="nt-small nt-muted nt-mhint">Type <b>@</b> in the note for a due date (&ldquo;@today call mom&rdquo;{% if smart.planner %} - the line goes to your Planner{% endif %}){% if smart.groceries %}, the grocery list (&ldquo;@grocery milk, eggs&rdquo;){% endif %}{% if smart.budget %}, a draft budget item in Money (&ldquo;@budget Christmas gifts 300&rdquo;){% endif %} or a person.</p>
                 {% endif %}
                 {% if is_owner %}
                 <hr class="nt-menu__sep">
@@ -281,6 +282,13 @@ note_content.css. Styles: notes.css; behavior: notes.js; views.workspace.
                     <div class="nt-row">
                         {% if smart.groceries %}<a class="nt-btn sm" href="{% url 'albright_meals:groceries' %}">🛒 Open grocery list</a>{% endif %}
                         <button type="button" class="nt-btn sm danger" data-chip-grocery-remove>Remove from groceries</button>
+                    </div>
+                </div>
+                <div class="nt-chippop__budget" data-chippop="budget" hidden>
+                    <p class="nt-small" data-chip-budget-text></p>
+                    <div class="nt-row">
+                        {% if smart.budget %}<a class="nt-btn sm" data-chip-budget-open href="{% url 'albright_money:budget' %}">💰 Open in Money</a>{% endif %}
+                        <button type="button" class="nt-btn sm danger" data-chip-budget-remove>Remove draft</button>
                     </div>
                 </div>
             </div>

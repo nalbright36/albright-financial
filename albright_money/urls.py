@@ -23,5 +23,6 @@ urlpatterns = [
     path("rules/", views.rules, name="rules"),
     path("rules/<int:pk>/delete/", views.rule_delete, name="rule_delete"),
     path("budget/", views.budget, name="budget"),
+    path("budget/drafts/<int:pk>/", views.budget_draft, name="budget_draft"),
     path("household/", views.household, name="household"),
 ]
