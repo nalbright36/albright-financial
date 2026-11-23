@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     'albright_fitness',
     'albright_weather',
     'albright_assistant',
+    'albright_roundup',
     'django.contrib.humanize',
 ]
 
