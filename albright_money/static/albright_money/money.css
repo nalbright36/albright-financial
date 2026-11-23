@@ -227,8 +227,36 @@ a.mn-list__main:hover { color: var(--accent); text-decoration: none; }
 .mn-template:hover { border-color: var(--accent); }
 .mn-template.is-on { border-color: var(--accent); background: var(--accent-soft); }
 .mn-template__name { font-weight: 600; }
-.mn-pline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: var(--space-3) 0;
-  border-top: 1px solid var(--border); }
+.mn-plan-metrics { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 var(--space-3);
+  font-size: var(--text-sm); color: var(--text-secondary); }
+.mn-plan-metrics strong { color: var(--text-primary); font-weight: 600; }
+.mn-pline { display: grid; gap: 6px 10px; padding: var(--space-3) 0; border-top: 1px solid var(--border);
+  grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas:
+    "name status" "amounts amounts" "bar bar" "meta meta"; }
 .mn-card .mn-pline:first-of-type { border-top: 0; }
-.mn-pline__name { flex: 1 1 auto; }
+.mn-pline__name { grid-area: name; }
+.mn-pline__name .ledger-input { width: 100%; font-weight: 600; }
+.mn-pline__status { grid-area: status; }
+.mn-pline__status .ledger-input { width: 100%; font-size: var(--text-sm); }
+.mn-pline__amounts { grid-area: amounts; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+.mn-pline__amounts .mn-bline__input { display: flex; align-items: center; gap: 4px; color: var(--text-secondary); flex-wrap: wrap; }
+.mn-pline__amounts .ledger-input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+.mn-pline__left { grid-column: 1 / -1; font-size: var(--text-sm); color: var(--text-secondary);
+  font-variant-numeric: tabular-nums; }
+.mn-pline--over .mn-pline__left { color: var(--loss); }
+.mn-pline--near .mn-pline__left { color: var(--warn); }
+.mn-pline--bought .mn-pline__name .ledger-input { color: var(--text-secondary); }
+.mn-pline .mn-bar { grid-area: bar; margin: 0; }
+.mn-pline__meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mn-pline__note { flex: 1 1 160px; min-height: 34px; }
+.mn-add-line { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 @media (min-width: 640px) { .mn-templates { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1000px) {
+  .mn-pline { grid-template-columns: minmax(0, 1.1fr) 148px 148px minmax(108px, auto) 128px;
+    grid-template-areas: "name planned spent left status" "bar bar bar bar bar" "meta meta meta meta meta";
+    align-items: end; }
+  .mn-pline__planned { grid-area: planned; }
+  .mn-pline__spent { grid-area: spent; }
+  .mn-pline__left { grid-area: left; grid-column: auto; padding-bottom: 8px; white-space: nowrap; }
+  .mn-pline__amounts { display: contents; }
+}

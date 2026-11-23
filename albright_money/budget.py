@@ -312,14 +312,41 @@ def plan_totals(plan):
     pace = None
     if days_left is not None and days_left > 0 and remaining > 0:
         weeks = Decimal(days_left) / Decimal(7)
-        pace = (remaining / weeks).quantize(Decimal("0.01"))
+        pace = (remaining / weeks).quantize(Decimal("1"))
     cap = plan.planned
     cap_over = (planned - cap) if cap and planned > cap else None
+    rows = []
+    for line in lines:
+        leftover = (line.planned or ZERO) - (line.spent or ZERO)
+        if line.spent > line.planned:
+            st = "over"
+        elif line.status == BudgetPlanLine.BOUGHT:
+            st = "under"
+        elif line.planned > 0 and line.spent >= line.planned * NEAR:
+            st = "near"
+        else:
+            st = "under"
+        lpct = 0 if line.planned <= 0 else min(100, int(line.spent / line.planned * 100))
+        if line.planned <= 0 and line.spent > 0:
+            lpct = 100
+        rows.append({"line": line, "left": leftover, "status": st, "pct": lpct})
     return {
-        "lines": lines, "planned": planned, "spent": spent, "remaining": remaining, "pct": min(pct, 100),
-        "bought": bought, "to_buy": to_buy, "count": len(lines), "days_left": days_left, "pace": pace,
-        "cap": cap, "cap_over": cap_over, "over": remaining < 0,
+        "lines": lines, "rows": rows, "planned": planned, "spent": spent, "remaining": remaining,
+        "pct": min(pct, 100), "bought": bought, "to_buy": to_buy, "count": len(lines),
+        "days_left": days_left, "pace": pace, "cap": cap, "cap_over": cap_over, "over": remaining < 0,
     }
+
+
+def reserve_plan(plan, user, month, planned, category=None, new_name=""):
+    """Put `planned` on `month`'s budget for `category` (or a new one). The plan keeps its lines and its cap;
+    `confirmed_at` / `line` mark it reserved. Returns the BudgetLine."""
+    cap = plan.planned
+    line = confirm_draft(plan, user, month, planned, category=category, new_name=new_name)
+    plan.refresh_from_db()
+    if plan.planned != cap:
+        plan.planned = cap
+        plan.save(update_fields=["planned"])
+    return line
 
 
 def visible_plan(user, pk):

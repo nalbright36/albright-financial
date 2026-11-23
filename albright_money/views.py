@@ -21,7 +21,7 @@ from django.views.decorators.http import require_POST
 from . import budget as budgets
 from . import imports, money, quickadd
 from .forms import AccountForm, CategoryForm, MappingForm, RuleForm, SplitRows, TransactionForm, TransferForm, UploadForm
-from .models import ZERO, Account, BudgetDraft, Category, Rule, Split, Transaction
+from .models import ZERO, Account, BudgetDraft, BudgetPlanLine, Category, Rule, Split, Transaction
 
 LIST_LIMIT = 300
 
@@ -653,6 +653,31 @@ def _plan(request, pk):
     return plan
 
 
+def _save_plan_lines(request, plan, here):
+    """Update every posted line (name, planned, spent, status, notes) on this plan."""
+    allowed = {line.pk: line for line in plan.plan_lines.all()}
+    errors = 0
+    for line in allowed.values():
+        prefix = f"line_{line.pk}_"
+        name = (request.POST.get(prefix + "name") or "").strip()[:80]
+        planned = money.to_decimal(request.POST.get(prefix + "planned") or "0")
+        spent = money.to_decimal(request.POST.get(prefix + "spent") or "0")
+        status = request.POST.get(prefix + "status") or BudgetPlanLine.TO_BUY
+        notes = (request.POST.get(prefix + "notes") or "").strip()[:200]
+        if not name or planned is None or spent is None or planned < 0 or spent < 0:
+            errors += 1
+            continue
+        if status not in dict(BudgetPlanLine.STATUSES):
+            status = line.status
+        line.name, line.planned, line.spent, line.status, line.notes = name, planned, spent, status, notes
+        line.save()
+    if errors:
+        messages.error(request, "Every line needs a name and amounts of 0 or more.")
+        return redirect(here)
+    messages.success(request, "Plan saved.")
+    return redirect(here)
+
+
 @login_required
 @never_cache
 def budget_plans(request):
@@ -734,7 +759,46 @@ def budget_plan(request, pk):
             plan.save(update_fields=["name", "due_date", "planned"])
             messages.success(request, "Plan saved.")
             return redirect(here)
-        # Line editing and reserve are evening 2.
+        if action == "save_lines":
+            return _save_plan_lines(request, plan, here)
+        if action == "add_line":
+            name = (request.POST.get("name") or "").strip()[:80] or "Person or event"
+            planned = money.to_decimal(request.POST.get("planned") or "0") or ZERO
+            spent = money.to_decimal(request.POST.get("spent") or "0") or ZERO
+            if planned < 0 or spent < 0:
+                messages.error(request, "Amounts must be 0 or more.")
+                return redirect(here)
+            order = (plan.plan_lines.order_by("-order").values_list("order", flat=True).first() or 0) + 1
+            BudgetPlanLine.objects.create(plan=plan, name=name, planned=planned, spent=spent, order=order)
+            messages.success(request, "Line added.")
+            return redirect(here)
+        if action == "delete_line":
+            line = plan.plan_lines.filter(pk=request.POST.get("line")).first()
+            if line is None:
+                messages.error(request, "That line is gone.")
+                return redirect(here)
+            line.delete()
+            messages.success(request, "Line removed.")
+            return redirect(here)
+        if action == "reserve":
+            amount = money.to_decimal(request.POST.get("planned") or "")
+            if amount is None or amount <= 0:
+                messages.error(request, "Give a planned amount over $0 to reserve.")
+                return redirect(here)
+            month = _month(request.POST.get("month"), budgets.this_month())
+            category, new_name = None, ""
+            picked = request.POST.get("category") or "new"
+            if picked.isdigit():
+                category = Category.objects.filter(space=space, pk=int(picked), archived=False,
+                                                   kind=Category.EXPENSE).first()
+                if category is None:
+                    messages.error(request, "Pick a spending category.")
+                    return redirect(here)
+            else:
+                new_name = request.POST.get("new_name") or plan.name
+            line = budgets.reserve_plan(plan, request.user, month, amount, category=category, new_name=new_name)
+            messages.success(request, f"Reserved {amount:,.2f} in {line.category.name} for {month:%B}.")
+            return redirect(here)
         messages.error(request, "Nothing to do.")
         return redirect(here)
     totals = budgets.plan_totals(plan)
@@ -742,9 +806,14 @@ def budget_plan(request, pk):
     if plan.note_id:
         from albright_notes.models import Note
         note_visible = Note.objects.visible_to(request.user).filter(pk=plan.note_id).exists()
+    reserve_categories = [c for c in money.ensure_categories(request.user, space) if not c.is_income]
+    this = budgets.this_month()
     return render(request, "albright_money/plan.html", {
-        "plan": plan, "space": space, "tab": "plans", "month": budgets.this_month(),
+        "plan": plan, "space": space, "tab": "plans", "month": this,
         "templates": BudgetDraft.TEMPLATES, "note_visible": note_visible,
+        "reserve_categories": reserve_categories,
+        "reserve_months": [this, budgets.add_months(this, 1)],
+        "statuses": BudgetPlanLine.STATUSES,
         "here": here, **totals})
 
 
