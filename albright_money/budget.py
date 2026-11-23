@@ -191,10 +191,25 @@ def split_amount(text):
     return name[:60], (amount if amount and amount > 0 else None)
 
 
-def create_draft(user, text, note=None):
-    """A budget plan from a note's line, in the writer's current Money space. The amount (if any) is the cap.
-    Starts blank (no lines) so the person can pick a template or add lines. Returns the plan."""
-    space = money.current_space(user)
+def _space_already_used_on_note(user, note):
+    """If this note already links plans and they all live in one Money space the writer can still see,
+    return that space (keep later @budget lines with the earlier ones). Otherwise None."""
+    if note is None or not getattr(note, "pk", None):
+        return None
+    ids = list(BudgetDraft.objects.visible_to(user).filter(note=note).values_list("space_id", flat=True).distinct())
+    if len(ids) != 1:
+        return None
+    from albright_labs.circles import default_create_space
+    return default_create_space(user, "money", inherit=ids[0])
+
+
+def create_draft(user, text, note=None, space=None):
+    """A budget plan from a note's line. The amount (if any) is the cap. Starts blank (no lines) so the
+    person can pick a template or add lines. Lives in `space` when given, else in the same space as this
+    note's existing plans when they're all in one space the writer can see, else Personal — not the
+    last-picked Money switcher (that was putting @budget items in a circle). Returns the plan."""
+    from albright_labs.circles import default_create_space, personal_space
+    space = space or _space_already_used_on_note(user, note) or default_create_space(user, "money") or personal_space(user)
     name, planned = split_amount(text)
     return BudgetDraft.objects.create(owner=user, space=space, name=name, planned=planned, note=note,
                                       template=BudgetDraft.BLANK)
@@ -265,8 +280,10 @@ def plans_for(space):
 
 
 def create_plan(user, name, template=BudgetDraft.BLANK, planned=None, due_date=None, note=None, space=None):
-    """A new plan in `space` (or the writer's current Money space), with starter lines from `template`."""
-    space = space or money.current_space(user)
+    """A new plan in `space` (when given), else in the same space as `note`'s existing plans when they all
+    live in one space the writer can see, else Personal. With starter lines from `template`."""
+    from albright_labs.circles import default_create_space, personal_space
+    space = space or _space_already_used_on_note(user, note) or default_create_space(user, "money") or personal_space(user)
     key = template if template in dict(BudgetDraft.TEMPLATES) else BudgetDraft.BLANK
     plan = BudgetDraft.objects.create(
         owner=user, space=space, name=(name or "Budget plan").strip()[:60] or "Budget plan",

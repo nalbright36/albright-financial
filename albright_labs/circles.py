@@ -137,6 +137,31 @@ def remember(user, app, space_id):
     pref.save(update_fields=["current_spaces", "updated_at"])
 
 
+def default_create_space(user, app, requested=None, inherit=None):
+    """The space a new item is created in when the caller didn't pick one: `requested` (an id) when the
+    user may see it, else `inherit` (a Space or id they can still see), else Personal.
+
+    Does not use the last-picked switcher (`current_space`). That memory is for which space a Meals or
+    Money page shows; using it for Notes @budget / @grocery put new items in a circle the person wasn't
+    currently looking at.
+    """
+    spaces = visible_spaces(user, app)
+    if not spaces:
+        return None
+    by_id = {s.pk: s for s in spaces}
+    if requested not in (None, ""):
+        try:
+            key = int(requested)
+        except (TypeError, ValueError):
+            key = None
+        if key in by_id:
+            return by_id[key]
+    inherit_id = getattr(inherit, "pk", inherit)
+    if inherit_id in by_id:
+        return by_id[inherit_id]
+    return personal_space(user)
+
+
 # ---------------------------------------------------------------------------
 # Circles and memberships
 # ---------------------------------------------------------------------------

@@ -544,13 +544,13 @@ def leave(request):
 def smart_groceries(request, pk):
     """"@grocery" on a line: {items: ["milk", "eggs"]} go on the grocery list of the person who typed it. Returns
     {ids, added (ids newly put on the list - what Undo takes off), already (bool: every one was on it), names}."""
-    _editable(request, pk)
+    note = _editable(request, pk)
     data = _json(request)
     texts = [smart.split_items(t)[0] for t in data.get("items") or [] if isinstance(t, str) and smart.split_items(t)]
     if not texts:
         return JsonResponse({"ok": False, "error": "Nothing to add"}, status=400)
     try:
-        made = smart.add_groceries(request.user, texts[:smart.MAX_GROCERIES])
+        made = smart.add_groceries(request.user, texts[:smart.MAX_GROCERIES], note=note)
     except smart.NoGroceries:
         return JsonResponse({"ok": False, "error": "You don't have a grocery list (Meals)."}, status=403)
     return JsonResponse({"ok": True, "ids": [g.pk for g, _s in made], "added": [g.pk for g, s in made if s == "added"],

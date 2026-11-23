@@ -392,13 +392,34 @@ def split_items(text):
     return [" ".join(part.split())[:120] for part in (text or "").split(",") if part.strip()][:MAX_GROCERIES]
 
 
-def add_groceries(user, texts, token=None):
-    """Put these items on the grocery list of the person who tagged them (their current Meals space). An item already
-    on the list (unchecked, the same thing - groceries.name_key) isn't added again. Returns [(line, "added"|"already")]."""
+def _space_already_used_for_groceries(user, note):
+    """If this note already links grocery lines and they all live in one Meals space the writer can still
+    see, return that space. Otherwise None."""
+    if note is None or not getattr(note, "pk", None):
+        return None
+    from albright_labs import circles
+    from albright_meals.models import GroceryItem
+    ids = []
+    for row in grocery_items(getattr(note, "body", "") or ""):
+        ids.extend(row.get("grocery_ids") or [])
+    if not ids:
+        return None
+    space_ids = set(GroceryItem.objects.filter(pk__in=ids, space_id__in=circles.space_ids(user, "meals"))
+                    .values_list("space_id", flat=True).distinct())
+    if len(space_ids) != 1:
+        return None
+    return circles.default_create_space(user, "meals", inherit=space_ids.pop())
+
+
+def add_groceries(user, texts, token=None, note=None, space=None):
+    """Put these items on a grocery list. Uses `space` when given, else the same Meals space as this note's
+    existing grocery chips when they're all in one space the writer can see, else Personal — not the
+    last-picked Meals switcher. An item already on the list (unchecked, the same thing - groceries.name_key)
+    isn't added again. Returns [(line, "added"|"already")]."""
     from albright_labs import circles
     from albright_meals import groceries
     from albright_meals.models import GroceryItem
-    space = circles.current_space(user, "meals")
+    space = space or _space_already_used_for_groceries(user, note) or circles.default_create_space(user, "meals")
     if space is None:
         raise NoGroceries()
     listed = {groceries.name_key(g.name): g for g in GroceryItem.objects.active().filter(space=space, checked=False).order_by("pk")}
@@ -430,8 +451,10 @@ class NoMoney(Exception):
 
 
 def add_budget_draft(note, user, text):
-    """ "@budget Christmas gifts 300": a draft budget item in the writer's current Money space - named from the line,
-    its amount (the first or last word) the planned amount - linked to this note. Returns the draft."""
+    """ "@budget Christmas gifts 300": a draft budget item in Money — Personal, or the same space as this
+    note's existing plans when they all live in one space the writer can see. Named from the line; its
+    amount (the first or last word) is the optional cap. Linked to this note. A shared note does not
+    move the plan into a circle (the owner can open it to a circle from the plan). Returns the draft."""
     from albright_money import budget
     from albright_money.money import can_open
     if not can_open(user):
@@ -521,7 +544,7 @@ def append_items(note, items, user, token=None):
             tasks += 1 if task else 0
             line += " " + date_token(day, at, task)
         if raw.get("grocery"):
-            made = add_groceries(user, split_items(text), token=token)
+            made = add_groceries(user, split_items(text), token=token, note=note)
             added += sum(1 for _l, status in made if status == "added")
             line += " " + grocery_token([g.pk for g, _s in made], already=all(s == "already" for _g, s in made))
         lines.append(line)
