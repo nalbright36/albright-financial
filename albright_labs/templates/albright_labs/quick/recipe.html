@@ -1,0 +1,32 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% comment %}Add recipe: paste a link (Meals' own import - recipe_import gives the preview, recipe_import_save saves it)
+or type it in (recipe_add with the title, ingredients and steps). hub.js switches the two.{% endcomment %}
+{% block body %}
+<div class="qa-seg" role="tablist" aria-label="How to add it">
+    <button type="button" role="tab" class="qa-seg__item is-on" aria-selected="true" data-quick-tab="link">Paste a link</button>
+    <button type="button" role="tab" class="qa-seg__item" aria-selected="false" data-quick-tab="type">Type it in</button>
+</div>
+<div data-quick-pane="link">
+    <form method="post" action="{{ import_url }}" class="qa-form" data-quick-import>{% csrf_token %}
+        <div class="qa-field">
+            <label for="qa-recipe-url">Recipe link</label>
+            <input type="url" name="url" id="qa-recipe-url" class="ledger-input" required autofocus autocomplete="off" inputmode="url" enterkeyhint="go"
+                   placeholder="https://..." data-more="url">
+        </div>
+        <div class="qa__foot">
+            <a href="{{ more_url }}" class="qa__more" data-quick-more>More details &rarr;</a>
+            <button type="submit" class="btn btn-primary qa__save" data-quick-save>Get recipe</button>
+        </div>
+    </form>
+    <div class="qa-import" data-quick-import-result aria-live="polite"></div>
+</div>
+<div data-quick-pane="type" hidden>
+    <form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+        <div class="qa-field"><label for="qa-recipe-title">Title</label><input type="text" name="title" id="qa-recipe-title" class="ledger-input" maxlength="200" required autocomplete="off" data-more="title"></div>
+        <div class="qa-field"><label for="qa-recipe-ing">Ingredients <span class="qa-opt">one per line</span></label><textarea name="ingredients_text" id="qa-recipe-ing" class="ledger-input" rows="4" data-list data-more="ingredients_text"></textarea></div>
+        <div class="qa-field"><label for="qa-recipe-steps">Steps <span class="qa-opt">one per line</span></label><textarea name="steps_text" id="qa-recipe-steps" class="ledger-input" rows="3" data-list data-more="steps_text"></textarea></div>
+        <div class="qa-field"><label for="qa-recipe-share">Share</label><select name="share_mode" id="qa-recipe-share" class="ledger-input">{% for k, label in share %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></div>
+        {% include "albright_labs/quick/_foot.html" %}
+    </form>
+</div>
+{% endblock %}

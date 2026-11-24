@@ -1,0 +1,23 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="priority" value="none"><input type="hidden" name="ends" value="never">
+    <input type="hidden" name="checkable" value="on">
+    <div class="qa-field">
+        <label for="qa-title-input">Title</label>
+        <input type="text" name="title" id="qa-title-input" class="ledger-input" maxlength="200" required autofocus autocomplete="off" enterkeyhint="done"
+               placeholder="{% if kind == 'event' %}Dinner with Sam{% else %}Call the dentist{% endif %}" data-more="title">
+    </div>
+    <div class="qa-row">
+        <div class="qa-field"><label for="qa-date">Date</label><input type="date" name="date" id="qa-date" class="ledger-input" value="{{ today|date:'Y-m-d' }}" required data-more="date"></div>
+        <div class="qa-field"><label for="qa-start">{% if kind == "event" %}Starts{% else %}Time <span class="qa-opt">optional</span>{% endif %}</label><input type="time" name="start_time" id="qa-start" class="ledger-input" data-more="start_time"></div>
+        {% if kind == "event" %}<div class="qa-field"><label for="qa-end">Ends <span class="qa-opt">optional</span></label><input type="time" name="end_time" id="qa-end" class="ledger-input" data-more="end_time"></div>{% endif %}
+    </div>
+    <div class="qa-row">
+        <div class="qa-field"><label for="qa-repeat">Repeat</label><select name="repeat" id="qa-repeat" class="ledger-input" data-more="repeat">{% for k, label in repeats %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></div>
+        <div class="qa-field"><label for="qa-share">Share</label><select name="share_mode" id="qa-share" class="ledger-input">{% for k, label in share %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></div>
+    </div>
+    {% include "albright_labs/quick/_foot.html" %}
+</form>
+{% endblock %}

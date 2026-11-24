@@ -93,7 +93,9 @@ def hub(request):
     added = {t.key for t in mine}
     return render(request, "albright_labs/hub.html", {
         "greeting": greeting(request.user), "home_tiles": [(t, counts.get(t.key, 0)) for t in mine],
-        "tile_catalog": [(app, [(t, t.key in added) for t in group])
+        "tile_catalog": [(app, [(heading, rows) for heading, rows in (
+                             ("Pages", [(t, t.key in added) for t in group if not t.is_action]),
+                             ("Quick actions", [(t, t.key in added) for t in group if t.is_action])) if rows])
                          for app, group in home_tiles.visible_catalog(request.user, pref)],
         "adding": request.GET.get("add") == "1",
         "editing": request.GET.get("edit") == "1", "home_url": landing.home_url(),

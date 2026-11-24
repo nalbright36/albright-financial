@@ -1,0 +1,12 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <div class="qa-row">
+        <div class="qa-field"><label for="qa-opp-type">Type</label><select name="opportunity_type" id="qa-opp-type" class="ledger-input">{% for k, label in types %}<option value="{{ k }}"{% if k == "income" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="qa-field"><label for="qa-opp-url">Link</label><input type="url" name="url" id="qa-opp-url" class="ledger-input" maxlength="1000" required autofocus autocomplete="off" inputmode="url" placeholder="https://..." data-more="url"></div>
+    <div class="qa-field"><label for="qa-opp-text">What it says <span class="qa-opt">paste the post</span></label><textarea name="text" id="qa-opp-text" class="ledger-input" rows="4" required data-list data-more="text"></textarea></div>
+    <p class="qa-hint">It's read and scored after you save - that can take a few seconds.</p>
+    {% include "albright_labs/quick/_foot.html" %}
+</form>
+{% endblock %}

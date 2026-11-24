@@ -1,0 +1,16 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+    <div class="qa-row qa-row--weight">
+        <div class="qa-field">
+            <label for="qa-weight">Weight today</label>
+            <input type="text" name="weight" id="qa-weight" class="ledger-input qa-big" required autofocus inputmode="decimal" autocomplete="off" enterkeyhint="done"
+                   placeholder="{% if last %}{{ last }}{% endif %}">
+        </div>
+        <div class="qa-field"><label for="qa-weight-unit">Unit</label><select name="unit" id="qa-weight-unit" class="ledger-input">{% for u in units %}<option value="{{ u }}"{% if u == unit %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
+    </div>
+    <p class="qa-hint">{% if last %}Last time: {{ last }} {{ unit }} on {{ last_date|date:"M j" }}.{% else %}Your first weigh-in.{% endif %} Logging again today replaces today's.</p>
+    {% include "albright_labs/quick/_foot.html" with save_label="Log" %}
+</form>
+{% endblock %}

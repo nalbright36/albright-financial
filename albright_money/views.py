@@ -18,7 +18,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import sheet
+from albright_labs import quick, sheet
 
 from . import budget as budgets
 from . import imports, money, quickadd
@@ -199,6 +199,8 @@ def quick_add(request):
     account = get_object_or_404(_accounts(user).filter(archived=False), pk=request.POST.get("account") or 0)
     parsed = quickadd.parse(request.POST.get("text", ""), money.categories_for_account(account))
     if parsed is None:
+        if quick.wanted(request):
+            return quick.error("Start or end with the amount - e.g. “42.18 Publix groceries”.")
         messages.error(request, "Start or end with the amount - e.g. “42.18 Publix groceries”.")
         return redirect(_next(request, "albright_money:transactions"))
     when = request.POST.get("date")
@@ -212,6 +214,9 @@ def quick_add(request):
     t.save()
     money.record_big_transaction(t, user)
     word = "in" if t.amount > 0 else "out"
+    if quick.wanted(request):
+        return quick.ok(f"Added ${abs(t.amount):,.2f} {word} – {t.payee or 'no payee'}",
+                        reverse("albright_money:transaction", args=[t.pk]))
     messages.success(request, f"Added ${abs(t.amount):,.2f} {word} – {t.payee or 'no payee'}"
                               + (f", {t.category.name}." if t.category else " (needs a category)."))
     return redirect(_next(request, "albright_money:transactions"))

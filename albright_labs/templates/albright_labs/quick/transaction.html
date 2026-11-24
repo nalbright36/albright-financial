@@ -1,0 +1,20 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+{% if accounts %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <div class="qa-field">
+        <label for="qa-money-text">Amount and payee</label>
+        <input type="text" name="text" id="qa-money-text" class="ledger-input" maxlength="300" required autofocus autocomplete="off" enterkeyhint="done" placeholder="42.18 Publix groceries">
+    </div>
+    <div class="qa-row">
+        <div class="qa-field"><label for="qa-money-account">Account</label><select name="account" id="qa-money-account" class="ledger-input">{% for a in accounts %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}</select></div>
+        <div class="qa-field"><label for="qa-money-date">Date</label><input type="date" name="date" id="qa-money-date" class="ledger-input" value="{{ today|date:'Y-m-d' }}"></div>
+    </div>
+    <p class="qa-hint">Money in? Start with +, e.g. &ldquo;+1200 paycheck&rdquo;. A category word at the end picks it.</p>
+    {% include "albright_labs/quick/_foot.html" %}
+</form>
+{% else %}
+<p class="qa-hint">Add an account first - then transactions can go in it.</p>
+<div class="qa__foot"><a href="{% url 'albright_money:accounts' %}" class="btn btn-primary">Add an account</a></div>
+{% endif %}
+{% endblock %}

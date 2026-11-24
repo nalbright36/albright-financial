@@ -28,7 +28,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import attachments, sharing, sheet
+from albright_labs import attachments, quick, sharing, sheet
 
 from . import checklist, planner, quickadd, quickview, recurrence, sources, weather
 from .forms import FromNoteForm, GroceryTaskForm, ItemForm
@@ -379,7 +379,11 @@ def quick_add(request):
 @login_required
 def new_item(request):
     initial = {"date": _day(request.GET.get("date"), planner.today(request.user)), "kind": request.GET.get("kind") or "task"}
+    # Home's quick add "More details": what was typed there comes along (?title=&start_time=&end_time=&repeat=).
+    initial.update({k: request.GET[k] for k in ("title", "start_time", "end_time", "repeat") if request.GET.get(k)})
     form = ItemForm(request.POST or None, initial=initial)
+    if request.method == "POST" and quick.wanted(request) and not form.is_valid():
+        return quick.form_error(form)
     if request.method == "POST" and form.is_valid():
         changes = form.changes()
         changes.pop("date")
@@ -391,6 +395,9 @@ def new_item(request):
         if item.kind == ScheduleItem.TASK:
             checklist.create_rows(item, [text for _pk, text in checklist.posted_rows(request.POST)])
         _share_new(request, item)
+        if quick.wanted(request):
+            return quick.ok(f"{'Event' if item.kind == ScheduleItem.EVENT else 'Task'} added",
+                            f"{reverse('albright_planner:day')}?date={item.date:%Y-%m-%d}")
         messages.success(request, f"Added “{item.title}”.")
         return redirect(_next(request))
     # ?panel=1: just the form - the New item dialog's "More options" (planner.js); it posts here like the page.

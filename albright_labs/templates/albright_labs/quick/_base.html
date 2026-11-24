@@ -1,0 +1,19 @@
+{% comment %}
+A quick-add popup on Home (albright_labs.quick_actions; hub.js puts it in #qa-dialog). Only the essential fields, with
+defaults; the first field takes the focus. The form posts to the app's own save view with X-Quick-Add: 1 (hub.js) -
+JSON back: close, toast, refresh the Today panel and badges; errors show above the form. "More details" opens the app's
+full form, carrying the fields marked data-more="<param>" (or, with data-quick-plain, submits the form the ordinary way).
+Enter saves; in a list box (one per line) Ctrl/Cmd+Enter does.
+{% endcomment %}
+<div class="qa" data-quick-popup data-name="{{ name }}" style="--tile-c: var(--app-{{ tile.accent }}, {{ tile.color }});">
+    {% block css %}{% endblock %}
+    <div class="qa__head">
+        <span class="qa__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" focusable="false"><use href="#ht-{{ tile.icon }}"/></svg></span>
+        <h2 class="qa__title" id="qa-title">{{ title }}</h2>
+        <button type="button" class="qa__close" data-quick-close aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+    </div>
+    <div class="qa-errors" data-quick-errors role="alert" hidden></div>
+    {% block body %}{% endblock %}
+</div>

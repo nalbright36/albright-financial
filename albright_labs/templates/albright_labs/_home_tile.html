@@ -1,11 +1,13 @@
 {% comment %}One of Home's tiles (hub.html "My tiles"; albright_labs.home_tiles): a real link - the icon in its app's tinted
 color, the label, and a count badge (hidden at 0, 99+ above 99). The remove (x) and the hidden order input are for
-Edit mode, as are the move left/right buttons (keyboard users); they're siblings of the link, never inside it. t = a home_tiles.Tile, count = its badge.{% endcomment %}
-<li class="ht" data-key="{{ t.key }}"{% if t.icon == "app" %} data-app-tile{% endif %} data-app-accent="{{ t.accent }}" style="--tile-c: var(--app-{{ t.accent }}, {{ t.color }});">
+Edit mode, as are the move left/right buttons (keyboard users); they're siblings of the link, never inside it. t = a home_tiles.Tile, count = its badge.
+An action tile (t.is_action) has a small "+" in the icon's corner; with a popup (t.action) hub.js opens it on Home
+(data-quick-url) instead of following the link, and "ask_ai" opens the assistant - the link is the no-JS way.{% endcomment %}
+<li class="ht{% if t.is_action %} ht--action{% endif %}" data-key="{{ t.key }}"{% if t.icon == "app" %} data-app-tile{% endif %} data-app-accent="{{ t.accent }}" style="--tile-c: var(--app-{{ t.accent }}, {{ t.color }});">
     <input type="hidden" name="tile" value="{{ t.key }}">
-    <a href="{{ t.url }}" class="ht__link" data-tile-link data-no-return title="{{ t.label }}">
-        <span class="ht__icon" aria-hidden="true">{% if t.icon == "app" %}{% include "_app_icon.html" with key=t.app %}{% else %}<svg width="22" height="22" viewBox="0 0 24 24" focusable="false"><use href="#ht-{{ t.icon }}"/></svg>{% endif %}</span>
-        <span class="ht__label">{{ t.label }}</span>
+    <a href="{{ t.url }}" class="ht__link" data-tile-link data-no-return title="{{ t.label }}"{% if t.action == "ask_ai" %} data-assistant-open{% elif t.action %} data-quick-url="{% url 'labs:quick_action' t.action %}" aria-haspopup="dialog"{% endif %}>
+        <span class="ht__icon" aria-hidden="true">{% if t.icon == "app" %}{% include "_app_icon.html" with key=t.app %}{% else %}<svg width="22" height="22" viewBox="0 0 24 24" focusable="false"><use href="#ht-{{ t.icon }}"/></svg>{% endif %}{% if t.is_action %}<span class="ht__plus">+</span>{% endif %}</span>
+        <span class="ht__label">{{ t.label }}</span>{% if t.is_action %}<span class="visually-hidden"> (quick action)</span>{% endif %}
         {% if count %}<span class="ht__badge" data-badge>{% if count > 99 %}99+{% else %}{{ count }}{% endif %}<span class="visually-hidden"> waiting</span></span>{% endif %}
     </a>
     <span class="ht__moves" data-edit-only>

@@ -1,0 +1,8 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <div class="qa-field"><label for="qa-note-title">Title</label><input type="text" name="title" id="qa-note-title" class="ledger-input" maxlength="200" autofocus autocomplete="off" enterkeyhint="next" placeholder="Untitled note"></div>
+    <div class="qa-field"><label for="qa-note-text">Note</label><textarea name="text" id="qa-note-text" class="ledger-input" rows="5" data-list></textarea></div>
+    {% include "albright_labs/quick/_foot.html" with plain_more=True %}
+</form>
+{% endblock %}

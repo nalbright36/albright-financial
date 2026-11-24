@@ -1,0 +1,4 @@
+<div class="qa__foot">
+    {% if plain_more %}<button type="submit" name="open" value="1" class="qa__more" data-quick-plain>More details &rarr;</button>{% else %}<a href="{{ more_url }}" class="qa__more" data-quick-more>More details &rarr;</a>{% endif %}
+    <button type="submit" class="btn btn-primary qa__save" data-quick-save>{{ save_label|default:"Save" }}</button>
+</div>

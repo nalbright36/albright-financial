@@ -20,6 +20,8 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+
+from albright_labs import quick
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -180,8 +182,12 @@ def pick(request, kind, pk):
             error = "Pick one of the units in the list (up to 5 kg)."
         else:
             entry.save()
+            if quick.wanted(request):
+                return quick.ok(f"Logged {entry.label} to {SLOT_KEYS[entry.slot].lower()}", _diary_url(on, entry.slot, request.user))
             _remember_undo(request, entry)
             return redirect(_diary_url(on, entry.slot, request.user))
+        if quick.wanted(request):
+            return quick.error(error)
         slot = entry.slot
     quantity, unit = (_typed(last.quantity), last.unit) if last and last.quantity and basis.unit(last.unit) else (1, basis.default)
     if request.method == "POST":

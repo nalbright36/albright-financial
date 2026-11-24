@@ -7,6 +7,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+
+from albright_labs import quick
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
@@ -71,10 +73,15 @@ def log_weight(request):
     unit = request.POST.get("unit") if request.POST.get("unit") in WEIGHT_LIMITS else profile.weight_unit
     value = _number(request.POST.get("weight"), *WEIGHT_LIMITS[unit])
     if value is None:
+        if quick.wanted(request):
+            return quick.error(f"Enter a weight in {unit}.")
         messages.error(request, f"Enter a weight in {unit}.")
     else:
         on = _day(request.POST.get("date"))
         _entry, created = body.log_weight(request.user, on, value, unit, " ".join(request.POST.get("note", "").split()))
+        if quick.wanted(request):
+            return quick.ok(f"Logged {value.normalize():f} {unit}" + ("" if created else " (replaced today's)"),
+                            reverse("albright_fitness:body"))
         messages.success(request, f"Logged {value.normalize():f} {unit}" + ("." if created else f" (replaced {on:%b} {on.day}'s)."))
     return _back(request, reverse("albright_fitness:body"))
 

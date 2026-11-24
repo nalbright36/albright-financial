@@ -1,0 +1,19 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    {% if space %}<input type="hidden" name="space" value="{{ space.pk }}">{% endif %}
+    <div class="qa-field">
+        <label for="qa-plan-recipe">Recipe</label>
+        <select name="recipe" id="qa-plan-recipe" class="ledger-input" autofocus>
+            <option value="">- Type a title instead -</option>
+            {% for r in recipes %}<option value="{{ r.pk }}">{{ r.title }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="qa-field"><label for="qa-plan-title">Or a title <span class="qa-opt">leftovers, takeout...</span></label><input type="text" name="title" id="qa-plan-title" class="ledger-input" maxlength="200" autocomplete="off"></div>
+    <div class="qa-row">
+        <div class="qa-field"><label for="qa-plan-date">Day</label><input type="date" name="date" id="qa-plan-date" class="ledger-input" value="{{ today|date:'Y-m-d' }}" required></div>
+        <div class="qa-field"><label for="qa-plan-slot">Meal</label><select name="slot" id="qa-plan-slot" class="ledger-input">{% for k, label in slots %}<option value="{{ k }}"{% if k == "dinner" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    </div>
+    {% include "albright_labs/quick/_foot.html" with save_label="Plan it" %}
+</form>
+{% endblock %}

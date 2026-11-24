@@ -1,0 +1,12 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <div class="qa-field">
+        <label for="qa-workout">What you did today</label>
+        <input type="text" name="text" id="qa-workout" class="ledger-input" maxlength="2000" required autofocus autocomplete="off" enterkeyhint="done"
+               placeholder="squat 225x5x3, bench 185x8,8,7, run 3.1mi 28:30">
+    </div>
+    <p class="qa-hint">Exercise, then weight &times; reps (&times; sets), commas between. Runs and rides: distance and time. It counts as today's planned day when it matches one.</p>
+    {% include "albright_labs/quick/_foot.html" with save_label="Log" %}
+</form>
+{% endblock %}

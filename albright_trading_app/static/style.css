@@ -1607,6 +1607,7 @@ body::before {
 .menu-panel,
 .pl-menu__panel,
 .pl-view-dialog,
+.qa-dialog,
 .meals-dialog,
 .ht-sheet__panel {
   background: var(--surface-overlay);
@@ -2010,6 +2011,72 @@ input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; ma
 .labs-picker__note { font-size: 0.75rem; color: var(--text-secondary); }
 .labs-picker__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 @media (prefers-reduced-motion: reduce) { .ht__icon, .ht.is-sliding, .ht.is-settling { transition: none; } .ht__icon { animation: none !important; } .ht__link:hover .ht__icon { transform: none; } }
+
+/* A quick action tile (home_tiles kind=ACTION): a small "+" in the icon's corner - on Home and in the Add sheet. */
+.ht__plus { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%; display: grid;
+  place-items: center; font-size: 0.8125rem; font-weight: 800; line-height: 1; background: var(--tile-c); color: var(--on-badge, #111);
+  box-shadow: 0 0 0 2px var(--bg); pointer-events: none; }
+.ht-row__icon { position: relative; }
+.ht-row__icon .ht__plus { width: 14px; height: 14px; right: -3px; bottom: -3px; font-size: 0.6875rem; box-shadow: 0 0 0 2px var(--surface-solid); }
+.ht-rows__sub { margin: 10px 2px 0; font-size: 0.6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary); }
+.ht-rows__sub:first-child { margin-top: 0; }
+.ht-rows__sub[hidden] { display: none; }
+
+/* The quick-add popup (albright_labs/quick/*.html in .qa-dialog). */
+.qa-dialog { color: var(--text-primary); background: var(--glass-bg-solid, var(--surface-solid)); -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+.qa-dialog:not([open]) { display: none; }
+.qa { --tile-c: var(--accent); display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 16px; }
+.qa--loading { flex-direction: row; align-items: center; gap: 10px; min-height: 120px; justify-content: center; color: var(--text-secondary); }
+.qa__head { display: flex; align-items: center; gap: 10px; }
+.qa__icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--tile-c) 16%, transparent); color: var(--tile-c); }
+.qa__icon svg { fill: none; stroke: currentColor; }
+.qa__title { flex: 1; min-width: 0; margin: 0; font-size: 1.0625rem; font-weight: 700; }
+.qa__close { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 10px; background: transparent;
+  color: var(--text-secondary); cursor: pointer; }
+.qa__close:hover { color: var(--text-primary); background: var(--surface-hover); }
+.qa-form { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.qa-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 0; }
+.qa-field > label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+.qa-field .ledger-input { width: 100%; min-width: 0; }
+.qa-field textarea.ledger-input { resize: vertical; min-height: 4.5em; }
+.qa-opt { font-weight: 400; color: var(--text-tertiary, var(--text-secondary)); }
+.qa-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.qa-row > .qa-field { flex: 1 1 8rem; }
+.qa-row--weight > .qa-field:last-child { flex: 0 0 5.5rem; }
+.qa-big { font-size: 1.375rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.qa-hint { margin: 0; font-size: 0.75rem; color: var(--text-secondary); }
+.qa-errors { padding: 8px 12px; border-radius: 10px; font-size: var(--text-sm); color: var(--red); background: var(--red-bg); }
+.qa-errors p { margin: 0; }
+.qa-errors[hidden] { display: none; }
+.qa__foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border); }
+.qa__more { margin-right: auto; padding: 0; border: 0; background: none; font: inherit; font-size: var(--text-sm); font-weight: 500; color: var(--tile-c); cursor: pointer; }
+.qa__more:hover { text-decoration: underline; }
+.qa .btn-primary { background: var(--tile-c); border-color: var(--tile-c); color: var(--on-badge, #111); }
+.qa-seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-hover); }
+.qa-seg__item { flex: 1; min-height: 34px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: var(--text-sm);
+  color: var(--text-secondary); cursor: pointer; }
+.qa-seg__item.is-on { background: var(--surface-solid); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+.qa-results { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; }
+.qa-results:empty, .qa-amount:empty, .qa-import:empty { display: none; }
+.qa-results__h { margin: 6px 2px 0; font-size: 0.6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary); }
+.qa-result { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid); color: var(--text-primary); font: inherit; cursor: pointer; }
+.qa-result:hover, .qa-result:focus-visible { border-color: var(--tile-c); }
+.qa-result small { font-size: 0.75rem; color: var(--text-secondary); }
+.qa-amount .fx-amount, .qa-import .meals-form { margin: 0; }
+.qa-spinner { display: inline-block; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong);
+  border-top-color: var(--tile-c, var(--accent)); animation: qa-spin .8s linear infinite; vertical-align: -3px; }
+@keyframes qa-spin { to { transform: rotate(360deg); } }
+.qa-toasts:empty { display: none; }
+.qa-toasts .toast a { color: inherit; font-weight: 600; text-decoration: underline; }
+@media (max-width: 640px) {
+  .qa { padding: 14px 16px 14px; }
+  .qa__foot .btn { flex: 1 1 auto; }
+  .qa__foot .qa__more { flex-basis: 100%; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) { .qa-spinner { animation: none; } }
 
 /* ---------- App navigation (albright_labs: the app registry) ---------- */
 /* The header's app launcher itself: albright_labs/static/labs/launcher.css. */
@@ -2633,7 +2700,9 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   --accent-ring: rgba(var(--accent-rgb), var(--accent-ring-alpha));
 }
 [data-theme="light"] .pl-view-dialog, [data-theme="light"] .pl-view-page { --accent: #4D7C0F; --accent-hover: #3F6212; }
-.pl-view-dialog {
+/* Home's quick-add popup (.qa-dialog, labs/hub.js) is the same centered card: these box, backdrop and phone rules
+   are shared; it keeps its tile's app color instead of the Planner's lime. */
+.pl-view-dialog, .qa-dialog {
   width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 48px); padding: 0; overflow: auto;
   border: 1px solid var(--border); border-radius: 16px; color: var(--text-primary);
   /* Solid - the calendar must not show through it (no transparency, no backdrop-filter); the dimmed ::backdrop
@@ -2641,7 +2710,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   background: var(--glass-bg-solid, var(--surface-solid)); -webkit-backdrop-filter: none; backdrop-filter: none; opacity: 1;
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
 }
-.pl-view-dialog::backdrop { background: var(--backdrop); }
+.pl-view-dialog::backdrop, .qa-dialog::backdrop { background: var(--backdrop); }
 .pl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; }
 .pl-view__body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 /* In the dialog: the header (title, menu, x) stays at the top and Edit / Close at the bottom - only the middle
@@ -2704,7 +2773,7 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   /* Phones: a centered card as tall as its content - Edit / Close right under it. Only a task taller than the
      screen reaches the cap (about 90% of the height, never under the notch or the home bar); then the middle
      scrolls and the header and footer stay in view. */
-  .pl-view-dialog { width: 92%; max-width: 92%; height: fit-content; margin: auto; border-radius: 16px;
+  .pl-view-dialog, .qa-dialog { width: 92%; max-width: 92%; height: fit-content; margin: auto; border-radius: 16px;
     top: env(safe-area-inset-top); bottom: env(safe-area-inset-bottom);   /* centered between the notch and the home bar */
     max-height: min(90vh, calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
     max-height: min(90dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px)); }

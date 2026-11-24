@@ -155,13 +155,13 @@ class CheckOffTests(Panel):
 
     def test_the_script_removes_it_at_once_and_undo_puts_it_back(self):
         js = static("albright_planner/planner.js")
-        self.assertIn("if (todayBox && todayBox.contains(el)) { todayChecked(el, data.done); return; }", js)
-        checked = js[js.index("function todayChecked(el, done) {"):js.index("if (todayBox) {")]
+        self.assertIn("if (todayBox() && todayBox().contains(el)) { todayChecked(el, data.done); return; }", js)
+        checked = js[js.index("function todayChecked(el, done) {"):js.index("if (todayBox()) {")]
         self.assertIn("list.removeChild(el);", checked)                          # hidden mode: out at once
         self.assertIn('todayToast("Done", true);', checked)
         self.assertIn("if (keep) list.appendChild(el);", checked)                # shown mode: to the bottom
         self.assertIn("todayCount({open: -1, overdue: overdue ? -1 : 0, done: keep ? 1 : 0});", checked)
-        undo = js[js.index('getElementById("planner-today-undo").addEventListener'):js.index("// ---------- Checklist rows")]
+        undo = js[js.index('event.target.closest("#planner-today-undo")'):js.index("// ---------- Checklist rows")]
         self.assertIn("d.list.insertBefore(d.el,", undo)                          # back where it was
         self.assertIn('undoBody.set("checked", "0");', undo)                     # unchecked on the server
         self.assertIn("todayCount({open: 1, overdue: d.overdue ? 1 : 0});", undo)

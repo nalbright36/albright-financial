@@ -2,6 +2,7 @@ from django.urls import path
 
 from albright_bot_api import oauth_views
 
+from . import quick_actions
 from . import (activity_views, api_key_views, attachment_views, circle_views, invite_views, public_views, push_views,
                share_views, views)
 
@@ -57,6 +58,8 @@ urlpatterns = [
     path("home/nav/", views.save_nav, name="save_nav"),
     path("home/picker/", views.save_picker, name="save_picker"),
     path("home/my-tiles/toggle/", views.toggle_tile, name="toggle_tile"),
+    path("home/quick/<str:name>/", quick_actions.popup, name="quick_action"),
+    path("home/refresh/", quick_actions.refresh, name="hub_refresh"),
     path("home/my-tiles/order/", views.save_tile_order, name="save_tile_order"),
     path("home/pin/", views.toggle_pin, name="toggle_pin"),
     path("home/nav/show/<slug:key>/", views.show_app, name="show_app"),

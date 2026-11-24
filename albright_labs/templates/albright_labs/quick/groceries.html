@@ -1,0 +1,12 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    {% if space %}<input type="hidden" name="space" value="{{ space.pk }}">{% endif %}
+    <div class="qa-field">
+        <label for="qa-groceries">Items <span class="qa-opt">one per line, or a comma list</span></label>
+        <textarea name="lines" id="qa-groceries" class="ledger-input" rows="4" required autofocus data-list placeholder="milk, eggs, 2 lb chicken thighs"></textarea>
+    </div>
+    {% if list_name %}<p class="qa-hint">Adds to {{ list_name }}'s list.</p>{% endif %}
+    {% include "albright_labs/quick/_foot.html" with save_label="Add" %}
+</form>
+{% endblock %}

@@ -19,6 +19,8 @@ from django.db.models import Sum
 from django.http import HttpResponse, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+
+from albright_labs import quick
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -221,7 +223,10 @@ def toggle_step(request, pk, step_id):
 @login_required
 def add_opportunity(request):
     initial_type = "crypto" if request.GET.get("type") == "crypto" else "income"
-    form = ManualOpportunityForm(request.POST or None, initial={"opportunity_type": initial_type})
+    initial = {"opportunity_type": initial_type, **{k: request.GET[k] for k in ("url", "title", "text") if request.GET.get(k)}}
+    form = ManualOpportunityForm(request.POST or None, initial=initial)
+    if request.method == "POST" and quick.wanted(request) and not form.is_valid():
+        return quick.form_error(form)
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
         opp, created = add_manual(data["url"], data["title"], data["text"], opportunity_type=data["opportunity_type"],
@@ -237,6 +242,9 @@ def add_opportunity(request):
             opp.platform_name = data.get("platform_name") or opp.platform_name
             opp.application_status = data.get("application_status") or opp.application_status
             rescore(opp)
+        if quick.wanted(request):
+            return quick.ok("Opportunity added" if created else "You've already added this one",
+                            reverse("albright_crypto_app:opportunity", args=[opp.pk]))
         if created:
             messages.success(request, "Added - facts extracted and scored." if opp.extraction_status == "done"
                              else "Added and scored (AI extraction skipped - limit reached or unavailable).")

@@ -34,7 +34,7 @@ from django.views.decorators.http import require_GET, require_POST
 from albright_control.review_list import ago
 from albright_labs.links import is_web_url, link_status
 
-from albright_labs import attachments, sharing
+from albright_labs import attachments, quick, sharing
 
 from . import links, notes, render as md, smart
 from .models import TRASH_DAYS, Note, NoteLink, NotesSettings
@@ -340,13 +340,25 @@ def note_new(request):
 @login_required
 @require_POST
 def capture(request):
-    title, body = notes.split_capture(request.POST.get("text", ""))
-    if not request.POST.get("text", "").strip():
+    """Quick capture: text (first line the title). Home's quick add posts title + text (a new note) or title + items
+    (a checklist: one "- [ ] " line per item) instead; "More details" posts it with open=1 to go on in the editor."""
+    text = request.POST.get("text", "")
+    items = [line.strip() for line in request.POST.get("items", "").splitlines() if line.strip()]
+    if request.POST.get("title", "").strip() or items:
+        title = request.POST.get("title", "").strip()[:200] or ("Checklist" if items else notes.UNTITLED)
+        body = "\n".join(f"- [ ] {item}" for item in items) if items else text.strip()
+    else:
+        title, body = notes.split_capture(text)
+    if not (text.strip() or items or request.POST.get("title", "").strip()):
+        if quick.wanted(request):
+            return quick.error("Type something first.")
         messages.error(request, "Type something first.")
         return redirect("albright_notes:list")
     note = notes.create(request.user, title, body)
     if request.POST.get("open"):
         return redirect(_note_url(note))
+    if quick.wanted(request):
+        return quick.ok(f"{'Checklist' if items else 'Note'} saved: {note.title}", _note_url(note))
     messages.success(request, f"Saved \u201c{note.title}\u201d.")
     return redirect("albright_notes:list")
 

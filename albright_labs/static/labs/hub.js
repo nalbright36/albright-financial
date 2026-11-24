@@ -9,6 +9,7 @@
  *  - "+ Add" / the Add tile open the Add sheet (a <dialog>): search (label + description + app, every word
  *    anywhere, with the app chip), and a + per page that adds it at once (labs:toggle_tile) - it turns into a
  *    check; tap again to remove. New tiles go to the end. Closing the sheet clears the search.
+ *  - A quick action tile (data-quick-url) opens its popup in #qa-dialog instead (see "Quick actions" below).
  *  - Edit mode (the Edit button, which then reads Done; or ?edit=1): tiles wiggle; each gets a remove (x) and
  *    move left/right buttons (keyboard users); dragging works the same. Done saves the settings too
  *    (labs:save_picker), without a reload.
@@ -119,6 +120,12 @@
                      terms.every(function (term) { return hay.indexOf(term) !== -1; });
             row.hidden = !ok;
             if (ok) shown += 1;
+        });
+        // A "Meals · Pages" / "Meals · Quick actions" heading shows while any row under it does.
+        sheet.querySelectorAll("[data-sub]").forEach(function (sub) {
+            var next = sub.nextElementSibling, any = false;
+            while (next && !next.hasAttribute("data-sub")) { if (!next.hidden) { any = true; break; } next = next.nextElementSibling; }
+            sub.hidden = !any;
         });
         if (empty) empty.hidden = shown > 0;
     }
@@ -426,6 +433,216 @@
         e.preventDefault();
         saveAndStop();
     });
+
+
+    // Quick actions ------------------------------------------------------------------------------------------
+    // An action tile with a popup (data-quick-url) opens it in #qa-dialog: fetched from labs:quick_action, its first
+    // field focused (the phone keyboard comes up). Its form posts to the app's own save view with X-Quick-Add: 1 and
+    // gets JSON back (albright_labs/quick.py): close, a toast ("Task added · View"), then the Today panel and the badges
+    // are fetched again (labs:hub_refresh) - no reload. Errors show above the form. "More details" opens the app's full
+    // form with the fields marked data-more; data-quick-plain submits the ordinary way. Esc, the backdrop and x close it.
+    var qa = document.getElementById("qa-dialog"), qaOpener = null, qaToasts = document.getElementById("qa-toasts");
+    function qaEsc(text) { var d = document.createElement("div"); d.textContent = text == null ? "" : String(text); return d.innerHTML; }
+    function qaClose() { if (qa && qa.open) qa.close(); }
+    function qaFocus() {
+        var first = qa.querySelector("[data-quick-pane]:not([hidden]) [autofocus], [data-quick-pane]:not([hidden]) input:not([type=hidden]), [autofocus]");
+        if (!first) first = qa.querySelector("input:not([type=hidden]), textarea, select, button");
+        if (first) { try { first.focus({preventScroll: true}); } catch (e) { first.focus(); } }
+    }
+    function qaErrors(list) {
+        var box = qa.querySelector("[data-quick-errors]");
+        if (!box) return;
+        box.innerHTML = (list || []).map(function (e) { return "<p>" + qaEsc(e) + "</p>"; }).join("");
+        box.hidden = !(list && list.length);
+    }
+    function qaToast(data) {
+        if (!qaToasts) return;
+        var t = document.createElement("div");
+        t.className = "toast toast--success";
+        t.innerHTML = "<span>" + qaEsc(data.message || "Saved") + (data.url ? ' &middot; <a href="' + qaEsc(data.url) + '">' +
+            qaEsc(data.link || "View") + "</a>" : "") + "</span>";
+        qaToasts.appendChild(t);
+        var gone = function () { if (t.parentNode) t.parentNode.removeChild(t); };
+        t.addEventListener("click", function (e) { if (!e.target.closest("a")) gone(); });
+        setTimeout(gone, 6000);
+    }
+    function qaRefresh() {
+        var url = qa && qa.getAttribute("data-refresh-url");
+        if (!url) return;
+        fetch(url, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (data) {
+                var old = document.getElementById("planner-today");
+                if (old && data.today_html) {
+                    var box = document.createElement("div");
+                    box.innerHTML = data.today_html;
+                    var fresh = box.querySelector("#planner-today");
+                    if (fresh) old.parentNode.replaceChild(fresh, old);
+                }
+                tiles().forEach(function (li) {
+                    var n = (data.badges || {})[li.dataset.key], link = li.querySelector(".ht__link");
+                    if (n === undefined || !link) return;
+                    var badge = li.querySelector("[data-badge]");
+                    if (!n) { if (badge) badge.parentNode.removeChild(badge); return; }
+                    if (!badge) {
+                        badge = document.createElement("span");
+                        badge.className = "ht__badge";
+                        badge.setAttribute("data-badge", "");
+                        link.appendChild(badge);
+                    }
+                    badge.innerHTML = (n > 99 ? "99+" : n) + '<span class="visually-hidden"> waiting</span>';
+                });
+            }).catch(function () { /* the page keeps what it shows */ });
+    }
+    function qaOpen(url, opener) {
+        if (!qa || typeof qa.showModal !== "function") { window.location.href = opener.href; return; }
+        qaOpener = opener;
+        qa.innerHTML = '<div class="qa qa--loading" role="status"><span class="qa-spinner" aria-hidden="true"></span> Loading…</div>';
+        if (!qa.open) qa.showModal();
+        fetch(url, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .then(function (html) { if (!qa.open) return; qa.innerHTML = html; qaFocus(); })
+            .catch(function () { qaClose(); window.location.href = opener.href; });     // the full page instead
+    }
+    function qaPost(form, submitter) {
+        if (form.reportValidity && !form.reportValidity()) return;
+        var body = new FormData(form), save = form.querySelector("[data-quick-save], [data-amount-save]");
+        if (submitter && submitter.name) body.append(submitter.name, submitter.value);
+        if (save) save.disabled = true;
+        qaErrors([]);
+        fetch(form.action, {method: "POST", body: body, credentials: "same-origin",
+                            headers: {"X-Quick-Add": "1", "X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { return r.json().catch(function () { return {ok: false}; }); })
+            .then(function (data) {
+                if (data.ok) { qaClose(); qaToast(data); qaRefresh(); return; }
+                qaErrors(data.errors && data.errors.length ? data.errors : ["Couldn't save that - try again."]);
+            })
+            .catch(function () { qaErrors(["Couldn't save - check your connection and try again."]); })
+            .then(function () { if (save) save.disabled = false; });
+    }
+    // Add recipe's "Paste a link": Meals' own import gives the preview (its Save form then posts like any other).
+    function qaImport(form) {
+        if (form.reportValidity && !form.reportValidity()) return;
+        var out = qa.querySelector("[data-quick-import-result]"), save = form.querySelector("[data-quick-save]");
+        if (save) save.disabled = true;
+        qaErrors([]);
+        out.innerHTML = '<p class="qa-hint" role="status"><span class="qa-spinner" aria-hidden="true"></span> Reading the recipe…</p>';
+        fetch(form.action, {method: "POST", body: new FormData(form), credentials: "same-origin",
+                            headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                out.innerHTML = data.html || "";
+                var heading = out.querySelector("#recipe-import-heading");
+                if (heading) heading.focus();
+            })
+            .catch(function () { out.innerHTML = ""; qaErrors(["Couldn't read that link - try again."]); })
+            .then(function () { if (save) save.disabled = false; });
+    }
+    // Log food: Fitness' search (JSON), then the food's amount panel; its Add posts like any other quick form.
+    function qaFoodSearch(form) {
+        var q = form.elements.q.value.trim(), out = qa.querySelector("[data-quick-food-results]");
+        qa.querySelector("[data-quick-food-amount]").innerHTML = "";
+        if (!q) { form.elements.q.focus(); return; }
+        out.innerHTML = '<p class="qa-hint" role="status"><span class="qa-spinner" aria-hidden="true"></span> Searching…</p>';
+        fetch(form.action + "?format=json&q=" + encodeURIComponent(q), {credentials: "same-origin"})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var html = (data.groups || []).map(function (g) {
+                    return '<p class="qa-results__h">' + qaEsc(g.title) + "</p>" + g.items.map(function (i) {
+                        return '<button type="button" class="qa-result" data-food-url="' + qaEsc(i.url) + '"><span>' + qaEsc(i.label) +
+                            '</span><small>' + qaEsc(i.detail) + "</small></button>";
+                    }).join("");
+                }).join("");
+                out.innerHTML = html || '<p class="qa-hint">Nothing found' + (data.note ? " - " + qaEsc(data.note) : ".") + "</p>";
+                if (html && data.note) out.insertAdjacentHTML("beforeend", '<p class="qa-hint">' + qaEsc(data.note) + "</p>");
+            })
+            .catch(function () { out.innerHTML = ""; qaErrors(["Couldn't search - try again."]); });
+    }
+    function qaFoodPick(button) {
+        var form = qa.querySelector("[data-quick-food-search]"), box = qa.querySelector("[data-quick-food-amount]");
+        var url = button.getAttribute("data-food-url");
+        url += (url.indexOf("?") < 0 ? "?" : "&") + "date=" + encodeURIComponent(form.getAttribute("data-date")) +
+               "&slot=" + encodeURIComponent(form.getAttribute("data-slot"));
+        fetch(url, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .then(function (html) {
+                qa.querySelector("[data-quick-food-results]").innerHTML = "";
+                box.innerHTML = html;
+                var qty = box.querySelector("[data-qty]");
+                if (qty) { qty.focus(); qty.select(); }
+            })
+            .catch(function () { qaErrors(["Couldn't open that food - try again."]); });
+    }
+    if (qa) {
+        grid.addEventListener("click", function (e) {
+            var link = e.target.closest("[data-quick-url]");
+            if (!link || editing() || e.defaultPrevented) return;
+            e.preventDefault();
+            qaOpen(link.getAttribute("data-quick-url"), link);
+        });
+        qa.addEventListener("click", function (e) {
+            if (e.target === qa || e.target.closest("[data-quick-close]")) { e.preventDefault(); qaClose(); return; }
+            var tab = e.target.closest("[data-quick-tab]");
+            if (tab) {
+                var name = tab.getAttribute("data-quick-tab");
+                qa.querySelectorAll("[data-quick-tab]").forEach(function (b) {
+                    b.classList.toggle("is-on", b === tab);
+                    b.setAttribute("aria-selected", b === tab ? "true" : "false");
+                });
+                qa.querySelectorAll("[data-quick-pane]").forEach(function (p) { p.hidden = p.getAttribute("data-quick-pane") !== name; });
+                qaErrors([]);
+                var field = qa.querySelector('[data-quick-pane="' + name + '"] input:not([type=hidden]), [data-quick-pane="' + name + '"] textarea');
+                if (field) field.focus();
+                return;
+            }
+            var more = e.target.closest("[data-quick-more]");
+            if (more) {
+                e.preventDefault();
+                var target = new URL(more.getAttribute("href"), window.location.origin);
+                qa.querySelectorAll("[data-more]").forEach(function (f) {
+                    var pane = f.closest("[data-quick-pane]");
+                    if (pane && pane.hidden) return;
+                    if (f.value && f.value.trim()) target.searchParams.set(f.getAttribute("data-more"), f.value.trim());
+                });
+                window.location.href = target.pathname + target.search + target.hash;
+                return;
+            }
+            var food = e.target.closest("[data-food-url]");
+            if (food) { qaFoodPick(food); return; }
+            var chipQty = e.target.closest("[data-qty-chip]");
+            if (chipQty) {
+                var qty = qa.querySelector("[data-qty]");
+                if (qty) { qty.value = chipQty.getAttribute("data-qty-chip"); qty.focus(); }
+                return;
+            }
+            var ai = e.target.closest("[data-quick-ai]");
+            if (ai) {                         // the assistant (assistant.js, on document) takes it from here
+                var q = qa.querySelector("[name=q]");
+                ai.setAttribute("data-assistant-prompt", "Estimate this and log it to my food diary: " + (q ? q.value.trim() : ""));
+                qaClose();
+            }
+        });
+        qa.addEventListener("submit", function (e) {
+            var f = e.target;
+            if (e.submitter && e.submitter.hasAttribute("data-quick-plain")) return;     // More details: the ordinary post
+            e.preventDefault();
+            if (f.hasAttribute("data-quick-import")) { qaImport(f); return; }
+            if (f.hasAttribute("data-quick-food-search")) { qaFoodSearch(f); return; }
+            qaPost(f, e.submitter);
+        });
+        qa.addEventListener("keydown", function (e) {      // a list box (one per line): Ctrl/Cmd+Enter saves
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target.matches("textarea")) {
+                e.preventDefault();
+                var f = e.target.form;
+                if (f && f.requestSubmit) f.requestSubmit(); else if (f) qaPost(f);
+            }
+        });
+        qa.addEventListener("close", function () {
+            qa.innerHTML = "";
+            if (qaOpener && document.body.contains(qaOpener)) qaOpener.focus();
+            qaOpener = null;
+        });
+    }
 
     if (editing()) startEditing();      // opened as ?edit=1
 })();

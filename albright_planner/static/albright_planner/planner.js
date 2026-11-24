@@ -175,7 +175,7 @@
                         showProgress(el, data);
                         if (data.note) weighInNote(el, data.note);
                         else el.querySelectorAll(".pl-kept-note").forEach(function (n) { n.remove(); });
-                        if (todayBox && todayBox.contains(el)) { todayChecked(el, data.done); return; }
+                        if (todayBox() && todayBox().contains(el)) { todayChecked(el, data.done); return; }
                         if (data.done && el.classList.contains("is-overdue")) el.remove();   // done: no longer overdue
                     });
                 },
@@ -250,9 +250,9 @@
             closeWeighIn();
             withTwins(item).forEach(function (el) {
                 weighInDone(el, res.data);
-                if (todayBox && todayBox.contains(el)) {
+                if (todayBox() && todayBox().contains(el)) {
                     todayChecked(el, true);
-                    if (todayBox.getAttribute("data-show-completed") !== "1") todayToast("Weigh-in: " + res.data.result, true);
+                    if (todayBox().getAttribute("data-show-completed") !== "1") todayToast("Weigh-in: " + res.data.result, true);
                 }
             });
         });
@@ -304,7 +304,9 @@
     });
 
     // ---------- Home's Today panel: a checked-off task leaves the list ("Done · Undo"), or drops to the bottom ----------
-    var todayBox = document.getElementById("planner-today"), lastDone = null, toastTimer = null;
+    // Looked up each time: Home swaps in a fresh panel after a quick add (labs/hub.js), so nothing holds the old one.
+    function todayBox() { return document.getElementById("planner-today"); }
+    var lastDone = null, toastTimer = null;
     function todayCount(change) {
         var c = document.getElementById("planner-today-count");
         if (!c) return;
@@ -335,7 +337,7 @@
     }
     function todayChecked(el, done) {
         var list = el.parentNode, overdue = el.classList.contains("is-overdue");
-        var keep = todayBox.getAttribute("data-show-completed") === "1";
+        var keep = todayBox().getAttribute("data-show-completed") === "1";
         if (done) {
             todayCount({open: -1, overdue: overdue ? -1 : 0, done: keep ? 1 : 0});
             if (keep) list.appendChild(el);                                   // struck through, at the bottom
@@ -349,8 +351,9 @@
         }
         todayEmpty(list);
     }
-    if (todayBox) {
-        document.getElementById("planner-today-undo").addEventListener("click", function () {
+    if (todayBox()) {
+        document.addEventListener("click", function (event) {
+            if (!event.target.closest || !event.target.closest("#planner-today-undo")) return;
             var d = lastDone, form = d && d.el.querySelector(".pl-check-form");
             if (!d || !form) return;
             lastDone = null;

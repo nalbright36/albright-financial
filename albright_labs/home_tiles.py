@@ -1,15 +1,25 @@
-"""Home's tiles (hub.html "My tiles"): the catalog of every page a user can pin, and each user's tiles.
+"""Home's tiles (hub.html "My tiles"): the catalog of every page and quick action a user can pin, and each user's tiles.
 
-Adding a page is one more Tile(...) in PAGES below - its key must be unique and start with its app's key. Every
-app also gets a "whole app" tile (key = the app's key, going to its landing page) without being listed. A badge is
-the name of a function below that takes the user and returns a count (one cheap query); counts are cached per user
-for 60 seconds (badges()).
+Two kinds of tile:
+  page    opens that page's main view (never one item) - Tile(..., kind=PAGE), the default.
+  action  a "create / log" action, marked with a small "+" in the icon's corner. With action="<name>" it opens that
+          quick-add popup right on Home (albright_labs/quick_actions.py: the popup's fields, posting to the app's own
+          save view); with no action it just goes to its URL (Start workout); action="ask_ai" opens the assistant.
+
+BUILDING A NEW FEATURE: every new page a person would open from Home, and every new "create / log" action, gets a
+Tile below in the same change - a page as kind=PAGE, an action with _act(...) (plus its popup in quick_actions.py
+when it can be done in a few fields). Keys must be unique, start with their group's key, and are never renamed
+(they're stored in HomeTile.key). Every app also gets a "whole app" tile (key = the app's key, going to its landing
+page) without being listed. A badge is the name of a function below that takes the user and returns a count (one
+cheap query); counts are cached per user for 60 seconds (badges()). needs: a function below (user -> bool) for a tile
+only some people may use.
 
 Only tiles for apps the user can open and that aren't archived are shown or offered (visible_catalog). A user's
 HomeTile rows for an app they lose are kept, just not shown - they come back with the app.
 
-The "Visuals" group: each saved Visual the user owns or has been shared (albright_assistant.Visual) is a tile
-("visual.<id>"), built per user (catalog(user)) - it belongs to no app, so everyone signed in has the group.
+Groups that aren't apps: "Account" (everyone signed in: My account, Circles, API keys...), "AI assistant" (people
+allowed the assistant: Ask AI, its settings, Visuals) and "Visuals" (each saved Visual the user owns or has been shared
+is a tile, "visual.<id>", built per user - catalog(user)).
 """
 import logging
 from dataclasses import dataclass
@@ -25,6 +35,7 @@ log = logging.getLogger(__name__)
 
 BADGE_TTL = 60
 APP = "app"            # icon: the app's own launcher icon (templates/_app_icon.html)
+PAGE, ACTION = "page", "action"
 
 
 @dataclass(frozen=True)
@@ -32,16 +43,19 @@ class Tile:
     key: str              # stored in HomeTile.key - never rename one
     label: str            # under the icon (one line) and in the Add sheet
     icon: str             # a symbol in albright_labs/_tile_icons.html, or APP
-    app: str              # apps_registry key: the color, and who may see it
+    app: str              # apps_registry key (or a group below): the color, and who may see it
     url_name: str
     description: str      # the Add sheet's second line
     badge: str = ""       # a function below: user -> int
     suffix: str = ""      # appended to the URL - a query or #anchor
     args: tuple = ()      # the URL's arguments (a Visual's id)
+    kind: str = PAGE      # PAGE or ACTION
+    action: str = ""      # an ACTION's popup (quick_actions.ACTIONS) - empty: the tile just opens its URL
+    needs: str = ""       # a function below: user -> bool, for a tile only some people may use
 
     @property
     def app_info(self):
-        return apps_registry.BY_KEY.get(self.app) or VISUALS_GROUP
+        return apps_registry.BY_KEY.get(self.app) or GROUPS.get(self.app) or VISUALS_GROUP
 
     @property
     def color(self):
@@ -52,11 +66,20 @@ class Tile:
         return self.app_info.accent
 
     @property
+    def is_action(self):
+        return self.kind == ACTION
+
+    @property
     def url(self):
         try:
             return reverse(self.url_name, args=self.args) + self.suffix
         except NoReverseMatch:       # an archived app's URLs can be missing in some setups
             return ""
+
+
+def _act(key, label, icon, app, url_name, description, action="", **kw):
+    """An action tile: url_name is where it goes without JavaScript (and its popup's "More details")."""
+    return Tile(key, label, icon, app, url_name, description, kind=ACTION, action=action, **kw)
 
 
 PAGES = (
@@ -65,46 +88,100 @@ PAGES = (
          badge="grocery_left"),
     Tile("meals.recipes", "Recipes", "book", "meals", "albright_meals:recipes", "Your recipe book"),
     Tile("meals.week", "This week's meals", "fork", "meals", "albright_meals:week", "Meal plan"),
-    Tile("meals.recipe_add", "Add recipe", "plus", "meals", "albright_meals:recipe_add", "Paste a link or type it in"),
     Tile("meals.ideas", "Meal ideas", "spark", "meals", "albright_meals:ideas", "What to cook next"),
     Tile("meals.eat_out", "Eat Out", "pin", "meals", "albright_meals:eat_out", "Find a restaurant"),
+    _act("meals.recipe_add", "Add recipe", "book", "meals", "albright_meals:recipe_add", "Paste a link or type it in",
+         action="recipe"),
+    _act("meals.grocery_add", "Add groceries", "cart", "meals", "albright_meals:groceries",
+         "One per line, or a comma list", action="groceries"),
+    _act("meals.plan_add", "Plan a meal", "fork", "meals", "albright_meals:week", "Pick a recipe, day and meal",
+         action="plan_meal"),
     # Fitness
     Tile("fitness.today", "Today", "dumb", "fitness", "albright_fitness:dashboard", "Today's workout"),
-    Tile("fitness.log_food", "Log food", "food", "fitness", "albright_fitness:food_find", "Find a food and log it"),
     Tile("fitness.food", "Food diary", "book", "fitness", "albright_fitness:food", "What you ate today"),
-    Tile("fitness.log_weight", "Log weight", "scale", "fitness", "albright_fitness:body", "Weigh in",
-         suffix="#fx-weigh"),
     Tile("fitness.programs", "Programs", "list", "fitness", "albright_fitness:programs", "Your training programs"),
     Tile("fitness.exercises", "Exercises", "dumb", "fitness", "albright_fitness:exercises", "The exercise library"),
     Tile("fitness.challenges", "Challenges", "trophy", "fitness", "albright_fitness:challenges", "Compete with friends"),
     Tile("fitness.history", "History", "clock", "fitness", "albright_fitness:history", "Past workouts"),
     Tile("fitness.insights", "Insights", "chart", "fitness", "albright_fitness:insights", "Trends and records"),
     Tile("fitness.body", "Body", "scale", "fitness", "albright_fitness:body", "Weight and measurements"),
+    Tile("fitness.targets", "Targets", "chart", "fitness", "albright_fitness:targets", "Calories and macros"),
+    Tile("fitness.my_foods", "My foods", "food", "fitness", "albright_fitness:my_foods", "Foods you've saved"),
+    Tile("fitness.food_ai", "Log food with AI", "spark", "fitness", "albright_fitness:food_ai",
+         "Connect your own AI to the diary"),
+    _act("fitness.log_food", "Log food", "food", "fitness", "albright_fitness:food_find", "Find a food and log it",
+         action="food"),
+    _act("fitness.log_weight", "Log weight", "scale", "fitness", "albright_fitness:body", "Weigh in",
+         action="weight", suffix="#fx-weigh"),
+    _act("fitness.quick_log", "Quick log workout", "dumb", "fitness", "albright_fitness:dashboard",
+         "“bench 185x8,8,7, run 3.1mi”", action="workout"),
+    _act("fitness.start", "Start workout", "dumb", "fitness", "albright_fitness:start", "Opens the workout screen"),
     # Planner
     Tile("planner.today", "Today", "cal", "planner", "albright_planner:day", "Open tasks today", badge="tasks_today"),
     Tile("planner.week", "Week", "cal", "planner", "albright_planner:week", "This week at a glance"),
     Tile("planner.month", "Month", "cal", "planner", "albright_planner:month", "The month view"),
     Tile("planner.briefing", "Briefing", "list", "planner", "roundup:briefing", "Your week ahead, in short"),
-    Tile("planner.new", "New task", "plus", "planner", "albright_planner:new", "Add a task or event"),
+    Tile("planner.settings", "Planner settings", "filter", "planner", "albright_planner:settings",
+         "Time zone, weather, workouts"),
+    _act("planner.new", "Add task", "cal", "planner", "albright_planner:new", "Title, day, time, repeat",
+         action="task"),
+    _act("planner.event", "Add event", "cal", "planner", "albright_planner:new", "Something with a time",
+         action="event", suffix="?kind=event"),
     # Notes
     Tile("notes.list", "All notes", "note", "notes", "albright_notes:list", "Every note"),
-    Tile("notes.new", "New note", "plus", "notes", "albright_notes:list", "Start a blank note", suffix="?start=new"),
+    _act("notes.new", "New note", "note", "notes", "albright_notes:list", "A title and a few lines",
+         action="note", suffix="?start=new"),
+    _act("notes.checklist", "Quick checklist", "list", "notes", "albright_notes:list", "One item per line",
+         action="checklist"),
     # Money
     Tile("money.transactions", "Transactions", "list", "money", "albright_money:transactions", "Everything spent"),
     Tile("money.budget", "Budget", "chart", "money", "albright_money:budget", "This month's budget"),
+    Tile("money.plans", "Budget plans", "chart", "money", "albright_money:budget_plans", "Plans from notes"),
     Tile("money.accounts", "Accounts", "card", "money", "albright_money:accounts", "Balances"),
+    Tile("money.transfer", "Transfer", "card", "money", "albright_money:transfer", "Move money between accounts"),
     Tile("money.import", "Import", "upload", "money", "albright_money:import", "Bank CSV import"),
     Tile("money.categories", "Categories", "tag", "money", "albright_money:categories", "Spending categories"),
     Tile("money.rules", "Rules", "filter", "money", "albright_money:rules", "Auto-categorize"),
+    _act("money.add", "Add transaction", "card", "money", "albright_money:transactions",
+         "“42.18 Publix groceries”", action="transaction"),
     # Opportunities
     Tile("opps.new", "New opps", "star", "opps", "albright_crypto_app:inbox", "New since your last visit",
          badge="opps_new"),
     Tile("opps.pipeline", "Pipeline", "list", "opps", "albright_crypto_app:pipeline", "What you're pursuing"),
     Tile("opps.earnings", "Earnings", "card", "opps", "albright_crypto_app:earnings", "What you've earned"),
-    Tile("opps.add", "Add opportunity", "plus", "opps", "albright_crypto_app:add", "Add one by hand"),
+    Tile("opps.hidden", "Hidden", "filter", "opps", "albright_crypto_app:hidden", "Ones you've hidden"),
+    Tile("opps.profile", "My profile", "star", "opps", "albright_crypto_app:profile", "What fits you"),
+    Tile("opps.settings", "Opps settings", "filter", "opps", "albright_crypto_app:settings", "Sources and filters"),
+    _act("opps.add", "Add opportunity", "star", "opps", "albright_crypto_app:add", "Paste a link and its text",
+         action="opportunity"),
     # Admin
     Tile("admin.health", "System health", "chart", "admin", "albright_control:health", "Late or failing jobs"),
     Tile("admin.ideas", "Ideas", "spark", "admin", "albright_control:ideas", "Suggestions inbox"),
+    Tile("admin.suggestions", "Suggestions", "list", "admin", "albright_control:suggestions", "The review list"),
+    Tile("admin.users", "Users", "list", "admin", "albright_control:users", "Accounts and app access"),
+    Tile("admin.integrations", "Integrations", "filter", "admin", "albright_control:integrations", "Keys and services"),
+    Tile("admin.ai_usage", "AI usage", "chart", "admin", "albright_control:ai_usage", "Spend and limits"),
+    Tile("admin.bot_api", "Bot API", "spark", "admin", "albright_control:bot_api", "Keys and activity"),
+    Tile("admin.data", "Data", "list", "admin", "albright_control:data", "Tables and counts"),
+    Tile("admin.storage", "Storage", "upload", "admin", "albright_control:storage", "Files and space used"),
+    Tile("admin.audit", "Audit log", "clock", "admin", "albright_control:audit", "Who changed what"),
+    _act("admin.idea_add", "Submit an idea", "spark", "admin", "albright_control:idea_add", "A title and a line or two",
+         action="idea"),
+    # Account (everyone signed in)
+    Tile("account.settings", "My account", "filter", "account", "labs:account", "Apps, sign-in page, storage"),
+    Tile("account.circles", "Circles", "star", "account", "labs:circles", "Who you share apps with"),
+    Tile("account.people", "People", "list", "account", "labs:people", "People you share with"),
+    Tile("account.shared", "Shared with me", "list", "account", "labs:shared_with_me", "What others share"),
+    Tile("account.sharing", "Sharing defaults", "filter", "account", "labs:sharing_defaults", "Who sees new items"),
+    Tile("account.activity", "Activity", "clock", "account", "labs:activity", "Recent changes"),
+    Tile("account.notifications", "Notifications", "clock", "account", "labs:notification_settings",
+         "What you're told about"),
+    Tile("account.api_keys", "API keys", "filter", "account", "labs:api_keys", "Connect your own AI",
+         needs="api_keys_allowed"),
+    # AI assistant (people allowed it)
+    _act("assistant.ask", "Ask AI", "spark", "assistant", "assistant:setup", "Opens the assistant", action="ask_ai"),
+    Tile("assistant.settings", "AI settings", "filter", "assistant", "assistant:setup", "Your assistant's model"),
+    Tile("assistant.visuals", "Visuals", "chart", "assistant", "assistant:visuals", "Charts the AI made for you"),
 )
 
 # Badges on whole-app tiles (the design shows the Planner's open tasks on its app tile).
@@ -117,12 +194,17 @@ def _app_tile(app):
 
 
 class _Group:
-    """The Visuals group: like an App to the templates (key, label, accent, color) - no app of its own."""
-    key, label, accent, color = "visuals", "Visuals", "labs", "#2DD4BF"
+    """A group that isn't an app: like an App to the templates (key, label, accent, color)."""
+    def __init__(self, key, label, accent, color):
+        self.key, self.label, self.accent, self.color = key, label, accent, color
 
 
-VISUALS = _Group.key
-VISUALS_GROUP = _Group()
+VISUALS = "visuals"
+VISUALS_GROUP = _Group(VISUALS, "Visuals", "labs", "#2DD4BF")
+ACCOUNT, ASSISTANT = "account", "assistant"
+GROUPS = {ACCOUNT: _Group(ACCOUNT, "Account", "labs", "#94A3B8"),
+          ASSISTANT: _Group(ASSISTANT, "AI assistant", "labs", "#2DD4BF"),
+          VISUALS: VISUALS_GROUP}
 
 
 def visual_tiles(user):
@@ -141,7 +223,10 @@ def visual_tiles(user):
 def catalog(user=None):
     """{key: Tile} - every app's whole-app tile, then PAGES (built from the registry on each call, so a new app
     gets its tile without being listed here), then - for a user - their Visuals."""
-    tiles = [t for t in [_app_tile(app) for app in apps_registry.APPS] + list(PAGES) if t.app in apps_registry.BY_KEY]
+    tiles = [t for t in [_app_tile(app) for app in apps_registry.APPS] + list(PAGES)
+             if t.app in apps_registry.BY_KEY or t.app in GROUPS]
+    if user is not None:
+        tiles = [t for t in tiles if not t.needs or _needs(t.needs, user)]
     if user is not None and getattr(user, "is_authenticated", False):
         from .request_cache import get
         tiles += get(("visual-tiles", user.pk), lambda: visual_tiles(user))     # Home asks twice: once per request
@@ -157,7 +242,8 @@ def _openable(user, pref=None):
     """The app keys this user can open, archived ones left out (allowed_keys already does - checked again so a
     superuser, who may open archived apps, never gets their tiles)."""
     pref = pref or _pref(user)
-    return [k for k in app_access.allowed_keys(user, pref) if not is_app_archived(k)] + [VISUALS]
+    groups = [ACCOUNT] + ([ASSISTANT] if assistant_allowed(user) else []) + [VISUALS]
+    return [k for k in app_access.allowed_keys(user, pref) if not is_app_archived(k)] + groups
 
 
 def visible_catalog(user, pref=None):
@@ -167,7 +253,7 @@ def visible_catalog(user, pref=None):
     for key in _openable(user, pref):
         tiles = [t for t in all_tiles if t.app == key and t.url]
         if tiles:
-            groups.append((apps_registry.BY_KEY.get(key) or VISUALS_GROUP, tiles))
+            groups.append((apps_registry.BY_KEY.get(key) or GROUPS.get(key) or VISUALS_GROUP, tiles))
     return groups
 
 
@@ -226,6 +312,31 @@ def reorder(user, keys):
             tile.order = i
             changed.append(tile)
     HomeTile.objects.bulk_update(changed, ["order"])
+
+
+# Who may use a tile (Tile.needs) and a group ------------------------------------------------------------------
+
+def _needs(name, user):
+    try:
+        return bool(globals()[name](user))
+    except Exception:  # noqa: BLE001 - a check must never break Home
+        log.exception("Home tile check %s failed", name)
+        return False
+
+
+def api_keys_allowed(user):
+    from albright_bot_api.scopes import keys_allowed
+    return keys_allowed(user)
+
+
+def assistant_allowed(user):
+    """The AI assistant group: only for people allowed the assistant (albright_assistant.access)."""
+    try:
+        from albright_assistant import access
+    except ImportError:                                 # pragma: no cover
+        return False
+    from .request_cache import get
+    return get(("assistant-allowed", getattr(user, "pk", None)), lambda: access.allowed(user))
 
 
 # Badges -------------------------------------------------------------------------------------------------------

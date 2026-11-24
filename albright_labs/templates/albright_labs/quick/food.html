@@ -1,0 +1,21 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% load cache_bust %}
+{% comment %}Log food: search (Fitness' own search - food_find?format=json: Recent, My foods, Recipes, All foods), tap one for
+its amount panel (food_pick, the same one the diary uses), Add logs it. With the AI assistant: "Ask AI to estimate" sends
+what was typed to the assistant to log.{% endcomment %}
+{% block css %}<link rel="stylesheet" href="{% static_version 'albright_fitness/fitness.css' %}">{% endblock %}
+{% block body %}
+<form method="get" action="{{ search_url }}" class="qa-form" data-quick-food-search data-date="{{ today|date:'Y-m-d' }}" data-slot="{{ slot }}">
+    <div class="qa-field">
+        <label for="qa-food-q">Food</label>
+        <input type="search" name="q" id="qa-food-q" class="ledger-input" required autofocus autocomplete="off" enterkeyhint="search" placeholder="2 eggs, oatmeal, chicken breast" data-more="q">
+    </div>
+    <div class="qa__foot">
+        <a href="{{ more_url }}" class="qa__more" data-quick-more>More details &rarr;</a>
+        {% if ai %}<button type="button" class="btn btn-secondary" data-assistant-open data-quick-ai>Ask AI to estimate</button>{% endif %}
+        <button type="submit" class="btn btn-primary qa__save">Search</button>
+    </div>
+</form>
+<div class="qa-results" data-quick-food-results aria-live="polite"></div>
+<div class="qa-amount" data-quick-food-amount></div>
+{% endblock %}

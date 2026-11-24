@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import sharing, sheet
+from albright_labs import quick as quick_add, sharing, sheet
 
 from . import body, burn, glossary, insights, nutrition, programs, stats, training
 from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord,
@@ -270,12 +270,16 @@ def quick(request):
     from .log_views import posted_matches
     parsed = training.parse_quick(request.POST.get("text", "")[:2000], request.user, posted_matches(request))
     good = [p for p in parsed if not p.problem]
-    for p in parsed:
-        if p.problem:
-            messages.error(request, f"“{p.text}”: {p.problem}.")
+    problems = [f"“{p.text}”: {p.problem}." for p in parsed if p.problem]
+    if quick_add.wanted(request) and (problems or not good):      # Home's popup: nothing saved until it all reads
+        return quick_add.error(problems or ["Type what you did, e.g. “bench 185x8,8,7, run 3.1mi 28:30”."])
+    for text in problems:
+        messages.error(request, text)
     if not good:
         return redirect("albright_fitness:dashboard")
     workout, _records, _day = programs.log_parsed(request.user, good)
+    if quick_add.wanted(request):
+        return quick_add.ok(f"Workout logged: {workout.title}", reverse("albright_fitness:summary", args=[workout.pk]))
     return redirect("albright_fitness:summary", pk=workout.pk)
 
 

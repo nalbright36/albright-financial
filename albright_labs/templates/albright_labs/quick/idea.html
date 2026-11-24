@@ -1,0 +1,11 @@
+{% extends "albright_labs/quick/_base.html" %}
+{% block body %}
+<form method="post" action="{{ post_url }}" class="qa-form" data-quick-form>{% csrf_token %}
+    <input type="hidden" name="app" value="all"><input type="hidden" name="priority" value="medium">
+    <input type="hidden" name="impact" value="medium"><input type="hidden" name="effort" value="medium">
+    <div class="qa-field"><label for="qa-idea-title">Idea</label><input type="text" name="title" id="qa-idea-title" class="ledger-input" maxlength="200" required autofocus autocomplete="off" data-more="title"></div>
+    <div class="qa-field"><label for="qa-idea-desc">Details <span class="qa-opt">optional</span></label><textarea name="description" id="qa-idea-desc" class="ledger-input" rows="3" data-list data-more="description"></textarea></div>
+    <div class="qa-field"><label for="qa-idea-cat">Kind</label><select name="category" id="qa-idea-cat" class="ledger-input">{% for k, label in categories %}<option value="{{ k }}"{% if k == "feature" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    {% include "albright_labs/quick/_foot.html" %}
+</form>
+{% endblock %}

@@ -23,7 +23,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from albright_labs import circles, sharing, sheet
+from albright_labs import circles, quick, sharing, sheet
 from albright_labs.models import ShareGrant
 
 from . import groceries, importer, plan, recipe_nutrition, scope, signals
@@ -101,10 +101,14 @@ def plan_add(request):
     title = (request.POST.get("title") or "").strip()[:200]
     recipe = scope.own(request.space).filter(pk=request.POST.get("recipe") or 0).first()
     if not form.is_valid() or not (recipe or title):
+        if quick.wanted(request):
+            return quick.error("Pick a day, a meal, and a recipe or a title.")
         messages.error(request, "Pick a day, a slot, and a recipe or a title.")
         return redirect("albright_meals:week")
     day, slot = form.cleaned_data["date"], form.cleaned_data["slot"]
     entry, _created = plan.set_slot(request.space, day, slot, recipe=recipe, title=title, user=request.user)
+    if quick.wanted(request):
+        return quick.ok(f"Planned {entry.display_title} · {day:%a} {entry.get_slot_display().lower()}", _week_url(day))
     messages.success(request, f"Planned {entry.display_title} for {day:%a %b} {day.day} ({entry.get_slot_display().lower()}).")
     return redirect(_week_url(day))
 
@@ -230,6 +234,8 @@ def _item(request, pk, queryset=None):
 @login_required
 @scope.space_required
 def grocery_page(request):
+    if request.method == "POST" and request.POST.get("lines") is not None:
+        return _grocery_lines(request)
     if request.method == "POST":
         line = (request.POST.get("line") or "").strip()
         parsed = groceries.parse_line(line)
@@ -247,6 +253,31 @@ def grocery_page(request):
         "list_html": payload["html"], "version": payload["version"], "unchecked": payload["unchecked"],
         "checked_count": payload["checked"], "week_start": plan.week_start(), "can_plan": _can_plan(request.user),
         "selecting": request.GET.get("select") == "1", "today": timezone.localdate(), "notices": _notices(request)})
+
+
+def _grocery_lines(request):
+    """Several items at once - one per line, or a comma list ("milk, eggs, 2 lb chicken"): each line goes through the
+    same parse_line / add_item as the list's own box (an existing item merges)."""
+    lines = [line for line in (request.POST.get("lines") or "").splitlines() if line.strip()]
+    # One line: a comma list. Several lines: one item each (a line like "2 lb chicken, cut up" keeps its comma).
+    parts = [p.strip() for p in lines[0].split(",")] if len(lines) == 1 else [line.strip() for line in lines]
+    added = []
+    for part in [p for p in parts if p][:100]:
+        parsed = groceries.parse_line(part)
+        if parsed["name"]:
+            item, _merged = groceries.add_item(request.space, parsed["name"], parsed["quantity"], parsed["unit"],
+                                               parsed["aisle"], parsed["note"], user=request.user)
+            added.append(item.name)
+    if not added:
+        if quick.wanted(request):
+            return quick.error("Type what to add, e.g. \"milk, eggs\" or one item per line.")
+        messages.error(request, "Type what to add, e.g. \"2 lb chicken thighs\".")
+        return redirect("albright_meals:groceries")
+    text = f"Added {added[0]}" if len(added) == 1 else f"Added {len(added)} items"
+    if quick.wanted(request):
+        return quick.ok(f"{text} to the grocery list", reverse("albright_meals:groceries"))
+    messages.success(request, f"{text}.")
+    return redirect("albright_meals:groceries")
 
 
 @never_cache
@@ -551,7 +582,11 @@ def recipe(request, pk):
 @scope.space_required
 def recipe_edit(request, pk=None):
     obj = scope.editable_recipe(request.user, pk) if pk else None
-    form = RecipeForm(request.POST or None, instance=obj)
+    # Home's quick add "More details": ?title=&ingredients_text=&steps_text= fill a new recipe's form.
+    initial = {k: request.GET[k] for k in ("title", "ingredients_text", "steps_text") if obj is None and request.GET.get(k)}
+    form = RecipeForm(request.POST or None, instance=obj, initial=initial)
+    if request.method == "POST" and quick.wanted(request) and not form.is_valid():
+        return quick.form_error(form)
     if request.method == "POST" and form.is_valid():
         saved = form.save(commit=False)
         new = not saved.pk
@@ -563,6 +598,8 @@ def recipe_edit(request, pk=None):
                 sharing.apply_posted(request, saved)
             except sharing.ShareError as exc:
                 messages.error(request, f"Not shared: {exc}")
+        if quick.wanted(request):
+            return quick.ok(f"Recipe added: {saved.title}", reverse("albright_meals:recipe", args=[saved.pk]))
         messages.success(request, f"Saved {saved.title}.")
         return redirect("albright_meals:recipe", pk=saved.pk)
     context = {"form": form, "recipe": obj, "share": sharing.control(request.user, obj, "meals")}
@@ -779,20 +816,28 @@ def recipe_import_save(request):
     import_id = request.POST.get("import_id") or ""
     data = imports.get(import_id)
     if data is None:
+        if quick.wanted(request):
+            return quick.error("That preview has expired - paste the link again.")
         messages.error(request, "That preview has expired - import the link again.")
         return redirect("albright_meals:recipe_add")
+    if not form.is_valid() and quick.wanted(request):
+        return quick.form_error(form)
     if not form.is_valid():
         return render(request, "albright_meals/recipe_import.html", {
             "import_status": "needs_review" if data["needs_review"] else "preview", "import_data": data,
             "import_form": form, "import_url": data.get("page_url", "")})
     existing = importer.find_saved(request.space, data["source_url"], data["page_url"])
     if existing:
+        if quick.wanted(request):
+            return quick.ok(f"Already saved: {existing.title}", reverse("albright_meals:recipe", args=[existing.pk]))
         messages.info(request, f"Already saved: {existing.title}.")
         return redirect("albright_meals:recipe", pk=existing.pk)
     with transaction.atomic():
         saved = importer.save_new({**data, **form.recipe_fields(data)}, request.space, user=request.user)
     imports.pop(import_id, None)
     request.session[IMPORTS_SESSION_KEY] = imports
+    if quick.wanted(request):
+        return quick.ok(f"Recipe added: {saved.title}", reverse("albright_meals:recipe", args=[saved.pk]))
     messages.success(request, f"Saved {saved.title}." + (" It's marked \"Needs review\" - check it against the "
                                                           "original." if saved.needs_review else ""))
     return redirect("albright_meals:recipe", pk=saved.pk)

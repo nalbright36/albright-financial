@@ -6,6 +6,8 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+
+from albright_labs import quick
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -134,7 +136,9 @@ class NewIdeaForm(IdeaForm):
 
 @superuser_required
 def idea_add(request):
-    form = NewIdeaForm(request.POST or None)
+    form = NewIdeaForm(request.POST or None, initial={k: request.GET[k] for k in ("title", "description") if request.GET.get(k)})
+    if request.method == "POST" and quick.wanted(request) and not form.is_valid():
+        return quick.form_error(form)
     if request.method == "POST" and form.is_valid():
         idea = form.save(commit=False)
         idea.source, idea.status = "manual", "new"
@@ -142,6 +146,9 @@ def idea_add(request):
         idea.possible_duplicate_of = find_duplicate(idea.title)
         idea.save()
         audit(request, "idea_created", f'#{idea.pk} "{idea.title[:80]}" (manual)')
+        if quick.wanted(request):
+            return quick.ok("Idea added" + (f" - looks like #{idea.possible_duplicate_of_id}" if idea.possible_duplicate_of_id else ""),
+                            reverse("albright_control:idea", args=[idea.pk]))
         messages.success(request, "Idea added." + (f" It looks like #{idea.possible_duplicate_of_id} - merge?" if idea.possible_duplicate_of_id else ""))
         return redirect("albright_control:idea", pk=idea.pk)
     return render(request, "albright_control/idea_add.html", {"form": form})
