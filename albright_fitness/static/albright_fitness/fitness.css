@@ -559,3 +559,34 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 .fx-program-share .fx-help { margin-bottom: 10px; }
 .fx-participants .pl-avatar { --pl-avatar: #7C3AED; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
   background: var(--pl-avatar); color: #fff; font-size: 0.75rem; font-weight: 700; }
+
+/* Food diary, Option B: what's left (goal = target + exercise), the Set-targets banner, the Exercise card. */
+.fx-left { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.fx-left__n { font-size: 2.6rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.fx-left__l { margin-top: 4px; font-size: var(--text-sm); color: var(--text-secondary); }
+.fx-goalbar { position: relative; display: block; height: 14px; margin: 16px 0 8px; border-radius: 999px; background: var(--surface-hover); overflow: hidden; }
+.fx-goalbar__ex { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--gain) 35%, transparent) 0 6px, color-mix(in srgb, var(--gain) 14%, transparent) 6px 12px); }
+.fx-goalbar__food { position: absolute; top: 0; bottom: 0; left: 0; min-width: 4px; border-radius: 999px; background: var(--accent); }
+.fx-goalbar__legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 14px; font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fx-dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; }
+.fx-dot--food { background: var(--accent); }
+.fx-dot--goal { background: var(--text-secondary); }
+.fx-dot--ex { background: var(--gain); }
+.fx-burned { color: var(--gain); }
+.fx-minis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.fx-minis div { display: flex; flex-direction: column; }
+.fx-minis b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.fx-minis span { font-size: var(--text-xs); color: var(--text-secondary); }
+.fx-targets-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: var(--space-4); padding: 14px 16px; border-radius: 16px; background: var(--accent); color: #111; }
+.fx-targets-banner__text { flex: 1 1 14rem; display: flex; flex-direction: column; gap: 2px; }
+.fx-targets-banner__text strong { font-size: var(--text-md); }
+.fx-targets-banner__text span { font-size: var(--text-sm); opacity: .8; }
+.fx-targets-banner__go.btn { background: #111; border-color: #111; color: #fff; white-space: nowrap; }
+.fx-targets-banner__hide { margin: 0; }
+.fx-targets-banner__hide .fx-link-btn { color: #111; opacity: .75; font-size: var(--text-xs); text-decoration: underline; }
+.fx-burn-row > summary { list-style: none; cursor: pointer; }
+.fx-burn-row > summary::-webkit-details-marker { display: none; }
+.fx-burn-form { padding: 6px 2px 10px; }
+@media (max-width: 480px) {
+  .fx-targets-banner__go.btn { flex: 1 1 auto; text-align: center; }
+}

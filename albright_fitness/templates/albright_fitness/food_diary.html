@@ -8,13 +8,17 @@ meal's Add open the one search (food_find_views); tap an entry to change its amo
 An entry an AI logged through the person's API key (source "ai") shows an "AI estimate" badge - "AI · edited" once
 they've changed it, "low confidence" in amber - and counts in the totals like any other. "Log food with your AI"
 opens the instructions to paste into their AI (food_ai_views.connect). Private to its owner.
+The day's calories (Option B): the big number is what's left of goal = calorie target + exercise (nutrition.allowance;
+the striped end of the bar is what exercise added); Exercise after Snacks lists the day's finished workouts with their
+burn (burn.py) - the pencil types a watch's number. No calorie target: a yellow "Set your targets" banner above the
+search ("Don't show me again" hides it for good - profile.hide_targets_banner) and the header says "Set targets".
 {% endcomment %}
 <div class="fx-narrow">
 <div class="fx-head">
     <div>
         <h1 class="fx-head__title">{% if on == today %}Today{% else %}{{ on|date:"l" }}{% endif %}</h1>
         <p class="fx-head__sub">{{ on|date:"F j, Y" }}</p>
-        <p class="fx-head__links" id="fx-food-top-links"><a href="{% url 'albright_fitness:my_foods' %}">My foods</a> &middot; <a href="{% url 'albright_fitness:targets' %}">Targets</a> &middot; <a href="{% url 'albright_fitness:food_ai' %}" id="fx-food-ai-link">Log food with your AI</a></p>
+        <p class="fx-head__links" id="fx-food-top-links"><a href="{% url 'albright_fitness:my_foods' %}">My foods</a> &middot; <a href="{% url 'albright_fitness:targets' %}" id="fx-food-targets-link">{% if has_calorie_target %}Targets{% else %}Set targets{% endif %}</a> &middot; <a href="{% url 'albright_fitness:food_ai' %}" id="fx-food-ai-link">Log food with your AI</a></p>
     </div>
     <nav class="fx-daynav" aria-label="Day">
         <a href="{% url 'albright_fitness:food_day' prev|date:'Y-m-d' %}" class="btn btn-secondary btn-sm" aria-label="Previous day">&lsaquo;</a>
@@ -24,6 +28,11 @@ opens the instructions to paste into their AI (food_ai_views.connect). Private t
 </div>
 
 {% if undo %}<form method="post" action="{% url 'albright_fitness:food_undo' %}" class="fx-undo" id="fx-undo" role="status">{% csrf_token %}<span>{{ undo.text }}</span><button type="submit" class="fx-link-btn">Undo</button></form>{% endif %}
+{% if show_banner %}<div class="fx-targets-banner" id="fx-targets-banner" role="region" aria-label="Set your targets">
+    <div class="fx-targets-banner__text"><strong>Set your targets to track your day</strong><span>Without them we can't show what's left to eat.</span></div>
+    <a class="btn btn-sm fx-targets-banner__go" href="{% url 'albright_fitness:targets' %}">Set targets</a>
+    <form method="post" action="{% url 'albright_fitness:hide_targets_banner' %}" class="fx-targets-banner__hide">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="fx-link-btn">Don't show me again</button></form>
+</div>{% endif %}
 <form method="get" action="{% url 'albright_fitness:food_find' %}" class="card fx-card fx-find fx-find--diary" role="search" id="fx-food-search">
     <input type="hidden" name="date" value="{{ on|date:'Y-m-d' }}"><input type="hidden" name="slot" value="{{ slot_now }}">
     <label class="fx-card__title" for="fx-diary-q">What did you eat?</label>
@@ -32,9 +41,24 @@ opens the instructions to paste into their AI (food_ai_views.connect). Private t
 </form>
 
 <section class="card fx-card" id="fx-food-totals" aria-labelledby="fx-food-totals-h">
+    {% if allowance and "calories" in tracked %}
+    <h2 class="visually-hidden" id="fx-food-totals-h">{% if on == today %}Today's{% else %}This day's{% endif %} calories</h2>
+    <div class="fx-left" id="fx-left">
+        {% if allowance.over %}<span class="fx-left__n">{{ allowance.over }}</span><span class="fx-left__l">kcal over {% if on == today %}today{% else %}this day{% endif %}</span>
+        {% else %}<span class="fx-left__n">{{ allowance.left }}</span><span class="fx-left__l">kcal left {% if on == today %}today{% else %}this day{% endif %}</span>{% endif %}
+    </div>
+    <div class="fx-goalbar" role="progressbar" aria-label="Calories eaten of {{ allowance.goal }}" aria-valuemin="0" aria-valuemax="{{ allowance.goal }}" aria-valuenow="{{ allowance.eaten }}">
+        {% if allowance.exercise %}<span class="fx-goalbar__ex" style="left: {{ allowance.base_pct }}%;"></span>{% endif %}
+        <span class="fx-goalbar__food" style="width: {{ allowance.food_pct }}%;"></span>
+    </div>
+    <p class="fx-goalbar__legend"><span><i class="fx-dot fx-dot--food"></i>{{ allowance.eaten }} eaten</span><span><i class="fx-dot fx-dot--goal"></i>{{ allowance.base }} goal</span>{% if allowance.exercise %}<span><i class="fx-dot fx-dot--ex"></i>+{{ allowance.exercise }} exercise</span>{% elif exercise.total and not profile.add_exercise %}<span>{{ exercise.total }} burned (not added)</span>{% endif %}</p>
+    {% else %}
     <h2 class="fx-card__title" id="fx-food-totals-h">{% if on == today %}Today's{% else %}This day's{% endif %} totals</h2>
+    {% if not has_calorie_target %}<div class="fx-minis"><div><b>{{ totals.calories|floatformat:0 }}</b><span>kcal eaten</span></div><div><b class="fx-burned">{{ exercise.total }}</b><span>kcal burned</span></div><div><b class="fx-muted">&mdash;</b><span>left (<a href="{% url 'albright_fitness:targets' %}">needs targets</a>)</span></div></div>{% endif %}
+    {% endif %}
     {% include "albright_fitness/_macro_bars.html" %}
-    {% if not has_targets %}<p class="fx-help"><a href="{% url 'albright_fitness:targets' %}">Set your targets</a> to see what's left.</p>{% endif %}
+    {% if carb_extra and "carbs" in tracked %}<p class="fx-help">Carbs include +{{ carb_extra }} g for today's exercise.</p>{% endif %}
+    {% if missing and has_calorie_target %}<p class="fx-help" id="fx-missing-targets">No target yet for {{ missing|join:", " }} - <a href="{% url 'albright_fitness:targets' %}">set {% if missing|length == 1 %}it{% else %}them{% endif %}</a>.</p>{% endif %}
 </section>
 
 {% if plan %}
@@ -72,6 +96,27 @@ opens the instructions to paste into their AI (food_ai_views.connect). Private t
     </div>
 </section>
 {% endfor %}
+<section class="card fx-card fx-meal" id="fx-exercise" aria-labelledby="fx-exercise-h">
+    <div class="fx-meal__head">
+        <h2 class="fx-card__title" id="fx-exercise-h">Exercise</h2>
+        {% if exercise.rows %}<span class="fx-meal__sum fx-burned">{{ exercise.total }} kcal burned</span>{% endif %}
+    </div>
+    {% for r in exercise.rows %}
+    <details class="fx-burn-row">
+        <summary class="fx-row fx-food-row"><span class="fx-row__title">{{ r.workout.title }} <span class="fx-muted fx-small">{{ r.detail }}</span></span>
+            <span class="fx-row__ind fx-burned">{{ r.kcal }} kcal{% if r.typed %} <span class="fx-muted">typed</span>{% endif %}</span><span class="fx-icon-btn" aria-hidden="true" title="Change">&#9998;</span></summary>
+        <form method="post" action="{% url 'albright_fitness:workout_calories' r.workout.pk %}" class="fx-row-form fx-burn-form">{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}#fx-exercise">
+            <label for="fx-burn-{{ r.workout.pk }}" class="fx-small">Calories burned</label>
+            <input type="number" name="calories" id="fx-burn-{{ r.workout.pk }}" class="ledger-input fx-servings" min="0" max="5000" step="1" value="{% if r.typed %}{{ r.kcal }}{% endif %}" placeholder="{{ r.estimate }}" inputmode="numeric">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            {% if r.typed %}<button type="submit" name="reset" value="1" class="fx-link-btn">Use estimate ({{ r.estimate }})</button>{% endif %}
+        </form>
+    </details>
+    {% empty %}<p class="fx-empty fx-small">No workouts {% if on == today %}yet today{% else %}this day{% endif %}.</p>{% endfor %}
+    {% if exercise.rows %}<p class="fx-help">Estimated from {% if exercise.weight_from == "default" %}an average weight (165 lb) - <a href="{% url 'albright_fitness:body' %}">add a weigh-in</a> for a closer number{% else %}your weight ({{ exercise.lb }} lb){% endif %} and each workout's time and type. Tap &#9998; to use your watch's number.{% if not profile.add_exercise %} Not added to your goal (<a href="{% url 'albright_fitness:targets' %}">Targets</a>).{% endif %}</p>{% endif %}
+    <div class="fx-meal__actions"><a href="{% url 'albright_fitness:start' %}" class="btn btn-secondary btn-sm">+ Log a workout</a></div>
+</section>
 <p class="fx-help"><a href="{% url 'albright_fitness:my_foods' %}">My foods</a> &middot; <a href="{% url 'albright_fitness:targets' %}">Targets</a> &middot; Only you can see your diary.</p>
 </div>
 {% endblock %}
