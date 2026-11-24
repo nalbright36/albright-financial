@@ -71,6 +71,8 @@ urlpatterns = [
     path("food/mine/", food_views.my_foods, name="my_foods"),
     path("food/mine/<int:pk>/delete/", food_views.delete_my_food, name="my_food_delete"),
     path("targets/", food_views.targets, name="targets"),
+    path("targets/hide-banner/", food_views.hide_targets_banner, name="hide_targets_banner"),
+    path("food/workouts/<int:pk>/calories/", food_views.workout_calories, name="workout_calories"),
     # Body metrics and Insights (body_views) - each person's own.
     path("body/", body_views.body_page, name="body"),
     path("body/weight/", body_views.log_weight, name="log_weight"),

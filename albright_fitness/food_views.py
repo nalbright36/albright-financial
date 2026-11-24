@@ -17,8 +17,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from . import nutrition, usda
-from .models import MACROS, CustomFood, FoodLogEntry, NutritionProfile
+from . import burn, nutrition, usda
+from .models import MACROS, CustomFood, FoodLogEntry, NutritionProfile, WeightEntry
 
 SLOT_KEYS = dict(FoodLogEntry.SLOTS)
 TABS = [("search", "Search"), ("recent", "Recent"), ("mine", "My foods"), ("quick", "Quick add"), ("recipes", "Recipes")]
@@ -28,11 +28,12 @@ PICK_FIELD = {"custom": "food", "recent": "entry", "recipe": "recipe"}
 PLAN_SLOT = {"breakfast": "breakfast", "lunch": "lunch", "dinner": "dinner", "snack": "snack"}
 
 
-def _day(text, default=None):
+def _day(text, user):
+    """A YYYY-MM-DD from a form, else the person's today (their own time zone - nutrition.today)."""
     try:
         return date.fromisoformat(text or "")
     except ValueError:
-        return default or timezone.localdate()
+        return nutrition.today(user)
 
 
 def _slot(text):
@@ -61,8 +62,8 @@ def _macro(text):
     return value.quantize(Decimal("0.01")) if value.is_finite() and 0 <= value <= 10000 else None
 
 
-def _diary_url(on, slot=None):
-    url = reverse("albright_fitness:food_day", args=[on.isoformat()]) if on != timezone.localdate() else reverse("albright_fitness:food")
+def _diary_url(on, slot=None, user=None):
+    url = reverse("albright_fitness:food_day", args=[on.isoformat()]) if on != nutrition.today(user) else reverse("albright_fitness:food")
     return url + (f"#slot-{slot}" if slot else "")
 
 
@@ -70,7 +71,7 @@ def _back(request, on, slot=None):
     nxt = request.POST.get("next") or ""
     if nxt and url_has_allowed_host_and_scheme(nxt, {request.get_host()}, require_https=request.is_secure()):
         return redirect(nxt)
-    return redirect(_diary_url(on, slot))
+    return redirect(_diary_url(on, slot, request.user))
 
 
 def _meal_spaces(user):
@@ -113,17 +114,52 @@ def _plan_today(user, on):
 @login_required
 @never_cache
 def diary(request, day=None):
-    on = _day(day) if day else timezone.localdate()
+    today = nutrition.today(request.user)
+    on = _day(day, request.user) if day else today
     if day and on.isoformat() != day:
         raise Http404
     profile = NutritionProfile.load(request.user)
     data = nutrition.day(request.user, on)
+    exercise = burn.day(request.user, on)
     from .food_find_views import pop_undo, slot_now
     return render(request, "albright_fitness/food_diary.html", {
-        "undo": pop_undo(request), "slot_now": slot_now(),
-        **data, "on": on, "today": timezone.localdate(), "prev": on - timedelta(days=1), "next": on + timedelta(days=1),
-        "profile": profile, "progress": nutrition.progress(profile, data["totals"]), "plan": _plan_today(request.user, on),
-        "has_targets": any(profile.target(n) for n in MACROS), "tracked": profile.tracked or []})
+        "undo": pop_undo(request), "slot_now": slot_now(user=request.user),
+        **data, "on": on, "today": today, "prev": on - timedelta(days=1), "next": on + timedelta(days=1),
+        "profile": profile, "progress": nutrition.progress(profile, data["totals"], exercise["total"]),
+        "plan": _plan_today(request.user, on), "exercise": exercise,
+        "allowance": nutrition.allowance(profile, data["totals"], exercise["total"]),
+        "has_calorie_target": bool(profile.target_calories), "missing": nutrition.tracked_missing(profile),
+        "show_banner": not profile.target_calories and not profile.hide_targets_banner,
+        "carb_extra": nutrition.exercise_extra(profile, exercise["total"])["carbs"], "tracked": profile.tracked or []})
+
+
+@login_required
+@require_POST
+def hide_targets_banner(request):
+    """"Don't show me again" on the diary's Set-targets banner - the header keeps a quiet "Set targets" link."""
+    profile = NutritionProfile.load(request.user)
+    profile.hide_targets_banner = True
+    profile.save(update_fields=["hide_targets_banner", "updated_at"])
+    return _back(request, nutrition.today(request.user))
+
+
+@login_required
+@require_POST
+def workout_calories(request, pk):
+    """A workout's calories burned, typed (a watch's number) - blank or "Use estimate" goes back to the estimate."""
+    from .models import Workout
+    workout = get_object_or_404(Workout, pk=pk, owner=request.user)
+    text = (request.POST.get("calories") or "").strip()
+    if request.POST.get("reset") or not text:
+        workout.calories_burned = None
+    elif text.isdigit() and 0 <= int(text) <= 5000:
+        workout.calories_burned = int(text)
+    else:
+        messages.error(request, "Enter calories burned as a whole number from 0 to 5,000.")
+        return _back(request, workout.date)
+    workout.save(update_fields=["calories_burned"])
+    messages.success(request, f"Updated calories burned for {workout.title}.")
+    return _back(request, workout.date)
 
 
 @login_required
@@ -139,19 +175,19 @@ def delete_entry(request, pk):
 @require_POST
 def copy_yesterday(request):
     """Copies the day before's entries in one meal into this day's same meal."""
-    on, slot = _day(request.POST.get("date")), _slot(request.POST.get("slot"))
+    on, slot = _day(request.POST.get("date"), request.user), _slot(request.POST.get("slot"))
     source = FoodLogEntry.objects.filter(owner=request.user, date=on - timedelta(days=1), slot=slot).order_by("pk")
     copies = []
     for e in source:
         e.pk, e.id, e.date, e.created_at = None, None, on, None
-        e.plan_entry = None
+        e.plan_entry, e.idempotency_key = None, ""          # a copy is never the AI's original (fitness_api replay)
         copies.append(e)
     FoodLogEntry.objects.bulk_create(copies)
     if copies:
         messages.success(request, f"Copied {len(copies)} item{'s' if len(copies) != 1 else ''} from yesterday's {SLOT_KEYS[slot].lower()}.")
     else:
         messages.info(request, f"Nothing was logged for {SLOT_KEYS[slot].lower()} the day before.")
-    return redirect(_diary_url(on, slot))
+    return redirect(_diary_url(on, slot, request.user))
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +197,7 @@ def copy_yesterday(request):
 @login_required
 @never_cache
 def add(request):
-    on, slot = _day(request.GET.get("date")), _slot(request.GET.get("slot"))
+    on, slot = _day(request.GET.get("date"), request.user), _slot(request.GET.get("slot"))
     tab = request.GET.get("tab") if request.GET.get("tab") in dict(TABS) else "search"
     q = usda.clean_query(request.GET.get("q", ""))
     context = {"on": on, "slot": slot, "slots": FoodLogEntry.SLOTS, "tab": tab, "tabs": TABS, "q": q,
@@ -185,7 +221,7 @@ def add(request):
 @never_cache
 def usda_food(request, fdc_id):
     """One USDA food: pick an amount (grams, or one of its household portions) and log it."""
-    on, slot = _day(request.GET.get("date") or request.POST.get("date")), _slot(request.GET.get("slot") or request.POST.get("slot"))
+    on, slot = _day(request.GET.get("date") or request.POST.get("date"), request.user), _slot(request.GET.get("slot") or request.POST.get("slot"))
     try:
         food = usda.food(fdc_id)
     except usda.UsdaError as exc:
@@ -210,7 +246,7 @@ def usda_food(request, fdc_id):
                                         label=str(food)[:200], grams=grams, portion_label=label[:60],
                                         quantity=amount, unit=unit, **nutrition.for_grams(food, grams))
             messages.success(request, f"Logged {food.name} to {SLOT_KEYS[slot].lower()}.")
-            return redirect(_diary_url(on, slot))
+            return redirect(_diary_url(on, slot, request.user))
     return render(request, "albright_fitness/food_usda.html", {
         "food": food, "on": on, "slot": slot, "slots": FoodLogEntry.SLOTS,
         "per100": [(nutrition.LABELS[n], getattr(food, n), nutrition.UNITS_OF[n]) for n in MACROS]})
@@ -241,12 +277,13 @@ def log(request):
         post["kind"], post[PICK_FIELD[pick_kind]] = pick_kind, pick_id
     request.POST = post
     user, kind = request.user, request.POST.get("kind")
-    on, slot = _day(request.POST.get("date")), _slot(request.POST.get("slot"))
+    on, slot = _day(request.POST.get("date"), request.user), _slot(request.POST.get("slot"))
     servings = _number(request.POST.get("servings") or "1", high=MAX_SERVINGS)
     entry = None
     if kind == "recent":
         earlier = get_object_or_404(FoodLogEntry, pk=request.POST.get("entry") or 0, owner=user)
         earlier.pk, earlier.id, earlier.date, earlier.slot, earlier.created_at, earlier.plan_entry = None, None, on, slot, None, None
+        earlier.idempotency_key = ""
         earlier.save()
         entry = earlier
     elif kind == "custom":
@@ -331,6 +368,19 @@ def _int_or_none(text, high):
     return int(text) if text.isdigit() and 0 < int(text) <= high else None
 
 
+TARGET_LIMITS = (("calories", 10000), ("protein", 1000), ("carbs", 2000), ("fat", 1000), ("fiber", 300))
+
+
+def _target_errors(post):
+    """Typed targets that can't be saved (not a whole number, or out of range) - shown, never silently cleared."""
+    errors = []
+    for n, high in TARGET_LIMITS:
+        text = (post.get(n) or "").strip().replace(",", "")
+        if text and _int_or_none(text, high) is None:
+            errors.append(f"{nutrition.LABELS[n]}: enter a whole number from 1 to {high:,} {nutrition.UNITS_OF[n]} (or leave it empty).")
+    return errors
+
+
 @login_required
 @never_cache
 def targets(request):
@@ -358,16 +408,33 @@ def targets(request):
                     messages.success(request, "Saved your targets.")
                     return redirect("albright_fitness:targets")
         elif action == "targets":
-            for n, high in (("calories", 10000), ("protein", 1000), ("carbs", 2000), ("fat", 1000), ("fiber", 300)):
-                setattr(profile, f"target_{n}", _int_or_none(request.POST.get(n), high))
-            profile.tracked = [n for n in MACROS if request.POST.get(f"track_{n}")] or ["protein"]
-            profile.save()
-            messages.success(request, "Saved your targets.")
-            return redirect("albright_fitness:targets")
+            errors = _target_errors(request.POST)
+            if errors:
+                for e in errors:
+                    messages.error(request, e)
+            else:
+                for n, high in TARGET_LIMITS:
+                    setattr(profile, f"target_{n}", _int_or_none((request.POST.get(n) or "").replace(",", ""), high))
+                profile.tracked = [n for n in MACROS if request.POST.get(f"track_{n}")] or ["protein"]
+                if request.POST.get("exercise_shown"):                 # the checkbox was on the form
+                    profile.add_exercise = bool(request.POST.get("add_exercise"))
+                profile.save()
+                messages.success(request, "Saved your targets.")
+                return redirect("albright_fitness:targets")
+    latest = WeightEntry.objects.filter(owner=request.user).order_by("-date").first()
+    weigh_in = None                         # a newer weigh-in than the calculator's weight (2 lb / 1 kg or more apart)
+    if latest is not None and (profile.weight_kg is None or abs(Decimal(latest.weight_kg) - profile.weight_kg) >= 1):
+        weigh_in = {"date": latest.date, "shown": nutrition.weight_shown(NutritionProfile(weight_kg=Decimal(latest.weight_kg),
+                                                                                         weight_unit=profile.weight_unit))}
+    form_errors = request.method == "POST" and request.POST.get("action") == "targets"
     return render(request, "albright_fitness/targets.html", {
         "profile": profile, "suggestion": suggestion, "note": nutrition.low_target_note(profile),
-        "weight": nutrition.weight_shown(profile), "height": nutrition.height_shown(profile),
-        "macros": [(n, nutrition.LABELS[n], nutrition.UNITS_OF[n], profile.target(n), n in (profile.tracked or [])) for n in MACROS],
+        "macro_note": nutrition.macro_note(profile), "weigh_in": weigh_in,
+        "rerun_nudge": profile.add_exercise and profile.activity in ("moderate", "active", "very") and bool(profile.target_calories),
+        "weight": weigh_in["shown"] if weigh_in else nutrition.weight_shown(profile), "height": nutrition.height_shown(profile),
+        "macros": [(n, nutrition.LABELS[n], nutrition.UNITS_OF[n], request.POST.get(n) if form_errors else profile.target(n),
+                    bool(request.POST.get(f"track_{n}")) if form_errors else n in (profile.tracked or []), high)
+                   for n, high in TARGET_LIMITS],
         "activity": NutritionProfile.ACTIVITY, "goals": NutritionProfile.GOALS, "sexes": NutritionProfile.SEXES})
 
 

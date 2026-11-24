@@ -33,9 +33,13 @@ UNDO_KEY = "fx_food_undo"
 LIMIT = 8
 
 
-def slot_now(now=None):
-    """The meal it probably is: breakfast until 10:30, lunch until 2:30, dinner 5-9, else a snack."""
-    t = (now or timezone.localtime()).time()
+def slot_now(now=None, user=None):
+    """The meal it probably is (by the person's own clock): breakfast until 10:30, lunch until 2:30, dinner 5-9, else
+    a snack."""
+    if now is None:
+        from albright_planner import planner
+        now = timezone.localtime(timezone=planner.user_zone(user)) if user is not None else timezone.localtime()
+    t = now.time()
     if t < time(10, 30):
         return FoodLogEntry.BREAKFAST
     if t < time(14, 30):
@@ -99,9 +103,9 @@ def search(user, q):
 
 
 def _context(request):
-    on = _day(request.GET.get("date") or request.POST.get("date"))
+    on = _day(request.GET.get("date") or request.POST.get("date"), request.user)
     slot = request.GET.get("slot") or request.POST.get("slot")
-    return on, (slot if slot in SLOT_KEYS else slot_now())
+    return on, (slot if slot in SLOT_KEYS else slot_now(user=request.user))
 
 
 @login_required
@@ -177,7 +181,7 @@ def pick(request, kind, pk):
         else:
             entry.save()
             _remember_undo(request, entry)
-            return redirect(_diary_url(on, entry.slot))
+            return redirect(_diary_url(on, entry.slot, request.user))
         slot = entry.slot
     quantity, unit = (_typed(last.quantity), last.unit) if last and last.quantity and basis.unit(last.unit) else (1, basis.default)
     if request.method == "POST":
@@ -219,7 +223,7 @@ def edit_entry(request, pk):
         if request.POST.get("action") == "remove":
             entry.delete()
             messages.success(request, f"Removed {entry.label}.")
-            return redirect(_diary_url(entry.date, entry.slot))
+            return redirect(_diary_url(entry.date, entry.slot, request.user))
         entry.slot = _slot(request.POST.get("slot"))
         if entry.source in (FoodLogEntry.QUICK, FoodLogEntry.AI):
             for n in MACROS:
@@ -228,7 +232,7 @@ def edit_entry(request, pk):
             if entry.source == FoodLogEntry.AI:
                 entry.edited = True
             entry.save()
-            return redirect(_diary_url(entry.date, entry.slot))
+            return redirect(_diary_url(entry.date, entry.slot, request.user))
         quantity = amounts.parse_quantity(request.POST.get("quantity"))
         if quantity is None:
             error = "Enter an amount like 1, 1.5, .3 or 1/4."
@@ -237,7 +241,7 @@ def edit_entry(request, pk):
         else:
             entry.save()
             messages.success(request, f"Changed {entry.label}.")
-            return redirect(_diary_url(entry.date, entry.slot))
+            return redirect(_diary_url(entry.date, entry.slot, request.user))
     quantity, unit = amounts.current(entry, basis)
     quantity = _typed(quantity)
     if request.method == "POST":
@@ -282,7 +286,7 @@ def new_food(request):
                                      **nutrition.scaled(values, quantity))
             entry.save()
             _remember_undo(request, entry)
-            return redirect(_diary_url(on, slot))
+            return redirect(_diary_url(on, slot, request.user))
     return render(request, "albright_fitness/food_new.html", {
         "on": on, "slot": slot, "slots": FoodLogEntry.SLOTS, "errors": errors, "post": request.POST,
         "name": request.POST.get("name") or usda.clean_query(request.GET.get("q", ""))})
@@ -299,7 +303,7 @@ def undo(request):
         on, slot = first.date, first.slot
         gone.delete()
         messages.success(request, "Undone.")
-        return redirect(_diary_url(on, slot))
+        return redirect(_diary_url(on, slot, request.user))
     return redirect("albright_fitness:food")
 
 
