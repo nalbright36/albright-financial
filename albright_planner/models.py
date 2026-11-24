@@ -273,6 +273,8 @@ class PlannerSettings(models.Model):
     # show_weather: when off, Day and Week (and the item panel) hide every forecast
     # and weather.attach skips the Open-Meteo fetches. Default on.
     show_weather = models.BooleanField(default=True)
+    # The Day view's weather panel folded away behind the toolbar pill (views.weather_collapse). Default open.
+    weather_collapsed = models.BooleanField(default=False)
 
     @classmethod
     def row(cls, user):

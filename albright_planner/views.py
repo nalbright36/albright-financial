@@ -154,6 +154,11 @@ def is_filtered(options, meals_toggle):
 KIND_CHOICES = [("", "Tasks and events"), (ScheduleItem.TASK, "Tasks only"), (ScheduleItem.EVENT, "Events only")]
 
 
+def _jump_short(view, day):
+    """Phones' Day date button: 'Nov 24' (the toolbar has to fit one line at 375px with the weather pill)."""
+    return f"{day:%b} {day.day}" if view == "day" else ""
+
+
 def _jump_label(view, day, today):
     """Compact label on the toolbar date button: 'Wed, Nov 4', 'Nov 2 – 8', 'November 2026'."""
     if view == "day":
@@ -201,7 +206,7 @@ def _frame(request, view, day, prev_day, next_day, title):
         "filter_pairs": list(keep.items()),
         "jump_kind": "month" if view == "month" else "date",
         "jump_value": f"{day.year:04d}-{day.month:02d}" if view == "month" else day.isoformat(),
-        "jump_label": _jump_label(view, day, today),
+        "jump_label": _jump_label(view, day, today), "jump_short": _jump_short(view, day),
         "on_today": _on_today(view, day, today),
         "here": here,
         "day_url": lambda d: link("day", d),
@@ -270,7 +275,8 @@ def day_view(request):
     context.update({"top": top, "hours": hours, "overdue": overdue, "is_today": day == today,
                     "empty": not (occs or overdue or meals),
                     "day_weather": wx, "weather_place": weather.home_label(request.user),
-                    "day_hours": day_hours})
+                    "day_hours": day_hours,
+                    "weather_collapsed": bool(getattr(PlannerSettings.row(request.user), "weather_collapsed", False))})
     return render(request, "albright_planner/day.html", context)
 
 
@@ -1198,6 +1204,16 @@ def set_weather_location(request):
                          "label": prefs.weather_auto_label,
                          "lat": float(prefs.weather_auto_lat),
                          "lon": float(prefs.weather_auto_lon)})
+
+
+@login_required
+@require_POST
+def weather_collapse(request):
+    """The Day view's weather pill: {"collapsed": true|false} - remembered per person so it follows them to every device."""
+    prefs = PlannerSettings.for_user(request.user)
+    prefs.weather_collapsed = bool(_json(request).get("collapsed"))
+    prefs.save(update_fields=["weather_collapsed"])
+    return JsonResponse({"ok": True, "collapsed": prefs.weather_collapsed})
 
 
 def _save_weather(request, prefs):

@@ -10,6 +10,10 @@ Everything else lives in two dialogs (planner.js; bottom sheets on phones):
 Without JavaScript the view switch and the arrows are plain links, the jump form shows the date field
 and a Go button, and the dialog buttons are links to the Planner settings page and the New item page.
 Keys (desktop): D / W / M switch views, T today, N New item, Left / Right previous or next.
+Day view with weather: a pill after the arrows (icon, temperature now - the high on other days - and a chevron) opens
+and closes the weather panel under the toolbar (#pl-wx-panel, day.html); the choice is saved per person
+(views.weather_collapse) and drawn on load. No weather (none set up, or it failed to load): no pill.
+Phones (640px and below): the date reads "Nov 24" and New item reads "New" so the row stays on one line.
 {% endcomment %}
 <div class="pl-head" id="pl-head">
     <div class="pl-head__top">
@@ -27,11 +31,12 @@ Keys (desktop): D / W / M switch views, T today, N New item, Left / Right previo
             <form method="get" action="{{ view_path }}" class="pl-jump" id="pl-jump">
                 {% for key, value in filter_pairs %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
                 <label for="pl-jump-date" class="visually-hidden">{% if jump_kind == "month" %}Go to month{% else %}Go to date{% endif %}</label>
-                <button type="button" class="pl-btn pl-jump__btn{% if on_today %} is-today{% endif %}" id="pl-jump-btn" title="{% if jump_kind == 'month' %}Go to month{% else %}Go to date{% endif %}">{{ jump_label }}</button>
+                <button type="button" class="pl-btn pl-jump__btn{% if on_today %} is-today{% endif %}" id="pl-jump-btn" title="{% if jump_kind == 'month' %}Go to month{% else %}Go to date{% endif %}">{% if jump_short %}<span class="pl-jump__full">{{ jump_label }}</span><span class="pl-jump__short" aria-hidden="true">{{ jump_short }}</span>{% else %}{{ jump_label }}{% endif %}</button>
                 <input type="{{ jump_kind }}" name="date" id="pl-jump-date" class="pl-input pl-jump__input" value="{{ jump_value }}" autocomplete="off">
                 <button type="submit" class="pl-btn pl-nojs">Go</button>
             </form>
             <a href="{{ next_url }}" class="pl-btn pl-btn--icon" id="pl-next" aria-label="Next {{ view }}" title="Next {{ view }}"><span class="pl-nav__lbl">Next</span>&rsaquo;</a>
+            {% if view == "day" and day_weather %}{% with wx=day_weather %}<button type="button" class="pl-wx-pill{% if not weather_collapsed %} is-open{% endif %}" id="pl-wx-pill" aria-expanded="{% if weather_collapsed %}false{% else %}true{% endif %}" aria-controls="pl-wx-panel" data-url="{% url 'albright_planner:weather_collapse' %}" title="{% if weather_collapsed %}Show{% else %}Hide{% endif %} weather"><span class="pl-wx-pill__icon" aria-hidden="true">{% include "albright_planner/_weather_icon.html" with icon=wx.icon %}</span><span class="pl-wx-pill__temp">{% if wx.temp is not None %}{{ wx.temp }}{% else %}{{ wx.high }}{% endif %}°</span><span class="visually-hidden">, {{ wx.label }}. Weather details</span><svg class="pl-wx-pill__chev" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6l4 4 4-4"/></svg></button>{% endwith %}{% endif %}
         </div>
         <div class="pl-head__actions">
             <a href="{% url 'albright_planner:settings' %}" class="pl-btn pl-options-btn" id="pl-options-btn" aria-haspopup="dialog" aria-controls="pl-options">
@@ -39,7 +44,7 @@ Keys (desktop): D / W / M switch views, T today, N New item, Left / Right previo
                 <span class="pl-options-btn__text">View options</span>
                 <span class="pl-options-dot" id="pl-options-dot"{% if not filtered %} hidden{% endif %}><span class="visually-hidden"> (some items are filtered out)</span></span>
             </a>
-            <a href="{{ new_url }}" class="pl-btn pl-btn--primary" id="pl-new" aria-haspopup="dialog" aria-controls="pl-new-dialog">New item</a>
+            <a href="{{ new_url }}" class="pl-btn pl-btn--primary" id="pl-new" aria-haspopup="dialog" aria-controls="pl-new-dialog"><span class="pl-new__full">New item</span><span class="pl-new__short" aria-hidden="true">New</span></a>
         </div>
     </div>
 

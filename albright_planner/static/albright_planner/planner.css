@@ -660,3 +660,33 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
   .pl-today .pl-src { padding: 2px 3px; }
   .pl-today .pl-item .pl-fit-icon { margin-right: -1px; }       /* the tighter gap already: don't touch the title */
 }
+
+/* Day view: the weather pill in the toolbar (_toolbar.html) folds the weather panel (#pl-wx-panel) away. Collapsed, the
+   panel takes no space; the pill keeps the icon and temperature. planner.js animates the height (none with reduced motion). */
+.pl-wx-pill { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; min-height: 38px; padding: 0 10px;
+  border: 0; border-radius: 999px; font: inherit; font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text-primary); background: color-mix(in srgb, #38bdf8 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #38bdf8 32%, transparent); cursor: pointer; }
+.pl-wx-pill:hover, .pl-wx-pill.is-open { background: color-mix(in srgb, #38bdf8 22%, transparent); }
+.pl-wx-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pl-wx-pill__icon { display: inline-flex; color: #0ea5e9; }
+.pl-wx-pill__icon svg { width: 16px; height: 16px; }
+.pl-wx-pill__chev { flex-shrink: 0; color: var(--pl-muted); transition: transform .2s ease; }
+.pl-wx-pill.is-open .pl-wx-pill__chev { transform: rotate(180deg); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pl-wx-pill__icon { color: #7dd3fc; } }
+:root[data-theme="dark"] .pl-wx-pill__icon { color: #7dd3fc; }
+.pl-wx-panel { margin-top: -6px; overflow: hidden; }
+.pl-wx-panel[hidden] { display: none !important; }
+.pl-wx-panel.is-animating { transition: height .2s ease; }
+.pl-wx-panel > .pl-day-wx { margin-top: 0; }
+.pl-jump__short, .pl-new__short { display: none; }
+@media (max-width: 640px) {
+  .pl-jump__full, .pl-new__full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .pl-jump__short, .pl-new__short { display: inline; }
+  .pl-wx-pill { min-height: 36px; padding: 0 8px; gap: 3px; }
+}
+@media (max-width: 380px) {
+  .pl-wx-pill { padding: 0 7px; }
+  .pl-wx-pill__chev { width: 12px; height: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .pl-wx-panel.is-animating, .pl-wx-pill__chev { transition: none; } }

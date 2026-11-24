@@ -760,7 +760,7 @@
         return {title: doc.getElementById("pl-title").textContent, prev: doc.getElementById("pl-prev").getAttribute("href"),
                 today: todayBtn.getAttribute("href"), todayHidden: todayBtn.hidden,
                 next: doc.getElementById("pl-next").getAttribute("href"), page: doc.title,
-                jump: jumpBtn ? jumpBtn.textContent : "", jumpValue: jumpDate ? jumpDate.value : "",
+                jump: jumpBtn ? jumpBtn.innerHTML : "", jumpValue: jumpDate ? jumpDate.value : "",
                 jumpToday: !!(jumpBtn && jumpBtn.classList.contains("is-today"))};
     }
     function showHead(links) {
@@ -770,7 +770,7 @@
         document.title = links.page;
         var jumpBtn = document.getElementById("pl-jump-btn"), jumpDate = document.getElementById("pl-jump-date");
         if (jumpBtn && "jump" in links) {
-            jumpBtn.textContent = links.jump;
+            jumpBtn.innerHTML = links.jump;                       // our own page's markup (full + phone labels)
             jumpBtn.classList.toggle("is-today", links.jumpToday);
         }
         if (jumpDate && "jumpValue" in links) jumpDate.value = links.jumpValue;
@@ -1642,4 +1642,54 @@
         }
     });
     document.querySelectorAll(".pl-view-page [data-qv-title]").forEach(qvGrow);   // the quick view as a page
+    // ---------- Day view: the weather pill ----------
+    // The pill (_toolbar.html) opens / closes #pl-wx-panel with a ~200ms height animation (none with reduced motion).
+    // The choice is saved on the server (views.weather_collapse) and drawn on load; a localStorage copy marks a save
+    // still on its way, so a reload before it lands keeps what was picked (and sends it again).
+    (function () {
+        var pill = document.getElementById("pl-wx-pill");
+        if (!pill) return;
+        var KEY = "pl-wx-collapsed";
+        function remember(value) { try { window.localStorage.setItem(KEY, JSON.stringify(value)); } catch (e) { /* private mode */ } }
+        function recall() { try { return JSON.parse(window.localStorage.getItem(KEY) || "null"); } catch (e) { return null; } }
+        function reduced() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+        function panel() { return document.getElementById("pl-wx-panel"); }      // looked up each time: View options can redraw it
+        function show(open, animate) {
+            var box = panel();
+            pill.setAttribute("aria-expanded", open ? "true" : "false");
+            pill.classList.toggle("is-open", open);
+            pill.title = open ? "Hide weather" : "Show weather";
+            if (!box) return;
+            function done() { box.classList.remove("is-animating"); box.style.height = ""; if (!open) box.hidden = true; }
+            if (!animate || reduced()) { box.hidden = !open; box.style.height = ""; box.classList.remove("is-animating"); return; }
+            box.hidden = false;
+            var full = box.scrollHeight;
+            box.classList.remove("is-animating");
+            box.style.height = (open ? 0 : full) + "px";
+            void box.offsetHeight;                                                // start from there
+            box.classList.add("is-animating");
+            box.style.height = (open ? full : 0) + "px";
+            var finished = false;
+            function end(event) {
+                if (finished || (event && event.target !== box)) return;
+                finished = true; box.removeEventListener("transitionend", end); done();
+            }
+            box.addEventListener("transitionend", end);
+            window.setTimeout(end, 320);                                          // in case transitionend never comes
+        }
+        function save(collapsed) {
+            remember({collapsed: collapsed, pending: true});
+            post(pill.dataset.url, {collapsed: collapsed}, true).then(function (r) {
+                if (r.ok) remember({collapsed: collapsed, pending: false});
+            }).catch(function () { /* stays pending; the next load sends it again */ });
+        }
+        var server = pill.getAttribute("aria-expanded") === "false", local = recall();
+        if (local && local.pending && local.collapsed !== server) { show(!local.collapsed, false); save(local.collapsed); }
+        else remember({collapsed: server, pending: false});
+        pill.addEventListener("click", function () {
+            var collapsed = pill.getAttribute("aria-expanded") === "true";        // open now -> collapse
+            show(!collapsed, true);
+            save(collapsed);
+        });
+    })();
 })();

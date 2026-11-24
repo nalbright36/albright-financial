@@ -367,7 +367,7 @@ class ViewSwitchTests(Base):
     def test_the_date_button_shows_the_viewed_period(self):
         day = bar(self.client.get(url("day")).content.decode())
         self.assertIn('id="pl-jump-btn"', day)
-        self.assertIn(">Wed, Nov 4</button>", day)
+        self.assertIn('>Wed, Nov 4</span><span class="pl-jump__short" aria-hidden="true">Nov 4</span></button>', day)   # phones: "Nov 4"
         self.assertIn("pl-jump__btn is-today", day)
         self.assertIn('id="pl-today" hidden', day)                             # already on today: Today is tucked away
         week = bar(self.client.get(url("week")).content.decode())
@@ -377,11 +377,11 @@ class ViewSwitchTests(Base):
         self.assertIn(">November 2026</button>", month)
         self.assertIn('id="pl-today" hidden', month)
         later = bar(self.client.get(url("day") + "?date=2026-11-12").content.decode())
-        self.assertIn(">Thu, Nov 12</button>", later)
+        self.assertIn(">Thu, Nov 12</span>", later)
         self.assertRegex(later, r'<a href="/planner/day/" class="pl-btn" id="pl-today">Today</a>')
         self.assertNotIn("pl-jump__btn is-today", later)
         other_year = bar(self.client.get(url("day") + "?date=2025-11-04").content.decode())
-        self.assertIn(">Tue, Nov 4, 2025</button>", other_year)
+        self.assertIn(">Tue, Nov 4, 2025</span>", other_year)
         split = bar(self.client.get(url("week") + "?date=2026-11-30").content.decode())
         self.assertIn(">Nov 30 – Dec 6</button>", split)
 
