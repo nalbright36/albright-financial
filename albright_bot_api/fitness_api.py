@@ -417,17 +417,22 @@ def weight(request, token):
 def today(request, token):
     from albright_fitness import nutrition, stats
     from albright_fitness.models import MACROS, FoodLogEntry, NutritionProfile, Workout
-    user, on = token.owner, timezone.localdate()
+    from albright_fitness import burn
+    user = token.owner
+    on = nutrition.today(user)                               # the person's day, as the food log endpoints use
     profile = NutritionProfile.load(user)
     eaten = nutrition.totals(FoodLogEntry.objects.filter(owner=user, date=on))
+    burned = burn.day(user, on)["total"]
+    extra = nutrition.exercise_extra(profile, burned)
     macros = {}
     for n in MACROS:
-        target = profile.target(n)
-        macros[n] = {"eaten": f"{eaten[n]:.0f}", "target": target,
-                     "remaining": int(target - eaten[n]) if target else None, "tracked": n in (profile.tracked or [])}
+        target = nutrition.goal(profile, n, burned)
+        macros[n] = {"eaten": f"{nutrition.whole(eaten[n])}", "target": target, "exercise": extra.get(n, 0),
+                     "remaining": target - nutrition.whole(eaten[n]) if target else None, "tracked": n in (profile.tracked or [])}
     done = Workout.objects.filter(owner=user, date=on, finished_at__isnull=False).select_related("program_day")
     return ({"date": on.isoformat(), "planned": [{"name": d.name, "program": d.program.name, "done": bool(w)} for d, w in stats.todays(user, on)],
-             "workouts_done": [{"id": w.pk, "name": w.title, "from_planner": w.from_planner} for w in done], "macros": macros},
+             "workouts_done": [{"id": w.pk, "name": w.title, "from_planner": w.from_planner} for w in done], "macros": macros,
+             "exercise_calories": burned},
             200, "read fitness today")
 
 

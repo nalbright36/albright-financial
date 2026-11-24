@@ -111,6 +111,6 @@ def today(request, token):
         out["fitness"] = {
             "planned_workouts": [{"name": d.name, "program": d.program.name, "done": bool(w)}
                                  for d, w in stats.todays(owner, on)],
-            "macros": {n: {"eaten": round(float(eaten[n])), "target": profile.target(n)} for n in MACROS},
+            "macros": {n: {"eaten": nutrition.whole(eaten[n]), "target": profile.target(n)} for n in MACROS},
         }
     return out, 200, f"read today {on}"

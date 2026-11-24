@@ -255,6 +255,8 @@ class Workout(models.Model):
     status = models.CharField(max_length=8, choices=STATUSES, default=DONE)
     skip_reason = models.CharField(max_length=8, blank=True)
     skip_note = models.CharField(max_length=200, blank=True)
+    # Calories burned as typed by the person (a watch's number) - empty: burn.py estimates it.
+    calories_burned = models.PositiveIntegerField(null=True, blank=True, validators=[MaxValueValidator(5000)])
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = WorkoutManager()
@@ -398,9 +400,10 @@ class NutritionProfile(models.Model):
     MACROS the diary and dashboard show (e.g. protein only, calories hidden)."""
     MALE, FEMALE = "male", "female"
     SEXES = [(MALE, "Male"), (FEMALE, "Female")]
-    ACTIVITY = [("sedentary", "Sedentary (desk job, little exercise)"), ("light", "Light (exercise 1-3 days a week)"),
-                ("moderate", "Moderate (exercise 3-5 days a week)"), ("active", "Active (hard exercise 6-7 days a week)"),
-                ("very", "Very active (physical job plus training)")]
+    # Daily life, not counting workouts - logged workouts add their own calories (burn.py, add_exercise).
+    ACTIVITY = [("sedentary", "Sedentary (desk job, mostly sitting)"), ("light", "Light (on your feet some of the day)"),
+                ("moderate", "Moderate (on your feet most of the day)"), ("active", "Active (physical job)"),
+                ("very", "Very active (hard physical job)")]
     MAINTAIN, LOSE, GAIN = "maintain", "lose", "gain"
     GOALS = [(MAINTAIN, "Maintain"), (LOSE, "Slow loss (~0.5 lb a week)"), (GAIN, "Slow gain (~0.5 lb a week)")]
     IN, CM = "in", "cm"
@@ -431,6 +434,10 @@ class NutritionProfile(models.Model):
     hide_weight = models.BooleanField(default=False)
     weigh_in_reminder = models.BooleanField(default=False)
     weigh_in_weekday = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(6)])
+    # Logged workouts raise the day's calorie goal (and carbs) by their estimated burn (burn.py).
+    add_exercise = models.BooleanField(default=True)
+    # "Don't show me again" on the diary's Set-targets banner (the header keeps a quiet "Set targets" link).
+    hide_targets_banner = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

@@ -6,6 +6,9 @@
   fat and carbs - never below the resting rate or more than a 20% deficit. Typed targets below that get a gentle
   note (check with a doctor or dietitian).
 - The diary: a day's entries by meal, totals vs targets, what's left (over is just "over", never alarming).
+  Logged workouts (burn.py) raise the day's calorie goal - and carbs, by the same calories / 4 - while the person's
+  add_exercise is on: goal = target + exercise, left = goal - food. Every number shown rounds half up (whole()), the
+  same on the diary, Today, the launcher and the Bot API. "Today" is the person's own (their Planner time zone).
 - Recipes: each ingredient line matched to a USDA food and grams; totals and per serving.
 """
 import re
@@ -37,6 +40,20 @@ UNIT_WORDS = {"cup": ("cup", "cups", "c"), "tbsp": ("tbsp", "tablespoon", "table
               "l": ("l", "liter", "litre"), "pt": ("pt", "pint"), "qt": ("qt", "quart"), "gal": ("gal", "gallon")}
 _SPELLING = {spelling: unit for unit, spellings in UNIT_WORDS.items() for spelling in spellings}
 _LEADING_NUMBER = re.compile(r"^\s*(\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)\s*(.*)$")
+
+
+def whole(value):
+    """Rounds half up to an int - the one rounding for every total, target and "left" a person sees."""
+    return int(Decimal(value or 0).to_integral_value(ROUND_HALF_UP))
+
+
+def today(user):
+    """The person's today, in their own time zone (their Planner setting) - the same day the Bot API logs to."""
+    from albright_planner import planner
+    return planner.today(user)
+
+
+nutrition_today = today                      # for functions whose `today` argument hides it
 
 
 def dec(value, places="0.1"):
@@ -206,6 +223,18 @@ def low_target_note(profile):
     return ""
 
 
+def macro_note(profile):
+    """A gentle note when typed protein / carbs / fat add up to calories well off the calorie target, else ""."""
+    p, c, f, kcal = profile.target_protein, profile.target_carbs, profile.target_fat, profile.target_calories
+    if not (p and c and f and kcal):
+        return ""
+    from_macros = p * 4 + c * 4 + f * 9
+    if abs(from_macros - kcal) <= max(100, kcal // 10):
+        return ""
+    return (f"Your protein, carbs and fat add up to about {from_macros:,} calories, but your calorie target is "
+            f"{kcal:,}. Adjust one so they agree - or use the calculator.")
+
+
 # Units for the targets form: weight shown in lb or kg, height in in or cm (stored as kg and cm).
 def weight_shown(profile):
     if profile.weight_kg is None:
@@ -241,21 +270,53 @@ def totals(entries):
     return out
 
 
-def progress(profile, day_totals):
-    """One row per tracked macro: total, target, left / over (over is just information), the bar's width."""
+def exercise_extra(profile, burned):
+    """{"calories": n, "carbs": g} the day's workouts add to the targets - nothing when add_exercise is off or there
+    is no calorie target to add to. Carbs only (exercise runs mostly on carbs; protein and fat stay as set)."""
+    burned = whole(burned) if profile.add_exercise and profile.target_calories else 0
+    return {"calories": burned, "carbs": whole(Decimal(burned) / 4) if burned and profile.target_carbs else 0}
+
+
+def goal(profile, name, burned=0):
+    target = profile.target(name)
+    return target + exercise_extra(profile, burned).get(name, 0) if target else target
+
+
+def progress(profile, day_totals, burned=0):
+    """One row per tracked macro: total, target (with the day's exercise), left / over (over is just information),
+    the bar's width. extra: what exercise added to the target."""
+    extra = exercise_extra(profile, burned)
     rows = []
     for name in MACROS:
         if name not in (profile.tracked or []):
             continue
-        total, target = day_totals.get(name, ZERO), profile.target(name)
-        row = {"name": name, "label": LABELS[name], "unit": UNITS_OF[name], "total": int(total.to_integral_value(ROUND_HALF_UP)),
-               "target": target, "left": None, "over": None, "pct": 0}
+        total, target = day_totals.get(name, ZERO), goal(profile, name, burned)
+        row = {"name": name, "label": LABELS[name], "unit": UNITS_OF[name], "total": whole(total),
+               "target": target, "extra": extra.get(name, 0), "left": None, "over": None, "pct": 0}
         if target:
-            diff = int((Decimal(target) - total).to_integral_value(ROUND_HALF_UP))
+            diff = target - whole(total)
             row["left"], row["over"] = (diff, None) if diff >= 0 else (None, -diff)
             row["pct"] = min(100, int(total * 100 / Decimal(target)))
         rows.append(row)
     return rows
+
+
+def allowance(profile, day_totals, burned=0):
+    """The diary's big number: {"base", "exercise", "goal", "eaten", "left", "over", "food_pct", "base_pct"} - or
+    None without a calorie target. goal = base + exercise; left = goal - food; bar widths are of the goal."""
+    base = profile.target_calories
+    if not base:
+        return None
+    exercise = exercise_extra(profile, burned)["calories"]
+    total, eaten = base + exercise, whole(day_totals.get("calories", ZERO))
+    diff = total - eaten
+    return {"base": base, "exercise": exercise, "goal": total, "eaten": eaten, "left": max(diff, 0),
+            "over": max(-diff, 0), "food_pct": min(100, eaten * 100 // total), "base_pct": base * 100 // total}
+
+
+def tracked_missing(profile):
+    """Tracked macros with no target yet (the diary prompts to set them)."""
+    return [LABELS[n] for n in MACROS if n in (profile.tracked or []) and not profile.target(n)]
 
 
 def day(user, on):
@@ -270,21 +331,21 @@ def day(user, on):
 
 def averages(user, today=None, days=7):
     """Average calories and protein a day over the last `days` days that have anything logged -> dict or None."""
-    today = today or timezone.localdate()
+    today = today or nutrition_today(user)
     rows = (FoodLogEntry.objects.filter(owner=user, date__gt=today - timedelta(days=days), date__lte=today)
             .values("date").annotate(calories=Sum("calories"), protein=Sum("protein")))
     rows = list(rows)
     if not rows:
         return None
     n = len(rows)
-    return {"days": n, "calories": int(sum((r["calories"] or ZERO) for r in rows) / n),
-            "protein": int(sum((r["protein"] or ZERO) for r in rows) / n)}
+    return {"days": n, "calories": whole(sum((r["calories"] or ZERO) for r in rows) / n),
+            "protein": whole(sum((r["protein"] or ZERO) for r in rows) / n)}
 
 
 def recent_foods(user, limit=12, days=60):
     """What I log most (then most recently) over the last couple of months - one tap re-logs it. Each is the
     latest entry of its kind (same source and food / my food / recipe / quick-add label)."""
-    since = timezone.localdate() - timedelta(days=days)
+    since = nutrition_today(user) - timedelta(days=days)
     groups = (FoodLogEntry.objects.filter(owner=user, date__gte=since)
               .values("source", "label", "food_id", "custom_food_id", "recipe_id")
               .annotate(times=Count("pk"), last=Max("pk")).order_by("-times", "-last")[:limit])
@@ -297,11 +358,13 @@ def status_line(user, today=None):
     profile = NutritionProfile.objects.filter(user=user).first()
     if not profile:
         return ""
-    today = today or timezone.localdate()
+    from . import burn
+    today = today or nutrition_today(user)
     eaten = totals(FoodLogEntry.objects.filter(owner=user, date=today))
+    burned = burn.day(user, today)["total"] if profile.add_exercise and profile.target_calories else 0
     for name in ("protein", "calories", "carbs", "fat", "fiber"):
         if name in (profile.tracked or []) and profile.target(name):
-            return f"{LABELS[name]} {int(eaten[name])}/{profile.target(name)} {UNITS_OF[name]}"
+            return f"{LABELS[name]} {whole(eaten[name])}/{goal(profile, name, burned)} {UNITS_OF[name]}"
     return ""
 
 

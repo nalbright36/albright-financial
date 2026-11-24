@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 
 from albright_labs import sharing, sheet
 
-from . import body, glossary, insights, nutrition, programs, stats, training
+from . import body, burn, glossary, insights, nutrition, programs, stats, training
 from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord,
                      ProgramDay, ProgramExercise, ScheduledSession, Workout, WorkoutExercise, WorkoutSet)
 
@@ -68,9 +68,11 @@ def dashboard(request):
     if open_workout is not None and open_workout.created_at < timezone.now() - STALE_AFTER:
         open_workout, stale_workout = None, open_workout   # "Unfinished workout from Nov 12 - Finish or Discard"
     profile = NutritionProfile.load(request.user)
-    eaten = nutrition.totals(FoodLogEntry.objects.filter(owner=request.user, date=timezone.localdate()))
+    on = nutrition.today(request.user)
+    eaten = nutrition.totals(FoodLogEntry.objects.filter(owner=request.user, date=on))
+    burned = burn.day(request.user, on)["total"]
     return render(request, "albright_fitness/dashboard.html", {
-        **data, "volume_max": top, "open_workout": open_workout, "stale_workout": stale_workout, "progress": nutrition.progress(profile, eaten),
+        **data, "volume_max": top, "open_workout": open_workout, "stale_workout": stale_workout, "progress": nutrition.progress(profile, eaten, burned),
         "food_average": nutrition.averages(request.user), "tracked": profile.tracked or [],
         "week_summary": insights.week(request.user, stats.week_start(timezone.localdate())), "weight": _dashboard_weight(request.user, profile),
         "records_text": [(r, training.record_text(r)) for r in data["records"]],
