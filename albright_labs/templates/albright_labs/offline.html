@@ -1,21 +1,34 @@
 {% extends "index.html" %}
+{% load cache_bust %}
 {% block page_title %}You’re offline · {% endblock %}
+{% block offline_meta %} data-shell{% endblock %}
 {% block content %}
-{% comment %}Public offline fallback (labs.push_views.offline), shown by /sw.js when a navigation can't reach the site. Keeps the site header from index.html.{% endcomment %}
-<div class="container offline-page">
-    <div class="card offline-card">
+{% comment %}The offline page (labs.push_views.offline - public, no data in it). /sw.js saves it without cookies at install and
+shows it for any page it has no saved copy of while offline - at that page's own address. labs/offline_view.js then draws
+that section read-only from the IndexedDB snapshot (albright_labs.offline): Today, Week, Meals, Groceries, Recipes (and
+one recipe), Notes (and one note), Fitness. Anything else - or no snapshot yet - gets the card with the sections that work.
+The data-* addresses are the sections' pages, so the links and the matching use the real URLs.{% endcomment %}
+<div class="container offline-page ov" id="offline-view"
+     data-today="{% url 'albright_planner:day' %}" data-planner="{% url 'albright_planner:home' %}"
+     data-week="{% url 'albright_planner:week' %}" data-meals="{% url 'albright_meals:week' %}"
+     data-groceries="{% url 'albright_meals:groceries' %}" data-recipes="{% url 'albright_meals:recipes' %}"
+     data-notes="{% url 'albright_notes:list' %}" data-fitness="{% url 'albright_fitness:dashboard' %}">
+    <div class="ov__snapshot" id="offline-snapshot" hidden></div>
+    <div class="card offline-card" id="offline-card">
         <div class="offline-card__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8A16 16 0 0112 5c2.2 0 4.3.4 6.2 1.2"/><path d="M5 12.2A11 11 0 0112 10c1.5 0 3 .3 4.3.8"/><path d="M8.4 15.5A6 6 0 0112 14.5c.7 0 1.4.1 2 .4"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/></svg>
         </div>
-        <h1>You’re offline</h1>
-        <p>Albright can’t reach the site right now. Pages you already opened may still work. Check your connection, then try again.</p>
+        <h1 id="offline-title">You’re offline</h1>
+        <p id="offline-text">This page isn’t saved on this device. These work without a connection:</p>
+        <ul class="ov__links" id="offline-links">
+            <li><a href="{% url 'albright_planner:day' %}">Today</a></li>
+            <li><a href="{% url 'albright_planner:week' %}">This week</a></li>
+            <li><a href="{% url 'albright_meals:groceries' %}">Groceries</a></li>
+            <li><a href="{% url 'albright_meals:recipes' %}">Recipes</a></li>
+            <li><a href="{% url 'albright_notes:list' %}">Notes</a></li>
+        </ul>
         <button type="button" class="btn btn-primary" id="offline-retry">Try again</button>
     </div>
 </div>
 {% endblock %}
-{% block app_scripts %}
-<script>
-    var btn = document.getElementById("offline-retry");
-    if (btn) btn.addEventListener("click", function () { location.reload(); });
-</script>
-{% endblock %}
+{% block app_scripts %}<script src="{% static_version 'labs/offline_view.js' %}"></script>{% endblock %}

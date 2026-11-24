@@ -43,7 +43,10 @@ def manifest(request):
     data = {
         "name": "Albright Labs",
         "short_name": "Albright",
+        # "/" opens the landing page; offline, /sw.js shows its saved copy or the offline Today (albright_labs.offline).
+        "id": "/",
         "start_url": "/",
+        "scope": "/",
         "display": "standalone",
         "background_color": THEME_COLOR,
         "theme_color": THEME_COLOR,

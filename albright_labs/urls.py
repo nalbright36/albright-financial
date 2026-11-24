@@ -2,7 +2,7 @@ from django.urls import path
 
 from albright_bot_api import oauth_views
 
-from . import quick_actions
+from . import offline, quick_actions
 from . import (activity_views, api_key_views, attachment_views, circle_views, invite_views, public_views, push_views,
                share_views, views)
 
@@ -20,6 +20,7 @@ urlpatterns = [
     path("home/launcher/", views.launcher_lines, name="launcher_lines"),
     path("home/landing/", views.save_landing, name="save_landing"),
     path("home/account/", views.account, name="account"),
+    path("home/account/offline/", offline.settings, name="offline_settings"),
     # API keys / Connect your AI (api_key_views; the keys and the API: albright_bot_api). The approval page for an
     # AI connecting over MCP + OAuth (albright_bot_api.oauth_views) lives here so it looks like My account too.
     path("account/api-keys/", api_key_views.api_keys, name="api_keys"),

@@ -85,11 +85,56 @@ def remove(request, pk):
     return redirect("labs:notification_settings")
 
 
+# The app shell the worker saves at install (offline viewing - albright_labs.offline): with cache_bust's ?v=, the same
+# URLs the pages ask for. The fonts' CSS and files are saved the first time a page loads them.
+SHELL = ("style.css", "labs/launcher.css", "labs/launcher.js", "labs/push.js", "labs/offline.js", "labs/offline_view.js",
+         "js/app_nav.js", "js/menu.js", "js/md_editor.js", "js/fab_dock.js", "labs/quicksave.js", "labs/notifications.js",
+         "labs/share.js", "icons/logo-mark-white.png", "icons/logo-mark-dark.png", "icons/icon-192.png",
+         "icons/favicon-32.png")
+_version = {"at": 0.0, "value": ""}
+
+
+def static_hash():
+    """A short hash of every static file (name, size, last change) and this worker's template: a deploy that changes
+    any of them is a new worker - it replaces the old one and drops its caches. Worked out at most once a minute."""
+    import hashlib
+    import os
+    import time
+
+    from django.contrib.staticfiles import finders
+    from django.template.loader import get_template
+
+    now = time.time()
+    if _version["value"] and now - _version["at"] < 60:
+        return _version["value"]
+    digest = hashlib.sha1()
+    seen = set()
+    for finder in finders.get_finders():
+        for path, storage in finder.list([]):
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                stat = os.stat(storage.path(path))
+            except (OSError, NotImplementedError):
+                continue
+            digest.update(f"{path}:{stat.st_size}:{int(stat.st_mtime)};".encode())
+    try:
+        digest.update(str(int(os.path.getmtime(get_template("albright_labs/sw.js").origin.name))).encode())
+    except (OSError, AttributeError):
+        pass
+    _version.update(at=now, value=digest.hexdigest()[:12])
+    return _version["value"]
+
+
 @require_GET
 @never_cache
 def service_worker(request):
     """The service worker, scoped to the whole site."""
-    response = render(request, "albright_labs/sw.js", content_type="application/javascript")
+    from albright_reselling_app.templatetags.cache_bust import static_version
+    response = render(request, "albright_labs/sw.js", {"version": static_hash(),
+                                                       "shell": [static_version(p) for p in SHELL]},
+                      content_type="application/javascript")
     response["Service-Worker-Allowed"] = "/"
     # A short no-cache so a new worker is noticed without waiting a day.
     response["Cache-Control"] = "no-cache"

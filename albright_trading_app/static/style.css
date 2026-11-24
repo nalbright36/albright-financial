@@ -3455,6 +3455,67 @@ html.pl-scroll-lock, html.pl-scroll-lock body { overflow: hidden; }
 .offline-card p { margin: 0 0 20px; }
 .offline-card .btn { min-height: 44px; min-width: 140px; }
 
+/* ---------- Offline viewing (labs/offline.js, labs/offline_view.js, albright_labs.offline) ---------- */
+.offline-banner {
+  position: sticky; top: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 7px 16px; font-size: 0.8125rem; font-weight: 600; text-align: center;
+  background: var(--warn-bg, #4a3b12); color: var(--warn, #f5c451); border-bottom: 1px solid var(--border);
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner svg { flex: none; }
+.is-offline [data-offline-off] { opacity: 0.45; cursor: not-allowed; }
+/* The offline page is the same for whoever signs in (saved without cookies): no Login link, it can't work offline. */
+.is-offline-shell .navbar a[href*="user_login"] { display: none; }
+.is-offline a[data-offline-off] { pointer-events: auto; }
+.sw-update {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 1200;
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; max-width: calc(100vw - 32px);
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elevated, var(--bg)); color: var(--text-primary);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); font-size: 0.875rem; font-weight: 600;
+}
+.ov.ov--data { display: block; max-width: 760px; }
+.ov__links { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.ov__links a, .ov__tab {
+  display: inline-block; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 0.875rem;
+  color: var(--text-primary); text-decoration: none;
+}
+.ov__nav { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 14px; padding-bottom: 2px; }
+.ov__tab { flex: none; }
+.ov__tab.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.ov__stack { display: grid; gap: 14px; }
+.ov__card { margin: 0; }
+.ov__snapshot > .ov__card { margin-bottom: 14px; }
+.ov__sub { margin-left: auto; font-size: 0.8125rem; color: var(--text-secondary); }
+.ov__list, .ov__checklist { list-style: none; margin: 0; padding: 0; }
+.ov__item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); }
+.ov__item:first-child { border-top: 0; }
+.ov__item--row { justify-content: space-between; align-items: baseline; }
+.ov__item.is-done > .ov__main > .ov__title, .ov__checklist .is-done span:last-child { text-decoration: line-through; color: var(--text-secondary); }
+.ov__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ov__title { font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+a.ov__title { text-decoration: none; }
+a.ov__title:hover { text-decoration: underline; }
+.ov__meta { font-size: 0.8125rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ov__check {
+  flex: none; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-top: 2px;
+  border: 1.5px solid var(--text-secondary); border-radius: 5px; font-size: 12px; line-height: 1;
+}
+.ov__check.is-done { background: var(--accent); border-color: var(--accent); color: var(--bg, #fff); }
+.ov__dot { flex: none; width: 8px; height: 8px; margin: 7px 5px 0; border-radius: 50%; background: var(--accent); }
+.ov__checklist { margin-top: 6px; }
+.ov__checklist li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; font-size: 0.875rem; }
+.ov__checklist .ov__check { width: 15px; height: 15px; font-size: 10px; }
+.ov__h { margin: 14px 0 4px; font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.ov__bullets, .ov__steps { margin: 0; padding-left: 22px; }
+.ov__bullets li, .ov__steps li { padding: 4px 0; overflow-wrap: anywhere; }
+.ov__text { margin: 0 0 10px; color: var(--text-secondary); }
+.ov__note { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.ov__back { display: inline-block; margin-top: 12px; font-size: 0.875rem; }
+.ov__empty { margin: 0; color: var(--text-secondary); }
+.ov__foot { margin: 14px 0 0; font-size: 0.8125rem; color: var(--text-secondary); text-align: center; }
+.offline-data__line { margin: 0 0 4px; font-size: 0.875rem; }
+.offline-data__switch { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 0.875rem; flex-wrap: wrap; }
+
 /* ---------- "…" menus (js/menu.js): every <details data-menu> ----------
    While open, the panel sits in a layer at the end of <body> (or of its open dialog), position: fixed next to its
    button and above everything - a card can't clip it (glass cards' backdrop-filter traps fixed positioning and

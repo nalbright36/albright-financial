@@ -24,6 +24,21 @@
         {% include "albright_labs/_storage_bar.html" with u=usage %}
         <p style="margin: 10px 0 0; font-size: 0.875rem; color: var(--text-secondary);">{% if attachment_files %}{{ attachment_files }} attachment{{ attachment_files|pluralize }} on Planner tasks and notes.{% else %}You haven't attached any files to Planner tasks or notes yet.{% endif %} Each file can be up to {{ attachment_max }}.{% if usage.full %} You're out of space: delete some attachments to add more.{% endif %}</p>
     </section>
+    {# Offline viewing (albright_labs.offline): labs/offline.js fills in this device's numbers and runs Clear. #}
+    <section class="card" id="offline-data" style="margin-top: var(--space-5, 20px);">
+        <div class="card__header"><span class="card__label">Offline data</span></div>
+        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">A read-only copy of your Planner (today and the next 7 days), groceries, this week's meals, recipes, notes and today's food is kept on this device, so you can look at them with no connection. Nothing can be changed offline, and signing out deletes it.</p>
+        {% if offline_on %}
+        <p class="offline-data__line">Last saved: <strong data-offline-saved>…</strong></p>
+        <p class="offline-data__line">Space used on this device: <strong data-offline-size>…</strong></p>
+        <p class="offline-data__line" data-offline-cleared hidden role="status">Cleared. It's saved again as you use the site - turn it off below to stop.</p>
+        <button type="button" class="btn btn-secondary" data-offline-clear style="margin-top: 8px;">Clear offline data</button>
+        {% endif %}
+        <form method="post" action="{% url 'labs:offline_settings' %}" class="offline-data__switch">{% csrf_token %}
+            <label><input type="checkbox" name="enabled" value="on"{% if offline_on %} checked{% endif %}> Keep offline data on my devices</label>
+            <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+        </form>
+    </section>
     <section class="card" id="api-keys-link" style="margin-top: var(--space-5, 20px);">
         <div class="card__header"><span class="card__label">API keys / Connect your AI</span></div>
         <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">{% if api_keys %}Let an AI assistant (like ChatGPT, Claude, Grok or Gemini) read and update your apps, as you.{% else %}Connect an AI assistant to your account - API access isn't turned on for you yet.{% endif %}</p>

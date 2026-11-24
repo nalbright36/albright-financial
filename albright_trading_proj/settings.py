@@ -103,6 +103,8 @@ MIDDLEWARE = [
     'albright_labs.activity.ActivityMiddleware',
     'albright_trading_proj.middleware.LastAppMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # Offline viewing: X-Albright-Offline on HTML pages for /sw.js, a stamp on each change (albright_labs.offline).
+    'albright_labs.offline.OfflineMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -133,6 +135,7 @@ TEMPLATES = [
                 'albright_labs.context_processors.app_nav',
                 'albright_control.nav.admin_nav',
                 'albright_assistant.context_processors.assistant',
+                'albright_labs.offline.context',
             ],
         },
     },

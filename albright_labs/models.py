@@ -193,6 +193,8 @@ class UserPreference(models.Model):
     current_spaces = models.JSONField(default=dict, blank=True)
     # When they last opened the Opportunities Inbox - Home's "New opps" tile counts what arrived since.
     opps_seen_at = models.DateTimeField(null=True, blank=True)
+    # My account > Offline data: keep a read-only copy (pages and the snapshot) on their devices (albright_labs.offline).
+    offline_enabled = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
