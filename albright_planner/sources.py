@@ -151,15 +151,17 @@ class Meal:
     slot: str
     url: str
     is_meal: bool = True
+    qv: str = ""             # the meal quick view's JSON (albright_meals.meal_view) - planner.js opens it from data-mqv
 
 
 def show_meals(user):
     return can_open(user, "meals") and PlannerSettings.for_user(user).show_meals
 
 
-def meals(user, start, end, show=None):
+def meals(user, start, end, show=None, full=True):
     """Planned (and cooked) meals between start and end for someone who can open Meals - else none. show: the
-    views' choice for this page (View options, live before it's saved); None = the saved setting."""
+    views' choice for this page (View options, live before it's saved); None = the saved setting. Each carries its
+    quick view's JSON (meal.qv) - with the whole recipe unless full=False (Month: fetched when tapped instead)."""
     if not (show_meals(user) if show is None else show and can_open(user, "meals")):
         return []
     from albright_meals.scope import space_ids
@@ -172,4 +174,5 @@ def meals(user, start, end, show=None):
     out = [Meal(e, e.date, e.display_title, e.get_slot_display(), reverse("albright_meals:plan_entry", args=[e.pk]))
            for e in entries]
     out.sort(key=lambda m: (m.date, SLOT_ORDER.get(m.entry.slot, 9)))
-    return out
+    from albright_meals import meal_view
+    return meal_view.attach(out, user, full=full)

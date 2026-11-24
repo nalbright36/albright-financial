@@ -137,6 +137,8 @@ TEMPLATES = [
                 'albright_assistant.context_processors.assistant',
                 'albright_labs.offline.context',
             ],
+            # {{ n|plural:"item" }} on every template (albright_labs.text).
+            'builtins': ['albright_labs.templatetags.counts'],
         },
     },
 ]

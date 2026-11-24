@@ -2594,15 +2594,18 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .meals-recipe__actions form { margin: 0; }
 .meals-section { margin-top: var(--space-4); }
 .meals-section__title { margin: 0 0 var(--space-3); font-size: var(--text-lg, 1.125rem); }
-.meals-ingredients { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+/* The recipe page's ingredients are .ing-list rows (the Ingredients block below); these are its grocery-pick extras. */
 /* A recipe's ingredients, ticked to add to the grocery list. */
 .meals-pick-bar { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
-.meals-ingredients--pick { list-style: none; padding-left: 0; gap: 4px; }
-.meals-pick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.meals-pick { display: flex; align-items: flex-start; gap: 10px; min-height: 40px; padding: 6px 0; cursor: pointer; }
-.meals-pick input { width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; accent-color: var(--accent-solid); }
-.meals-pick-row.is-on-list .meals-pick span { color: var(--text-secondary); }
-.meals-pick-row .meals-chip--on { margin-left: 30px; }
+/* A pick row: the tick box, then the amount and name columns, then Convert. The label is display: contents so its
+   box, amount and name sit in the row's grid (clicking any of them still ticks it); the convert icon stays outside it. */
+.ing.ing--pick { grid-template-columns: 22px minmax(4rem, 6rem) minmax(0, 1fr) auto; align-items: center; padding: 8px 0; }
+.meals-pick { display: contents; cursor: pointer; }
+.meals-pick input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent-solid); cursor: pointer; }
+.ing--pick .ing__amt, .ing--pick .ing__name { cursor: pointer; }
+.meals-pick-row.is-on-list .ing__amt, .meals-pick-row.is-on-list .ing__name { color: var(--text-secondary); }
+.ing__onlist { grid-column: 2 / -1; justify-self: start; margin-top: 2px; }
+.ing.ing--tools { grid-template-columns: minmax(4.5rem, 6.5rem) minmax(0, 1fr) auto; align-items: center; }
 .meals-pick-submit { margin-top: var(--space-3); min-height: 44px; }
 .meals-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); }
 .meals-steps + .meals-steps__heading, .meals-steps__heading + .meals-steps__heading { margin-top: var(--space-4); }
@@ -2702,7 +2705,8 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
 [data-theme="light"] .pl-view-dialog, [data-theme="light"] .pl-view-page { --accent: #4D7C0F; --accent-hover: #3F6212; }
 /* Home's quick-add popup (.qa-dialog, labs/hub.js) is the same centered card: these box, backdrop and phone rules
    are shared; it keeps its tile's app color instead of the Planner's lime. */
-.pl-view-dialog, .qa-dialog {
+.qa-dialog,
+.pl-view-dialog {
   width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 48px); padding: 0; overflow: auto;
   border: 1px solid var(--border); border-radius: 16px; color: var(--text-primary);
   /* Solid - the calendar must not show through it (no transparency, no backdrop-filter); the dimmed ::backdrop
@@ -2710,7 +2714,8 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   background: var(--glass-bg-solid, var(--surface-solid)); -webkit-backdrop-filter: none; backdrop-filter: none; opacity: 1;
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
 }
-.pl-view-dialog::backdrop, .qa-dialog::backdrop { background: var(--backdrop); }
+.pl-view-dialog::backdrop { background: var(--backdrop); }
+.qa-dialog::backdrop { background: var(--backdrop); }
 .pl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; }
 .pl-view__body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 /* In the dialog: the header (title, menu, x) stays at the top and Edit / Close at the bottom - only the middle
@@ -2773,7 +2778,8 @@ a.strategy-chip:hover { border-color: var(--strategy-color, var(--border-strong)
   /* Phones: a centered card as tall as its content - Edit / Close right under it. Only a task taller than the
      screen reaches the cap (about 90% of the height, never under the notch or the home bar); then the middle
      scrolls and the header and footer stay in view. */
-  .pl-view-dialog, .qa-dialog { width: 92%; max-width: 92%; height: fit-content; margin: auto; border-radius: 16px;
+  .qa-dialog,
+  .pl-view-dialog { width: 92%; max-width: 92%; height: fit-content; margin: auto; border-radius: 16px;
     top: env(safe-area-inset-top); bottom: env(safe-area-inset-bottom);   /* centered between the notch and the home bar */
     max-height: min(90vh, calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
     max-height: min(90dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px)); }
@@ -2924,14 +2930,13 @@ html.has-fab-dock body { padding-bottom: calc(88px + env(safe-area-inset-bottom,
 }
 .meals-page { padding-bottom: 96px; }                       /* room for the button under the last line */
 /* The icon by each ingredient line. */
-.meals-ingredient-line { display: list-item; }
 .meals-convert-line {
   display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: 6px; vertical-align: middle;
   border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--accent); cursor: pointer; padding: 0;
 }
 .meals-convert-line:hover { background: var(--surface-hover); }
 .meals-convert-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.meals-pick-row .meals-convert-line { margin-left: auto; }
+.ing .meals-convert-line { align-self: center; }
 @media (max-width: 639.98px) { .meals-convert-line { width: 40px; height: 40px; } }
 
 /* The dialog: centered on a desktop, a bottom sheet on phones - a solid background either way. */
@@ -3182,6 +3187,54 @@ details[open] > .pl-prop__row .pl-prop__chev, .pl-prop__row[aria-expanded="true"
 .pl-qv__foot { justify-content: space-between; align-items: center; }
 .pl-qv__editor { font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
 .pl-qv__editor:hover { color: var(--accent-hover); text-decoration: none; }
+
+/* ---------- A planned meal's quick view (planner.js openMeal, albright_meals.meal_view) ---------- */
+.pl-meal-qv { --meal: var(--app-meals, #F97316); }
+/* The body scrolls (a long recipe): its parts keep their height - .pl-props' overflow: hidden would otherwise let the
+   flex column squash the Date and Meal rows to nothing. */
+.pl-meal-qv .pl-view__body > * { flex-shrink: 0; }
+.pl-meal-qv__icon { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; margin-top: 1px;
+  border-radius: 8px; color: var(--meal); background: color-mix(in srgb, var(--meal) 16%, transparent); }
+.pl-meal-qv__chip { display: inline-flex; vertical-align: 3px; margin-left: 4px; padding: 1px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: var(--meal); background: color-mix(in srgb, var(--meal) 14%, transparent); white-space: nowrap; }
+.pl-meal-qv__recipe { display: flex; flex-direction: column; gap: 14px; }
+.pl-meal-qv__recipe > .pl-skel { display: block; height: 14px; margin: 4px 0; }
+.pl-meal-qv__meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; font-size: 0.875rem; color: var(--text-secondary); }
+.pl-meal-qv__rating { font-weight: 600; color: var(--text-primary); }
+.pl-meal-qv__desc { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
+.pl-meal-qv__steps { margin: 0; padding-left: 1.4em; }
+.pl-meal-qv__steps li { padding: 5px 0; line-height: 1.5; overflow-wrap: anywhere; }
+.pl-meal-qv__norecipe { margin: 0; }
+.pl-meal-qv__foot { flex-direction: column; align-items: stretch; gap: 10px; }
+.pl-meal-qv__foot .pl-qv__saved { margin: 0; min-height: 1em; justify-content: center; text-align: center; }
+.pl-meal-qv__foot .pl-qv__saved:empty { display: none; }
+.pl-meal-qv__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+html .pl .pl-meal-qv__groceries, .pl-meal-qv__groceries { width: 100%; min-height: 44px; }
+html .pl .pl-meal-qv__remove { color: var(--red); }
+@media (max-width: 640px) { .pl-meal-qv__row .pl-btn { flex: 0 1 auto; } }
+
+/* ---------- Ingredients, everywhere (the recipe page, the meal quick view - albright_meals.meal_view) ----------
+   One per row: the amount in a fixed left column (bold), the name on the right wrapping under itself, a note muted
+   after it; a thin line between rows. A section ("For the sauce") is a small label. data-ing-check rows strike
+   through when tapped (cooking). */
+.ing-list { list-style: none; margin: 0; padding: 0; }
+.ing { display: grid; grid-template-columns: minmax(4.5rem, 6.5rem) minmax(0, 1fr); column-gap: 12px; align-items: baseline;
+  padding: 10px 0; border-top: 1px solid var(--border); line-height: 1.4; }
+.ing-list > .ing:first-child, .ing-section + .ing { border-top: 0; }
+.ing__amt { font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ing__name { min-width: 0; overflow-wrap: anywhere; }
+.ing__note { color: var(--text-secondary); font-size: 0.875em; }
+.ing-section { margin: 0; padding: 14px 0 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-secondary); list-style: none; }
+.ing-list > .ing-section:first-child, .ing-section--steps:first-child { padding-top: 2px; }
+[data-ing-check] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+[data-ing-check]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.ing.is-struck .ing__amt, .ing.is-struck .ing__name { text-decoration: line-through; color: var(--text-muted, var(--text-secondary)); }
+@media (max-width: 480px) {
+  .ing { grid-template-columns: minmax(3.75rem, 5.25rem) minmax(0, 1fr); column-gap: 10px; }
+  .ing.ing--tools { grid-template-columns: minmax(3.75rem, 5.25rem) minmax(0, 1fr) auto; }
+  .ing.ing--pick { grid-template-columns: 22px minmax(3.5rem, 4.75rem) minmax(0, 1fr) auto; column-gap: 10px; }
+}
 
 /* The edit page (Option C): back + ⋯, the check box and a big title, the property rows, Notes, Checklist, Attachments. */
 .pl-ed { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 104px; }

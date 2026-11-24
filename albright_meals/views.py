@@ -24,9 +24,10 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from albright_labs import circles, quick, sharing, sheet
+from albright_labs.text import plural
 from albright_labs.models import ShareGrant
 
-from . import groceries, importer, plan, recipe_nutrition, scope, signals
+from . import groceries, importer, meal_view, plan, recipe_nutrition, scope, signals
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
 from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
@@ -153,10 +154,16 @@ def plan_move(request, pk):
     entry = _entry(request, pk)
     form = PlanSlotForm(request.POST)
     if not form.is_valid():
+        if quick.wanted(request):
+            return quick.error(["Pick the day and slot to move it to."])
         messages.error(request, "Pick the day and slot to move it to.")
         return redirect(_week_url(entry.date))
     swapped = plan.move(entry, form.cleaned_data["date"], form.cleaned_data["slot"])
     day = form.cleaned_data["date"]
+    if quick.wanted(request):                     # the Planner's meal quick view (meal_view): it stays open
+        data = meal_view.payload(entry, request.user, full=False)
+        return quick.ok("Saved", data["page"], date=data["date"], dateText=data["dateText"], slot=data["slot"],
+                        slotLabel=data["slotLabel"], swapped=swapped.display_title if swapped else "")
     messages.success(request, f"Moved to {day:%a %b} {day.day}." + (f" {swapped.display_title} took its place."
                                                                     if swapped else ""))
     return redirect(_week_url(day))
@@ -181,8 +188,44 @@ def plan_delete(request, pk):
     entry = _entry(request, pk)
     day = entry.date
     entry.delete()
+    if quick.wanted(request):
+        return quick.ok("Removed from the plan.", _week_url(day))
     messages.success(request, "Removed from the plan.")
     return redirect(_week_url(day))
+
+
+@login_required
+@scope.space_required
+def plan_quick(request, pk):
+    """The Planner's meal quick view, as JSON (meal_view.payload) - the Month view fetches it on pointerdown."""
+    return JsonResponse({"ok": True, **meal_view.payload(_entry(request, pk), request.user, full=True)})
+
+
+@login_required
+@scope.space_required
+@require_POST
+def plan_groceries(request, pk):
+    """The meal quick view's "Add ingredients to groceries": this meal's recipe into the meal's own space's list
+    (anything already there from this recipe, unchecked, is left alone)."""
+    entry = _entry(request, pk)
+    if not entry.recipe_id:
+        if quick.wanted(request):
+            return quick.error(["This meal has no recipe to add."])
+        return redirect(_week_url(entry.date))
+    added, merged, skipped = groceries.add_recipes(entry.space, [entry.recipe], user=request.user, skip_listed=True)
+    text = _groceries_text(added, merged, skipped)
+    if quick.wanted(request):
+        return quick.ok(text, reverse("albright_meals:groceries"), link="Groceries", added=added, merged=merged)
+    messages.success(request, text)
+    return redirect(_week_url(entry.date))
+
+
+def _groceries_text(added, merged, skipped):
+    if not added and not merged and skipped:
+        return "Everything from this recipe is already on the grocery list."
+    return (f"Added {plural(added, 'item')} to the grocery list"
+            + (f", {merged} combined with what was there" if merged else "")
+            + (f" ({skipped} already on it from this recipe)" if skipped else "") + ".")
 
 
 @login_required
@@ -539,16 +582,18 @@ def _target_space(request, recipe):
 
 
 def _ingredients_for(space, obj):
-    ingredients = []
+    """The recipe page's rows (meal_view.ingredient_rows - a section heading has "section"), each ingredient with what's
+    already on the grocery list under its name, and the parts the converter needs."""
     listed = groceries.on_list(space)
-    for index, ingredient in enumerate(obj.ingredients or []):
-        name, quantity, unit, note = groceries.ingredient_parts(ingredient)
-        original = ingredient.get("original", "") if isinstance(ingredient, dict) else ""
-        if name or original:
-            on_list = [groceries.describe(item) for item in listed.get(groceries.name_key(name), [])] if name else []
-            ingredients.append({"index": index, "name": name, "quantity": groceries.format_quantity(quantity),
-                                "unit": unit, "note": note, "original": original, "on_list": on_list})
-    return ingredients
+    rows = []
+    raw = obj.ingredients or []
+    for row in meal_view.ingredient_rows(raw):
+        if "section" not in row:
+            name, quantity, unit, _note = groceries.ingredient_parts(raw[row["index"]])
+            row.update(quantity=groceries.format_quantity(quantity), unit=unit, pick_name=name,
+                       on_list=[groceries.describe(item) for item in listed.get(groceries.name_key(name), [])] if name else [])
+        rows.append(row)
+    return rows
 
 
 @login_required
@@ -575,7 +620,7 @@ def recipe(request, pk):
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
         "nutrition": getattr(obj, "nutrition", None), "per_serving": recipe_nutrition.per_serving(getattr(obj, "nutrition", None)),
         "can_log": _can_log(request.user), "diary_slots": _diary_slots(), "today": timezone.localdate(),
-        "picked_count": sum(1 for i in ingredients if i["name"] and not i["on_list"])})
+        "picked_count": sum(1 for i in ingredients if i.get("pick_name") and not i["on_list"])})
 
 
 @login_required
@@ -673,11 +718,9 @@ def recipe_groceries(request, pk):
         return redirect(reverse("albright_meals:recipe", args=[pk]) + "#ingredients")
     added, merged, skipped = groceries.add_recipes(_target_space(request, obj), [obj], user=request.user, skip_listed=True)
     if not added and not merged and skipped:
-        messages.info(request, "Everything from this recipe is already on the grocery list.")
+        messages.info(request, _groceries_text(added, merged, skipped))
     else:
-        messages.success(request, f"Added {added} item{'s' if added != 1 else ''} to the grocery list"
-                                  + (f", {merged} combined with what was there" if merged else "")
-                                  + (f" ({skipped} already on it from this recipe)" if skipped else "") + ".")
+        messages.success(request, _groceries_text(added, merged, skipped))
     return redirect(_safe_next(request) or reverse("albright_meals:recipe", args=[pk]))
 
 

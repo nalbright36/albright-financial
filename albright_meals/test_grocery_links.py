@@ -53,7 +53,7 @@ class OnListTests(Base):
         self.assertIn("On list: 1 (from Chili)", onions)
         tortillas = html.split('name="ingredient" value="4"', 1)[1].split(">", 1)[0]
         self.assertIn("checked", tortillas)                                  # not on the list: ticked
-        self.assertIn('Add <span data-pick-count>3</span> item<span data-pick-plural>s</span>', html)   # cilantro, tomatoes, tortillas
+        self.assertIn('<span data-pick-label>Add 3 items to the grocery list</span>', html)   # cilantro, tomatoes, tortillas
 
     def test_checked_and_cleared_lines_dont_count(self):
         chili = self.recipe("Chili", CHILI)

@@ -331,7 +331,7 @@ def month_view(request):
     grid_end = planner.week_start(last) + timedelta(days=6)
     occs = quickview.attach(checklist.attach(planner.occurrences(request.user, grid_start, grid_end, **_filters(request))),
                             request.user)
-    meals = sources.meals(request.user, grid_start, grid_end, show=_options(request)["meals"])
+    meals = sources.meals(request.user, grid_start, grid_end, show=_options(request)["meals"], full=False)
     context = _frame(request, "month", day, _add_months(first, -1), _add_months(first, 1), f"{first:%B %Y}")
     weeks, d = [], grid_start
     while d <= grid_end:

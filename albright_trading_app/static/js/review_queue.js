@@ -223,7 +223,7 @@
             byId("rq-review-skipped").hidden = true;
         } else {
             setText("rq-done-title", "End of the queue");
-            setText("rq-done-text", pending + " skipped lot" + (pending === 1 ? "" : "s") + " still waiting.");
+            setText("rq-done-text", plural(pending, "skipped lot") + " still waiting.");
             byId("rq-review-skipped").hidden = false;
             setText("rq-review-skipped", "Review skipped (" + pending + ")");
         }

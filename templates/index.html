@@ -491,6 +491,8 @@
                 else if (tab === 'personal') link.href = link.dataset.personalUrl;
             })();
         </script>
+        {# plural(n, "item") for every script below (albright_labs.text). #}
+        <script src="{% static_version 'labs/text.js' %}"></script>
         <script src="{% static_version 'labs/launcher.js' %}"></script>
         <script src="{% static_version 'labs/push.js' %}"></script>
         <script src="{% static_version 'labs/offline.js' %}"></script>

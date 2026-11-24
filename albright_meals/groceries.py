@@ -240,6 +240,15 @@ def ingredient_parts(ingredient):
     return name, quantity, normalize_unit(unit), str(ingredient.get("note") or "").strip()
 
 
+def is_heading(text):
+    """A recipe's section line written among its ingredients - "## Sauce", "For the sauce:", a short "For the ..." -
+    shown as a label (meal_view.ingredient_rows), never bought."""
+    t = (text or "").strip()
+    words = len(t.split())
+    return bool(t) and (t.startswith("##") or (t.endswith(":") and words <= 6)
+                        or (re.match(r"(?i)^for (the |a |an )?\w", t) is not None and words <= 5))
+
+
 def add_recipes(space, recipes, user=None, token=None, skip_listed=False):
     """Every ingredient of these recipes, duplicates combined first (same thing, same unit),
     then merged into the list. skip_listed: leave out an ingredient whose unchecked line already
@@ -255,7 +264,7 @@ def add_recipes(space, recipes, user=None, token=None, skip_listed=False):
     for recipe in recipes:
         for ingredient in recipe.ingredients or []:
             name, quantity, unit, note = ingredient_parts(ingredient)
-            if not name:
+            if not name or (quantity is None and not unit and is_heading(name)):
                 continue
             key = (name_key(name), unit)
             if key in combined:

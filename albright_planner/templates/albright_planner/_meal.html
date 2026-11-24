@@ -1,7 +1,8 @@
-{% comment %}A planned meal from Meals (read live, never copied), on the same one line as any item: the fork, its title (cut off with "…"; the full title is the tooltip), then its slot and "Meals" - icons only in Week's narrow columns. View only - no checkbox, no drag. Opens it in Meals.{% endcomment %}
+{% comment %}A planned meal from Meals (read live, never copied), on the same one line as any item: the fork, its title (cut off with "…"; the full title is the tooltip), then its slot and "Meals" - icons only in Week's narrow columns. View only - no checkbox, no drag. A tap opens its quick view (planner.js, from data-mqv: the date, the slot and the whole
+recipe); the link is Meals' own page for that meal (no JS, or a new tab).{% endcomment %}
 <li class="pl-item is-meal{% if drag %} rb-it rb-it--meal{% endif %}" data-meal="{{ o.entry.pk }}">
     <span class="pl-meal-icon" aria-hidden="true">{% include "albright_planner/_fork.html" %}</span>
-    <a href="{{ o.url }}" class="pl-item__body" title="{{ o.slot }}: {{ o.title }} (Meals)">
+    <a href="{{ o.url }}" class="pl-item__body" title="{{ o.slot }}: {{ o.title }} (Meals)" data-meal-view{% if o.qv %} data-mqv="{{ o.qv }}"{% endif %} aria-haspopup="dialog">
         <span class="pl-item__title{% if drag %} rb-it__title{% endif %}">{{ o.title }}</span>
         <span class="pl-ind"><span class="pl-ind__text">{{ o.slot }}</span><span class="pl-ind__src pl-ind__text">Meals</span></span>
     </a>

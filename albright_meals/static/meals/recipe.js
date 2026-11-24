@@ -4,17 +4,33 @@
  */
 (function () {
     "use strict";
+    // Read-only recipes: tap an ingredient (data-ing-check) to strike it through while cooking - not the Convert button.
+    document.addEventListener("click", function (e) {
+        var row = e.target.closest && e.target.closest(".ing-list [data-ing-check]");
+        if (!row || e.target.closest("button, a, input, label")) return;
+        var on = row.classList.toggle("is-struck");
+        row.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    document.addEventListener("keydown", function (e) {
+        var row = e.target.matches && e.target.matches(".ing-list [data-ing-check]") && e.target;
+        if (!row || (e.key !== " " && e.key !== "Enter")) return;
+        e.preventDefault();
+        row.click();
+    });
+})();
+
+(function () {
+    "use strict";
     var form = document.getElementById("ingredient-form");
     if (!form) return;
     var button = document.getElementById("ingredient-add");
-    var count = form.querySelector("[data-pick-count]");
-    var plural = form.querySelector("[data-pick-plural]");
+    // The whole label is one piece of text (plural(), labs/text.js) - the flex button's gap can't split "item s".
+    var label = form.querySelector("[data-pick-label]");
     var boxes = Array.prototype.slice.call(form.querySelectorAll("[data-pick-box]:not([disabled])"));
 
     function refresh() {
         var n = boxes.filter(function (b) { return b.checked; }).length;
-        if (count) count.textContent = n;
-        if (plural) plural.textContent = n === 1 ? "" : "s";
+        if (label) label.textContent = "Add " + plural(n, "item") + " to the grocery list";
         if (button) button.disabled = n === 0;
     }
 

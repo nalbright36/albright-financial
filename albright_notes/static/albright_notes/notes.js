@@ -290,7 +290,7 @@
     function showWords() {
         if (!words || !ne) return;
         var n = countWords(ne.text());
-        words.textContent = n + " word" + (n === 1 ? "" : "s");
+        words.textContent = plural(n, "word");
     }
     var wordsTimer = null;
     function wordsSoon() { clearTimeout(wordsTimer); wordsTimer = setTimeout(showWords, 400); }
@@ -301,7 +301,7 @@
         var s = Math.max(0, (Date.now() - then.getTime()) / 1000);
         if (s < 45) return "just now";
         if (s < 3600) return Math.round(s / 60) + " min ago";
-        if (s < 86400) { var h = Math.round(s / 3600); return h + " hour" + (h === 1 ? "" : "s") + " ago"; }
+        if (s < 86400) { var h = Math.round(s / 3600); return plural(h, "hour") + " ago"; }
         if (s < 7 * 86400) return then.toLocaleDateString(undefined, {weekday: "long"});
         return then.toLocaleDateString(undefined, {month: "short", day: "numeric", year: then.getFullYear() === new Date().getFullYear() ? undefined : "numeric"});
     }
@@ -888,7 +888,7 @@
                     NoteEditor.updateChip(editor, c.uid, {ids: data.ids.join(","), already: data.already});
                     if (data.added.length) {
                         var n = data.added.length;
-                        toast("Added " + n + " item" + (n === 1 ? "" : "s") + " to groceries", "Undo", function () {
+                        toast("Added " + plural(n, "item") + " to groceries", "Undo", function () {
                             api(root.dataset.groceriesRemoveUrl, {ids: data.added}).then(function () {
                                 var now = chipBy(c.uid);
                                 if (now) { skipPrompt["grocery:" + now.attrs.ids] = true; NoteEditor.removeChip(editor, c.uid); }

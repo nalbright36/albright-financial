@@ -372,7 +372,7 @@ class IdeaAndRecipeTests(Base):
                                                            {"tag": "breakfast"}).context["recipes"]], ["Pancakes"])
         curry = Recipe.objects.get(title="Chicken curry")
         detail = self.client.get(reverse("albright_meals:recipe", args=[curry.pk]))
-        self.assertContains(detail, "<strong>1 lb</strong> chicken")
+        self.assertContains(detail, '<span class="ing__amt">1 lb</span><span class="ing__name">chicken</span>')
         self.assertContains(detail, "<li>Simmer.</li>")
         self.client.post(reverse("albright_meals:recipe_plan", args=[curry.pk]),
                          {"date": self.today.isoformat(), "slot": "dinner"})

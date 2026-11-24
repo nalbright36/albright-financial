@@ -606,6 +606,194 @@
         try { data = link.dataset.qv ? JSON.parse(link.dataset.qv) : null; } catch (e) { data = null; }
         openView(link.getAttribute("href"), link, data);
     });
+    // ---------- A planned meal's quick view (albright_meals.meal_view) ----------
+    // A meal row (data-meal-view) opens this in the same dialog, drawn at once from its data-mqv: the title and slot chip,
+    // the date and slot (each a tap-to-pick row that saves on change - plan_move; "Saved" in the corner; a meal already
+    // in that slot swaps places), then the whole recipe - time, servings, my rating, ingredients (tap one to strike it
+    // while cooking), steps. Month's rows carry no recipe: it's fetched (plan_quick) on pointerdown and drawn in when
+    // it arrives. Footer: Add ingredients to groceries (plan_groceries), Remove from plan, Open recipe page. After a change
+    // the calendar under it reloads when it closes.
+    var FORK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 2v8a2 2 0 0 0 2 2v10M11 2v8a2 2 0 0 1-2 2M7 2v5M11 2v5M9 2v5"/><path d="M17 22V2c-2.2 1.3-3 4-3 7v4h3"/></svg>';
+    var CHEVRON = '<svg class="pl-prop__icon pl-prop__chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>';
+    var recipeCache = {};
+    function mealRecipe(d) {
+        if (d.recipe || !d.recipeUrl) return Promise.resolve(d.recipe || null);
+        if (!recipeCache[d.recipeUrl]) {
+            recipeCache[d.recipeUrl] = fetch(d.recipeUrl, {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (data) { return data.recipe || null; });
+            recipeCache[d.recipeUrl].catch(function () { delete recipeCache[d.recipeUrl]; });
+        }
+        return recipeCache[d.recipeUrl];
+    }
+    function ingredientsHtml(rows) {
+        if (!rows.length) return '<p class="pl-muted">No ingredients listed.</p>';
+        return '<ul class="ing-list">' + rows.map(function (r) {
+            if (r.section) return '<li class="ing-section">' + esc(r.section) + "</li>";
+            return '<li class="ing" data-ing-check tabindex="0" role="checkbox" aria-checked="false"><span class="ing__amt">' + esc(r.amount) +
+                '</span><span class="ing__name">' + esc(r.name) + (r.note ? ' <span class="ing__note">' + esc(r.note) + "</span>" : "") + "</span></li>";
+        }).join("") + "</ul>";
+    }
+    function stepsHtml(groups) {
+        if (!groups.length) return '<p class="pl-muted">No steps listed.</p>';
+        return groups.map(function (g) {
+            return (g.heading ? '<h4 class="ing-section ing-section--steps">' + esc(g.heading) + "</h4>" : "") +
+                (g.steps.length ? '<ol class="pl-meal-qv__steps"' + (g.start > 1 ? ' start="' + g.start + '"' : "") + ">" +
+                    g.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>" : "");
+        }).join("");
+    }
+    function recipeHtml(r) {
+        if (!r) return '<div class="pl-meal-qv__recipe" data-meal-recipe><span class="pl-skel" aria-hidden="true"></span><span class="pl-skel" aria-hidden="true"></span><span class="visually-hidden">Loading the recipe</span></div>';
+        var meta = [];
+        if (r.times) meta.push('<span>' + esc(r.times) + "</span>");
+        if (r.servings) meta.push('<span>' + esc(plural(r.servings, "serving")) + "</span>");
+        if (r.rating) meta.push('<span class="pl-meal-qv__rating" title="Your rating">' + esc(r.rating.emoji) + " " + esc(r.rating.label) + "</span>");
+        return '<div class="pl-meal-qv__recipe" data-meal-recipe>' +
+            (meta.length ? '<p class="pl-meal-qv__meta">' + meta.join("") + "</p>" : "") +
+            (r.description ? '<p class="pl-meal-qv__desc">' + esc(r.description) + "</p>" : "") +
+            '<section class="pl-view__section"><h3 class="pl-view__label">Ingredients' + (r.ingredients.length ? ' <span class="pl-view__count">' +
+                r.ingredients.filter(function (i) { return !i.section; }).length + "</span>" : "") + "</h3>" + ingredientsHtml(r.ingredients) + "</section>" +
+            '<section class="pl-view__section"><h3 class="pl-view__label">Steps</h3>' + stepsHtml(r.steps) + "</section></div>";
+    }
+    function mealPanel(d, back) {
+        var slots = (d.slots || []).map(function (s) {
+            return '<option value="' + esc(s[0]) + '"' + (s[0] === d.slot ? " selected" : "") + ">" + esc(s[1]) + "</option>";
+        }).join("");
+        return '<article class="pl-view pl-qv pl-meal-qv" aria-labelledby="pl-view-title" data-quick-url="' + esc(d.move) +
+            '" data-meal-panel data-date="' + esc(d.date) + '" data-slot="' + esc(d.slot) + '">' +
+            '<header class="pl-view__head"><span class="pl-meal-qv__icon" aria-hidden="true">' + FORK + "</span>" +
+            '<h2 class="pl-view__title" id="pl-view-title">' + esc(d.title) + ' <span class="pl-meal-qv__chip" data-qv-value="slot-chip">' + esc(d.slotLabel) + "</span></h2>" +
+            '<a href="' + esc(back) + '" class="pl-view__close" data-view-close aria-label="Close" title="Close (Esc)">' + CLOSE_X + "</a></header>" +
+            '<div class="pl-view__body"><div class="pl-props pl-qv__props">' +
+            '<div class="pl-qv__prop"><button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false"><span class="pl-prop__label">' + qvIcon("date") +
+                'Date</span><span class="pl-prop__value" data-qv-value="date">' + esc(d.dateText) + "</span>" + CHEVRON + "</button>" +
+                '<div class="pl-qv__picker" hidden><label class="visually-hidden" for="pl-meal-date">Date</label><input type="date" id="pl-meal-date" class="pl-input" value="' +
+                esc(d.date) + '" data-meal-field="date" required></div></div>' +
+            '<div class="pl-qv__prop"><button type="button" class="pl-prop__row" data-qv-pick aria-expanded="false"><span class="pl-prop__label">' + qvIcon("time") +
+                'Meal</span><span class="pl-prop__value" data-qv-value="slot">' + esc(d.slotLabel) + "</span>" + CHEVRON + "</button>" +
+                '<div class="pl-qv__picker" hidden><label class="visually-hidden" for="pl-meal-slot">Meal</label><select id="pl-meal-slot" class="pl-input pl-select" data-meal-field="slot">' +
+                slots + "</select></div></div></div>" +
+            (d.notes ? '<section class="pl-view__section"><h3 class="pl-view__label">Notes</h3><div class="pl-view__notes pl-qv__plain">' + esc(d.notes) + "</div></section>" : "") +
+            (d.hasRecipe ? recipeHtml(d.recipe || null) : '<p class="pl-muted pl-meal-qv__norecipe">Just a title in the plan &ndash; no recipe attached.</p>') +
+            "</div>" +
+            '<footer class="pl-view__foot pl-meal-qv__foot"><span class="pl-qv__saved" data-qv-status role="status" aria-live="polite"></span>' +
+            (d.groceries ? '<button type="button" class="pl-btn pl-btn--primary pl-meal-qv__groceries" data-meal-groceries="' + esc(d.groceries) + '">Add ingredients to groceries</button>' : "") +
+            '<div class="pl-meal-qv__row"><button type="button" class="pl-btn pl-btn--ghost pl-meal-qv__remove" data-meal-remove="' + esc(d.remove) + '">Remove from plan</button>' +
+            '<a href="' + esc(d.page) + '" class="pl-qv__editor">' + (d.hasRecipe ? "Open recipe page" : "Open in Meals") + " &rarr;</a></div></footer></article>";
+    }
+    function openMeal(d, opener) {
+        var box = viewBox(), token = {}, back = window.location.pathname + window.location.search;
+        viewOpener = opener || null;
+        box._token = token;
+        box.innerHTML = mealPanel(d, back);
+        if (!box.open) box.showModal();
+        document.documentElement.classList.add("pl-scroll-lock");
+        var close = box.querySelector(".pl-view__close");
+        if (close) close.focus();
+        if (history.pushState && !viewPushed && opener) { history.pushState({plView: true}, "", opener.getAttribute("href")); viewPushed = true; }
+        if (d.hasRecipe && !d.recipe) {
+            mealRecipe(d).then(function (r) {
+                var slot = box._token === token && box.open && box.querySelector("[data-meal-recipe]");
+                if (!slot) return;
+                var wrap = document.createElement("div");
+                wrap.innerHTML = recipeHtml(r);
+                slot.parentNode.replaceChild(wrap.firstChild, slot);
+            }).catch(function () {
+                var slot = box._token === token && box.querySelector("[data-meal-recipe]");
+                if (slot) slot.innerHTML = '<p class="pl-error">Couldn’t load the recipe &ndash; <a href="' + esc(d.page) + '">open it</a>.</p>';
+            });
+        }
+    }
+    document.addEventListener("pointerdown", function (event) {                  // Month: the recipe before the tap ends
+        var link = event.target.closest && event.target.closest("a[data-meal-view]");
+        if (!link || !canDialog) return;
+        try { mealRecipe(JSON.parse(link.dataset.mqv || "{}")).catch(function () {}); } catch (e) { /* no data */ }
+    }, {passive: true});
+    document.addEventListener("click", function (event) {
+        var link = event.target.closest && event.target.closest("a[data-meal-view]");
+        if (!link || !canDialog || !link.dataset.mqv || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        var d;
+        try { d = JSON.parse(link.dataset.mqv); } catch (e) { return; }
+        event.preventDefault();
+        openMeal(d, link);
+    });
+    function mealSave(panel, date, slot, revert) {
+        var body = new FormData();
+        body.append("date", date);
+        body.append("slot", slot);
+        qvStatus(panel, "Saving…", "saving");
+        return fetch(panel.dataset.quickUrl, {method: "POST", credentials: "same-origin", body: body,
+                     headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest", "X-Quick-Add": "1"}})
+            .then(function (r) { return r.json().catch(function () { return {}; }); })
+            .then(function (data) {
+                if (!data.ok) throw new Error((data.errors || [])[0] || "check your connection and try again.");
+                panel.dataset.date = data.date;
+                panel.dataset.slot = data.slot;
+                qvValue(panel, "date", data.dateText);
+                qvValue(panel, "slot", data.slotLabel);
+                qvValue(panel, "slot-chip", data.slotLabel);
+                var dialog = panel.closest("dialog");
+                if (dialog) dialog.dataset.changed = "1";                       // the calendar under it shows the move
+                qvStatus(panel, data.swapped ? "Saved · swapped with " + data.swapped : "Saved", "saved");
+            }).catch(function (err) {
+                revert();
+                qvStatus(panel, "Couldn’t save – " + (err && err.message ? err.message : "try again."), "error");
+            });
+    }
+    document.addEventListener("change", function (event) {
+        var el = event.target, field = el.getAttribute && el.getAttribute("data-meal-field");
+        var panel = field && el.closest("[data-meal-panel]");
+        if (!panel) return;
+        var oldDate = panel.dataset.date, oldSlot = panel.dataset.slot;
+        var wasDate = qvValue(panel, "date"), wasSlot = qvValue(panel, "slot");
+        if (field === "date") {
+            if (!el.value) return;
+            qvValue(panel, "date", qvDate(el.value));                           // at once; the server's word follows
+            mealSave(panel, el.value, oldSlot, function () { el.value = oldDate; qvValue(panel, "date", wasDate); });
+        } else {
+            var label = el.options[el.selectedIndex].text;
+            qvValue(panel, "slot", label);
+            qvValue(panel, "slot-chip", label);
+            mealSave(panel, oldDate, el.value, function () {
+                el.value = oldSlot; qvValue(panel, "slot", wasSlot); qvValue(panel, "slot-chip", wasSlot);
+            });
+        }
+    });
+    document.addEventListener("click", function (event) {
+        var panel = event.target.closest && event.target.closest("[data-meal-panel]");
+        if (!panel) return;
+        var add = event.target.closest("[data-meal-groceries]"), remove = event.target.closest("[data-meal-remove]");
+        var ing = event.target.closest("[data-ing-check]");
+        if (ing) { toggleIngredient(ing); return; }
+        var target = add || remove;
+        if (!target) return;
+        if (remove && !window.confirm("Remove " + (panel.querySelector("#pl-view-title").firstChild.textContent.trim()) + " from the plan?")) return;
+        target.disabled = true;
+        qvStatus(panel, remove ? "Removing…" : "Adding…", "saving");
+        fetch(target.getAttribute(add ? "data-meal-groceries" : "data-meal-remove"), {method: "POST", credentials: "same-origin",
+              headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest", "X-Quick-Add": "1"}})
+            .then(function (r) { return r.json().catch(function () { return {}; }); })
+            .then(function (data) {
+                if (!data.ok) throw new Error((data.errors || [])[0] || "try again.");
+                var dialog = panel.closest("dialog");
+                if (remove) { if (dialog) { dialog.dataset.changed = "1"; dialog.close(); } return; }
+                qvStatus(panel, data.message, "saved");
+                target.textContent = data.added || data.merged ? "Added to groceries" : "Already on the list";
+            }).catch(function (err) {
+                target.disabled = false;
+                qvStatus(panel, "Couldn’t " + (remove ? "remove" : "add") + " – " + (err && err.message ? err.message : "try again."), "error");
+            });
+    });
+    // Tap an ingredient to strike it while cooking (any .ing-list with data-ing-check rows - the recipe page too).
+    function toggleIngredient(row) {
+        var on = row.classList.toggle("is-struck");
+        row.setAttribute("aria-checked", on ? "true" : "false");
+    }
+    document.addEventListener("keydown", function (event) {
+        var row = event.target.matches && event.target.matches("[data-ing-check]") && event.target;
+        if (row && (event.key === " " || event.key === "Enter") && row.closest("[data-meal-panel]")) { event.preventDefault(); toggleIngredient(row); }
+    });
+
     // The linked note's checklist (the panel shows the whole note): a box ticks that one "- [ ]" line in the note
     // itself - Notes' check endpoint, by the item's stable id (data-item-id), on the note's latest text - so someone
     // else's edit meanwhile is never overwritten. The box flips at once; per item only the latest tap is sent
@@ -1070,7 +1258,7 @@
             }[repeat] || "";
             var ends = value("ends"), until = parseDate(value("until")), count = value("count");
             if (ends === "on" && until) text += " until " + shortDate(until);
-            else if (ends === "after" && count) text += ", " + count + " time" + (count === "1" ? "" : "s");
+            else if (ends === "after" && count) text += ", " + plural(count, "time");
             else if (value("kind") === "task") text += " \u00b7 one at a time";
             return text;
         }

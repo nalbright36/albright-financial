@@ -480,7 +480,7 @@ class WebsiteImportTests(Base):
         self.assertContains(detail, f'Source: <a href="{CHILI_URL}" target="_blank" rel="noopener noreferrer nofollow">'
                                     'Example Kitchen</a> &middot; by Ann Baker', html=False)
         self.assertContains(detail, '<h3 class="meals-steps__heading">For the chili</h3>')
-        self.assertContains(detail, "<span>2 lb ground beef</span></label>")   # a tickable ingredient
+        self.assertContains(detail, '<span class="ing__amt">2 lb</span><span class="ing__name">ground beef</span></label>')   # a tickable ingredient
         self.assertContains(detail, 'id="recipe-reimport"')
         self.assertNotContains(detail, "Needs review")
 
