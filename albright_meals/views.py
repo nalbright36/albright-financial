@@ -777,11 +777,7 @@ def recipe_save_copy(request, pk):
     obj, editable = scope.readable_recipe(request.user, request.space, pk)
     if editable:
         return redirect("albright_meals:recipe", pk=pk)
-    fields = ("title", "description", "ingredients", "steps", "prep_minutes", "cook_minutes", "total_time_minutes",
-              "servings", "tags", "standard_tags", "source_url", "source_name", "author", "image_url", "notes")
-    copy = Recipe(**{name: getattr(obj, name) for name in fields}, space=request.space, created_by=request.user,
-                  saved_from=obj, saved_from_name=scope.title(obj.space)[:100], visibility=Recipe.HOUSEHOLD)
-    copy.save()
+    copy = scope.save_copy(obj, request.space, request.user)
     messages.success(request, f"Saved {copy.title} to your recipes.")
     return redirect("albright_meals:recipe", pk=copy.pk)
 

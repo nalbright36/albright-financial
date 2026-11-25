@@ -533,3 +533,18 @@ def spaces(request, token):
     rows = [{"id": sp.pk, "name": sp.name, "personal": sp.is_personal, "current": current is not None and sp.pk == current.pk}
             for sp in circles.visible_spaces(token.owner, "meals")]
     return {"spaces": rows}, 200, f"listed {len(rows)} meals spaces"
+
+
+@bot_endpoint("meals:write", methods=("POST",))
+def recipe_share_link(request, token, recipe_id):
+    """The recipe's public, read-only share link (albright_meals.share_links) - the one it has, or a new one. Only a
+    recipe in a space the owner sees (its owners share it)."""
+    from albright_meals import scope as meals_scope, share_links
+    models = _meals()
+    recipe = models.Recipe.objects.filter(pk=recipe_id, space_id__in=meals_scope.space_ids(token.owner)).first()
+    if recipe is None:
+        raise ApiError(404, f"No recipe {recipe_id} in the owner's spaces.", "rejected: recipe not found")
+    link, created = share_links.get_or_create(recipe, token.owner)
+    return ({"recipe_id": recipe.pk, "title": recipe.title, "url": share_links.url(link), "created": created,
+             "views": link.view_count}, 201 if created else 200,
+            f"{'made' if created else 'read'} the share link for recipe #{recipe.pk}")

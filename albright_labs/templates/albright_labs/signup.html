@@ -1,22 +1,24 @@
 {% extends "base_public_form.html" %}
-{% comment %}An invite link's sign-up page (albright_labs.invite_views.signup). The email comes from the invite, locked.{% endcomment %}
+{% comment %}An invite link's sign-up page (albright_labs.invite_views.signup). The email comes from the invite, locked.
+From a recipe share link (invite_views.share_signup, `share`): first name and email are fields too.{% endcomment %}
 {% block page_title %}Create your account{% endblock %}
 {% block heading %}Create your account{% endblock %}
 {% block card %}
 {% if signed_in %}
 <p class="pa-text" id="signup-signed-in">You're signed in as <strong>{{ user.get_username }}</strong>. <a href="{% url 'user_logout' %}">Log out</a>, then open the invite link again to make a new account.</p>
 {% else %}
-<p class="pa-lead">{% if invite.name %}Welcome, {{ invite.name }}. {% endif %}Choose a username and password. The invite works once and expires {{ invite.expires_at|date:"M j, g:i A" }}.</p>
+{% if share %}<p class="pa-lead" id="signup-share">{{ share.by }}&rsquo;s link counts as your invite. Make your account and we&rsquo;ll save <strong>{{ share.title }}</strong> to your recipes.</p>
+{% else %}<p class="pa-lead">{% if invite.name %}Welcome, {{ invite.name }}. {% endif %}Choose a username and password. The invite works once and expires {{ invite.expires_at|date:"M j, g:i A" }}.</p>{% endif %}
 {% if form.errors %}<div class="pa-alert" role="alert" id="form-error">{% if form.non_field_errors %}{{ form.non_field_errors|join:" " }}{% else %}Please fix the highlighted field{{ form.errors|length|pluralize }} below.{% endif %}</div>{% endif %}
 <form method="post" id="signup-form" class="pa-form" novalidate>{% csrf_token %}
-<div class="pa-field">
+{% if not share %}<div class="pa-field">
 <label class="pa-label" for="signup-email">Email</label>
 <input type="email" id="signup-email" class="ld-input pa-input" value="{{ invite.email }}" readonly disabled aria-describedby="signup-email-help">
 <div class="pa-help" id="signup-email-help">From your invite - it can't be changed.</div>
-</div>
+</div>{% endif %}
 {% for field in form %}{% include "_public_field.html" %}{% endfor %}
 <button type="submit" class="btn btn-pri pa-submit">Create account</button>
 </form>
 {% endif %}
 {% endblock %}
-{% block links %}{% if not signed_in %}<a href="{% url 'user_login' %}" id="sign-in-link">Already have an account? Sign in</a>{% endif %}<a href="{% url 'labs:root' %}" id="back-home">Back to home</a>{% endblock %}
+{% block links %}{% if share %}<a href="{{ share.back }}" id="back-to-recipe">Back to the recipe</a>{% endif %}{% if not signed_in %}<a href="{% url 'user_login' %}" id="sign-in-link">Already have an account? Sign in</a>{% endif %}<a href="{% url 'labs:root' %}" id="back-home">Back to home</a>{% endblock %}

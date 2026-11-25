@@ -103,6 +103,20 @@ def editable_recipe(user, pk, queryset=None):
     return recipe
 
 
+COPY_FIELDS = ("title", "description", "ingredients", "steps", "prep_minutes", "cook_minutes", "total_time_minutes",
+               "servings", "tags", "standard_tags", "source_url", "source_name", "author", "image_url", "notes")
+
+
+def save_copy(obj, space, user, fields=COPY_FIELDS):
+    """"Save to my recipes": a copy of someone else's recipe in `space` - credited "Saved from <their space>", with the
+    original source link - that its new space can edit, rate and plan. The original (and its ratings) stay theirs.
+    A public share link saves only what its page shows (share_links.COPY_FIELDS)."""
+    copy = Recipe(**{name: getattr(obj, name) for name in fields}, space=space, created_by=user, saved_from=obj,
+                  saved_from_name=title(obj.space)[:100], visibility=Recipe.HOUSEHOLD)
+    copy.save()
+    return copy
+
+
 def owned_recipe(user, pk, queryset=None):
     """A recipe in a space this person sees - its owners (share it, the library, move it) - else 404."""
     recipe = (queryset if queryset is not None else Recipe.objects).filter(space_id__in=space_ids(user), pk=pk).first()

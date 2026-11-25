@@ -1,0 +1,25 @@
+{% load cache_bust %}{% comment %}
+A recipe's public share link, in its Share box (albright_labs/_share.html - sharing.control's public_link, for the
+recipe's owners): "Copy share link" makes one (or copies the one there is), "New link" replaces it (the old one stops
+working), "Turn off" stops it. meals/share_link.js does it without reloading and copies; without JS each form posts.
+The public page: albright_meals.share_link_views.shared_recipe.
+{% endcomment %}
+<div class="share-link" id="share-link" data-share-link>
+    <h3 class="share-link__title">Share link</h3>
+    <p class="share-link__note">Anyone with the link can see this recipe, without signing in. They never see your ratings or notes.</p>
+    <div class="share-link__row" data-share-link-row{% if not link.on %} hidden{% endif %}>
+        <label class="visually-hidden" for="share-link-url">Share link</label>
+        <input type="text" readonly id="share-link-url" class="ledger-input share-link__url" value="{{ link.url }}" data-share-link-url>
+    </div>
+    <div class="share-link__actions">
+        <form method="post" action="{{ link.action }}" data-share-link-form>{% csrf_token %}<input type="hidden" name="action" value="create"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn btn-secondary btn-sm" id="share-link-copy">Copy share link</button></form>
+        <form method="post" action="{{ link.action }}" data-share-link-form data-share-link-on{% if not link.on %} hidden{% endif %}>{% csrf_token %}<input type="hidden" name="action" value="regenerate"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="share-link__minor" id="share-link-new">New link</button></form>
+        <form method="post" action="{{ link.action }}" data-share-link-form data-share-link-on{% if not link.on %} hidden{% endif %}>{% csrf_token %}<input type="hidden" name="action" value="off"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="share-link__minor" id="share-link-off">Turn off</button></form>
+    </div>
+    <p class="share-link__meta" data-share-link-meta>{% if link.on %}{{ link.views }} view{{ link.views|pluralize }}{% endif %}</p>
+    <p class="share-box__status" data-share-link-status role="status" aria-live="polite"></p>
+</div>
+<script src="{% static_version 'meals/share_link.js' %}" defer></script>

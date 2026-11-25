@@ -67,6 +67,7 @@ api_urlpatterns = [
     path("meals/recipes", meals_api.recipes, name="meals_recipes"),
     path("meals/recipes/import", meals_api.recipes_import, name="meals_recipes_import"),
     path("meals/recipes/<int:recipe_id>", overview_api.recipe_detail, name="meals_recipe"),
+    path("meals/recipes/<int:recipe_id>/share-link", meals_api.recipe_share_link, name="meals_recipe_share_link"),
     # Notes (albright_bot_api.notes_api).
     path("notes", notes_api.notes_collection, name="notes"),
     path("notes/<int:note_id>", notes_api.note_item, name="note"),

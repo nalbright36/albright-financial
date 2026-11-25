@@ -433,6 +433,16 @@ Returns 201 (created) or 200 (updated) {"id": int, "created": bool}.""",
        example={"title": "Turkey chili", "servings": 6, "ingredients": ["2 lb ground turkey", "1 can black beans"],
                 "steps": ["Brown the turkey.", "Simmer 30 minutes."]},
        returns={"id": 12, "created": True}),
+    Op("POST", "meals/recipes/{id}/share-link", "getRecipeShareLink", "Get (or make) a recipe's public share link",
+       """The recipe's public, read-only share link - anyone with it sees the recipe without signing in (title,
+description, time, servings, ingredients, steps, nutrition per serving and "Shared by <first name>"; never ratings,
+notes or anything else of the owner's). Returns the link it already has, or makes one. Use it for "send me a share
+link for the chili": find the recipe's id with searchMyItems or listRecipes first. Only recipes in the owner's own
+spaces. Returns 201 (made now) or 200 {"recipe_id", "title", "url" (the link to send), "created": bool, "views":
+int}. The owner turns a link off or makes a new one from the recipe's Share box.""",
+       scopes=("meals:write",), section="meals", display="meals/recipes/<id>/share-link",
+       returns={"recipe_id": 12, "title": "Turkey chili", "url": "https://example.com/meals/r/Xy3...Q/",
+                "created": True, "views": 0}),
     Op("POST", "meals/recipes/import", "importRecipe", "Import a recipe from a web page", """\
 Import a recipe from a link. Only that one page is read (never anything it links to): its recipe data
 (schema.org JSON-LD or microdata), or - if it has none - the AI reads the page's visible text, keeping only

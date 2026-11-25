@@ -83,6 +83,7 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
     {{ share.choices|json_script:"share-choices" }}
     <p class="share-box__status" data-share-status role="status" aria-live="polite"></p>
     {% endif %}
+    {% if share.public_link %}{% include "albright_meals/_share_link.html" with link=share.public_link %}{% endif %}
 </section>
 {% else %}
 <fieldset class="share-new" data-share-new>

@@ -20,7 +20,8 @@ from .models import RateLimitHit
 # scope: (attempts, window in minutes)
 LIMITS = {"login": (10, 15), "signup": (20, 15), "reset": (5, 15),
           "oauth": (20, 60),   # AI apps registering to connect (albright_bot_api.oauth_views)
-          "invite": (5, 60)}   # "Request an invite" on the public home page (albright_labs.public_views)
+          "invite": (5, 60),   # "Request an invite" on the public home page (albright_labs.public_views)
+          "recipe_link": (120, 15)}   # public recipe share links (albright_meals.share_link_views)
 
 
 def client_ip(request):

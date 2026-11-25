@@ -3060,6 +3060,25 @@ details[open] > summary.circles-card__title { margin-bottom: var(--space-3); }
 .share-new .share-box__note { flex: 1 1 100%; margin: 0; }
 .share-box__status { min-height: 1.2em; margin: 6px 0 0; font-size: var(--text-sm); color: var(--text-secondary); }
 .share-box__status.is-error { color: var(--loss); }
+/* A recipe's public share link (albright_meals/_share_link.html, meals/share_link.js) - under the people it's shared with. */
+.share-link { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.share-link__title { margin: 0 0 4px; font-size: var(--text-base); font-weight: 700; }
+.share-link__note { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
+.share-link__row { margin-bottom: 8px; }
+.share-link__url { width: 100%; box-sizing: border-box; font-size: var(--text-sm); color: var(--app-meals); }
+.share-link__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.share-link__actions form { margin: 0; }
+.share-link__actions form[hidden] { display: none; }
+.share-link__minor { border: 0; background: none; padding: 4px 0; font: inherit; font-size: var(--text-sm); color: var(--text-secondary);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.share-link__minor:hover { color: var(--text-primary); }
+.share-link__meta { margin: 6px 0 0; font-size: var(--text-xs); color: var(--text-secondary); }
+.share-link__meta:empty { display: none; }
+.circles-links { list-style: none; margin: 0; padding: 0; }
+.circles-links li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.circles-links li:last-child { border-bottom: 0; }
+.circles-links a { font-weight: 600; }
+.circles-links form { margin: 0 0 0 auto; }
 .share-chips { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .share-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 12px; }
 .share-chip__who { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 0; font-weight: 600; }

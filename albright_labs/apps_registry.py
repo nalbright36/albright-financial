@@ -80,7 +80,9 @@ APPS = (
                ("meals:groceries", "Groceries", "albright_meals:groceries"),
                ("meals:ideas", "Ideas", "albright_meals:ideas"),
                ("meals:recipes", "Recipes", "albright_meals:recipes"),
-               ("meals:eatout", "Eat out", "albright_meals:eat_out"))),
+               ("meals:eatout", "Eat out", "albright_meals:eat_out")),
+        # Public recipe share links (albright_meals.share_link_views): open to anyone with the link, signed in or not.
+        ungated_url_names=frozenset({"shared_recipe", "shared_recipe_save"})),
     App(key="notes", package="albright_notes", label="Notes", short_label="Notes", brand="Albright Notes", accent="notes",
         color="#EC4899", landing_url_name="albright_notes:list", namespaces=("albright_notes",),
         description="Private Markdown notes and checklists - share one, link it to a recipe, lot or strategy.",

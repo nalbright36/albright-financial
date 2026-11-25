@@ -18,6 +18,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from albright_labs import app_access, apps_registry, archive, invites, password_views
 from albright_labs.forms import CreateUserForm, InviteForm
@@ -50,8 +51,17 @@ def _page(request, status=200, **extra):
     rows, apps = _rows()
     context = {"rows": rows, "apps": apps, "form": CreateUserForm(), "invite_form": InviteForm(),
                "invites": Invitation.objects.select_related("created_by", "used_by")[:50],
-               "email_configured": settings.EMAIL_CONFIGURED, **extra}
+               "email_configured": settings.EMAIL_CONFIGURED, "share_settings": _share_settings(), **extra}
     return render(request, "albright_control/users.html", context, status=status)
+
+
+def _share_settings():
+    """Recipe share links as invites (albright_meals.RecipeShareSettings): on/off, and the apps those accounts get."""
+    from albright_meals.models import RecipeShareSettings
+    config = RecipeShareSettings.load()
+    choices = [(app.key, app.label, app.key in config.join_apps) for app in apps_registry.APPS
+               if app.key in apps_registry.grantable_keys() and app.key != "meals"]
+    return {"on": config.links_are_invites, "choices": choices}
 
 
 def _show_invite(request, invite, raw, sent=None):
@@ -143,6 +153,20 @@ def users(request):
         messages.success(request, f"{user.username} {'can now' if pref.assistant_allowed else 'can no longer'} use the AI "
                                   "assistant.")
         return redirect("albright_control:users")
+    if action == "share_invites":
+        # "Share links count as invites": a recipe share link's Join makes an account with no waitlist (off: the page
+        # only offers Sign in), and which apps those accounts get besides Meals.
+        from albright_meals.models import RecipeShareSettings
+        config = RecipeShareSettings.load()
+        config.links_are_invites = request.POST.get("on") == "1"
+        allowed = set(apps_registry.grantable_keys())
+        config.apps = [key for key in request.POST.getlist("apps") if key in allowed and key != "meals"]
+        config.save()
+        audit(request, "share_invites", f"recipe share links as invites: {'on' if config.links_are_invites else 'off'}"
+                                        f" ({', '.join(config.join_apps)})")
+        messages.success(request, "Recipe share links count as invites." if config.links_are_invites
+                         else "Recipe share links no longer count as invites - their page only offers Sign in.")
+        return redirect(reverse("albright_control:users") + "#share-invites")
     if action == "invite":
         invite_form = InviteForm(request.POST)
         if not invite_form.is_valid():

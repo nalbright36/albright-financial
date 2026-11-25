@@ -1,0 +1,93 @@
+{% extends "base_public.html" %}{% load static %}
+{% comment %}
+A public recipe share link (albright_meals.share_link_views.shared_recipe) - "Option A" in
+docs/design/shared_recipe_options.html: the title full width, then Ingredients and Steps side by side (tops aligned,
+equal height; stacked on phones), a join card at the bottom. Everything comes from share_links.public_recipe (`r`) -
+an allow-list; this page never sees the Recipe. No links into the signed-in app (only Sign in / Join / Save, and
+"Open it" for the recipe's own people). Strict public headers: styles in meals/shared_recipe.css, the servings
+scaler and Print in meals/shared_recipe.js - nothing inline. Print: light, one column.
+{% endcomment %}
+{% block title %}{{ meta_title }}{% endblock %}
+{% block meta %}{{ block.super }}
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{% static 'meals/shared_recipe.css' %}">{% endblock %}
+{% block header %}
+<header class="sr-bar">
+    <span class="sr-bar__brand"><img src="{% static 'icons/logo-mark-white.png' %}" alt="" class="sr-bar__logo" width="45" height="22"><span class="disp">Albright Labs</span></span>
+    <span class="sr-bar__by"><span class="sr-avatar" aria-hidden="true">{{ r.shared_by|slice:":1"|upper }}</span>Shared by {{ r.shared_by }}</span>
+</header>
+{% endblock %}
+{% block content %}
+<main class="sr" id="shared-recipe">
+    <header class="sr-head">
+        <p class="sr-eyebrow">Recipe</p>
+        <h1 class="disp sr-title" id="sr-title">{{ r.title }}</h1>
+        {% if r.description %}<p class="sr-desc">{{ r.description|linebreaksbr }}</p>{% endif %}
+        {% if r.time or r.servings or r.nutrition %}<p class="sr-meta">
+            {% if r.time %}<span><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{{ r.time }}</span>{% endif %}
+            {% if r.servings %}<span><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/></svg>Serves {{ r.servings }}</span>{% endif %}
+            {% if r.nutrition %}<span><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3s5 4 5 9a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3 1-5.5 1-7.5z"/></svg>{{ r.nutrition.calories|floatformat:0 }} cal / serving</span>{% endif %}
+        </p>{% endif %}
+    </header>
+
+    <div class="sr-cols">
+        <section class="sr-card" id="sr-ingredients" aria-labelledby="sr-ing-h">
+            <div class="sr-card__head">
+                <h2 class="disp" id="sr-ing-h">Ingredients</h2>
+                {% if r.servings %}<div class="sr-scale" data-scale data-base="{{ r.servings }}" role="group" aria-label="Servings">
+                    <span>Servings</span>
+                    <button type="button" class="sr-scale__btn" data-step="-1" aria-label="Fewer servings" hidden>&minus;</button>
+                    <output class="sr-scale__n" data-servings aria-live="polite">{{ r.servings }}</output>
+                    <button type="button" class="sr-scale__btn" data-step="1" aria-label="More servings" hidden>+</button>
+                </div>{% endif %}
+            </div>
+            {% if r.ingredients %}<ul class="sr-ing">{% for i in r.ingredients %}{% if i.section %}<li class="sr-ing__section">{{ i.section }}</li>{% else %}<li class="sr-ing__row"><b class="sr-ing__amt"{% if i.qty %} data-qty="{{ i.qty|stringformat:'g' }}" data-one="{{ i.unit_one }}" data-many="{{ i.unit_many }}"{% endif %}>{{ i.amount }}</b><span class="sr-ing__name">{{ i.name }}{% if i.note %} <em>{{ i.note }}</em>{% endif %}</span></li>{% endif %}{% endfor %}</ul>
+            {% else %}<p class="sr-muted">No ingredients listed.</p>{% endif %}
+        </section>
+        <section class="sr-card" id="sr-steps" aria-labelledby="sr-steps-h">
+            <div class="sr-card__head"><h2 class="disp" id="sr-steps-h">Steps</h2></div>
+            {% for group in r.step_groups %}
+            {% if group.heading %}<h3 class="sr-steps__heading">{{ group.heading }}</h3>{% endif %}
+            {% if group.steps %}<ol class="sr-steps"{% if group.start > 1 %} start="{{ group.start }}"{% endif %}>{% for step in group.steps %}<li><span class="sr-steps__n" aria-hidden="true">{{ forloop.counter0|add:group.start }}</span><p>{{ step|linebreaksbr }}</p></li>{% endfor %}</ol>{% endif %}
+            {% empty %}<p class="sr-muted">No steps listed.</p>{% endfor %}
+        </section>
+    </div>
+
+    {% if r.nutrition %}<section class="sr-card sr-nutrition" id="sr-nutrition" aria-labelledby="sr-nut-h">
+        <h2 class="disp" id="sr-nut-h">Nutrition <span class="sr-muted">per serving</span></h2>
+        <dl class="sr-nutrition__grid">
+            <div><dt>Calories</dt><dd>{{ r.nutrition.calories|floatformat:0 }}</dd></div>
+            {% if r.nutrition.protein is not None %}<div><dt>Protein</dt><dd>{{ r.nutrition.protein|floatformat:0 }} g</dd></div>{% endif %}
+            {% if r.nutrition.carbs is not None %}<div><dt>Carbs</dt><dd>{{ r.nutrition.carbs|floatformat:0 }} g</dd></div>{% endif %}
+            {% if r.nutrition.fat is not None %}<div><dt>Fat</dt><dd>{{ r.nutrition.fat|floatformat:0 }} g</dd></div>{% endif %}
+            {% if r.nutrition.fiber is not None %}<div><dt>Fiber</dt><dd>{{ r.nutrition.fiber|floatformat:0 }} g</dd></div>{% endif %}
+        </dl>
+    </section>{% endif %}
+
+    <section class="sr-cta" id="sr-join" aria-labelledby="sr-cta-h">
+        <img src="{% static 'icons/logo-mark-white.png' %}" alt="" class="sr-cta__logo" width="81" height="40">
+        {% if signed_in %}
+            {% if is_mine %}
+            <div><h2 class="disp" id="sr-cta-h">This is one of your recipes</h2><p>This is what people with the link see.</p></div>
+            <div class="sr-cta__actions"><a class="btn btn-pri" href="{{ mine_url }}" id="sr-open-mine">Open it</a></div>
+            {% elif can_save %}
+            <div><h2 class="disp" id="sr-cta-h">Save this recipe to your recipes</h2><p>Your own copy to plan, rate and turn into a grocery list.</p></div>
+            <div class="sr-cta__actions"><a class="btn btn-pri" href="{% url 'albright_meals:shared_recipe_save' token %}" id="sr-save">Save to my recipes</a></div>
+            {% else %}
+            <div><h2 class="disp" id="sr-cta-h">Save recipes with Meals</h2><p>Your account doesn't have Meals yet. Ask the site's admin to turn it on.</p></div>
+            {% endif %}
+        {% else %}
+            <div><h2 class="disp" id="sr-cta-h">Save this recipe to your own Albright Labs</h2><p>Plan the week, turn recipes into grocery lists, and share with your household.</p></div>
+            <div class="sr-cta__actions">
+                {% if join_url %}<a class="btn btn-pri" href="{{ join_url }}" id="sr-join-btn">Join Albright Labs</a>{% endif %}
+                <a class="btn btn-sec" href="{{ login_url }}" id="sr-sign-in">Already have an account? Sign in</a>
+            </div>
+            <small class="sr-cta__note">{% if join_url %}{{ r.shared_by }}&rsquo;s link counts as your invite, so there's no waitlist.{% else %}Albright Labs is invite-only.{% endif %}</small>
+        {% endif %}
+    </section>
+
+    <div class="sr-foot"><span>Shared from Albright Labs</span><button type="button" class="sr-foot__print" data-print hidden>Print</button></div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'meals/shared_recipe.js' %}" defer></script>{% endblock %}

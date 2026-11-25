@@ -369,3 +369,51 @@ class EatOutSettings(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="eat_out_settings")
     last_query = models.TextField(max_length=2000, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+# ---------------------------------------------------------------------------
+# Public share links (share_links.py): a read-only page for anyone with the link - no sign-in
+# ---------------------------------------------------------------------------
+
+class RecipeShareLink(models.Model):
+    """A public, read-only link to one recipe (/meals/r/<token>/): "Copy share link" in the recipe's Share box.
+    The token is unguessable (secrets.token_urlsafe) and kept as-is so the owner can copy the link again. One active
+    link per recipe: Regenerate turns this one off (revoked_at) and makes a new one; Turn off just revokes it. The
+    public page shows only an allow-list of the recipe's fields (share_links.public_recipe)."""
+    recipe = models.ForeignKey("Recipe", on_delete=models.CASCADE, related_name="share_links")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="recipe_share_links")
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    view_count = models.PositiveIntegerField(default=0)
+    last_viewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        indexes = [models.Index(fields=["recipe", "revoked_at"], name="meals_sharelink_active")]
+
+    def __str__(self):
+        return f"Share link for recipe #{self.recipe_id}{' (off)' if self.revoked_at else ''}"
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None
+
+
+class RecipeShareSettings(models.Model):
+    """Site-wide (one row - Admin > Users): whether a recipe share link counts as an invite from its sharer - its
+    "Join Albright Labs" makes an account with no waitlist - and which apps that account gets (Meals always)."""
+    links_are_invites = models.BooleanField("Share links count as invites", default=True)
+    apps = models.JSONField(default=list, blank=True)          # extra app keys for those accounts, besides Meals
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return "Recipe share link settings"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @property
+    def join_apps(self):
+        return ["meals"] + [key for key in (self.apps or []) if key != "meals"]

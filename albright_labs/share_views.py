@@ -129,7 +129,11 @@ def defaults(request):
         rows.append({"app": app, "label": sharing.app_label(app),
                      "noun": sharing.APPS[app].noun, "default": d, "people": people,
                      "circles": sharing.shareable_circles(user, app), "text": sharing.default_text(user, app)})
-    return render(request, "albright_labs/sharing_defaults.html", {"rows": rows})
+    share_links = []
+    if can_use_app(user, "meals"):                   # Meals' public recipe links (albright_meals.share_links)
+        from albright_meals import share_links as meals_links
+        share_links = meals_links.owner_links(user)
+    return render(request, "albright_labs/sharing_defaults.html", {"rows": rows, "share_links": share_links})
 
 
 @login_required

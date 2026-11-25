@@ -1,0 +1,20 @@
+{% extends "index.html" %}
+{% block page_title %}Save {{ title }} · {% endblock %}
+{% block content %}
+{% comment %}"Save to my recipes" from a public share link (albright_meals.share_link_views.shared_recipe_save): confirm,
+then the copy opens. Only the recipe's title and the sharer's first name - nothing else of theirs.{% endcomment %}
+<div class="container meals-page meals-narrow">
+    <section class="card meals-section" id="shared-save">
+        <h1 class="meals-head__title">Save {{ title }}</h1>
+        {% if can_save %}
+        <p>{{ by }} shared this recipe with a link. Save a copy to your recipes to plan it, rate it and add it to your grocery list.</p>
+        <form method="post">{% csrf_token %}
+            <button type="submit" class="btn btn-primary" id="shared-save-confirm">Save to my recipes</button>
+            <a href="{% url 'albright_meals:shared_recipe' token %}" class="btn btn-secondary">Back to the recipe</a>
+        </form>
+        {% else %}
+        <p>Your account doesn't have Meals yet. Ask the site's admin to turn it on.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

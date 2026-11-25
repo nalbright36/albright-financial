@@ -69,4 +69,6 @@ urlpatterns = [
     path("home/nav/show/<slug:key>/", views.show_app, name="show_app"),
     # An invite link: the only way to make an account yourself (404 without a usable invite).
     path("join/<str:token>/", invite_views.signup, name="signup"),
+    # A recipe share link counting as an invite (albright_meals.share_links): a signed reference to the link.
+    path("join/recipe/<str:reference>/", invite_views.share_signup, name="share_signup"),
 ]

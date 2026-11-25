@@ -101,7 +101,8 @@ class InviteForm(forms.Form):
 
 
 class SignupForm(forms.Form):
-    """The invite link's sign-up page. The email comes from the invite (shown locked), never from the form."""
+    """The invite link's sign-up page. The email comes from the invite (shown locked), never from the form. With no
+    invite (a recipe share link counting as one - invite_views.share_signup) they type their first name and email."""
     username = forms.CharField(max_length=150, widget=forms.TextInput(attrs={**INPUT, "autocomplete": "username",
                                                                             "autocapitalize": "none"}),
                                help_text="Letters, numbers and @ . + - _ only.")
@@ -113,6 +114,12 @@ class SignupForm(forms.Form):
     def __init__(self, *args, invite, **kwargs):
         super().__init__(*args, **kwargs)
         self.invite = invite
+        if invite is None:
+            fields = {"first_name": forms.CharField(label="First name", max_length=60, widget=forms.TextInput(
+                          attrs={**INPUT, "autocomplete": "given-name"})),
+                      "email": forms.EmailField(max_length=254, widget=forms.EmailInput(
+                          attrs={**INPUT, "autocomplete": "email", "autocapitalize": "none"}))}
+            self.fields = {**fields, **self.fields}
         from django.contrib.auth.password_validation import password_validators_help_text_html
         self.fields["password1"].help_text = password_validators_help_text_html()
 
@@ -134,11 +141,23 @@ class SignupForm(forms.Form):
             self.add_error("password2", "The two passwords don't match.")
         elif first and cleaned.get("username"):
             try:
-                validate_password(first, user=get_user_model()(username=cleaned["username"], email=self.invite.email,
-                                                               first_name=self.invite.name))
+                validate_password(first, user=get_user_model()(username=cleaned["username"], email=self.email,
+                                                               first_name=self.first_name))
             except forms.ValidationError as exc:
                 self.add_error("password1", exc)
-        if _email_taken(self.invite.email):
+        if self.email and _email_taken(self.email):
             raise forms.ValidationError("There's already an account with this email - sign in instead.")
         return cleaned
+
+    @property
+    def email(self):
+        if self.invite is not None:
+            return self.invite.email
+        return (self.cleaned_data.get("email") or "").strip().lower()
+
+    @property
+    def first_name(self):
+        if self.invite is not None:
+            return self.invite.name
+        return " ".join((self.cleaned_data.get("first_name") or "").split())
 

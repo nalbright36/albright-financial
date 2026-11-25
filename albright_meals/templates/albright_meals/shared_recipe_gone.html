@@ -1,0 +1,7 @@
+{% extends "base_public_form.html" %}
+{% comment %}A recipe share link that's unknown, turned off, or whose sharer no longer has the recipe (404) -
+albright_meals.share_link_views. Says nothing about whether the link ever existed.{% endcomment %}
+{% block page_title %}Link not active{% endblock %}
+{% block meta %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block heading %}This link is no longer active{% endblock %}
+{% block card %}<p class="pa-lead" id="shared-gone">The person who shared this recipe turned the link off or made a new one. Ask them to send it again.</p>{% endblock %}

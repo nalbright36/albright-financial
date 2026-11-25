@@ -477,7 +477,15 @@ def control(user, obj=None, app=None):
             ]
     people_rows = [r for r in rows if not r["is_circle"]] if obj is not None else []
     visibility = grant_visibility(user, obj, kind) if obj is not None else []
-    return {"obj": obj, "kind": kind, "owner": owner, "can_move": owner, "rows": rows, "people_rows": people_rows,
+    public_link = None
+    if obj is not None and owner and kind.label == "albright_meals.Recipe":
+        # A recipe's public, read-only share link (albright_meals.share_links) - its owners make and turn it off.
+        from albright_meals import share_links
+        link = share_links.active_link(obj)
+        public_link = {"on": link is not None, "url": share_links.url(link) if link else "",
+                       "views": link.view_count if link else 0,
+                       "action": reverse("albright_meals:recipe_share_link", args=[obj.pk])}
+    return {"obj": obj, "public_link": public_link, "kind": kind, "owner": owner, "can_move": owner, "rows": rows, "people_rows": people_rows,
             "chip_rows": people_rows if visibility else rows,
             "visibility": visibility, "visibility_action": "set_visibility",
             "label": kind.label,
