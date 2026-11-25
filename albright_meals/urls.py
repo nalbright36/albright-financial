@@ -20,6 +20,7 @@ urlpatterns = [
     path("groceries/", views.grocery_page, name="groceries"),
     path("groceries/list/", views.grocery_list, name="grocery_list"),
     path("groceries/<int:pk>/toggle/", views.grocery_toggle, name="grocery_toggle"),
+    path("groceries/<int:pk>/edit/", views.grocery_edit, name="grocery_edit"),
     path("groceries/<int:pk>/delete/", views.grocery_delete, name="grocery_delete"),
     path("groceries/<int:pk>/merge/", views.grocery_merge, name="grocery_merge"),
     path("groceries/clear-checked/", views.grocery_clear, name="grocery_clear"),

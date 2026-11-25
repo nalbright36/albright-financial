@@ -288,7 +288,7 @@ def grocery_page(request):
             item, merged = groceries.add_item(request.space, parsed["name"], parsed["quantity"], parsed["unit"],
                                               parsed["aisle"], parsed["note"], user=request.user)
             if _wants_json(request):
-                return JsonResponse({"ok": True, "merged": merged, **_list_payload(request)})
+                return JsonResponse({"ok": True, "merged": merged, "id": item.pk, **_list_payload(request)})
             messages.success(request, f"{'Updated' if merged else 'Added'} {item.name}.")
         return redirect("albright_meals:groceries")
     payload = _list_payload(request)
@@ -357,6 +357,28 @@ def grocery_toggle(request, pk):
         counts = GroceryItem.objects.active().filter(space_id=item.space_id).aggregate(
             unchecked=Count("pk", filter=Q(checked=False)), checked=Count("pk", filter=Q(checked=True)))
         return JsonResponse({"ok": True, "id": item.pk, "item_checked": item.checked, **counts})
+    return redirect("albright_meals:groceries")
+
+
+@login_required
+@scope.space_required
+@require_POST
+def grocery_edit(request, pk):
+    """Change a line: POST line ("2 lb chicken thighs, boneless" - read like the list's own box: quantity, unit,
+    name, note) - offline editing (albright_labs.sync) sends it. The aisle follows the new name."""
+    item = _item(request, pk)
+    parsed = groceries.parse_line(request.POST.get("line") or "")
+    if not parsed["name"]:
+        if _wants_json(request):
+            return JsonResponse({"ok": False, "error": "Type the item's name."}, status=400)
+        messages.error(request, "Type the item's name.")
+        return redirect("albright_meals:groceries")
+    item.name, item.quantity, item.unit = parsed["name"][:120], parsed["quantity"], (parsed["unit"] or "")[:20]
+    item.note, item.aisle = (parsed["note"] or "")[:200], parsed["aisle"] or item.aisle
+    item.save(update_fields=["name", "quantity", "unit", "note", "aisle", "updated_at"])
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "id": item.pk})
+    messages.success(request, f"Updated {item.name}.")
     return redirect("albright_meals:groceries")
 
 

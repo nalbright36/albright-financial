@@ -14,9 +14,15 @@
  *             the snapshot are deleted - before anything of the new person's is saved
  *   update    the first worker takes over at once; a newer one waits until the page's "New version available -
  *             Refresh" (labs/offline.js) asks it to (SKIP_WAITING), then the page reloads
+ *   edit      offline, the sections that can be changed offline (push_views.edit_paths: Today, Week, Meals, Groceries,
+ *             Recipes, Notes, Fitness) always get the offline page - it draws them from the snapshot with every
+ *             offline change and lets you make more - rather than a saved copy of the page
+ *   sync      Background Sync ("albright-sync", registered by labs/sync.js after a change): an open page is asked to
+ *             send the outbox; with none open the worker sends it itself (labs/sync_core.js)
  * And Web Push banners (albright_labs.push).
  */
 {% load static %}
+try { importScripts("{{ sync_core|escapejs }}"); } catch (e) {}   // the outbox (labs/sync_core.js), for Background Sync
 const VERSION = "{{ version }}";
 const SHELL = "albright-shell-" + VERSION;
 const STATIC = "albright-static-" + VERSION;
@@ -33,7 +39,12 @@ const SHELL_FILES = [{% for url in shell %}"{{ url|escapejs }}"{% if not forloop
 const NEVER = ["/user_login", "/user_logout", "/admin/", "/control/", "/account/", "/assistant/", "/bot-api/", "/api/",
                "/oauth", "/.well-known/", "/reset", "/offline/", "/sw.js", "/invite", "/signup", "/__albright/"];
 
+const EDIT = {{ edit_paths_json|safe }};
+
 function never(path) { return NEVER.some(function (p) { return path.indexOf(p) === 0; }); }
+function editable(path) {
+  return EDIT.exact.indexOf(path) >= 0 || EDIT.prefix.some(function (p) { return path.indexOf(p) === 0; });
+}
 
 self.addEventListener("install", function (event) {
   event.waitUntil(caches.open(SHELL).then(function (cache) {
@@ -105,7 +116,8 @@ function marked(response) {
 }
 
 function offlinePage(request) {
-  return caches.open(PAGES).then(function (c) { return c.match(pageKey(request.url), { ignoreVary: true }); })
+  var edit = editable(new URL(request.url).pathname);
+  return caches.open(PAGES).then(function (c) { return edit ? null : c.match(pageKey(request.url), { ignoreVary: true }); })
     .then(function (saved) {
       if (saved) return marked(saved);
       return caches.match(OFFLINE_URL, { ignoreVary: true }).then(function (page) {
@@ -187,6 +199,21 @@ self.addEventListener("message", function (event) {
       if (!m.user) return setMeta({ user: String(data.user) });
     }));
   }
+});
+
+// ---------- Background Sync: the offline changes ----------
+self.addEventListener("sync", function (event) {
+  if (event.tag !== "albright-sync") return;
+  event.waitUntil(self.clients.matchAll({ type: "window" }).then(function (clients) {
+    if (clients.length) { clients[0].postMessage({ type: "SYNC" }); return; }       // the page sends it and shows it
+    if (!self.AlbrightSyncCore) return;
+    return getMeta().then(function (m) {
+      if (!m.user) return;
+      return self.AlbrightSyncCore.flush({ user: m.user }).then(function (out) {
+        if (out && out.error) throw new Error("try again later");                   // the browser retries the sync
+      });
+    });
+  }));
 });
 
 // ---------- Web Push ----------

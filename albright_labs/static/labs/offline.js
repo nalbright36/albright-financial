@@ -6,10 +6,14 @@
 //              open. A different user's copy is deleted first; signed out or "Offline data" off deletes it.
 //   offline    "Offline · showing your data from <time>" at the top; buttons that change data are disabled with
 //              "Available when you're back online", and any post is stopped. Back online: the banner goes, the
-//              buttons come back, the snapshot is refreshed - and a saved copy of a page is reloaded live.
+//              buttons come back, the snapshot is refreshed - and a saved copy of a page is reloaded live. On a
+//              section that can be changed offline (Planner, Groceries, Notes, Fitness, Meals - push_views.edit_paths)
+//              the banner offers "Edit offline": the offline page draws it from the snapshot, editable
+//              (labs/offline_view.js; the changes go through labs/sync.js's outbox).
 //   update     a newer worker waiting: "New version available - Refresh" (it takes over, then the page reloads).
 //   account    My account > Offline data: when it was last saved, the space it uses, "Clear offline data".
-// window.AlbrightOffline: {get, clear, refresh} for labs/offline_view.js.
+// window.AlbrightOffline: {get, save, clear, refresh, stamp, editable} for labs/offline_view.js and labs/sync.js. A fresh
+// snapshot gets the changes that haven't synced yet laid over it (AlbrightSync.overlay) and fires "albright:snapshot".
 (function () {
     var body = document.body, meta = document.querySelector('meta[name="albright-offline"]');
     if (!meta) return;
@@ -92,7 +96,12 @@
                 if (String(data.user) !== user) return null;          // signed in as someone else in another tab
                 var value = {user: user, saved_at: data.saved_at, saved_ms: Date.now(), data: data};
                 if (offline) goOnline();                              // the site answered: we're back
-                return put(value).then(function () { showAccount(); return value; });
+                var laid = window.AlbrightSync ? window.AlbrightSync.overlay(data) : Promise.resolve(data);
+                return laid.then(function () { return put(value); }).then(function () {
+                    showAccount();
+                    document.dispatchEvent(new CustomEvent("albright:snapshot", {detail: value}));
+                    return value;
+                });
             })
             .catch(function () { busy = false; return null; });
     }
@@ -105,6 +114,11 @@
     }
 
     // ---------- offline: banner and disabled buttons ----------
+    var EDIT = {exact: [], prefix: []};
+    try { EDIT = JSON.parse(meta.getAttribute("data-edit") || "{}"); } catch (e) {}
+    function editable(path) {
+        return (EDIT.exact || []).indexOf(path) >= 0 || (EDIT.prefix || []).some(function (p) { return path.indexOf(p) === 0; });
+    }
     var CONTROLS = ['form[method="post"] button:not([type="button"])', 'form[method="POST"] button:not([type="button"])',
         'form[method="post"] input[type="submit"]', 'form[method="post"] input[type="checkbox"]',
         'form[method="POST"] input[type="checkbox"]', 'input[type="checkbox"][data-url]', '[data-quick-url]',
@@ -133,6 +147,14 @@
             "<span>Offline &middot; showing your data from <time></time></span>";
         el.querySelector("time").textContent = stamp(at);
         if (at) el.querySelector("time").setAttribute("datetime", at);
+        if (!shell && editable(window.location.pathname)) {
+            var go = document.createElement("button");
+            go.type = "button";
+            go.className = "offline-banner__edit";
+            go.textContent = "Edit offline";
+            go.addEventListener("click", function () { window.location.reload(); });   // the worker shows the editable copy
+            el.appendChild(go);
+        }
         el.hidden = false;
     }
     function disable() {
@@ -290,7 +312,7 @@
     }
 
     // ---------- start ----------
-    window.AlbrightOffline = {get: get, clear: clear, refresh: refresh, stamp: stamp};
+    window.AlbrightOffline = {get: get, save: put, clear: clear, refresh: refresh, stamp: stamp, editable: editable};
     if (!shell) {
         if (!user || !on) {
             // Signed out, or Offline data off: nothing of anyone's stays on this device.

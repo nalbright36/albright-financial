@@ -88,6 +88,7 @@ def remove(request, pk):
 # The app shell the worker saves at install (offline viewing - albright_labs.offline): with cache_bust's ?v=, the same
 # URLs the pages ask for. The fonts' CSS and files are saved the first time a page loads them.
 SHELL = ("style.css", "labs/launcher.css", "labs/launcher.js", "labs/text.js", "labs/push.js", "labs/offline.js", "labs/offline_view.js",
+         "labs/sync_core.js", "labs/sync.js",
          "js/app_nav.js", "js/menu.js", "js/md_editor.js", "js/fab_dock.js", "labs/quicksave.js", "labs/notifications.js",
          "labs/share.js", "icons/logo-mark-white.png", "icons/logo-mark-dark.png", "icons/icon-192.png",
          "icons/favicon-32.png")
@@ -127,13 +128,26 @@ def static_hash():
     return _version["value"]
 
 
+def edit_paths():
+    """The sections that can be changed offline (labs/offline_view.js): offline, /sw.js opens the offline page there
+    (it draws them from the snapshot, with every offline change) even when it has a saved copy of the page itself.
+    {"exact": [...], "prefix": [...]} - also on the page's <meta name="albright-offline"> for labs/offline.js."""
+    from django.urls import reverse
+    exact = ["/", "/home/", reverse("albright_planner:home"), reverse("albright_planner:day"), reverse("albright_planner:week"),
+             reverse("albright_meals:week"), reverse("albright_meals:groceries")]
+    prefix = [reverse("albright_notes:list"), reverse("albright_meals:recipes"), reverse("albright_fitness:dashboard")]
+    return {"exact": sorted(set(exact)), "prefix": prefix}
+
+
 @require_GET
 @never_cache
 def service_worker(request):
     """The service worker, scoped to the whole site."""
     from albright_reselling_app.templatetags.cache_bust import static_version
     response = render(request, "albright_labs/sw.js", {"version": static_hash(),
-                                                       "shell": [static_version(p) for p in SHELL]},
+                                                       "shell": [static_version(p) for p in SHELL],
+                                                       "sync_core": static_version("labs/sync_core.js"),
+                                                       "edit_paths_json": json.dumps(edit_paths())},
                       content_type="application/javascript")
     response["Service-Worker-Allowed"] = "/"
     # A short no-cache so a new worker is noticed without waiting a day.

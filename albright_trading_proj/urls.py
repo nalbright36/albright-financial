@@ -23,7 +23,7 @@ from albright_bot_api.urls import api_urlpatterns as bot_api_urlpatterns
 from albright_bot_api.urls import oauth_urlpatterns as bot_oauth_urlpatterns
 from albright_crypto_app.views import legacy_redirect
 from django.conf.urls import include
-from albright_labs import offline, password_views
+from albright_labs import offline, password_views, sync
 from albright_labs import push_views
 from albright_trading_proj import site_icons
 
@@ -43,6 +43,8 @@ urlpatterns = [
     path("offline/", push_views.offline, name="offline"),
     # Offline viewing: the signed-in person's key data for IndexedDB (albright_labs.offline).
     path("offline/snapshot/", offline.snapshot, name="offline_snapshot"),
+    # Offline editing: the changes made offline, applied through each app's own save view (albright_labs.sync).
+    path("sync/", sync.sync, name="offline_sync"),
     # Password setup/reset links (Admin > Users "Send password setup link", and "Reset password" on sign-in).
     path("reset_password/", password_views.reset_request, name="password_reset"),
     path("reset_password/sent/", password_views.ResetDone.as_view(), name="password_reset_done"),

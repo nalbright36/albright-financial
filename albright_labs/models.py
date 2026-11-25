@@ -619,3 +619,36 @@ class HomeTile(models.Model):
 
     def __str__(self):
         return f"{self.user}: {self.key}"
+
+
+# ---------------------------------------------------------------------------
+# Offline editing (albright_labs.sync): what each device sent, so nothing is applied twice
+# ---------------------------------------------------------------------------
+
+class SyncChange(models.Model):
+    """One change a browser made offline and sent to /sync/ (labs/sync.js's outbox). client_change_id is the
+    browser's UUID for it: the same change sent again (a retry after a dropped reply) gets the stored result back
+    and is never applied twice."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    client_change_id = models.UUIDField()
+    action = models.CharField(max_length=40)
+    target = models.CharField(max_length=40, blank=True, db_index=True)   # "grocery:12" - what it changed
+    status = models.CharField(max_length=12)        # applied / skipped / conflict / rejected / deleted / forbidden
+    result = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "client_change_id"], name="labs_sync_change_once")]
+
+
+class SyncObject(models.Model):
+    """Something made offline: the browser's own UUID for it (so it could be edited or checked off before it
+    existed here) and the row it became. Later changes that name the UUID reach that row."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    client_id = models.UUIDField()
+    kind = models.CharField(max_length=20)          # planner / grocery / note / food / weight / workout
+    object_id = models.PositiveBigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "client_id"], name="labs_sync_object_once")]

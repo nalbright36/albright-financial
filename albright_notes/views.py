@@ -358,7 +358,7 @@ def capture(request):
     if request.POST.get("open"):
         return redirect(_note_url(note))
     if quick.wanted(request):
-        return quick.ok(f"{'Checklist' if items else 'Note'} saved: {note.title}", _note_url(note))
+        return quick.ok(f"{'Checklist' if items else 'Note'} saved: {note.title}", _note_url(note), id=note.pk)
     messages.success(request, f"Saved \u201c{note.title}\u201d.")
     return redirect("albright_notes:list")
 

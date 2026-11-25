@@ -1,5 +1,6 @@
-"""Offline viewing (read-only), the server's half. The browser's half: /sw.js (albright_labs/templates/albright_labs/sw.js),
-labs/offline.js on every page and labs/offline_view.js on the offline page.
+"""Offline viewing, the server's half. The browser's half: /sw.js (albright_labs/templates/albright_labs/sw.js),
+labs/offline.js on every page and labs/offline_view.js on the offline page. Offline editing builds on it: the
+snapshot carries the ids and versions a change needs, labs/sync.js keeps the outbox and albright_labs.sync applies it.
 
   - OfflineMiddleware tells the service worker about every HTML page with an X-Albright-Offline header:
       "anon"            nobody is signed in      -> the worker wipes every saved page and the snapshot
@@ -78,11 +79,16 @@ class OfflineMiddleware:
 
 
 def context(request):
-    """index.html's <body data-offline-...>: who the saved data belongs to, and whether to keep it."""
+    """index.html's <meta name="albright-offline">: whether to keep data offline, and the sections that can be changed
+    offline (push_views.edit_paths - labs/offline.js offers "Edit offline" there)."""
+    import json
+
+    from .push_views import edit_paths
+    out = {"offline_edit_paths": json.dumps(edit_paths())}
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
-        return {"offline_on": False}
-    return {"offline_on": enabled(user)}
+        return {**out, "offline_on": False}
+    return {**out, "offline_on": enabled(user)}
 
 
 # ---------------------------------------------------------------------------
@@ -99,10 +105,15 @@ def _planner(user):
     end = start + timedelta(days=7)
     rows = []
     for o in checklist.attach(planner.occurrences(user, start, end)):
-        rows.append({"date": o.date.isoformat(), "title": o.title, "start": _hm(o.start_time), "end": _hm(o.end_time),
-                     "kind": o.item.kind, "checkable": o.item.checkable, "done": bool(o.done),
-                     "skipped": bool(getattr(o, "skipped", False)),
-                     "checklist": [{"text": r.text, "done": bool(r.checked)} for r in getattr(o, "checklist", [])]})
+        item = o.item
+        rows.append({"id": item.pk, "occurrence": o.occurrence_date.isoformat(),
+                     "date": o.date.isoformat(), "title": o.title, "start": _hm(o.start_time), "end": _hm(o.end_time),
+                     "kind": item.kind, "checkable": item.checkable, "done": bool(o.done),
+                     "skipped": bool(getattr(o, "skipped", False)), "notes": item.notes or "",
+                     "repeats": item.repeats, "workout": item.is_workout, "weigh_in": item.is_weigh_in,
+                     "editable": item.can_edit(user) and not item.is_weigh_in, "owner": item.owner_id == user.pk,
+                     "checklist": [{"id": r.item.pk, "text": r.text, "done": bool(r.checked),
+                                    "grocery": bool(r.item.grocery_item_id)} for r in getattr(o, "checklist", [])]})
     return {"start": start.isoformat(), "end": end.isoformat(), "items": rows}
 
 
@@ -124,12 +135,13 @@ def _meals(user):
     space = circles.current_space(user, "meals")
     if space is None:
         return {}
-    groceries = [{"name": i.name, "quantity": format_quantity(i.quantity) or "", "unit": i.unit, "aisle": i.aisle,
-                  "note": i.note, "checked": i.checked}
+    groceries = [{"id": i.pk, "name": i.name, "quantity": format_quantity(i.quantity) or "", "unit": i.unit,
+                  "aisle": i.aisle, "note": i.note, "checked": i.checked}
                  for i in GroceryItem.objects.active().filter(space=space)]
     start = week_start()
     end = start + timedelta(days=6)
-    plan = [{"date": e.date.isoformat(), "slot": e.get_slot_display() if hasattr(e, "get_slot_display") else e.slot,
+    plan = [{"id": e.pk, "date": e.date.isoformat(), "slot_key": e.slot,
+             "slot": e.get_slot_display() if hasattr(e, "get_slot_display") else e.slot,
              "title": e.display_title, "recipe_id": e.recipe_id}
             for e in MealPlanEntry.objects.filter(space=space, date__gte=start, date__lte=end).select_related("recipe")]
     recipes = list(meals_scope.own(space).order_by("-updated_at", "-pk")[:RECIPES_MAX])
@@ -142,15 +154,24 @@ def _meals(user):
                      "rating": mine[0].get_level_display() if mine else None,
                      "rating_level": mine[0].level if mine else None,
                      "servings": r.servings, "minutes": (r.prep_minutes or 0) + (r.cook_minutes or 0) or None})
+    from albright_meals.models import SLOTS, RecipeRating
+    levels = [{"level": level, "label": label, "emoji": RecipeRating.INFO[level][0]} for level, label in RecipeRating.LEVELS]
     return {"space": space.name, "groceries": groceries,
-            "meal_plan": {"start": start.isoformat(), "end": end.isoformat(), "entries": plan}, "recipes": rows}
+            "meal_plan": {"start": start.isoformat(), "end": end.isoformat(), "entries": plan,
+                          "slots": [list(s) for s in SLOTS]},
+            "recipes": rows, "rating_levels": levels}
 
 
 def _notes(user):
     from albright_notes.models import Note
     notes = Note.objects.filter(owner=user, archived=False).order_by("-pinned", "-updated_at", "-pk")[:NOTES_MAX]
+    from albright_notes import render
+    # version: what an offline edit started from (albright_labs.sync keeps a newer server edit); check_ids: each
+    # checklist item's stable id, so ticking one offline ticks that line (notes.set_checked). A note too long to keep
+    # whole is read-only offline (complete: false) - an edit would cut it short.
     return [{"id": n.pk, "title": n.title, "body": (n.body or "")[:NOTE_CHARS], "pinned": n.pinned, "tags": n.tags,
-             "updated_at": n.updated_at.isoformat()} for n in notes]
+             "updated_at": n.updated_at.isoformat(), "version": n.version, "complete": len(n.body or "") <= NOTE_CHARS,
+             "check_ids": render.item_ids(n.body or "")} for n in notes]
 
 
 def _fitness(user):
@@ -158,12 +179,12 @@ def _fitness(user):
     from albright_fitness.models import FoodLogEntry, NutritionProfile, WeightEntry
     day = nutrition.today(user)
     entries = FoodLogEntry.objects.filter(owner=user, date=day).order_by("created_at", "pk")
-    food = [{"slot": e.get_slot_display(), "label": e.label, "calories": nutrition.whole(e.calories),
+    food = [{"id": e.pk, "slot": e.get_slot_display(), "label": e.label, "calories": nutrition.whole(e.calories),
              "protein": nutrition.whole(e.protein)} for e in entries]
     unit = NutritionProfile.load(user).weight_unit
     weights = [{"date": w.date.isoformat(), "weight": f"{body.shown(w.weight_kg, unit)}"}
                for w in WeightEntry.objects.filter(owner=user).order_by("-date")[:WEIGHTS]]
-    return {"food": {"date": day.isoformat(), "entries": food,
+    return {"food": {"date": day.isoformat(), "entries": food, "slots": [list(s) for s in FoodLogEntry.SLOTS],
                      "calories": sum(f["calories"] or 0 for f in food), "protein": sum(f["protein"] or 0 for f in food)},
             "weights": {"unit": unit, "entries": weights}}
 

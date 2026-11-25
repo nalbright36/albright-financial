@@ -17,7 +17,7 @@
         <title>{% block page_title %}{% endblock %}{{ app_brand|default:"Albright Labs" }}</title>
         {% include "_head_icons.html" %}
         {# Offline viewing (labs/offline.js, albright_labs.offline): whose saved data this is, whether to keep it, when the page was made. #}
-        <meta name="albright-offline"{% if user.is_authenticated %} data-user="{{ user.pk }}" data-state="{% if offline_on %}on{% else %}off{% endif %}"{% endif %} data-snapshot="{% url 'offline_snapshot' %}" data-rendered-at="{% now 'c' %}"{% block offline_meta %}{% endblock %}>
+        <meta name="albright-offline"{% if user.is_authenticated %} data-user="{{ user.pk }}" data-state="{% if offline_on %}on{% else %}off{% endif %}"{% endif %} data-snapshot="{% url 'offline_snapshot' %}" data-notes="{% url 'albright_notes:list' %}" data-edit="{{ offline_edit_paths }}" data-rendered-at="{% now 'c' %}"{% block offline_meta %}{% endblock %}>
         <script>
             // Runs before paint so there's no flash of the wrong theme.
             // Mirrors the wiring at the bottom of this file and in
@@ -496,6 +496,8 @@
         <script src="{% static_version 'labs/launcher.js' %}"></script>
         <script src="{% static_version 'labs/push.js' %}"></script>
         <script src="{% static_version 'labs/offline.js' %}"></script>
+        <script src="{% static_version 'labs/sync_core.js' %}"></script>
+        <script src="{% static_version 'labs/sync.js' %}"></script>
         {% if user.is_authenticated %}<script src="{% static_version 'labs/notifications.js' %}"></script>{% endif %}
         {% if user.is_authenticated %}<script src="{% static_version 'labs/share.js' %}" defer></script>{% endif %}
         <script src="{% static_version 'js/app_nav.js' %}"></script>

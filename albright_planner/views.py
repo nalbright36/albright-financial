@@ -397,7 +397,7 @@ def new_item(request):
         _share_new(request, item)
         if quick.wanted(request):
             return quick.ok(f"{'Event' if item.kind == ScheduleItem.EVENT else 'Task'} added",
-                            f"{reverse('albright_planner:day')}?date={item.date:%Y-%m-%d}")
+                            f"{reverse('albright_planner:day')}?date={item.date:%Y-%m-%d}", id=item.pk)
         messages.success(request, f"Added “{item.title}”.")
         return redirect(_next(request))
     # ?panel=1: just the form - the New item dialog's "More options" (planner.js); it posts here like the page.
