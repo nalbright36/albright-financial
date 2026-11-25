@@ -161,6 +161,8 @@ function prepare(lines) {
                 ORDERED.test(line) !== ORDERED.test(previous)) out.push("");
             else if (ITEM_LINE.test(previous) && !ITEM_LINE.test(line) && !/^\s/.test(line) &&
                 !line.startsWith(">") && !FENCE.test(previous)) out.push("");
+            else if (ITEM_LINE.test(line) && !ITEM_LINE.test(previous) &&
+                indentOf(previous).length > indentOf(line).length) out.push("");  // a new item after indented content (an image in the item)
         }
         out.push(line);
         previous = line;
@@ -342,11 +344,16 @@ function listItems(node, marker) {
         let head = firstBlock ? inline(firstBlock.content) : "";
         let text = prefixLines(head, m, "    ");
         const rest = firstBlock ? children.slice(1) : children;
+        let loose = false;
         rest.forEach((child) => {
             if (isEmptyParagraph(child)) return;
             const sep = /List$/.test(child.type) ? "\n" : "\n\n";
+            if (!/List$/.test(child.type)) loose = true;
             text += sep + prefixLines(block(child), "    ", "    ");
         });
+        // A blank line after an item that holds a block (an image) so the next item isn't
+        // swallowed into that block's paragraph (Python-Markdown / render.py).
+        if (loose) text += "\n";
         return text;
     }).join("\n");
 }

@@ -220,6 +220,9 @@ def _lists_start_anywhere(body):
             elif ITEM_LINE.match(previous) and not ITEM_LINE.match(line) \
                     and not line[:1].isspace() and not line.startswith(">") and not FENCE.match(previous):
                 out.append("")                    # ... and a plain line right after a list item ends the list
+            elif ITEM_LINE.match(line) and not ITEM_LINE.match(previous) \
+                    and len(_indent(previous)) > len(_indent(line)):
+                out.append("")                    # a new item after indented content (an image in the item)
         out.append(line)
         previous = line
     return "\n".join(out)

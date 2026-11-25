@@ -285,6 +285,25 @@ class ChecklistTests(Base):
         self.assertIn("- [ ] not a task", html)                       # code blocks stay text
         self.assertNotIn("data-task", str(render.render(self.BODY, editable=False)))
 
+    def test_images_inside_a_checklist_item_dont_swallow_the_rest(self):
+        # The editor writes images indented under the item, then the next item with no blank line.
+        # Python-Markdown would otherwise fold the later "- [ ]" lines into the last image's
+        # paragraph, so a shared / view-only note showed raw markdown after the photos.
+        body = ("- [ ] 2 pounds of sausage\n\n"
+                "    ![sausage-1.jpeg](/attachments/101/)\n\n"
+                "    ![sausage-2.jpeg](/attachments/102/)\n"
+                "- [ ]\n"
+                "- [ ] 3 white or yellow onions\n"
+                "- [ ] 1 cup celery")
+        html = str(render.render(body, editable=False))
+        self.assertIn('<img alt="sausage-1.jpeg" src="/attachments/101/">', html)
+        self.assertIn('<img alt="sausage-2.jpeg" src="/attachments/102/">', html)
+        self.assertEqual(html.count('class="nt-check"'), 4)
+        self.assertIn("3 white or yellow onions", html)
+        self.assertIn("1 cup celery", html)
+        self.assertNotIn("- [ ]", html)                    # later items are checkboxes, not raw markdown
+        self.assertNotIn("<pre>", html)
+
     def test_list_fixups_and_empty_lines(self):
         body = "\n".join(["Trip", "- x", "1. one", "2. ", "- [ ] pack", "    - nested", "after", "```", "- code", "```",
                           "- ", "", "", "", "end"])

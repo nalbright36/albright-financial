@@ -9,6 +9,7 @@ const cases = [
   "# Title\n\nPara one\n\n\nPara after one empty\n\n\n\nTwo empties",
   "Shopping:\n- milk\n- eggs\n    - large\n1. one\n2. two",
   "- [ ] pack\n- [x] done\n    - [ ] nested",
+  "- [ ] 2 pounds of sausage\n\n    ![sausage-1.jpeg](/attachments/101/)\n\n    ![sausage-2.jpeg](/attachments/102/)\n- [ ] \n- [ ] 3 white or yellow onions",
   "> quote line\n> second\n\n---\n\n```py\nprint('a')\n\n\nx = 1\n```",
   "**bold** *it* ++under++ ~~strike~~ ==mark== `code` [link](https://example.com/a b)",
   "-# small print\nnext para",
