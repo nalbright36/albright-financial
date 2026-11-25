@@ -504,7 +504,7 @@ def _recipe_chips(source_key, q, tag, quick, filters, top_tags):
     """The chip row under the search (recipes.html): All, Staples, Favorites, Not rated, the most-used tags, Under 30 min.
     One chip at a time; each keeps the source (?from=) and the search. The rating chips are my own stamps, like the
     filter box's default ("Rated by: Me")."""
-    base = ([("from", source_key)] if source_key != "all" else []) + ([("q", q)] if q else [])
+    base = [("from", source_key)] + ([("q", q)] if q else [])
     mine = filters["rated_by"] == "me" and not filters["love"]
     rating_only = mine and not tag and not quick
 
@@ -538,7 +538,7 @@ def _recipe_source(recipe):
 
 def _filter_query(request, filters, source_key, q, tag, quick=False):
     """The current filters as a query string (bookmarkable) - without the page's own source switch."""
-    params = [("from", source_key)] if source_key != "all" else []
+    params = [("from", source_key)]
     if q:
         params.append(("q", q))
     if tag:
@@ -580,8 +580,12 @@ def recipes(request):
                 mine_by_recipe[recipe_pk] = rating
             else:
                 others.setdefault(recipe_pk, []).append(rating)
-    shares = {g.object_id: g for g in sharing.grants_reaching(user, Recipe)
-              .filter(object_id__in=[r.pk for r in rows]).select_related("created_by")}
+    shares = {}
+    for g in sharing.grants_reaching(user, Recipe).filter(object_id__in=[r.pk for r in rows]).select_related(
+            "created_by", "circle"):
+        prev = shares.get(g.object_id)
+        if prev is None or (g.circle_id and not prev.circle_id):
+            shares[g.object_id] = g
     visible = scope.space_ids(user)
     cards = [{"recipe": r, "mine": mine_by_recipe.get(r.pk), "others": others.get(r.pk, []), "own": r.space_id in visible,
               "nutrition": recipe_nutrition.per_serving(getattr(r, "nutrition", None)),
@@ -594,10 +598,15 @@ def recipes(request):
         for item in group["items"]:
             item["href"] = "?" + _filter_query(request, filters, item["token"], q, tag, quick)
             item["on"] = item["token"] == source_key
+    add_space = None
+    if source == "mine":
+        add_space = circles.personal_space(user)
+    elif isinstance(source, tuple) and source[0] == "space":
+        add_space = next((s for s in request.spaces if s.pk == source[1]), None)
     return render(request, "albright_meals/recipes.html", {
         "cards": cards, "recipes": rows, "q": q, "tag": tag, "quick": quick,
         "source": source, "source_key": source_key, "source_label": scope.source_label(source, user),
-        "source_choices": choices,
+        "source_choices": choices, "add_space": add_space,
         "chips": _recipe_chips(source_key, q, tag, quick, filters, top_tags),
         "filters": filters, "filtering": scope.filters_active(filters),
         "query": _filter_query(request, filters, source_key, q, tag, quick),

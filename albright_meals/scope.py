@@ -143,9 +143,29 @@ def source_queryset(user, source):
     if source == "shared":
         return shared_with(user)
     if source[0] == "space":
-        return Recipe.objects.filter(space_id=source[1])
+        return _space_or_circle_shares(user, source[1])
     pks = sharing.grants_reaching(user, Recipe).filter(created_by_id=source[1]).values("object_id")
     return Recipe.objects.filter(pk__in=pks)
+
+
+def _space_or_circle_shares(user, space_id):
+    """Recipes in this space, plus ones shared with the circle (a ShareGrant, not a move) when it's a
+    circle space the person can see."""
+    space = next((s for s in circles.visible_spaces(user, APP) if s.pk == space_id), None)
+    if space is None:
+        return Recipe.objects.none()
+    q = Q(space_id=space_id)
+    if space.circle_id:
+        q |= Q(pk__in=_circle_grant_ids(space.circle_id))
+    return Recipe.objects.filter(q)
+
+
+def _circle_grant_ids(circle_id):
+    from django.contrib.contenttypes.models import ContentType
+    from albright_labs.models import ShareGrant
+    return ShareGrant.objects.filter(
+        content_type=ContentType.objects.get_for_model(Recipe), circle_id=circle_id, hidden_at__isnull=True,
+    ).values("object_id")
 
 
 def source_label(source, user):
@@ -203,6 +223,8 @@ def source_badge(recipe, user, share=None):
         return None
     if recipe.space_id in mine and recipe.space.circle_id:
         return recipe.space.circle.name
+    if share is not None and share.circle_id:
+        return share.circle.name
     if share is not None and share.created_by_id:
         return (share.created_by.first_name or share.created_by.get_username()).strip()
     if recipe.visibility == Recipe.LIBRARY:

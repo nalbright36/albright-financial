@@ -2,7 +2,9 @@
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from albright_labs.circles import remember
 from albright_labs.testing import personal, share_with
+from django.urls import reverse
 
 from .models import Recipe
 from .test_spaces import Base, url
@@ -166,3 +168,61 @@ class AllRecipesListTests(Base):
             page = self.client.get(url("recipes"))
         self.assertEqual(len(titles(page)), 11)     # 3 originals in the union + 8 shares
         self.assertLessEqual(len(ctx.captured_queries), 45)
+
+
+    def _all_href(self, response):
+        for group in response.context["source_choices"]:
+            for item in group["items"]:
+                if item["token"] == "all":
+                    return item["href"]
+        self.fail("No All recipes item in the dropdown")
+
+    def test_switching_back_to_all_from_a_circle(self):
+        """Picking All after a circle must send ?from=all so memory does not keep the circle."""
+        circled = self.client.get(url("recipes"), {"from": f"space-{self.ours.pk}"})
+        self.assertEqual(titles(circled), ["Family Meatballs"])
+        href = self._all_href(circled)
+        self.assertIn("from=all", href)
+        page = self.client.get(url("recipes") + href)
+        self.assertEqual(page.context["source_key"], "all")
+        self.assertEqual(titles(page), ["Family Meatballs", "Kim's chili", "Solo soup"])
+        self.assertEqual(self.client.get(url("recipes")).context["source_key"], "all")
+
+    def test_a_recipe_shared_with_a_circle_shows_for_members(self):
+        """Share is a ShareGrant on the existing recipe (not a copy or a move). Members see it on All
+        and on that circle's filter, even when the recipe still lives in the owner's Personal space."""
+        kolaczki = self.recipe("Polish Kolaczki", space=self.mine)
+        share_with(kolaczki, circle=self.ours.circle, by=self.nate)
+        self.assertEqual(kolaczki.space, self.mine)     # still personal; the share did not move it
+        wife = self.as_user(self.wife)
+        all_page = wife.get(url("recipes"), {"from": "all"})
+        self.assertIn("Polish Kolaczki", titles(all_page))
+        self.assertEqual(badges(all_page)["Polish Kolaczki"], "Albrights")
+        circle_page = wife.get(url("recipes"), {"from": f"space-{self.ours.pk}"})
+        self.assertEqual(titles(circle_page), ["Family Meatballs", "Polish Kolaczki"])
+        self.assertEqual(badges(circle_page)["Polish Kolaczki"], "Albrights")
+        # View-only: she can open it, not edit
+        self.assertFalse(next(c for c in all_page.context["cards"] if c["recipe"].title == "Polish Kolaczki")["own"])
+        self.assertEqual(wife.get(url("recipe", kolaczki.pk)).status_code, 200)
+        self.assertEqual(wife.get(url("recipe_edit", kolaczki.pk)).status_code, 302)
+        # A stranger still cannot
+        kim = self.as_user(self.kim)
+        self.assertNotIn("Polish Kolaczki", titles(kim.get(url("recipes"), {"from": "all"})))
+        self.assertEqual(kim.get(url("recipe", kolaczki.pk)).status_code, 302)
+
+    def test_add_recipe_from_a_circle_filter_saves_into_that_space(self):
+        """The Recipes dropdown does not change the Meals switcher. Add / import must still land in
+        the circle (or Mine) being shown, not whatever space This week last remembered."""
+        remember(self.nate, "meals", self.mine.pk)
+        page = self.client.get(url("recipes"), {"from": f"space-{self.ours.pk}"})
+        add = reverse("albright_meals:recipe_add")
+        self.assertIn(f'{add}?space={self.ours.pk}', page.content.decode())
+        # Import/save uses request.space, which ?space= sets
+        self.client.get(add, {"space": self.ours.pk})
+        self.client.post(add, {"title": "Imported kolaczki", "ingredients_text": "1 cup flour",
+                               "steps_text": "Bake.", "tags_text": "", "description": "", "notes": "",
+                               "source_url": "", "image_url": ""})
+        saved = Recipe.objects.get(title="Imported kolaczki")
+        self.assertEqual(saved.space, self.ours)
+        wife = self.as_user(self.wife)
+        self.assertIn("Imported kolaczki", titles(wife.get(url("recipes"), {"from": f"space-{self.ours.pk}"})))

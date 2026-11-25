@@ -21,7 +21,7 @@ The menu, the chip and the stamps sit above the card's link, so using them never
     {% include "albright_meals/_notices.html" %}
     <form method="get" class="rl-head" id="recipe-filters" role="search">
         <h1 class="rl-head__title">Recipes</h1>
-        {% if source_key != "all" %}<input type="hidden" name="from" value="{{ source_key }}">{% endif %}
+        <input type="hidden" name="from" value="{{ source_key }}">
         {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
         {% if quick %}<input type="hidden" name="quick" value="1">{% endif %}
         <label class="rl-search" for="recipe-q">
@@ -30,7 +30,7 @@ The menu, the chip and the stamps sit above the card's link, so using them never
             <input type="search" name="q" id="recipe-q" value="{{ q }}" placeholder="Search recipes" autocomplete="off">
         </label>
         <button type="submit" class="visually-hidden">Search</button>
-        <a href="{% url 'albright_meals:recipe_add' %}" class="btn btn-primary rl-head__add">+ Add recipe</a>
+        <a href="{% url 'albright_meals:recipe_add' %}{% if add_space %}?space={{ add_space.pk }}{% endif %}" class="btn btn-primary rl-head__add">+ Add recipe</a>
     </form>
     <p class="rl-count" id="recipe-count">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag or quick or filtering %} found{% endif %}</p>
 
@@ -61,7 +61,7 @@ The menu, the chip and the stamps sit above the card's link, so using them never
             </fieldset>
             <label class="meals-filter-chip meals-filter-chip--love"><input type="checkbox" name="love" value="1" form="recipe-filters"{% if filters.love %} checked{% endif %}> &#x2764;&#xFE0F; We both love <span class="meals-hint">(at least two of us rated it, all Favorite or Staple)</span></label>
         </div>
-        <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm" form="recipe-filters">Apply</button>{% if filtering %} <a href="?{% if source_key != 'all' %}from={{ source_key }}{% endif %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
+        <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm" form="recipe-filters">Apply</button>{% if filtering %} <a href="?from={{ source_key }}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
     </details>
 
     <p class="visually-hidden" role="status" aria-live="polite" id="rate-status"></p>
