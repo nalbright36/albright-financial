@@ -72,6 +72,144 @@ def library():
     return Recipe.objects.filter(visibility=Recipe.LIBRARY)
 
 
+# Recipes list source ("Showing: All recipes"): ?from=all|mine|library|shared|space-<id>|person-<id>
+# Remembered on UserPreference.current_spaces["meals_recipes_from"] (a string; "meals" stays a space id).
+FROM_KEY = "meals_recipes_from"
+
+
+def source_token(source):
+    """'all', 'mine', 'library', 'shared', 'space-12', or 'person-34'."""
+    return f"{source[0]}-{source[1]}" if isinstance(source, tuple) else source
+
+
+def parse_source(raw, user):
+    """A valid source for this person, or None when `raw` is missing or they may not use it."""
+    value = (raw or "").strip()
+    if value in ("all", "mine", "library", "shared"):
+        return value
+    if value.startswith("space-") and value[6:].isdigit():
+        space_id = int(value[6:])
+        if space_id in space_ids(user):
+            return ("space", space_id)
+    if value.startswith("person-") and value[7:].isdigit():
+        person_id = int(value[7:])
+        if sharing.grants_reaching(user, Recipe).filter(created_by_id=person_id).exists():
+            return ("person", person_id)
+    return None
+
+
+def remembered_source(user):
+    from albright_labs.models import UserPreference
+    return (UserPreference.for_user(user).current_spaces or {}).get(FROM_KEY)
+
+
+def remember_source(user, token):
+    from albright_labs.models import UserPreference
+    pref, _created = UserPreference.objects.get_or_create(user=user)
+    spaces = dict(pref.current_spaces or {})
+    if spaces.get(FROM_KEY) == token:
+        return
+    spaces[FROM_KEY] = token
+    pref.current_spaces = spaces
+    pref.save(update_fields=["current_spaces", "updated_at"])
+
+
+def resolve_source(request):
+    """The list's source: ?from= when valid, else a leftover ?tab= (library / shared / the space being
+    shown), else the one they last picked, else All recipes. A valid ?from= is remembered."""
+    user = request.user
+    raw = request.GET.get("from")
+    if raw is None and request.GET.get("tab") in ("library", "shared", "mine"):
+        tab = request.GET["tab"]
+        raw = tab if tab in ("library", "shared") else f"space-{request.space.pk}"
+    explicit = raw is not None
+    source = parse_source(raw, user) if explicit else None
+    if source is None:
+        return parse_source(remembered_source(user), user) or "all"
+    if explicit:
+        remember_source(user, source_token(source))
+    return source
+
+
+def source_queryset(user, source):
+    """Recipes for this source - only ones this person may see. All is their spaces plus recipes shared
+    with them (not the public library). distinct() is the caller's job when they also add annotations."""
+    if source == "all":
+        return Recipe.objects.filter(Q(space_id__in=space_ids(user)) | Q(pk__in=sharing.shared_ids(user, Recipe)))
+    if source == "mine":
+        return Recipe.objects.filter(space=circles.personal_space(user))
+    if source == "library":
+        return library()
+    if source == "shared":
+        return shared_with(user)
+    if source[0] == "space":
+        return Recipe.objects.filter(space_id=source[1])
+    pks = sharing.grants_reaching(user, Recipe).filter(created_by_id=source[1]).values("object_id")
+    return Recipe.objects.filter(pk__in=pks)
+
+
+def source_label(source, user):
+    if source == "all":
+        return "All recipes"
+    if source == "mine":
+        return "Mine"
+    if source == "library":
+        return "Recipe library"
+    if source == "shared":
+        return "Shared with me"
+    if source[0] == "space":
+        for space in circles.visible_spaces(user, APP):
+            if space.pk == source[1]:
+                return space.name
+        return "Mine"
+    person = sharing.grants_reaching(user, Recipe).filter(created_by_id=source[1]).select_related("created_by").first()
+    who = person.created_by if person else None
+    return f"From {(who.first_name or who.get_username()).strip()}" if who else "Shared with me"
+
+
+def source_choices(user):
+    """Dropdown groups: All / Mine / each circle; Shared with me and each person who shared; the library."""
+    spaces = [s for s in circles.visible_spaces(user, APP) if s.circle_id]
+    first = [{"token": "all", "label": "All recipes"}, {"token": "mine", "label": "Mine"}]
+    first += [{"token": f"space-{s.pk}", "label": s.name} for s in spaces]
+    groups = [{"label": "", "items": first}]
+    people = _sharers(user)
+    if people:
+        shared = [{"token": "shared", "label": "Shared with me"}]
+        shared += [{"token": f"person-{p.pk}", "label": f"From {(p.first_name or p.get_username()).strip()}"}
+                   for p in people]
+        groups.append({"label": "", "items": shared})
+    groups.append({"label": "", "items": [{"token": "library", "label": "Recipe library"}]})
+    return groups
+
+
+def _sharers(user):
+    """People who shared a recipe this person can see only because of the share (not a space they see)."""
+    pks = list(shared_with(user).values_list("pk", flat=True))
+    if not pks:
+        return []
+    people = {}
+    for grant in sharing.grants_reaching(user, Recipe).filter(object_id__in=pks).select_related("created_by"):
+        who = grant.created_by
+        if who is not None and who.pk != user.pk:
+            people.setdefault(who.pk, who)
+    return sorted(people.values(), key=lambda u: (u.first_name or u.get_username()).lower())
+
+
+def source_badge(recipe, user, share=None):
+    """Where this card came from when it isn't the person's own personal recipe, or None."""
+    mine = space_ids(user)
+    if recipe.space_id in mine and recipe.space.user_id == user.pk:
+        return None
+    if recipe.space_id in mine and recipe.space.circle_id:
+        return recipe.space.circle.name
+    if share is not None and share.created_by_id:
+        return (share.created_by.first_name or share.created_by.get_username()).strip()
+    if recipe.visibility == Recipe.LIBRARY:
+        return "Recipe library"
+    return recipe.space.label if getattr(recipe, "space", None) is not None else None
+
+
 def readable(user, space=None):
     """Every recipe this person may read: in any space they see, the library, and ones shared with them."""
     return Recipe.objects.filter(Q(space_id__in=space_ids(user)) | Q(visibility=Recipe.LIBRARY)

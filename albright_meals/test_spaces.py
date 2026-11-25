@@ -160,7 +160,10 @@ class LibraryTests(Base):
         self.assertNotIn(url("recipe_edit", meatballs.pk), page)
         self.assertEqual(kim.get(url("recipe_edit", meatballs.pk)).status_code, 302)
         self.assertEqual(kim.post(url("recipe_visibility", meatballs.pk), {"visibility": "household"}).status_code, 404)
-        self.assertNotIn("Family Meatballs", kim.get(url("recipes")).content.decode())     # not in her own recipes
+        # A library recipe is not in All (or Mine). ?tab=library above remembered that
+        # filter, so this asks for All explicitly.
+        self.assertNotIn("Family Meatballs", kim.get(url("recipes") + "?from=all").content.decode())
+        self.assertNotIn("Family Meatballs", kim.get(url("recipes") + "?from=mine").content.decode())
 
     def test_save_to_my_recipes_copies_with_credit_and_survives_unsharing(self):
         meatballs = self.recipe(source_url="https://example.com/meatballs", visibility=Recipe.LIBRARY,

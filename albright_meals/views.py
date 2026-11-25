@@ -1,9 +1,10 @@
-"""Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes (mine, shared with me, the library), Eat out.
+"""Albright Meals pages (/meals/): This week, Groceries, Ideas, Recipes (All recipes by default), Eat out.
 Everything belongs to a space - someone's Personal space or a circle's (scope.py, which asks albright_labs.circles).
 Each page shows one space (the switcher; ?space=<id>, remembered); changing something works in any space you see, and
-anything in a space you don't see is a 404 (Meals access itself is checked first - albright_labs.app_access). A
-recipe in the library is read-only to everyone else; one shared with someone (albright_labs.sharing) is theirs to read
-or edit as shared, and they can save a copy."""
+anything in a space you don't see is a 404 (Meals access itself is checked first - albright_labs.app_access). The
+Recipes list defaults to All recipes (every space you see, plus recipes shared with you) and narrows with ?from=;
+the space switcher on other Meals pages is unchanged. A recipe in the library is read-only to everyone else; one
+shared with someone (albright_labs.sharing) is theirs to read or edit as shared, and they can save a copy."""
 import secrets
 from collections import Counter
 from types import SimpleNamespace
@@ -33,9 +34,6 @@ from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, Meal
                     RecipeForm)
 from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
                      RecipeNutritionLine, RecipeRating, SLOTS, STANDARD_TAGS)
-
-TABS = [("mine", "My recipes"), ("shared", "Shared with me"), ("library", "Recipe library")]
-
 
 def _week_url(day):
     return f"{reverse('albright_meals:week')}?start={plan.week_start(day).isoformat()}"
@@ -495,18 +493,18 @@ def idea_decline(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# Recipes: mine, shared with me, the library - with ratings on the cards
+# Recipes: All recipes by default (spaces you see + shares), narrowed with ?from= - with ratings on the cards
 # ---------------------------------------------------------------------------
 
 QUICK_MINUTES = 30          # the "Under 30 min" chip: total time at most this
 CHIP_TAGS = 6               # the most-used tags shown as chips
 
 
-def _recipe_chips(tab, q, tag, quick, filters, top_tags):
+def _recipe_chips(source_key, q, tag, quick, filters, top_tags):
     """The chip row under the search (recipes.html): All, Staples, Favorites, Not rated, the most-used tags, Under 30 min.
-    One chip at a time; each keeps the tab and the search. The rating chips are my own stamps, like the filter box's
-    default ("Rated by: Me")."""
-    base = ([("tab", tab)] if tab != "mine" else []) + ([("q", q)] if q else [])
+    One chip at a time; each keeps the source (?from=) and the search. The rating chips are my own stamps, like the
+    filter box's default ("Rated by: Me")."""
+    base = ([("from", source_key)] if source_key != "all" else []) + ([("q", q)] if q else [])
     mine = filters["rated_by"] == "me" and not filters["love"]
     rating_only = mine and not tag and not quick
 
@@ -538,9 +536,9 @@ def _recipe_source(recipe):
     return ""
 
 
-def _filter_query(request, filters, tab, q, tag, quick=False):
-    """The current filters as a query string (bookmarkable) - without the page's own tab switch."""
-    params = [("tab", tab)] if tab != "mine" else []
+def _filter_query(request, filters, source_key, q, tag, quick=False):
+    """The current filters as a query string (bookmarkable) - without the page's own source switch."""
+    params = [("from", source_key)] if source_key != "all" else []
     if q:
         params.append(("q", q))
     if tag:
@@ -559,13 +557,13 @@ def _filter_query(request, filters, tab, q, tag, quick=False):
 @scope.space_required
 def recipes(request):
     user, space = request.user, request.space
-    tab = request.GET.get("tab", "mine")
-    tab = tab if tab in dict(TABS) else "mine"
+    source = scope.resolve_source(request)
+    source_key = scope.source_token(source)
     q = (request.GET.get("q") or "").strip()[:100]
     tag = (request.GET.get("tag") or "").strip().lower()[:50]
     quick = request.GET.get("quick") == "1"
     filters = scope.parse_filters(request.GET, user, space)
-    base = {"mine": scope.own(space), "shared": scope.shared_with(user, space), "library": scope.library()}[tab]
+    base = scope.source_queryset(user, source)
     qs = base.select_related("created_by", "space__circle", "space__user", "nutrition")
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(notes__icontains=q))
@@ -587,15 +585,24 @@ def recipes(request):
     visible = scope.space_ids(user)
     cards = [{"recipe": r, "mine": mine_by_recipe.get(r.pk), "others": others.get(r.pk, []), "own": r.space_id in visible,
               "nutrition": recipe_nutrition.per_serving(getattr(r, "nutrition", None)),
-              "share": shares.get(r.pk), "source": _recipe_source(r), "tags": list(r.tags or [])[:2]} for r in rows]
+              "share": shares.get(r.pk), "source": _recipe_source(r), "tags": list(r.tags or [])[:2],
+              "badge": scope.source_badge(r, user, shares.get(r.pk))} for r in rows]
     tag_counts = Counter(t.lower() for r in base.only("tags") for t in (r.tags or []))
     top_tags = [t for t, _n in sorted(tag_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:CHIP_TAGS]]
+    choices = scope.source_choices(user)
+    for group in choices:
+        for item in group["items"]:
+            item["href"] = "?" + _filter_query(request, filters, item["token"], q, tag, quick)
+            item["on"] = item["token"] == source_key
     return render(request, "albright_meals/recipes.html", {
-        "cards": cards, "recipes": rows, "q": q, "tag": tag, "quick": quick, "tab": tab, "tabs": TABS,
-        "chips": _recipe_chips(tab, q, tag, quick, filters, top_tags),
-        "filters": filters, "filtering": scope.filters_active(filters), "query": _filter_query(request, filters, tab, q, tag, quick),
+        "cards": cards, "recipes": rows, "q": q, "tag": tag, "quick": quick,
+        "source": source, "source_key": source_key, "source_label": scope.source_label(source, user),
+        "source_choices": choices,
+        "chips": _recipe_chips(source_key, q, tag, quick, filters, top_tags),
+        "filters": filters, "filtering": scope.filters_active(filters),
+        "query": _filter_query(request, filters, source_key, q, tag, quick),
         "members": [m for m in circles.space_members(space, scope.APP) if m.pk != user.pk], "rating_levels": RecipeRating.choices(),
-        "notices": _notices(request), "shared_count": scope.shared_with(user, space).count()})
+        "notices": _notices(request)})
 
 
 def _target_space(request, recipe):

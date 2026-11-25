@@ -3,11 +3,14 @@
 {% block page_title %}Recipes · {% endblock %}
 {% block content %}
 {% comment %}
-Recipes (views.recipes) - Option A "Clean text cards" of docs/design/recipe_layouts_v2.html. Three tabs: My recipes
-(the space being shown), Shared with me (other spaces' recipes shared with me, read-only), the Recipe library
-(everyone's library recipes, read-only). A search box and one row of filter chips (All, Staples, Favorites, Not rated,
-the most-used tags, Under 30 min - views._recipe_chips) that keep the search; "More filters" has the full rating
+Recipes (views.recipes) - Option A "Clean text cards" of docs/design/recipe_layouts_v2.html. The list defaults to
+All recipes (every space you see, plus recipes shared with you personally). "Showing: All recipes" narrows to Mine
+(your Personal space), a circle, a person who shared with you, Shared with me, or the Recipe library (?from=,
+remembered). A search box and one row of filter chips (All, Staples, Favorites, Not rated, the most-used tags,
+Under 30 min - views._recipe_chips) that keep the search and the source; "More filters" has the full rating
 filters (who rated it, which levels, "We both love"). Everything is in the URL, so a filter can be bookmarked.
+A card that isn't yours shows a small badge (circle name or person). The header space switcher is on the other
+Meals pages, not here - this dropdown is the Recipes filter and does not change the remembered space.
 
 Each card: the title (the card's link - it covers the card), a ⋯ menu (Share, Add ingredients to groceries, Edit,
 Delete, and where it came from), a one-line description, time and servings, then my rating chip (tap: a small menu of
@@ -15,11 +18,10 @@ the levels, saved without opening the recipe - static/meals/ratings.js), the spa
 The menu, the chip and the stamps sit above the card's link, so using them never opens the recipe.
 {% endcomment %}
 <div class="container meals-page">
-{% include "albright_labs/_space_switch.html" %}
     {% include "albright_meals/_notices.html" %}
     <form method="get" class="rl-head" id="recipe-filters" role="search">
         <h1 class="rl-head__title">Recipes</h1>
-        {% if tab != "mine" %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
+        {% if source_key != "all" %}<input type="hidden" name="from" value="{{ source_key }}">{% endif %}
         {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
         {% if quick %}<input type="hidden" name="quick" value="1">{% endif %}
         <label class="rl-search" for="recipe-q">
@@ -32,7 +34,14 @@ The menu, the chip and the stamps sit above the card's link, so using them never
     </form>
     <p class="rl-count" id="recipe-count">{{ recipes|length }} recipe{{ recipes|length|pluralize }}{% if q or tag or quick or filtering %} found{% endif %}</p>
 
-    <nav class="meals-tabs" aria-label="Which recipes">{% for key, label in tabs %}<a href="?{% if key != 'mine' %}tab={{ key }}{% endif %}" class="meals-tabs__item{% if key == tab %} is-on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if key == "shared" and shared_count %} <span class="meals-tabs__count">{{ shared_count }}</span>{% endif %}</a>{% endfor %}</nav>
+    <details class="rl-from" data-menu data-menu-align="start">
+        <summary class="rl-from__btn" aria-label="Showing: {{ source_label }}"><span class="rl-from__label">Showing:</span> {{ source_label }}</summary>
+        <div class="menu-panel rl-from__panel" data-menu-panel>
+            {% for group in source_choices %}{% if not forloop.first %}<div class="rl-from__rule" role="separator"></div>{% endif %}
+            {% for item in group.items %}<a href="{{ item.href }}" class="menu-item{% if item.on %} is-on{% endif %}"{% if item.on %} aria-current="true"{% endif %}>{{ item.label }}</a>{% endfor %}
+            {% endfor %}
+        </div>
+    </details>
 
     <nav class="rl-chips" aria-label="Filter recipes">{% for chip in chips %}<a href="{{ chip.href }}" class="rl-chip{% if chip.on %} is-on{% endif %}"{% if chip.on %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</nav>
 
@@ -52,7 +61,7 @@ The menu, the chip and the stamps sit above the card's link, so using them never
             </fieldset>
             <label class="meals-filter-chip meals-filter-chip--love"><input type="checkbox" name="love" value="1" form="recipe-filters"{% if filters.love %} checked{% endif %}> &#x2764;&#xFE0F; We both love <span class="meals-hint">(at least two of us rated it, all Favorite or Staple)</span></label>
         </div>
-        <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm" form="recipe-filters">Apply</button>{% if filtering %} <a href="?{% if tab != 'mine' %}tab={{ tab }}{% endif %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
+        <div class="meals-filter-actions"><button type="submit" class="btn btn-primary btn-sm" form="recipe-filters">Apply</button>{% if filtering %} <a href="?{% if source_key != 'all' %}from={{ source_key }}{% endif %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}</div>
     </details>
 
     <p class="visually-hidden" role="status" aria-live="polite" id="rate-status"></p>
@@ -60,7 +69,10 @@ The menu, the chip and the stamps sit above the card's link, so using them never
         {% for c in cards %}{% with r=c.recipe %}
         <li><article class="rl-card" data-recipe="{{ r.pk }}">
             <div class="rl-card__top">
-                <h2 class="rl-card__title"><a href="{% url 'albright_meals:recipe' r.pk %}" class="rl-card__link"><span class="meals-recipe-card__title">{{ r.title }}</span></a></h2>
+                <div class="rl-card__heading">
+                    <h2 class="rl-card__title"><a href="{% url 'albright_meals:recipe' r.pk %}" class="rl-card__link"><span class="meals-recipe-card__title">{{ r.title }}</span></a></h2>
+                    {% if c.badge %}<span class="rl-card__badge">{{ c.badge }}</span>{% endif %}
+                </div>
                 <details class="rl-menu" data-menu>
                     <summary class="rl-menu__btn" aria-label="More for {{ r.title }}"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
                     <div class="menu-panel rl-menu__panel" data-menu-panel>
@@ -105,7 +117,7 @@ The menu, the chip and the stamps sit above the card's link, so using them never
             <p class="meals-stamp-note" data-stamp-note hidden></p>
         </article></li>
         {% endwith %}{% empty %}
-        <li class="meals-empty">{% if q or tag or quick or filtering %}No recipes match.{% elif tab == "shared" %}Nothing's been shared with you yet.{% elif tab == "library" %}The library is empty so far - put one of yours in it from its page.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
+        <li class="meals-empty">{% if q or tag or quick or filtering %}No recipes match.{% elif source_key == "shared" or source_key|slice:":7" == "person-" %}Nothing's been shared with you yet.{% elif source_key == "library" %}The library is empty so far - put one of yours in it from its page.{% else %}No recipes yet. Add one, or have the Recipe Bot send some.{% endif %}</li>
         {% endfor %}
     </ul>
 </div>

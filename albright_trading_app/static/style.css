@@ -2451,6 +2451,20 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .rl-search:focus-within { box-shadow: inset 0 0 0 1px var(--focus-border), var(--focus-ring); }
 .rl-head__add { flex: none; min-height: 40px; white-space: nowrap; }
 .rl-count { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--text-secondary); }
+.rl-from { margin: 0 0 var(--space-4); position: relative; z-index: 2; }
+.rl-from__btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px 0 12px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--surface-hover); color: var(--text-primary);
+  font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; list-style: none; }
+.rl-from__btn::-webkit-details-marker { display: none; }
+.rl-from__label { font-weight: 600; color: var(--text-secondary); }
+.rl-from__btn::after { content: ""; width: 8px; height: 8px; margin-left: 2px; border-right: 2px solid var(--text-secondary);
+  border-bottom: 2px solid var(--text-secondary); transform: rotate(45deg) translateY(-2px); }
+.rl-from[open] .rl-from__btn { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.rl-from__rule { height: 1px; margin: 4px 8px; background: var(--border); }
+.rl-from__panel .menu-item.is-on { background: var(--accent-soft); color: var(--text-primary); box-shadow: inset 3px 0 0 var(--accent); }
+.rl-card__badge { display: inline-flex; align-items: center; flex: none; min-height: 22px; padding: 0 8px;
+  border-radius: 999px; background: var(--accent-soft); color: var(--accent-hover); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.01em; position: relative; z-index: 1; }
 .rl-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; padding: 2px 0; }
 .rl-chip { flex: none; display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border-radius: 999px;
   font-size: 13px; white-space: nowrap; text-decoration: none; color: var(--text-soft); background: var(--btn-ghost-bg);
@@ -2468,6 +2482,7 @@ a.meals-tag { min-height: 32px; display: inline-flex; align-items: center; }
 .rl-card:hover { transform: translateY(-1px); }
 .rl-card:has(.rl-card__link:focus-visible) { outline: 2px solid var(--focus-border); outline-offset: 2px; }
 .rl-card__top { display: flex; align-items: flex-start; gap: 8px; }
+.rl-card__heading { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .rl-card__title { flex: 1; min-width: 0; margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 600;
   line-height: 1.25; letter-spacing: -0.01em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere; }
