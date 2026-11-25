@@ -270,3 +270,52 @@ class RecipeAttachmentLinkTests(Base):
         self.assertNotContains(page, "ing__pic")
         self.assertNotContains(page, reverse("labs:attachment", args=[photo.pk]))
         self.assertEqual(guest.get(reverse("labs:attachment", args=[photo.pk])).status_code, 404)
+
+class RecipeCoverSliderTests(Base):
+    def test_cover_area_is_a_slider_of_the_cover_then_other_photos(self):
+        colors = [(180, 60, 40), (200, 30, 30), (30, 180, 40), (40, 40, 200), (200, 180, 40), (120, 80, 160)]
+        photos = [self.attach(self.nate, self.recipe, f"pic{i}.png", png((40 + i, 30 + i), colors[i]))
+                  for i in range(6)]
+        recipe_attachments.set_cover(self.recipe, photos[2])
+        page = self.page()
+        self.assertContains(page, "data-ra-slider")
+        self.assertContains(page, "1 / 6")
+        self.assertContains(page, "Change cover")
+        self.assertContains(page, "Add files")
+        self.assertEqual(page.content.decode().count('class="ra-slider__slide"'), 6)
+        # Cover (pic2) is the first slide; no separate image grid or Attachments heading.
+        first = page.content.decode().split("data-ra-slide", 1)[1]
+        self.assertIn(reverse("labs:attachment", args=[photos[2].pk]), first[:800])
+        self.assertNotContains(page, "data-att-grid")
+        self.assertNotContains(page, "Attachments <")
+
+    def test_slider_shows_when_there_is_no_cover_but_there_are_photos(self):
+        self.recipe.image_url = ""
+        self.recipe.save(update_fields=["image_url"])
+        self.attach(self.nate, self.recipe, "only.png")
+        cover = recipe_attachments.cover_for(self.recipe)
+        self.assertEqual(cover["kind"], "attachment")
+        page = self.page()
+        self.assertContains(page, "data-ra-slider")
+        self.assertContains(page, "only.png")
+        self.assertContains(page, "is-single")
+
+    def test_view_only_reader_sees_the_slider_without_edit_controls(self):
+        self.attach(self.nate, self.recipe, "dish.png")
+        share_with(self.recipe, self.kim, permission="view", by=self.nate)
+        page = self.page(self.as_user(self.kim))
+        self.assertContains(page, "data-ra-slider")
+        self.assertNotContains(page, "Change cover")
+        self.assertNotContains(page, "Add files")
+        self.assertNotContains(page, "data-att-delete")
+
+    def test_non_image_files_stay_in_a_compact_list(self):
+        self.attach(self.nate, self.recipe, "dish.png")
+        pdf = self.attach(self.nate, self.recipe, "card.pdf", b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n")
+        page = self.page()
+        self.assertContains(page, "data-ra-slider")
+        self.assertContains(page, "card.pdf")
+        self.assertContains(page, "Files")
+        self.assertContains(page, "att__files")
+        # The PDF is not a slide.
+        self.assertNotIn(f'data-att-view data-full="{reverse("labs:attachment", args=[pdf.pk])}"', page.content.decode())

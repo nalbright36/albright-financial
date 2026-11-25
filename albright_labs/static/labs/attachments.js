@@ -76,8 +76,15 @@
             holder.innerHTML = row.html;
             var li = holder.querySelector("li");
             if (!li) return;
-            (row.is_image ? p.grid : p.files).appendChild(li);
+            var list = row.is_image ? p.grid : p.files;
+            if (list) list.appendChild(li);
         });
+    }
+
+    function changed(section, action, extra) {
+        var detail = extra || {};
+        detail.action = action;
+        section.dispatchEvent(new CustomEvent("att:changed", {bubbles: true, detail: detail}));
     }
 
     // ---------- Upload (one file per request, so each has its own progress) ----------
@@ -125,6 +132,7 @@
                 addRows(section, res.attachments);
                 setCount(section, res.count);
                 showError(section, (res.errors || []).join(" "));
+                changed(section, "add", {attachments: res.attachments, count: res.count});
                 if (job.onDone) job.onDone(res.attachments[0] || null);
             } else {
                 showError(section, (res.errors && res.errors.join(" ")) ||
@@ -234,6 +242,7 @@
                 item.remove();
                 setCount(section, res.count);
                 showError(section, "");
+                changed(section, "remove", {count: res.count});
                 var add = section.querySelector("[data-att-input]");
                 if (add) add.focus();
             } else {

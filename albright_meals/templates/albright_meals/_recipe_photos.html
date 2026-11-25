@@ -1,20 +1,41 @@
 {% comment %}
-Option C header + Add files (albright_meals.recipe_attachments.context). Cover photo (flagged, else the first
-upload, else the imported image_url). Change cover and the recipe-card flag are editor-only; view-only readers
-still see the header and the Recipe card button (it opens the existing swipe viewer). Delete uses the shared
-confirm (albright_labs/_attachment_delete.html). Wrapped by the article's data-att so the viewer can swipe.
+Cover-area photo slider (albright_meals.recipe_attachments.context). Slide 1 is the cover (flagged upload,
+else the first upload, else the imported image_url), then the other image attachments, no duplicates.
+If there is no cover but there are photos, the slider still shows in this spot. Tap a slide to open the
+existing swipe viewer. Change cover, Recipe card and delete are editor-only (view-only readers still see
+the slider and the Recipe card button). Non-image files and Add files stay below; there is no image grid.
 {% endcomment %}
-{% if recipe_cover.kind != "none" or recipe_att.count or recipe_photos_editable %}
+{% if recipe_slides or recipe_photos_editable %}
 <div class="ra-photos" id="recipe-photos">
-    {% if recipe_cover.kind != "none" %}
+    {% if recipe_slides %}
     <div class="ra-headpic">
-        {% if recipe_cover.kind == "attachment" %}
-        <a href="{{ recipe_cover.url }}" class="ra-headpic__link" data-att-view data-full="{{ recipe_cover.url }}" data-name="{{ recipe_cover.name|default:recipe.title }}">
-            <img src="{{ recipe_cover.url }}" alt="{{ recipe.title }}">
-        </a>
-        {% else %}
-        <img src="{{ recipe_cover.url }}" alt="{{ recipe.title }}" class="ra-headpic__img" loading="lazy" referrerpolicy="no-referrer">
-        {% endif %}
+        <div class="ra-slider{% if recipe_slides|length == 1 %} is-single{% endif %}" data-ra-slider>
+            <div class="ra-slider__track" data-ra-track>
+                {% for s in recipe_slides %}
+                <div class="ra-slider__slide" data-ra-slide{% if s.id %} data-att-item="{{ s.id }}"{% endif %}>
+                    {% if s.source == "image_url" %}
+                    <img src="{{ s.url }}" alt="{{ recipe.title }}" class="ra-headpic__img" loading="lazy" referrerpolicy="no-referrer">
+                    {% else %}
+                    <a href="{{ s.url }}" class="ra-headpic__link" data-att-view data-full="{{ s.url }}" data-name="{{ s.name|default:recipe.title }}">
+                        <img src="{{ s.url }}" alt="{{ s.name|default:recipe.title }}">
+                    </a>
+                    {% if recipe_photos_editable and s.delete_url %}
+                    <div class="ra-headpic__delete">{% include "albright_labs/_attachment_delete.html" with a=s %}</div>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% if recipe_slides|length > 1 %}
+            <button type="button" class="ra-slider__nav ra-slider__nav--prev" data-ra-prev aria-label="Previous photo">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6"/></svg>
+            </button>
+            <button type="button" class="ra-slider__nav ra-slider__nav--next" data-ra-next aria-label="Next photo">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div class="ra-slider__count" data-ra-count>1 / {{ recipe_slides|length }}</div>
+            {% endif %}
+        </div>
         <div class="ra-headpic__bar">
             {% if recipe_card %}
             <a href="{{ recipe_card.url }}" class="ra-card-btn" data-att-view data-full="{{ recipe_card.url }}" data-name="{{ recipe_card.name }}" aria-label="Open the original recipe card">
@@ -73,11 +94,8 @@ confirm (albright_labs/_attachment_delete.html). Wrapped by the article's data-a
             </details>
             {% endif %}
         </div>
-        {% if recipe_photos_editable and recipe_cover.delete_url %}
-        <div class="ra-headpic__delete">{% include "albright_labs/_attachment_delete.html" with a=recipe_cover %}</div>
-        {% endif %}
     </div>
     {% endif %}
-    {% include "albright_labs/_attachments.html" with att=recipe_att att_omit_data_att=True %}
+    {% include "albright_labs/_attachments.html" with att=recipe_att att_omit_data_att=True att_hide_images=True %}
 </div>
 {% endif %}

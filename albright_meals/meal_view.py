@@ -43,7 +43,8 @@ def _quantity_text(quantity):
 _UNIT_PLURALS = {"cup": "cups", "clove": "cloves", "can": "cans", "pinch": "pinches", "slice": "slices", "stick": "sticks",
                  "bunch": "bunches", "head": "heads", "sprig": "sprigs", "package": "packages", "jar": "jars", "piece": "pieces",
                  "pound": "pounds", "ounce": "ounces", "tablespoon": "tablespoons", "teaspoon": "teaspoons", "quart": "quarts",
-                 "pint": "pints", "gallon": "gallons", "handful": "handfuls", "dash": "dashes", "bag": "bags", "bottle": "bottles"}
+                 "pint": "pints", "gallon": "gallons", "handful": "handfuls", "dash": "dashes", "bag": "bags", "bottle": "bottles",
+                 "stalk": "stalks"}
 
 
 def _unit_text(unit, quantity):
@@ -70,8 +71,9 @@ def ingredient_rows(ingredients):
         original = (ingredient.get("original") or "") if isinstance(ingredient, dict) else             (ingredient if isinstance(ingredient, str) else "")
         # As written when it's a fraction ("1 1/2", "1/2"); a plain decimal reads better as one ("1.5" -> "1 1/2").
         written = str(ingredient.get("quantity") or "").strip() if isinstance(ingredient, dict) else ""
-        amount_qty = written if "/" in written and not any(c.isalpha() for c in written) else _quantity_text(quantity)
-        low = groceries.parse_quantity(str(ingredient.get("quantity_min") or "")) if isinstance(ingredient, dict) else None
+        # A range written in the quantity field ("4-5") is not a fraction; use the parsed numbers.
+        amount_qty = written if "/" in written and "-" not in written and not any(c.isalpha() for c in written) else _quantity_text(quantity)
+        low = groceries.quantity_min_of(ingredient) if isinstance(ingredient, dict) else None
         if low is not None and quantity is not None:
             amount_qty = f"{_quantity_text(low)}-{amount_qty}"
         amount = " ".join(p for p in (amount_qty, _unit_text(unit, quantity)) if p)

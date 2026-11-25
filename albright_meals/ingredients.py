@@ -169,6 +169,7 @@ def valid_ingredient_id(value):
 def normalize(ingredient):
     """One ingredient (a dict or a plain line) -> the stored shape. Idempotent; keeps a category someone chose."""
     from . import importer
+    from . import groceries
     from .groceries import is_heading
     if isinstance(ingredient, str) or not isinstance(ingredient, dict):
         line = str(ingredient or "").strip()
@@ -186,7 +187,11 @@ def normalize(ingredient):
         return {"original": line, "name": line.lstrip("#").strip().rstrip(":").strip(), "section": True}
     name = str(out.get("name") or "").strip()
     # Never split (a plain line), or the whole line ended up in the name ("1 tsp cinnamon", "Salt and pepper to taste").
-    if not given or (no_amount and (not name or _LEADS_WITH_AMOUNT.match(name) or _TASTE.search(name)
+    # Also re-parse when the quantity field itself is a range ("4-5") or is not a number, so older stored rows
+    # pick up quantity_min and a unit that used to live in the name ("stalks celery").
+    qty_text = str(out.get("quantity") or "").strip()
+    qty_broken = bool(qty_text) and groceries.parse_quantity(qty_text) is None
+    if not given or qty_broken or (no_amount and (not name or _LEADS_WITH_AMOUNT.match(name) or _TASTE.search(name)
                                     or ("," in name and not out.get("note")))):
         parsed = importer.parse_ingredient(out["original"])
         for key in ("name", "quantity", "quantity_min", "unit", "note"):
@@ -194,6 +199,18 @@ def normalize(ingredient):
                 out[key] = parsed[key]
             elif key == "quantity_min":
                 out.pop(key, None)
+    # Quantity field is itself a range ("4-5") and original didn't already split it.
+    qty_text = str(out.get("quantity") or "").strip()
+    if qty_text and groceries.parse_quantity(qty_text) is None:
+        low, high = groceries.parse_quantity_range(qty_text)
+        if high is not None:
+            out["quantity"] = groceries.format_quantity(high)
+            if low is not None:
+                out["quantity_min"] = groceries.format_quantity(low)
+            else:
+                out.pop("quantity_min", None)
+    name, unit = groceries.peel_unit(str(out.get("name") or "").strip(), str(out.get("unit") or "").strip())
+    out["name"], out["unit"] = name, unit
     for key in ("name", "quantity", "unit", "note"):
         out[key] = str(out.get(key) or "").strip()
     out.pop("section", None)

@@ -35,11 +35,20 @@ UNITS = {
     "dozen": "dozen", "head": "head", "heads": "head", "loaf": "loaf", "loaves": "loaf",
     "bottle": "bottle", "bottles": "bottle", "stick": "stick", "sticks": "stick",
     "slice": "slice", "slices": "slice", "piece": "piece", "pieces": "piece",
+    "stalk": "stalk", "stalks": "stalk",
+    "pinch": "pinch", "pinches": "pinch",
+    "dash": "dash", "dashes": "dash",
+    "sprig": "sprig", "sprigs": "sprig",
 }
 FRACTIONS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4", "⅛": "1/8", "⅜": "3/8", "⅝": "5/8",
              "⅞": "7/8", "⅕": "1/5", "⅖": "2/5", "⅗": "3/5", "⅘": "4/5", "⅙": "1/6", "⅚": "5/6"}
 _NUMBER = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?|\.\d+)"
 _LEADING = re.compile(rf"^\s*({_NUMBER})\s*(?:x\s+)?(.*)$", re.I)
+# Hyphen, en/em dash, minus, hyphen, or "to".
+_RANGE_SEP = r"(?:-|–|—|−|‐|\s+to\s+)"
+_RANGE_ONLY = re.compile(rf"^({_NUMBER})\s*{_RANGE_SEP}\s*({_NUMBER})$", re.I)
+_RANGE_LEAD = re.compile(rf"^\s*({_NUMBER})\s*{_RANGE_SEP}\s*({_NUMBER})(?![\w/])\s*(.*)$", re.I)
+_A_AN = re.compile(r"^(?:a|an)\s+(.*)$", re.I)
 
 # What isn't food goes in Household; everything else is filed by the recipe categories (ingredients.categorize).
 _HOUSEHOLD = ["paper towel", "paper towels", "toilet paper", "tissue", "tissues", "soap", "dish soap", "hand soap",
@@ -50,12 +59,17 @@ _HOUSEHOLD = ["paper towel", "paper towels", "toilet paper", "tissue", "tissues"
 AISLE_LABELS = dict(AISLES)
 
 
-def parse_quantity(text):
-    """"2", "1/2", "1 1/2", "1.5", "½" -> Decimal, or None."""
-    text = (text or "").strip()
+def _plain_amount(text):
+    """Normalize unicode fractions in a quantity string and squeeze spaces."""
+    text = (text or "").strip().replace("⁄", "/")
     for symbol, fraction in FRACTIONS.items():
         text = text.replace(symbol, f" {fraction}")
-    text = text.strip()
+    return " ".join(text.split())
+
+
+def parse_quantity(text):
+    """"2", "1/2", "1 1/2", "1.5", "½" -> Decimal, or None. A range is not a single amount."""
+    text = _plain_amount(text)
     if not text or not re.fullmatch(_NUMBER, text):
         return None
     try:
@@ -69,6 +83,36 @@ def parse_quantity(text):
     except (InvalidOperation, ZeroDivisionError):
         return None
     return total.quantize(Decimal("0.001")).normalize() if total > 0 else None
+
+
+def parse_quantity_range(text):
+    """A single amount or a range -> (low, high) as Decimals.
+
+    "4-5", "4 - 5", "4–5", "4 to 5", "1/2-1", "1 1/2-2", "½-1" -> (low, high).
+    A single number -> (None, value). Unparseable -> (None, None).
+    high is the upper end (what the grocery list buys).
+    """
+    text = _plain_amount(text)
+    if not text:
+        return None, None
+    match = _RANGE_ONLY.fullmatch(text)
+    if match:
+        low, high = parse_quantity(match.group(1)), parse_quantity(match.group(2))
+        if low is not None and high is not None:
+            return (min(low, high), max(low, high)) if low != high else (None, high)
+    return None, parse_quantity(text)
+
+
+def peel_unit(name, unit=""):
+    """If unit is empty and the name starts with a known unit ("stalks celery"), split it off."""
+    unit = (unit or "").strip()
+    name = (name or "").strip()
+    if unit or not name:
+        return name, unit
+    first, _, remainder = name.partition(" ")
+    if remainder and first.lower().rstrip(".") in UNITS:
+        return remainder.strip(), normalize_unit(first)
+    return name, unit
 
 
 def normalize_unit(unit):
@@ -101,10 +145,27 @@ def parse_line(line):
     elif "," in text:
         text, note = (part.strip() for part in text.split(",", 1))
     quantity, unit, name = None, "", text
-    match = _LEADING.match(text)
-    if match:
-        quantity = parse_quantity(match.group(1))
-        rest = match.group(2).strip()
+    ranged = _RANGE_LEAD.match(text)
+    if ranged and parse_quantity(ranged.group(1)) is not None and parse_quantity(ranged.group(2)) is not None:
+        low, high = parse_quantity(ranged.group(1)), parse_quantity(ranged.group(2))
+        quantity, rest = max(low, high), ranged.group(3).strip()
+    else:
+        match = _LEADING.match(text)
+        a_match = _A_AN.match(text)
+        if match:
+            quantity = parse_quantity(match.group(1))
+            rest = match.group(2).strip()
+        elif a_match:
+            rest = a_match.group(1).strip()
+            first, _, remainder = rest.partition(" ")
+            if first.lower().rstrip(".") in UNITS and remainder:
+                quantity, unit, name = Decimal(1), normalize_unit(first), remainder.strip()
+                rest = ""
+            else:
+                rest = text
+        else:
+            rest = ""
+    if rest:
         first, _, remainder = rest.partition(" ")
         if first.lower().rstrip(".") in UNITS and remainder:
             unit, name = normalize_unit(first), remainder.strip()
@@ -205,12 +266,26 @@ def ingredient_parts(ingredient):
     name = str(ingredient.get("name") or "").strip()
     quantity_text = str(ingredient.get("quantity") or "").strip()
     unit = str(ingredient.get("unit") or "").strip()
-    quantity = parse_quantity(quantity_text)
+    _low, quantity = parse_quantity_range(quantity_text)
     if quantity is None and quantity_text and not unit:
         # "1 cup" in the quantity field
         parsed = parse_line(f"{quantity_text} {name}")
         quantity, unit = parsed["quantity"], parsed["unit"]
+        if parsed.get("name"):
+            name = parsed["name"]
+    name, unit = peel_unit(name, unit)
     return name, quantity, normalize_unit(unit), str(ingredient.get("note") or "").strip()
+
+
+def quantity_min_of(ingredient):
+    """The lower end of a range, from quantity_min or a range written in the quantity field."""
+    if not isinstance(ingredient, dict):
+        return None
+    stored = parse_quantity(str(ingredient.get("quantity_min") or ""))
+    if stored is not None:
+        return stored
+    low, high = parse_quantity_range(str(ingredient.get("quantity") or ""))
+    return low if high is not None else None
 
 
 def category_of(ingredient):

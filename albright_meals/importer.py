@@ -412,7 +412,7 @@ def servings_from(value):
 _FRACTION_CHARS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4", "⅕": "1/5", "⅖": "2/5", "⅗": "3/5",
                    "⅘": "4/5", "⅙": "1/6", "⅚": "5/6", "⅛": "1/8", "⅜": "3/8", "⅝": "5/8", "⅞": "7/8"}
 _QTY = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?|\.\d+)"
-_RANGE = re.compile(rf"^({_QTY})\s*(?:-|–|—|to)\s*({_QTY})(?![\w/])\s*(.*)$", re.I)
+_RANGE = re.compile(rf"^({_QTY})\s*(?:-|–|—|−|‐|to)\s*({_QTY})(?![\w/])\s*(.*)$", re.I)
 _LEADING_QTY = re.compile(rf"^({_QTY})(?![\w/])\s*(.*)$")
 
 
@@ -444,6 +444,13 @@ def parse_ingredient(line):
         match = _LEADING_QTY.match(text)
         if match and groceries.parse_quantity(match.group(1)) is not None:
             quantity, rest = groceries.parse_quantity(match.group(1)), match.group(2)
+        else:
+            a_match = re.match(r"^(?:a|an)\s+(.*)$", text, re.I)
+            if a_match:
+                maybe = a_match.group(1).strip()
+                first, _, remainder = maybe.partition(" ")
+                if first.lower().rstrip(".") in groceries.UNITS and remainder.strip():
+                    quantity, unit, rest = groceries.parse_quantity("1"), groceries.normalize_unit(first), remainder.strip()
     rest = rest.strip()
     notes = []
     if quantity is not None:
@@ -456,7 +463,7 @@ def parse_ingredient(line):
 
         rest = leading_paren(rest)
         first, _, remainder = rest.partition(" ")
-        if first.lower().rstrip(".") in groceries.UNITS and remainder.strip():
+        if not unit and first.lower().rstrip(".") in groceries.UNITS and remainder.strip():
             unit, rest = groceries.normalize_unit(first), leading_paren(remainder.strip())
         if rest.lower().startswith("of "):
             rest = rest[3:]

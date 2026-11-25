@@ -51,4 +51,45 @@
             .then(function () { window.location.reload(); })
             .catch(function () { input.disabled = false; input.value = ""; });
     });
+
+
+    function sliderIndex(track, slides) {
+        if (!slides.length) return 0;
+        var gap = 8;
+        var width = slides[0].getBoundingClientRect().width + gap;
+        if (!width) return 0;
+        var i = Math.round(track.scrollLeft / width);
+        return Math.max(0, Math.min(slides.length - 1, i));
+    }
+    function bindSlider(root) {
+        var track = root.querySelector("[data-ra-track]");
+        if (!track) return;
+        var slides = Array.prototype.slice.call(root.querySelectorAll("[data-ra-slide]"));
+        var count = root.querySelector("[data-ra-count]");
+        function update() {
+            if (!count || slides.length < 2) return;
+            var i = sliderIndex(track, slides);
+            count.textContent = (i + 1) + " / " + slides.length;
+        }
+        track.addEventListener("scroll", update, {passive: true});
+        update();
+        function go(dir) {
+            if (!slides.length) return;
+            var i = sliderIndex(track, slides) + dir;
+            i = Math.max(0, Math.min(slides.length - 1, i));
+            slides[i].scrollIntoView({behavior: "smooth", inline: "start", block: "nearest"});
+        }
+        var prev = root.querySelector("[data-ra-prev]");
+        var next = root.querySelector("[data-ra-next]");
+        if (prev) prev.addEventListener("click", function () { go(-1); });
+        if (next) next.addEventListener("click", function () { go(1); });
+    }
+    document.querySelectorAll("[data-ra-slider]").forEach(bindSlider);
+
+    // After Add files or a delete on this page, reload so the cover slider stays in sync.
+    document.addEventListener("att:changed", function (event) {
+        if (event.target && event.target.closest && event.target.closest(".ra-photos, article[data-att]")) {
+            window.location.reload();
+        }
+    });
 })();

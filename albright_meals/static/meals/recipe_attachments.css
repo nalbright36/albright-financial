@@ -1,15 +1,56 @@
-/* Photos on a recipe (Option C): a 180px dish header, Change cover + Recipe card overlays,
-   Add files from the shared attachment section, and (e2) thumbs beside ingredients / under steps.
+/* Photos on a recipe (Option C): the 180px cover area is itself a horizontal slider (cover first,
+   then other photos, peek of the next, dots/count). Change cover + Recipe card overlays, Add files
+   and a compact non-image file list sit under it, plus (e2) thumbs beside ingredients / under steps.
    Mobile-first. Editor-only controls stay in the template; this file only styles them. */
 
 .ra-photos { margin: var(--space-3) 0 12px; }
 .ra-headpic { position: relative; margin: 0 0 12px; }
 .ra-headpic__link, .ra-headpic__img { display: block; }
-.ra-headpic img {
+.ra-headpic img, .ra-slider__slide img {
     width: 100%; height: 180px; object-fit: cover;
     border-radius: var(--radius-md); display: block;
     background: var(--surface-raised);
 }
+
+/* Cover-area slider: almost-full-width slides with a peek of the next photo. */
+.ra-slider { position: relative; }
+.ra-slider__track {
+    display: flex; gap: 8px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.ra-slider__track::-webkit-scrollbar { display: none; }
+.ra-slider__slide {
+    flex: 0 0 88%;
+    scroll-snap-align: start;
+    position: relative;
+}
+.ra-slider.is-single .ra-slider__slide { flex-basis: 100%; }
+.ra-slider__nav {
+    display: none; place-items: center;
+    position: absolute; top: 50%; transform: translateY(-50%);
+    z-index: 2; width: 36px; height: 36px; padding: 0;
+    border: 0; border-radius: 999px; cursor: pointer;
+    background: rgba(0, 0, 0, 0.55); color: #fff;
+}
+.ra-slider__nav--prev { left: 8px; }
+.ra-slider__nav--next { right: 8px; }
+.ra-slider__nav:hover, .ra-slider__nav:focus-visible { background: rgba(0, 0, 0, 0.78); }
+@media (min-width: 700px) {
+    .ra-slider__nav { display: grid; }
+}
+.ra-slider__count {
+    position: absolute; top: 8px; left: 8px; z-index: 2;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(0, 0, 0, 0.62); color: #fff;
+    font-size: 0.75rem; font-weight: 600;
+    pointer-events: none;
+}
+
+/* Image grid is gone on this page; only a compact file list + Add files remain. */
+.ra-photos .att--files-only { margin-top: 8px; }
+.ra-photos .att--files-only .att__label { font-size: var(--text-sm); }
 .ra-headpic__bar {
     position: absolute; left: 8px; right: 8px; bottom: 8px;
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

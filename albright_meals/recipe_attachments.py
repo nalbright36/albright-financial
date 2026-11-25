@@ -236,6 +236,37 @@ def decorate_steps(recipe, groups):
     return out
 
 
+
+def slider_slides(recipe):
+    """Ordered photos for the cover-area slider: the cover first, then other image attachments, no duplicates.
+
+    Cover can be an uploaded file or the imported image_url. If there is no cover but there are image
+    attachments, those still appear in the cover spot. Non-image files are not included (they stay in
+    the compact files list).
+    """
+    cover = cover_for(recipe)
+    slides = []
+    seen = set()
+    if cover["kind"] == "image_url" and cover.get("url"):
+        slides.append({
+            "source": "image_url", "url": cover["url"], "thumb_url": cover["url"],
+            "name": recipe.title, "id": None, "is_cover": True, "is_image": True, "delete_url": "",
+        })
+    elif cover["kind"] == "attachment" and cover.get("attachment") is not None:
+        row = _describe(cover["attachment"])
+        row.update(source="attachment", is_cover=True)
+        slides.append(row)
+        seen.add(cover["attachment"].pk)
+    for attachment in attachments.for_parent(recipe).order_by("pk"):
+        if not attachment.is_image or attachment.pk in seen:
+            continue
+        row = _describe(attachment)
+        row.update(source="attachment", is_cover=False)
+        slides.append(row)
+        seen.add(attachment.pk)
+    return slides
+
+
 def context(user, recipe, editable=None):
     """Template context for the recipe page's photos."""
     can_edit = attachments.can_edit(user, recipe) if editable is None else editable
@@ -246,6 +277,7 @@ def context(user, recipe, editable=None):
         "recipe_att": att,
         "recipe_cover": cover,
         "recipe_card": card,
+        "recipe_slides": slider_slides(recipe),
         "recipe_photos_editable": can_edit,
         "ingredient_photos": ingredient_photo_map(recipe),
         "step_photos": step_photo_map(recipe),
