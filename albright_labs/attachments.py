@@ -65,6 +65,9 @@ PARENTS = {"planner": "albright_planner.ScheduleItem", "notes": "albright_notes.
            "assistant": "albright_assistant.Message"}
 
 IMAGE_TYPES = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "gif": "GIF", "webp": "WEBP", "heic": "HEIF", "heif": "HEIF"}
+# Pillow's format -> how we store it. MPO is a multi-frame JPEG (some phones); HEIC is HEIF.
+# The filename is not trusted: iPhone Safari often sends a HEIC photo named image.jpeg.
+KIND = {"JPEG": "JPEG", "MPO": "JPEG", "PNG": "PNG", "GIF": "GIF", "WEBP": "WEBP", "HEIF": "HEIF", "HEIC": "HEIF"}
 OUTPUT = {"JPEG": ("jpg", "image/jpeg"), "HEIF": ("jpg", "image/jpeg"), "PNG": ("png", "image/png"),
           "GIF": ("gif", "image/gif"), "WEBP": ("webp", "image/webp")}
 OFFICE = {"docx": ("word/", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
@@ -211,22 +214,35 @@ def _thumbnail(img):
     return out.getvalue()
 
 
+def _looks_like_heif(raw):
+    """True when the bytes are HEIC/HEIF (iPhones often name these .jpeg). Not AVIF."""
+    if len(raw) < 12 or raw[4:8] != b"ftyp":
+        return False
+    size = int.from_bytes(raw[0:4], "big")
+    box = raw[8:size] if 16 <= size <= len(raw) else raw[8:64]
+    if b"avif" in box or b"avis" in box:
+        return False
+    return any(tag in box for tag in (b"heic", b"heif", b"heix", b"heim", b"heis", b"mif1", b"msf1"))
+
+
 def process_image(raw, ext):
-    """(data, thumb, mime, out_ext, width, height) for an image upload - or AttachmentError if the content isn't
-    the image its extension says."""
+    """(data, thumb, mime, out_ext, width, height) for an image upload - or AttachmentError if the bytes
+    aren't a photo we can use. Trusts the actual format, not the filename: a HEIC named .jpeg (what iPhone
+    Safari often sends) is converted to JPEG, a misnamed PNG stays a PNG, and a non-image is refused."""
     if Image is None:
         raise AttachmentError("Images can't be added right now.")
-    expected = IMAGE_TYPES[ext]
-    if expected == "HEIF" and not HEIF_SUPPORTED:
+    heif_bytes = _looks_like_heif(raw)
+    if (heif_bytes or IMAGE_TYPES.get(ext) == "HEIF") and not HEIF_SUPPORTED:
         raise AttachmentError("HEIC photos can't be added right now - send it as JPEG.")
     try:
         probe = Image.open(io.BytesIO(raw))
         probe.verify()
         img = Image.open(io.BytesIO(raw))
-        found = img.format
-        if found != expected:
-            raise AttachmentError(f"That file isn't really a .{ext} image.")
-        if found == "GIF" and getattr(img, "is_animated", False):
+        kind = KIND.get(img.format)
+        if kind is None:
+            raise AttachmentError(
+                "That file doesn't look like a photo we can use. Try a JPEG, PNG, GIF, WebP or HEIC photo.")
+        if kind == "GIF" and getattr(img, "is_animated", False):
             data = raw                                 # keep the animation; GIFs hold no EXIF to strip
             img.seek(0)
             frame = img.convert("RGBA")
@@ -239,12 +255,15 @@ def process_image(raw, ext):
                 img.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
             width, height = img.size
             thumb = _thumbnail(img)
-            data = _save_image(img, found)
+            data = _save_image(img, kind)
     except AttachmentError:
         raise
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError) as exc:
-        raise AttachmentError(f"That file isn't a readable .{ext} image.") from exc
-    out_ext, mime = OUTPUT[found]
+        if heif_bytes and not HEIF_SUPPORTED:
+            raise AttachmentError("HEIC photos can't be added right now - send it as JPEG.") from exc
+        raise AttachmentError(
+            "We couldn't read that photo. Try saving it as a JPEG or PNG and attach it again.") from exc
+    out_ext, mime = OUTPUT[kind]
     return data, thumb, mime, out_ext, width, height
 
 
@@ -323,7 +342,8 @@ def add(user, parent, upload):
         data, mime = raw, _check_office(raw, ext)
     else:
         data, mime = raw, _check_text(raw, ext)
-    name = clean_name(upload.name, out_ext if out_ext != ext and ext in ("heic", "heif") else None)
+    # Always use the extension we actually stored (HEIC or a misnamed photo.jpeg -> .jpg; a PNG called .jpg -> .png).
+    name = clean_name(upload.name, out_ext if out_ext != ext else None)
     try:
         with transaction.atomic():
             # The size after downscaling, plus the thumbnail - checked and added under the lock on their row.

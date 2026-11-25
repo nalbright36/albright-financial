@@ -199,11 +199,12 @@ class PlannerAttachmentTests(Helpers, PlannerBase):
         self.assertFalse(Attachment.objects.exists())
 
     def test_a_fake_image_is_refused(self):
-        for name, data in (("cat.png", b"this is not a picture at all"), ("cat.jpg", png()),      # a PNG called .jpg
+        for name, data in (("cat.png", b"this is not a picture at all"),
                            ("cat.gif", b"GIF89a" + b"\x00" * 20)):
             with self.subTest(name=name):
                 res = self.post_file(self.client, self.task, name, data)
                 self.assertEqual(res.status_code, 400, res.content)
+                self.assertTrue(res.json()["errors"])
         self.assertFalse(Attachment.objects.exists())
 
     def test_fake_documents_are_refused(self):
@@ -238,6 +239,19 @@ class PlannerAttachmentTests(Helpers, PlannerBase):
         thumb = b"".join(self.client.get(reverse("labs:attachment_thumb", args=[a.pk])).streaming_content)
         self.assertEqual(max(Image.open(io.BytesIO(thumb)).size), 400)
 
+    def test_a_plain_jpeg_is_accepted(self):
+        out = io.BytesIO()
+        Image.new("RGB", (40, 30), (200, 10, 10)).save(out, "JPEG")
+        a = self.attach(self.me, self.task, "photo.jpeg", out.getvalue())
+        self.assertEqual((a.mime_type, a.original_name, a.width, a.height), ("image/jpeg", "photo.jpg", 40, 30))
+
+    def test_a_misnamed_png_is_still_a_photo(self):
+        """A real PNG called .jpg is a photo with the wrong name, not a fake - store it as PNG."""
+        a = self.attach(self.me, self.task, "cat.jpg", png())
+        self.assertEqual((a.mime_type, a.original_name), ("image/png", "cat.png"))
+        stored = b"".join(self.client.get(reverse("labs:attachment", args=[a.pk])).streaming_content)
+        self.assertEqual(Image.open(io.BytesIO(stored)).format, "PNG")
+
     @skipUnless(attachments.HEIF_SUPPORTED, "pillow-heif isn't installed")
     def test_heic_becomes_jpeg(self):
         out = io.BytesIO()
@@ -245,6 +259,16 @@ class PlannerAttachmentTests(Helpers, PlannerBase):
         a = self.attach(self.me, self.task, "IMG_0042.HEIC", out.getvalue())
         self.assertEqual((a.mime_type, a.original_name), ("image/jpeg", "IMG_0042.jpg"))
         self.assertTrue(a.key.endswith(".jpg"))
+        stored = b"".join(self.client.get(reverse("labs:attachment", args=[a.pk])).streaming_content)
+        self.assertEqual(Image.open(io.BytesIO(stored)).format, "JPEG")
+
+    @skipUnless(attachments.HEIF_SUPPORTED, "pillow-heif isn't installed")
+    def test_heic_named_jpeg_becomes_jpeg(self):
+        """iPhone Safari often sends a HEIC photo named image.jpeg - convert it, don't reject it."""
+        out = io.BytesIO()
+        Image.new("RGB", (50, 30), (0, 200, 0)).save(out, "HEIF")
+        a = self.attach(self.me, self.task, "image.jpeg", out.getvalue())
+        self.assertEqual((a.mime_type, a.original_name), ("image/jpeg", "image.jpg"))
         stored = b"".join(self.client.get(reverse("labs:attachment", args=[a.pk])).streaming_content)
         self.assertEqual(Image.open(io.BytesIO(stored)).format, "JPEG")
 
