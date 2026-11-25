@@ -1,6 +1,6 @@
 from django import forms
 
-from . import groceries, importer
+from . import groceries, importer, ingredients
 from .models import MealIdea, MealPlanEntry, MealsSettings, Recipe, SLOTS, STANDARD_TAGS
 
 INPUT = {"class": "ledger-input"}
@@ -82,8 +82,19 @@ class RecipeForm(forms.ModelForm):
         # An imported line left as it was keeps its parts and its original text.
         unchanged = {ingredient_line(i): i for i in self.instance.ingredients or [] if isinstance(i, dict)}
         recipe = super().save(commit=False)
-        recipe.ingredients = [unchanged.get(line.strip()) or ingredient_from_line(line)
-                              for line in self.cleaned_data["ingredients_text"].splitlines() if line.strip()]
+        rows = [dict(unchanged.get(line.strip()) or ingredient_from_line(line))
+                for line in self.cleaned_data["ingredients_text"].splitlines() if line.strip()]
+        # The edit page's Categories dropdowns (cat_line / cat, matched by the line's text) - and, on "Ask my AI
+        # assistant", its suggestions for the ones still in Other.
+        chosen = {}
+        if self.data is not None and hasattr(self.data, "getlist"):
+            chosen = {line: cat for line, cat in zip(self.data.getlist("cat_line"), self.data.getlist("cat"))
+                      if cat in ingredients.ORDER}
+        for row in rows:
+            line = ingredient_line(row)
+            if line in chosen:
+                row["category"] = chosen[line]
+        recipe.ingredients = rows
         recipe.steps = [line.strip() for line in self.cleaned_data["steps_text"].splitlines() if line.strip()]
         recipe.tags = list(dict.fromkeys(t.strip().lower() for t in self.cleaned_data["tags_text"].split(",")
                                          if t.strip()))[:20]
@@ -95,9 +106,9 @@ class RecipeForm(forms.ModelForm):
 
 
 def ingredient_from_line(line):
-    parsed = groceries.parse_line(line)
-    return {"name": parsed["name"], "quantity": groceries.format_quantity(parsed["quantity"]),
-            "unit": parsed["unit"], "note": parsed["note"]}
+    """A typed line, split like an imported one (importer.parse_ingredient - ranges, fractions, "to taste"), its
+    text kept as "original"; Recipe.save gives it a category."""
+    return importer.parse_ingredient(line)
 
 
 def ingredient_line(ingredient):

@@ -7,10 +7,11 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
+# The grocery list's aisles: the recipe ingredient categories (ingredients.CATEGORIES), plus Household.
+from .ingredients import AISLES
+
 BOT_LABEL = "Recipe Bot"
 
-AISLES = [("produce", "Produce"), ("meat", "Meat & seafood"), ("dairy", "Dairy"), ("bakery", "Bakery"),
-          ("pantry", "Pantry"), ("frozen", "Frozen"), ("household", "Household"), ("other", "Other")]
 SLOTS = [("breakfast", "Breakfast"), ("lunch", "Lunch"), ("dinner", "Dinner"), ("snack", "Snack")]
 
 
@@ -92,7 +93,11 @@ class Recipe(_Authored):
 
     def save(self, *args, **kwargs):
         from .importer import normalize_url
+        from .ingredients import normalize_list
         self.source_key = normalize_url(self.source_url)[:500] if self.source_url else ""
+        # Every way a recipe is saved (the form, imports, the Bot API, the assistant): each ingredient split into
+        # amount / unit / name / note with its original line kept, and given a category (ingredients.py).
+        self.ingredients = normalize_list(self.ingredients)
         if kwargs.get("update_fields") is not None and "source_url" in kwargs["update_fields"]:
             kwargs["update_fields"] = {*kwargs["update_fields"], "source_key"}
         super().save(*args, **kwargs)

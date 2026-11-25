@@ -189,7 +189,7 @@ class ParsingTests(SimpleTestCase):
             ("2 cups of milk", ("milk", "2", "cup", "")),
             ("1 onion, diced", ("onion", "1", "", "diced")),
             ("4 chicken thighs (bone-in)", ("chicken thighs", "4", "", "bone-in")),
-            ("Salt and pepper to taste", ("Salt and pepper to taste", "", "", "")),
+            ("Salt and pepper to taste", ("Salt and pepper", "", "", "to taste")),
             ("A handful of fresh cilantro", ("A handful of fresh cilantro", "", "", "")),
             ("For the garnish:", ("For the garnish:", "", "", "")),
             ("(optional)", ("(optional)", "", "", "")),
@@ -466,7 +466,7 @@ class WebsiteImportTests(Base):
         self.assertRedirects(response, reverse("albright_meals:recipe", args=[recipe.pk]), fetch_redirect_response=False)
         self.assertEqual((recipe.title, recipe.servings, recipe.description), ("Chili", 8, "Quick chili."))
         self.assertEqual(recipe.ingredients[0], {"name": "ground beef", "quantity": "2", "unit": "lb", "note": "",
-                                                 "original": "2 lb ground beef"})
+                                                 "original": "2 lb ground beef", "category": "meat"})
         self.assertEqual(recipe.ingredients[2]["original"], "3 cloves garlic")     # an edited line, parsed again
         self.assertEqual(recipe.steps, ["## For the chili", "Brown the beef in a large pot.", "Simmer."])
         self.assertEqual((recipe.source_url, recipe.source_key, recipe.source_name, recipe.author),
@@ -592,7 +592,8 @@ class WebsiteImportTests(Base):
             response = self.client.post(reverse("albright_meals:recipe_reimport", args=[recipe.pk]), follow=True)
         self.assertContains(response, "Couldn&#x27;t re-import: That page took too long")
         recipe.refresh_from_db()
-        self.assertEqual((recipe.title, recipe.ingredients), ("Old chili", [{"name": "beef"}]))
+        self.assertEqual((recipe.title, recipe.ingredients), ("Old chili", [
+            {"name": "beef", "quantity": "", "unit": "", "note": "", "original": "beef", "category": "meat"}]))
 
     def test_no_reimport_without_a_source(self):
         recipe = self.recipe("Hand-written", [{"name": "beef"}])

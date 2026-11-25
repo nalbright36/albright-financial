@@ -1,4 +1,5 @@
-// A public recipe share link (albright_meals/shared_recipe.html): the servings scaler and Print. A file, not inline -
+// A public recipe share link (albright_meals/shared_recipe.html): the servings scaler (only parsed amounts - a row
+// with data-qty; a range scales both ends) and Print. A file, not inline -
 // the public pages' CSP allows no inline script. Without JS the page shows the recipe as written.
 (function () {
     "use strict";
@@ -28,8 +29,9 @@
             rows.forEach(function (el) {
                 if (now === base) { el.textContent = el.getAttribute("data-written"); return; }
                 var qty = parseFloat(el.getAttribute("data-qty")) * factor;
+                var low = el.hasAttribute("data-qty-min") ? parseFloat(el.getAttribute("data-qty-min")) * factor : null;
                 var unit = qty > 1 ? el.getAttribute("data-many") : el.getAttribute("data-one");
-                el.textContent = amount(qty) + (unit ? " " + unit : "");
+                el.textContent = (low ? amount(low) + "-" : "") + amount(qty) + (unit ? " " + unit : "");
             });
             scale.querySelector('[data-step="-1"]').disabled = now <= 1;
             scale.querySelector('[data-step="1"]').disabled = now >= 99;

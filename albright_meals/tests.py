@@ -160,14 +160,14 @@ class QuickAddParsingTests(TestCase):
         cases = {
             "2 lb chicken thighs": ("chicken thighs", Decimal("2"), "lb", "", "meat"),
             "1 1/2 cups milk": ("milk", Decimal("1.5"), "cup", "", "dairy"),
-            "½ tsp cumin": ("cumin", Decimal("0.5"), "tsp", "", "pantry"),
+            "½ tsp cumin": ("cumin", Decimal("0.5"), "tsp", "", "spices"),
             "3 onions": ("onions", Decimal("3"), "", "", "produce"),
             "milk (whole)": ("milk", None, "", "whole", "dairy"),
             "2 cans black beans": ("black beans", Decimal("2"), "can", "", "pantry"),
             "1 onion, diced": ("onion", Decimal("1"), "", "diced", "produce"),
             "12 oz frozen peas": ("frozen peas", Decimal("12"), "oz", "", "frozen"),
             "paper towels": ("paper towels", None, "", "", "household"),
-            "6 bagels": ("bagels", Decimal("6"), "", "", "bakery"),
+            "6 bagels": ("bagels", Decimal("6"), "", "", "pantry"),
             "2 lbs. ground beef": ("ground beef", Decimal("2"), "lb", "", "meat"),
             "mystery thing": ("mystery thing", None, "", "", "other"),
         }
@@ -178,7 +178,7 @@ class QuickAddParsingTests(TestCase):
                                  (name, qty, unit, note, aisle))
 
     def test_aisle_guess_prefers_the_longer_phrase(self):
-        self.assertEqual(groceries.guess_aisle("black pepper"), "pantry")
+        self.assertEqual(groceries.guess_aisle("black pepper"), "spices")
         self.assertEqual(groceries.guess_aisle("red bell pepper"), "produce")
         self.assertEqual(groceries.guess_aisle("peanut butter"), "pantry")
         self.assertEqual(groceries.guess_aisle("chicken broth"), "pantry")
@@ -383,8 +383,9 @@ class IdeaAndRecipeTests(Base):
             "title": "Chili", "ingredients_text": "2 lb ground beef\n1 onion, diced", "steps_text": "Brown.\nSimmer.",
             "tags_text": "Beef, Easy", "description": "", "notes": "", "source_url": "", "image_url": ""})
         chili = Recipe.objects.get(title="Chili")
-        self.assertEqual(chili.ingredients, [{"name": "ground beef", "quantity": "2", "unit": "lb", "note": ""},
-                                             {"name": "onion", "quantity": "1", "unit": "", "note": "diced"}])
+        self.assertEqual(chili.ingredients, [
+            {"name": "ground beef", "quantity": "2", "unit": "lb", "note": "", "original": "2 lb ground beef", "category": "meat"},
+            {"name": "onion", "quantity": "1", "unit": "", "note": "diced", "original": "1 onion, diced", "category": "produce"}])
         self.assertEqual((chili.steps, chili.tags, chili.created_by), (["Brown.", "Simmer."], ["beef", "easy"],
                                                                        self.owner))
 
@@ -504,7 +505,8 @@ class BotApiTests(Base):
         self.assertEqual(created.status_code, 201)
         recipe_id = created.json()["id"]
         recipe = Recipe.objects.get(pk=recipe_id)
-        self.assertEqual(recipe.ingredients[0], {"name": "chicken", "quantity": "1", "unit": "lb", "note": ""})
+        self.assertEqual(recipe.ingredients[0], {"name": "chicken", "quantity": "1", "unit": "lb", "note": "",
+                                                 "original": "1 lb chicken", "category": "meat"})
         self.assertEqual((recipe.tags, recipe.from_bot, recipe.author_label), (["quick", "chicken"], True, "Recipe Bot"))
         updated = self.call("POST", "meals/recipes", {"title": "chicken curry", "notes": "Add more ginger."})
         self.assertEqual((updated.status_code, updated.json()), (200, {"id": recipe_id, "created": False}))

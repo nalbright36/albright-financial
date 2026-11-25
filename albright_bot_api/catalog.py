@@ -372,7 +372,7 @@ The space's grocery list. Returns {"items": [{"id", "name", "quantity" (str | nu
                            "checked": False, "added_by": "Sam"}]}),
     Op("POST", "meals/groceries", "addGroceries", "Add one or many grocery items", """\
 Add one item {"name": str (required, <=120), "quantity", "unit" (<=20), "aisle" (optional - guessed from the
-name), "note" (<=200)} or many: {"items": [ ...up to 100 of those ]}. An item merges into an UNCHECKED line
+name: meat, produce, dairy, pantry, spices, sauces, baking, frozen, beverages, household or other), "note" (<=200)} or many: {"items": [ ...up to 100 of those ]}. An item merges into an UNCHECKED line
 with the same name and unit (quantities added). Returns 201 {"items": [{"id", "merged": bool, ...}]}.""",
        scopes=("meals:write",), section="meals", status=201,
        body={"name": S(maxLength=120), "quantity": NUM_OR_TEXT, "unit": S(maxLength=20), "aisle": S(), "note": S(maxLength=200),

@@ -28,6 +28,7 @@ from albright_labs.text import plural
 from albright_labs.models import ShareGrant
 
 from . import groceries, importer, meal_view, plan, recipe_nutrition, scope, signals
+from . import ingredients as ingredient_categories
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
 from .models import (GroceryItem, MealIdea, MealPlanEntry, MealsSettings, NUTRITION_FIELDS, Recipe, RecipeNutrition,
@@ -624,6 +625,7 @@ def recipe(request, pk):
     obj, editable = scope.readable_recipe(request.user, request.space, pk)
     _recipe_grants().filter(object_id=obj.pk, user=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
     ingredients = _ingredients_for(obj.space if obj.space_id in scope.space_ids(request.user) else request.space, obj)
+    group_mode = ingredient_categories.mode_for(request.user, obj.ingredients)
     source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
     host = (urlsplit(source_link).hostname or "") if source_link else ""
     mine = RecipeRating.objects.filter(recipe=obj, user=request.user).first()
@@ -636,6 +638,7 @@ def recipe(request, pk):
         "my_rating": mine, "others": others, "rating_levels": RecipeRating.choices(), "needs_tweaks": RecipeRating.NEEDS_TWEAKS,
         "standard_tags": [labels[key] for key in obj.standard_tags or [] if key in labels],
         "recipe": obj, "editable": editable, "owned": owned, "shared_grant": shared_grant, "ingredients": ingredients,
+        "ingredient_groups": ingredient_categories.group_rows(ingredients, group_mode), "group_mode": group_mode,
         "share": sheet.sheet(request.user, obj), "move_spaces": [s for s in request.spaces if s.pk != obj.space_id] if owned else [],
         "step_groups": importer.step_groups(obj.steps),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
@@ -667,9 +670,28 @@ def recipe_edit(request, pk=None):
                 messages.error(request, f"Not shared: {exc}")
         if quick.wanted(request):
             return quick.ok(f"Recipe added: {saved.title}", reverse("albright_meals:recipe", args=[saved.pk]))
+        if request.POST.get("ai_categories") == "1":
+            # "Ask my AI assistant": its suggestions for what the keyword map left in Other, then back to the form.
+            others = [row["name"] for row in saved.ingredients if row.get("category") == "other" and row.get("name")]
+            found = ingredient_categories.suggest_with_ai(request.user, others)
+            for row in saved.ingredients:
+                if row.get("category") == "other" and row.get("name") in found:
+                    row["category"] = found[row["name"]]
+            saved.save(update_fields=["ingredients", "updated_at"])
+            messages.success(request, f"Saved. Your AI assistant placed {plural(len(found), 'ingredient')}."
+                             if found else "Saved. Your AI assistant didn't have a suggestion - pick them below.")
+            return redirect(reverse("albright_meals:recipe_edit", args=[saved.pk]) + "#ingredient-categories")
         messages.success(request, f"Saved {saved.title}.")
         return redirect("albright_meals:recipe", pk=saved.pk)
     context = {"form": form, "recipe": obj, "share": sharing.control(request.user, obj, "meals")}
+    if obj is not None:
+        from .forms import ingredient_line
+        rows = [{"line": ingredient_line(i), "category": i.get("category") or "other"}
+                for i in obj.ingredients or [] if isinstance(i, dict) and not i.get("section")]
+        others = sum(1 for r in rows if r["category"] == "other")
+        context.update(category_rows=rows, categories=ingredient_categories.CATEGORIES,
+                       ai_categories=plural(others, "ingredient") if others and
+                       ingredient_categories.ai_available(request.user) else "")
     if obj is None:
         # Add a recipe opens with Import from link; ?url=<link> (a bookmark, a bot) pre-fills it and starts it.
         link = (request.GET.get("url") or "").strip()[:importer.MAX_URL]
@@ -1032,3 +1054,21 @@ def recipe_nutrition_manual(request, pk):
     recipe_nutrition.set_manual(obj, values, request.user)
     messages.success(request, "Saved the nutrition per serving.")
     return redirect("albright_meals:recipe", pk=pk)
+
+
+@login_required
+@require_POST
+def ingredient_grouping(request):
+    """The recipe page's "Group by: Category / Recipe order" - remembered for this person, on every recipe."""
+    from albright_labs.models import UserPreference
+    mode = request.POST.get("mode")
+    if mode in (ingredient_categories.BY_CATEGORY, ingredient_categories.BY_RECIPE):
+        pref = UserPreference.objects.get_or_create(user=request.user)[0]
+        pref.ingredient_grouping = mode
+        pref.save(update_fields=["ingredient_grouping", "updated_at"])
+    if quick.wanted(request) or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "mode": mode})
+    nxt = request.POST.get("next", "")
+    if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+        return redirect(nxt)
+    return redirect("albright_meals:recipes")

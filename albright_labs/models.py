@@ -197,6 +197,9 @@ class UserPreference(models.Model):
     offline_enabled = models.BooleanField(default=True)
     # The search palette's recent searches (albright_labs.search_views), newest first, at most 8.
     recent_searches = models.JSONField(default=list, blank=True)
+    # A recipe's ingredients "Group by: Category / Recipe order" (albright_meals.ingredients.mode_for); "" = never
+    # chosen (by category, except recipes with their own sections).
+    ingredient_grouping = models.CharField(max_length=10, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

@@ -3246,6 +3246,20 @@ html .pl .pl-meal-qv__remove { color: var(--red); }
 .ing-section { margin: 0; padding: 14px 0 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
   color: var(--text-secondary); list-style: none; }
 .ing-list > .ing-section:first-child, .ing-section--steps:first-child { padding-top: 2px; }
+/* No amount ("Salt, for the meat"): the name starts at the left edge - no empty amount column. */
+.ing.ing--noamt .ing__name { grid-column: 1 / 3; }
+.ing.ing--pick.ing--noamt .ing__name { grid-column: 2 / 4; }
+/* A category label (albright_meals.ingredients - "Group by: Category"): small, uppercase, Meals orange. */
+.ing-section--cat { color: color-mix(in srgb, var(--app-meals) 80%, var(--text-secondary)); letter-spacing: .08em; }
+.meals-ing-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  margin-bottom: var(--space-2); }
+.meals-ing-head .meals-section__title { margin: 0; }
+.meals-groupby { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--text-xs); color: var(--text-secondary); }
+.meals-groupby__seg { display: inline-flex; padding: 2px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); }
+.meals-groupby__opt { border: 0; background: none; padding: 5px 10px; border-radius: 8px; font: inherit; font-size: var(--text-xs);
+  color: var(--text-secondary); cursor: pointer; min-height: 30px; }
+.meals-groupby__opt:hover { color: var(--text-primary); }
+.meals-groupby__opt.is-on { color: var(--app-meals); background: color-mix(in srgb, var(--app-meals) 14%, transparent); font-weight: 600; }
 [data-ing-check] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 [data-ing-check]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .ing.is-struck .ing__amt, .ing.is-struck .ing__name { text-decoration: line-through; color: var(--text-muted, var(--text-secondary)); }
@@ -3939,3 +3953,15 @@ html .navbar .notif-panel { top: calc(100% + 8px); right: 0; left: auto; }
   .navbar__main-row, .navbar__tools, .navbar--collapsed .navbar__tools { gap: 4px; }
   html .navbar .app-launcher__button { width: 34px; height: 34px; }
 }
+
+/* A recipe's edit page: each ingredient's category (albright_meals.ingredients) - one small dropdown per line. */
+.meals-cats { margin: 0 0 var(--space-4); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.meals-cats legend { padding: 0 4px; font-weight: 700; font-size: var(--text-sm); }
+.meals-cats .meals-hint { margin: 0 0 var(--space-2); }
+.meals-cats__list { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+.meals-cats__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(9rem, 12rem); align-items: center; gap: 10px;
+  padding: 6px 0; border-top: 1px solid var(--border); }
+.meals-cats__row:first-child { border-top: 0; }
+.meals-cats__name { font-size: var(--text-sm); overflow-wrap: anywhere; margin: 0; }
+.meals-cats__select { min-height: 36px; font-size: var(--text-sm); }
+@media (max-width: 480px) { .meals-cats__row { grid-template-columns: minmax(0, 1fr); gap: 4px; } }

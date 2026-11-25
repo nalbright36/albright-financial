@@ -111,16 +111,10 @@ def _number(quantity):
 def public_recipe(link):
     """Everything the public page shows - and nothing else."""
     recipe = link.recipe
-    rows = []
-    for row in meal_view.ingredient_rows(recipe.ingredients):
-        if row.get("section"):
-            rows.append({"section": row["section"]})
-            continue
-        ingredient = (recipe.ingredients or [])[row["index"]]
-        from .groceries import ingredient_parts
-        _name, quantity, unit, _note = ingredient_parts(ingredient)
-        rows.append({"amount": row["amount"], "name": row["name"], "note": row["note"], "qty": _number(quantity),
-                     "unit_one": meal_view._unit_text(unit, 1), "unit_many": meal_view._unit_text(unit, 2)})
+    from .ingredients import group_rows, mode_for
+    keep = ("amount", "name", "note", "qty", "qty_min", "unit_one", "unit_many")
+    groups = [{"label": g["label"], "category": g["category"], "rows": [{k: row.get(k) for k in keep} for row in g["rows"]]}
+              for g in group_rows(meal_view.ingredient_rows(recipe.ingredients), mode_for(None, recipe.ingredients))]
     minutes = recipe.total_time_minutes or ((recipe.prep_minutes or 0) + (recipe.cook_minutes or 0)) or None
     per = recipe_nutrition.per_serving(getattr(recipe, "nutrition", None))
     nutrition = None
@@ -131,7 +125,7 @@ def public_recipe(link):
         "description": recipe.description,
         "time": time_text(minutes),
         "servings": recipe.servings,
-        "ingredients": rows,
+        "ingredient_groups": groups,
         "step_groups": importer.step_groups(recipe.steps),
         "nutrition": nutrition,
         "shared_by": sharer_name(link),

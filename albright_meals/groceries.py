@@ -41,42 +41,12 @@ FRACTIONS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4", 
 _NUMBER = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?|\.\d+)"
 _LEADING = re.compile(rf"^\s*({_NUMBER})\s*(?:x\s+)?(.*)$", re.I)
 
-# (phrase, aisle) - checked longest phrase first, as whole words, so "black pepper" is
-# pantry while "pepper" alone is produce, and "frozen ..." always wins.
-_AISLE_WORDS = {
-    "frozen": ["frozen", "ice cream", "popsicle", "frozen pizza", "tater tots", "frozen peas", "frozen corn"],
-    "household": ["paper towel", "paper towels", "toilet paper", "tissue", "tissues", "soap", "dish soap",
-                  "detergent", "laundry", "trash bag", "trash bags", "garbage bag", "foil", "aluminum foil",
-                  "plastic wrap", "sponge", "sponges", "shampoo", "conditioner", "toothpaste", "napkins",
-                  "bleach", "cleaner", "wipes", "batteries", "light bulb", "diapers", "deodorant"],
-    "meat": ["chicken", "beef", "pork", "turkey", "bacon", "sausage", "ham", "salmon", "shrimp", "fish",
-             "steak", "lamb", "ground beef", "ground turkey", "tilapia", "cod", "crab", "lobster", "scallops",
-             "chicken thighs", "chicken breast", "ribs", "hot dogs", "brisket", "meatballs", "chorizo", "prosciutto"],
-    "dairy": ["milk", "cheese", "butter", "yogurt", "cream", "egg", "eggs", "sour cream", "cream cheese",
-              "cheddar", "mozzarella", "parmesan", "feta", "half and half", "heavy cream", "cottage cheese",
-              "ricotta", "whipped cream", "oat milk", "almond milk"],
-    "bakery": ["bread", "buns", "bun", "bagel", "bagels", "tortilla", "tortillas", "rolls", "croissant",
-               "croissants", "muffin", "muffins", "pita", "baguette", "english muffins", "naan", "cake"],
-    "pantry": ["rice", "pasta", "spaghetti", "noodles", "flour", "sugar", "brown sugar", "oil", "olive oil",
-               "vegetable oil", "vinegar", "salt", "black pepper", "pepper flakes", "spice", "spices", "cumin",
-               "paprika", "oregano", "cinnamon", "beans", "black beans", "chickpeas", "lentils", "sauce",
-               "tomato sauce", "tomato paste", "canned tomatoes", "diced tomatoes", "broth", "stock",
-               "chicken broth", "chicken stock", "cereal", "oats", "oatmeal", "honey", "peanut butter",
-               "jam", "jelly", "ketchup", "mustard", "mayo", "mayonnaise", "soy sauce", "salsa", "coffee", "tea",
-               "nuts", "almonds", "walnuts", "crackers", "chips", "baking soda", "baking powder", "vanilla",
-               "syrup", "maple syrup", "cornstarch", "breadcrumbs", "tuna", "canned", "quinoa", "couscous"],
-    "produce": ["apple", "apples", "banana", "bananas", "onion", "onions", "garlic", "potato", "potatoes",
-                "sweet potato", "tomato", "tomatoes", "lettuce", "spinach", "carrot", "carrots", "celery",
-                "pepper", "peppers", "bell pepper", "bell peppers", "jalapeno", "lemon", "lemons", "lime",
-                "limes", "avocado", "avocados", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary",
-                "mushroom", "mushrooms", "broccoli", "cauliflower", "cucumber", "cucumbers", "zucchini",
-                "squash", "berries", "strawberries", "blueberries", "raspberries", "grapes", "orange",
-                "oranges", "ginger", "kale", "cabbage", "corn", "green beans", "peas", "asparagus", "scallions",
-                "green onions", "shallot", "shallots", "salad", "arugula", "peach", "peaches", "pear",
-                "pears", "melon", "watermelon", "pineapple", "mango", "eggplant", "radish", "beets", "herbs"],
-}
-_PHRASES = sorted(((phrase, aisle) for aisle, words in _AISLE_WORDS.items() for phrase in words),
-                  key=lambda pair: -len(pair[0]))
+# What isn't food goes in Household; everything else is filed by the recipe categories (ingredients.categorize).
+_HOUSEHOLD = ["paper towel", "paper towels", "toilet paper", "tissue", "tissues", "soap", "dish soap", "hand soap",
+              "detergent", "laundry", "trash bag", "trash bags", "garbage bag", "garbage bags", "foil", "aluminum foil",
+              "plastic wrap", "sponge", "sponges", "shampoo", "conditioner", "toothpaste", "napkins", "bleach",
+              "cleaner", "wipes", "batteries", "light bulb", "light bulbs", "diapers", "deodorant", "dishwasher pods",
+              "zip bags", "ziploc bags", "parchment paper"]
 AISLE_LABELS = dict(AISLES)
 
 
@@ -106,12 +76,15 @@ def normalize_unit(unit):
     return UNITS.get(unit, unit[:MAX_UNIT])
 
 
-def guess_aisle(name):
+def household(name):
     lowered = f" {re.sub(r'[^a-z ]+', ' ', (name or '').lower())} "
-    for phrase, aisle in _PHRASES:
-        if f" {phrase} " in lowered:
-            return aisle
-    return "other"
+    return any(f" {phrase} " in lowered for phrase in _HOUSEHOLD)
+
+
+def guess_aisle(name):
+    """The aisle (category) for a grocery line - the recipe categories, or Household (ingredients.aisle_for)."""
+    from .ingredients import aisle_for
+    return aisle_for(name)
 
 
 def parse_line(line):
@@ -240,6 +213,17 @@ def ingredient_parts(ingredient):
     return name, quantity, normalize_unit(unit), str(ingredient.get("note") or "").strip()
 
 
+def category_of(ingredient):
+    """A recipe ingredient's category (its grocery aisle - lines added from a recipe keep it), or None to guess."""
+    from .ingredients import ORDER
+    category = ingredient.get("category") if isinstance(ingredient, dict) else None
+    return category if category in ORDER else None
+
+
+def _is_section(ingredient):
+    return isinstance(ingredient, dict) and bool(ingredient.get("section"))
+
+
 def is_heading(text):
     """A recipe's section line written among its ingredients - "## Sauce", "For the sauce:", a short "For the ..." -
     shown as a label (meal_view.ingredient_rows), never bought."""
@@ -264,7 +248,7 @@ def add_recipes(space, recipes, user=None, token=None, skip_listed=False):
     for recipe in recipes:
         for ingredient in recipe.ingredients or []:
             name, quantity, unit, note = ingredient_parts(ingredient)
-            if not name or (quantity is None and not unit and is_heading(name)):
+            if not name or (quantity is None and not unit and is_heading(name)) or _is_section(ingredient):
                 continue
             key = (name_key(name), unit)
             if key in combined:
@@ -276,15 +260,15 @@ def add_recipes(space, recipes, user=None, token=None, skip_listed=False):
                 row["recipes"].add(recipe.pk)
             else:
                 combined[key] = {"name": name, "quantity": quantity, "unit": unit, "note": note,
-                                 "recipe": recipe, "recipes": {recipe.pk}}
+                                 "aisle": category_of(ingredient), "recipe": recipe, "recipes": {recipe.pk}}
     added = merged = skipped = 0
     by_pk = {r.pk: r for r in recipes}
     for (key, unit), row in combined.items():
         if any((key, unit, pk) in listed for pk in row["recipes"]):
             skipped += 1
             continue
-        _item, was_merged = add_item(space, row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
-                                     token=token, recipes=[by_pk[pk] for pk in sorted(row["recipes"])])
+        _item, was_merged = add_item(space, row["name"], row["quantity"], row["unit"], row["aisle"], note=row["note"],
+                                     user=user, token=token, recipes=[by_pk[pk] for pk in sorted(row["recipes"])])
         merged += was_merged
         added += not was_merged
     return added, merged, skipped
@@ -319,18 +303,19 @@ def add_selected(space, recipe, indexes, user=None):
         if not 0 <= index < len(ingredients):
             continue
         name, quantity, unit, note = ingredient_parts(ingredients[index])
-        if not name:
+        if not name or _is_section(ingredients[index]):
             continue
         key = (name_key(name), unit)
-        row = picked.setdefault(key, {"name": name, "quantity": None, "unit": unit, "note": ""})
+        row = picked.setdefault(key, {"name": name, "quantity": None, "unit": unit, "note": "",
+                                      "aisle": category_of(ingredients[index])})
         if quantity is not None:
             row["quantity"] = (row["quantity"] or 0) + quantity
         if note and note.lower() not in row["note"].lower():
             row["note"] = f"{row['note']}; {note}" if row["note"] else note
     counts = {"added": 0, "combined": 0, "duplicates": 0}
     for row in picked.values():
-        _item, status = add_item_detail(space, row["name"], row["quantity"], row["unit"], note=row["note"], user=user,
-                                        recipes=[recipe])
+        _item, status = add_item_detail(space, row["name"], row["quantity"], row["unit"], row["aisle"], note=row["note"],
+                                        user=user, recipes=[recipe])
         counts[{ADDED: "added", COMBINED: "combined", DUPLICATE: "duplicates"}[status]] += 1
     return counts
 

@@ -42,7 +42,7 @@ scaler and Print in meals/shared_recipe.js - nothing inline. Print: light, one c
                     <button type="button" class="sr-scale__btn" data-step="1" aria-label="More servings" hidden>+</button>
                 </div>{% endif %}
             </div>
-            {% if r.ingredients %}<ul class="sr-ing">{% for i in r.ingredients %}{% if i.section %}<li class="sr-ing__section">{{ i.section }}</li>{% else %}<li class="sr-ing__row"><b class="sr-ing__amt"{% if i.qty %} data-qty="{{ i.qty|stringformat:'g' }}" data-one="{{ i.unit_one }}" data-many="{{ i.unit_many }}"{% endif %}>{{ i.amount }}</b><span class="sr-ing__name">{{ i.name }}{% if i.note %} <em>{{ i.note }}</em>{% endif %}</span></li>{% endif %}{% endfor %}</ul>
+            {% if r.ingredient_groups %}<ul class="sr-ing">{% for g in r.ingredient_groups %}{% if g.label %}<li class="sr-ing__section{% if g.category %} sr-ing__section--cat{% endif %}">{{ g.label }}</li>{% endif %}{% for i in g.rows %}<li class="sr-ing__row{% if not i.amount %} sr-ing__row--noamt{% endif %}">{% if i.amount %}<b class="sr-ing__amt"{% if i.qty %} data-qty="{{ i.qty|stringformat:'g' }}"{% if i.qty_min %} data-qty-min="{{ i.qty_min|stringformat:'g' }}"{% endif %} data-one="{{ i.unit_one }}" data-many="{{ i.unit_many }}"{% endif %}>{{ i.amount }}</b>{% endif %}<span class="sr-ing__name">{{ i.name }}{% if i.note %} <em>{{ i.note }}</em>{% endif %}</span></li>{% endfor %}{% endfor %}</ul>
             {% else %}<p class="sr-muted">No ingredients listed.</p>{% endif %}
         </section>
         <section class="sr-card" id="sr-steps" aria-labelledby="sr-steps-h">

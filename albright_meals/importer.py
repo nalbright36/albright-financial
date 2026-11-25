@@ -427,17 +427,19 @@ def _ascii_fractions(text):
 
 def parse_ingredient(line):
     """"1 1/2 cups flour, sifted" -> {"name": "flour", "quantity": "1.5", "unit": "cup", "note": "sifted",
-    "original": "1 1/2 cups flour, sifted"}. A range ("2-3 cloves") takes the larger number. Never loses a
+    "original": "1 1/2 cups flour, sifted"}. A range ("2-3 cloves") buys the larger number ("quantity") and keeps
+    the smaller as "quantity_min", so it reads "2-3". "Salt and pepper to taste" -> note "to taste". Never loses a
     line: whatever doesn't split stays in the name, and "original" is always the line as written."""
     original = str(line or "").strip()
     text = _ascii_fractions(original)
-    quantity, unit, note = None, "", ""
+    quantity, low_end, unit, note = None, None, "", ""
     rest = text
     match = _RANGE.match(text)
     if match:
         low, high = groceries.parse_quantity(match.group(1)), groceries.parse_quantity(match.group(2))
         if low is not None and high is not None:
             quantity, rest = max(low, high), match.group(3)
+            low_end = min(low, high) if low != high else None
     if quantity is None:
         match = _LEADING_QTY.match(text)
         if match and groceries.parse_quantity(match.group(1)) is not None:
@@ -465,10 +467,17 @@ def parse_ingredient(line):
     if "," in rest:
         rest, comma_note = (part.strip() for part in rest.split(",", 1))
         notes.append(comma_note)
+    taste = re.search(r"(?i)\s+(to taste|as needed|for serving|for garnish|optional)$", rest)
+    if taste and taste.start() > 0:                                    # "Salt and pepper to taste"
+        notes.append(taste.group(1).lower())
+        rest = rest[:taste.start()]
     name = rest.strip(" ,;-") or original
     note = "; ".join(n for n in notes if n)
-    return {"name": name[:groceries.MAX_NAME], "quantity": groceries.format_quantity(quantity), "unit": unit,
-            "note": note[:groceries.MAX_NOTE], "original": original[:500]}
+    out = {"name": name[:groceries.MAX_NAME], "quantity": groceries.format_quantity(quantity), "unit": unit,
+           "note": note[:groceries.MAX_NOTE], "original": original[:500]}
+    if low_end is not None:                                            # "1-2 jalapeños": shown as a range
+        out["quantity_min"] = groceries.format_quantity(low_end)
+    return out
 
 
 def ingredient_lines(recipe_ingredients):

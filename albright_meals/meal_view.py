@@ -56,14 +56,24 @@ def _unit_text(unit, quantity):
 
 
 def ingredient_rows(ingredients):
+    """Display rows, in the recipe's order: {"index", "amount" ("1 1/2 cups", "1-2", "" when there's none), "name",
+    "note", "original", "category", "qty" / "qty_min" (numbers the servings scaler multiplies - only for a parsed
+    amount), "unit_one" / "unit_many"} - or {"section": "For the sauce"}. A row with no amount has amount "" and the
+    page draws its name from the left edge (no empty amount column)."""
+    from .ingredients import categorize
     rows = []
     for index, ingredient in enumerate(ingredients or []):
+        if isinstance(ingredient, dict) and ingredient.get("section"):
+            rows.append({"index": index, "section": str(ingredient.get("name") or "").strip()})
+            continue
         name, quantity, unit, note = groceries.ingredient_parts(ingredient)
-        original = (ingredient.get("original") or "") if isinstance(ingredient, dict) else \
-            (ingredient if isinstance(ingredient, str) else "")
+        original = (ingredient.get("original") or "") if isinstance(ingredient, dict) else             (ingredient if isinstance(ingredient, str) else "")
         # As written when it's a fraction ("1 1/2", "1/2"); a plain decimal reads better as one ("1.5" -> "1 1/2").
         written = str(ingredient.get("quantity") or "").strip() if isinstance(ingredient, dict) else ""
         amount_qty = written if "/" in written and not any(c.isalpha() for c in written) else _quantity_text(quantity)
+        low = groceries.parse_quantity(str(ingredient.get("quantity_min") or "")) if isinstance(ingredient, dict) else None
+        if low is not None and quantity is not None:
+            amount_qty = f"{_quantity_text(low)}-{amount_qty}"
         amount = " ".join(p for p in (amount_qty, _unit_text(unit, quantity)) if p)
         text = (name or original).strip()
         if not text and not original:
@@ -71,8 +81,29 @@ def ingredient_rows(ingredients):
         if not amount and groceries.is_heading(original or text):
             rows.append({"index": index, "section": (original or text).strip().lstrip("#").strip().rstrip(":").strip()})
             continue
-        rows.append({"index": index, "amount": amount, "name": text or original, "note": note, "original": original})
+        category = ingredient.get("category") if isinstance(ingredient, dict) else ""
+        rows.append({"index": index, "amount": amount, "name": text or original, "note": note, "original": original,
+                     "category": category or categorize(text), "qty": _number(quantity) if amount_qty else None,
+                     "qty_min": _number(low), "unit_one": _unit_text(unit, 1), "unit_many": _unit_text(unit, 2)})
     return rows
+
+
+def _number(value):
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def grouped_ingredients(recipe, user):
+    """The recipe's rows grouped for display - by the person's "Group by" (ingredients.mode_for) - with the mode and
+    whether the recipe has its own sections (the toggle shows on every recipe; its label says what Recipe order
+    keeps)."""
+    from .ingredients import group_rows, has_sections, mode_for
+    rows = ingredient_rows(recipe.ingredients)
+    mode = mode_for(user, recipe.ingredients)
+    return {"mode": mode, "groups": group_rows(rows, mode), "rows": rows,
+            "has_sections": has_sections(recipe.ingredients)}
 
 
 def _times(recipe):
@@ -87,12 +118,24 @@ def _times(recipe):
     return " · ".join(parts)
 
 
-def recipe_json(recipe, rating=None):
+def _flat_groups(recipe, user):
+    """The quick view's rows, grouped like the recipe page: a label row ({"section": "Produce", "cat": true} for a
+    category) before each group's ingredients."""
+    from .ingredients import group_rows, mode_for
+    out = []
+    for group in group_rows(ingredient_rows(recipe.ingredients), mode_for(user, recipe.ingredients)):
+        if group["label"]:
+            out.append({"section": group["label"], "cat": bool(group["category"])})
+        out += [{k: v for k, v in row.items() if k not in ("index", "original")} for row in group["rows"]]
+    return out
+
+
+def recipe_json(recipe, rating=None, user=None):
     return {
         "title": recipe.title, "description": recipe.description or "", "times": _times(recipe),
         "servings": recipe.servings or None,
         "rating": {"emoji": rating.emoji, "label": rating.get_level_display()} if rating else None,
-        "ingredients": [{k: v for k, v in row.items() if k not in ("index", "original")} for row in ingredient_rows(recipe.ingredients)],
+        "ingredients": _flat_groups(recipe, user),
         "steps": importer.step_groups(recipe.steps),
         "url": reverse("albright_meals:recipe", args=[recipe.pk]),
     }
@@ -119,7 +162,7 @@ def payload(entry, user, ratings=None, full=True):
     }
     if recipe is not None:
         if full:
-            data["recipe"] = recipe_json(recipe, (ratings or {}).get(recipe.pk))
+            data["recipe"] = recipe_json(recipe, (ratings or {}).get(recipe.pk), user)
         else:
             data["recipeUrl"] = reverse("albright_meals:plan_quick", args=[entry.pk])
     return data

@@ -53,6 +53,7 @@
 .sr-ing__row:last-child { border-bottom: 0; }
 .sr-ing__amt { flex: 0 0 86px; color: var(--sr-orange-soft); font-weight: 600; font-variant-numeric: tabular-nums; }
 .sr-ing__name { min-width: 0; overflow-wrap: anywhere; }
+.sr-ing__row--noamt .sr-ing__name { flex: 1; }          /* no amount: the name starts at the left edge */
 .sr-ing__name em { color: var(--sr-muted); font-style: normal; font-size: 13px; }
 .sr-ing__section { padding: 14px 0 4px; font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); font-weight: 600; }
 
@@ -118,3 +119,9 @@
   .sr-nutrition__grid div { background: none; box-shadow: inset 0 0 0 1px #e6e0d4; }
   .sr-steps li, .sr-ing__row { break-inside: avoid; }
 }
+
+/* Category labels (albright_meals.ingredients): small, uppercase, Meals orange. */
+.sr-ing__section--cat { color: var(--sr-orange); opacity: 0.9; letter-spacing: 0.1em; }
+.sr-ing > .sr-ing__section:first-child { padding-top: 2px; }
+.sr-ing__section + .sr-ing__row { border-top: 0; }
+@media print { .sr-ing__section--cat { color: #9a5a1f; } }

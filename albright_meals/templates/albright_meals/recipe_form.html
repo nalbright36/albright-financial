@@ -19,6 +19,19 @@
             {% if field.name == "ingredients_text" %}<small class="meals-hint">Like the grocery list: "2 lb chicken thighs", "1 onion, diced".</small>{% endif %}
             {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
         </div>
+        {% if field.name == "ingredients_text" and category_rows %}
+        {# Each ingredient's category (albright_meals.ingredients): it groups the recipe page and the grocery list. Matched to the line it belongs to, so editing the text above keeps the others. #}
+        <fieldset class="meals-cats" id="ingredient-categories">
+            <legend>Categories</legend>
+            <p class="meals-hint">Where each ingredient goes on the recipe page and the grocery list. New lines get one when you save.</p>
+            <ul class="meals-cats__list">{% for row in category_rows %}
+                <li class="meals-cats__row"><input type="hidden" name="cat_line" value="{{ row.line }}">
+                    <label for="cat-{{ forloop.counter }}" class="meals-cats__name">{{ row.line }}</label>
+                    <select name="cat" id="cat-{{ forloop.counter }}" class="ledger-input meals-cats__select">{% for key, label in categories %}<option value="{{ key }}"{% if key == row.category %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></li>{% endfor %}
+            </ul>
+            {% if ai_categories %}<button type="submit" name="ai_categories" value="1" class="btn btn-secondary btn-sm" id="ai-categories" formnovalidate>Ask my AI assistant about the {{ ai_categories }} in Other</button>{% endif %}
+        </fieldset>
+        {% endif %}
         {% endfor %}
         {% if not recipe %}{% include "albright_labs/_share.html" %}{% endif %}
         <button type="submit" class="btn btn-primary">Save recipe</button>

@@ -629,9 +629,11 @@
     function ingredientsHtml(rows) {
         if (!rows.length) return '<p class="pl-muted">No ingredients listed.</p>';
         return '<ul class="ing-list">' + rows.map(function (r) {
-            if (r.section) return '<li class="ing-section">' + esc(r.section) + "</li>";
-            return '<li class="ing" data-ing-check tabindex="0" role="checkbox" aria-checked="false"><span class="ing__amt">' + esc(r.amount) +
-                '</span><span class="ing__name">' + esc(r.name) + (r.note ? ' <span class="ing__note">' + esc(r.note) + "</span>" : "") + "</span></li>";
+            if (r.section) return '<li class="ing-section' + (r.cat ? " ing-section--cat" : "") + '">' + esc(r.section) + "</li>";
+            // Grouped like the recipe page (albright_meals.ingredients); no amount: the name starts at the left edge.
+            return '<li class="ing' + (r.amount ? "" : " ing--noamt") + '" data-ing-check tabindex="0" role="checkbox" aria-checked="false">' +
+                (r.amount ? '<span class="ing__amt">' + esc(r.amount) + "</span>" : "") +
+                '<span class="ing__name">' + esc(r.name) + (r.note ? ' <span class="ing__note">' + esc(r.note) + "</span>" : "") + "</span></li>";
         }).join("") + "</ul>";
     }
     function stepsHtml(groups) {
