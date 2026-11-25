@@ -46,7 +46,7 @@ class OnListTests(Base):
         groceries.add_recipes(self.space, [chili], user=self.owner)
         tacos = self.recipe("Tacos", TACOS)
         html = page(self.client, tacos)
-        beef = html.split('value="0"', 1)[1].split("</li>", 1)[0]
+        beef = html.split('name="ingredient" value="0"', 1)[1].split("</li>", 1)[0]
         self.assertIn("On list: 1 lb (from Chili)", beef)
         self.assertNotIn("checked", html.split('name="ingredient" value="0"', 1)[1].split(">", 1)[0])
         onions = html.split('name="ingredient" value="2"', 1)[1].split("</li>", 1)[0]

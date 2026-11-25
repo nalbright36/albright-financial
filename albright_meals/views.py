@@ -27,7 +27,7 @@ from albright_labs import circles, quick, sharing, sheet
 from albright_labs.text import plural
 from albright_labs.models import ShareGrant
 
-from . import groceries, importer, meal_view, plan, recipe_nutrition, scope, signals
+from . import groceries, importer, meal_view, plan, recipe_attachments, recipe_nutrition, scope, signals
 from . import ingredients as ingredient_categories
 from .forms import (EntryForm, IdeaForm, ImportLinkForm, ImportPreviewForm, MealsSettingsForm, PlanSlotForm,
                     RecipeForm)
@@ -645,7 +645,8 @@ def recipe(request, pk):
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
         "nutrition": getattr(obj, "nutrition", None), "per_serving": recipe_nutrition.per_serving(getattr(obj, "nutrition", None)),
         "can_log": _can_log(request.user), "diary_slots": _diary_slots(), "today": timezone.localdate(),
-        "picked_count": sum(1 for i in ingredients if i.get("pick_name") and not i["on_list"])})
+        "picked_count": sum(1 for i in ingredients if i.get("pick_name") and not i["on_list"]),
+        **recipe_attachments.context(request.user, obj, editable)})
 
 
 @login_required

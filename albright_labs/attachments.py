@@ -1,4 +1,4 @@
-"""Attachments - files and photos on Planner tasks and notes. Every rule is here; the views (attachment_views) and
+"""Attachments - files and photos on Planner tasks, notes and recipes. Every rule is here; the views (attachment_views) and
 templates (albright_labs/_attachments.html) only call it. The bytes go through attachment_storage.
 
 Who: seeing a task or note (sharing.can_view - the owner, or a person or circle it's shared with) lets you see and
@@ -62,7 +62,7 @@ JPEG_QUALITY = 88
 
 # The two kinds of parent: the apps_registry key in the upload form -> the model label.
 PARENTS = {"planner": "albright_planner.ScheduleItem", "notes": "albright_notes.Note",
-           "assistant": "albright_assistant.Message"}
+           "assistant": "albright_assistant.Message", "meals": "albright_meals.Recipe"}
 
 IMAGE_TYPES = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "gif": "GIF", "webp": "WEBP", "heic": "HEIF", "heif": "HEIF"}
 # Pillow's format -> how we store it. MPO is a multi-frame JPEG (some phones); HEIC is HEIF.
@@ -124,6 +124,10 @@ def can_view(user, parent):
     from . import sharing
     if _is_chat_message(parent):                       # an assistant photo: the chat's owner only
         return bool(user and user.is_authenticated and parent.chat.user_id == user.pk)
+    if parent is not None and parent._meta.label == PARENTS.get("meals"):
+        # Library readers and view-only shares can see a recipe's photos; anonymous visitors cannot
+        # (public share links are a separate path and do not use this).
+        return bool(hasattr(parent, "can_view") and parent.can_view(user))
     return parent is not None and sharing.can_view(user, parent)
 
 
@@ -323,7 +327,8 @@ def add(user, parent, upload):
     """Check, process and store one upload on `parent` (the caller has checked edit access). Returns the
     Attachment, or raises AttachmentError."""
     if for_parent(parent).count() >= max_per_parent():
-        noun = {PARENTS["notes"]: "note", PARENTS["assistant"]: "message"}.get(parent._meta.label, "task")
+        noun = {PARENTS["notes"]: "note", PARENTS["assistant"]: "message",
+                PARENTS["meals"]: "recipe"}.get(parent._meta.label, "task")
         raise AttachmentError(f"A {noun} can have at most {max_per_parent()} attachments.")
     usage = storage.get_storage_usage(user)
     if usage["full"]:                                   # already full: say so before any processing

@@ -2,10 +2,18 @@
 {% load cache_bust %}
 {% block page_title %}{{ recipe.title }} · {% endblock %}
 {% block fab_items %}{% include "albright_meals/_converter_fab.html" %}{% endblock %}
+{% block app_head %}
+<link rel="stylesheet" href="{% static_version 'labs/attachments.css' %}">
+<link rel="stylesheet" href="{% static_version 'meals/recipe_attachments.css' %}">
+{% endblock %}
+{% block app_scripts %}
+<script src="{% static_version 'labs/attachments.js' %}" defer></script>
+<script src="{% static_version 'meals/recipe_attachments.js' %}" defer></script>
+{% endblock %}
 {% block content %}
 <div class="container meals-page meals-narrow">
     <a href="{% url 'albright_meals:recipes' %}{% if not owned %}?tab={% if shared_grant %}shared{% else %}library{% endif %}{% endif %}" class="meals-back">&larr; Recipes</a>
-    <article class="meals-recipe">
+    <article class="meals-recipe" data-att>
         {# Not in my spaces (the library, or shared with me): "Save to my recipes" makes my own copy. #}
         {% if not owned %}<div class="card meals-readonly" id="recipe-readonly">
             <p>{% if shared_grant %}<strong>{{ shared_grant.created_by.first_name|default:shared_grant.created_by.username|default:"Someone" }}</strong> shared this with you{% else %}From the <strong>Recipe library</strong>{% endif %} &middot; {{ recipe.space.label }}'s recipe, {% if editable %}you can edit it{% else %}read-only{% endif %}.</p>
@@ -38,7 +46,7 @@
         </div>
         {% if source_link %}<p class="meals-source" id="recipe-source">Source: <a href="{{ source_link }}" target="_blank" rel="noopener noreferrer nofollow">{{ recipe.source_name|default:source_host }}</a>{% if recipe.author %} &middot; by {{ recipe.author }}{% endif %}</p>{% elif recipe.author %}<p class="meals-source">By {{ recipe.author }}</p>{% endif %}
         {% if recipe.needs_review %}<p class="meals-hint">The AI read this recipe from the page's text because the page had no recipe data - check it against the original, then untick "Needs review" in Edit.</p>{% endif %}
-        {% if recipe.image_url %}<img src="{{ recipe.image_url }}" alt="" class="meals-recipe__image" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        {% include "albright_meals/_recipe_photos.html" %}
         {% if recipe.description %}<p>{{ recipe.description|linebreaksbr }}</p>{% endif %}
         {% if standard_tags %}<div class="meals-tags meals-tags--standard" id="recipe-standard-tags">{% for label in standard_tags %}<span class="meals-tag meals-tag--standard">{{ label }}</span>{% endfor %}</div>{% endif %}
         {% if recipe.tags %}<div class="meals-tags">{% for t in recipe.tags %}<a href="{% url 'albright_meals:recipes' %}?tag={{ t|urlencode }}" class="meals-tag">{{ t }}</a>{% endfor %}</div>{% endif %}

@@ -9,3 +9,5 @@ class AlbrightMealsConfig(AppConfig):
     def ready(self):
         from . import signals
         signals.connect()               # activity in circle kitchens (albright_labs.activity)
+        from . import recipe_attachments
+        recipe_attachments.connect()    # drop stale photo links after a recipe is edited

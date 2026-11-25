@@ -80,6 +80,8 @@ class Recipe(_Authored):
     source_name = models.CharField(max_length=120, blank=True)   # "Serious Eats" - the credit line
     author = models.CharField(max_length=200, blank=True)
     image_url = models.URLField(max_length=500, blank=True)
+    # When True, the header uses image_url even if photos have been uploaded (Change cover → Imported photo).
+    prefer_imported_cover = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
     needs_review = models.BooleanField(default=False, help_text="Read from the page's text by the AI - check it.")
     imported_at = models.DateTimeField(null=True, blank=True)
@@ -106,6 +108,26 @@ class Recipe(_Authored):
     def total_minutes(self):
         total = (self.prep_minutes or 0) + (self.cook_minutes or 0)
         return self.total_time_minutes or total or None
+
+    def can_view(self, user):
+        """True when this person may read the recipe: they see its space, it is in the Recipe library, or it
+        is shared with them (albright_labs.sharing). Anonymous visitors cannot; public share links are a
+        separate path that does not use this."""
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        from albright_labs import sharing
+        from .scope import space_ids
+        return (self.space_id in space_ids(user) or self.visibility == self.LIBRARY
+                or sharing.can_view(user, self))
+
+    def can_edit(self, user):
+        """True when this person may change the recipe (and add or remove its photos): they see its space,
+        or it is shared with them to edit. A library or view-only share is read-only."""
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        from albright_labs import sharing
+        from .scope import space_ids
+        return self.space_id in space_ids(user) or sharing.can_edit(user, self)
 
 
 class RecipeRating(models.Model):
@@ -422,3 +444,31 @@ class RecipeShareSettings(models.Model):
     @property
     def join_apps(self):
         return ["meals"] + [key for key in (self.apps or []) if key != "meals"]
+
+
+class RecipeAttachment(models.Model):
+    """Meals-only metadata for one file on a recipe. The file itself is albright_labs.Attachment
+    (parent: this recipe). Cover, the original recipe-card flag, and links to an ingredient or a step
+    live here so Notes and Planner attachments stay unchanged."""
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="media")
+    attachment = models.OneToOneField("albright_labs.Attachment", on_delete=models.CASCADE,
+                                      related_name="recipe_meta")
+    is_cover = models.BooleanField(default=False)
+    is_recipe_card = models.BooleanField(default=False)
+    # The stable id on an ingredient dict (albright_meals.ingredients.normalize). Empty: not pinned to a line.
+    ingredient_id = models.CharField(max_length=16, blank=True)
+    # Index in recipe.steps of a real step (not a '## ' heading). step_text is a snapshot used to retarget
+    # or drop the link if the list is edited (recipe_attachments.cleanup_links).
+    step_index = models.PositiveIntegerField(null=True, blank=True)
+    step_text = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["recipe"], condition=models.Q(is_cover=True),
+                                    name="meals_one_recipe_cover"),
+            models.UniqueConstraint(fields=["recipe"], condition=models.Q(is_recipe_card=True),
+                                    name="meals_one_recipe_card"),
+        ]
+
+    def __str__(self):
+        return f"photo on {self.recipe_id}"

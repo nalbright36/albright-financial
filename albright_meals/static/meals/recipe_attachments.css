@@ -1,0 +1,83 @@
+/* Photos on a recipe (Option C): a 180px dish header, Change cover + Recipe card overlays,
+   Add files from the shared attachment section, and (e2) thumbs beside ingredients / under steps.
+   Mobile-first. Editor-only controls stay in the template; this file only styles them. */
+
+.ra-photos { margin: var(--space-3) 0 12px; }
+.ra-headpic { position: relative; margin: 0 0 12px; }
+.ra-headpic__link, .ra-headpic__img { display: block; }
+.ra-headpic img {
+    width: 100%; height: 180px; object-fit: cover;
+    border-radius: var(--radius-md); display: block;
+    background: var(--surface-raised);
+}
+.ra-headpic__bar {
+    position: absolute; left: 8px; right: 8px; bottom: 8px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    pointer-events: none;
+}
+.ra-headpic__bar > * { pointer-events: auto; }
+.ra-card-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-height: 40px; padding: 4px 10px 4px 4px;
+    border-radius: 10px; border: 1px solid transparent;
+    background: rgba(0, 0, 0, 0.62); color: #fff;
+    font: inherit; font-size: var(--text-sm); font-weight: 600;
+    text-decoration: none;
+}
+.ra-card-btn:hover, .ra-card-btn:focus-visible { color: #fff; background: rgba(0, 0, 0, 0.78); }
+.ra-card-btn img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; display: block; }
+
+.ra-cover-details { margin-left: auto; position: relative; }
+.ra-cover-btn, .ra-cover-details > summary.ra-cover-btn {
+    list-style: none; cursor: pointer;
+    min-height: 32px; padding: 0 10px; border-radius: 999px;
+    border: 1px solid transparent; background: rgba(0, 0, 0, 0.62); color: #fff;
+    font: inherit; font-size: 0.75rem; font-weight: 600;
+}
+.ra-cover-details > summary.ra-cover-btn::-webkit-details-marker { display: none; }
+.ra-cover-details[open] > summary.ra-cover-btn { background: rgba(0, 0, 0, 0.85); }
+
+.ra-picker {
+    position: absolute; right: 0; bottom: calc(100% + 8px);
+    z-index: 5; width: min(280px, calc(100vw - 32px));
+    max-height: 280px; overflow: auto;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-solid, var(--surface));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    color: var(--text-primary);
+}
+.ra-picker__label {
+    margin: 8px 0 6px; font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary);
+}
+.ra-picker__label:first-child { margin-top: 0; }
+.ra-picker__row { margin: 0 0 4px; }
+.ra-picker__opt {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    min-height: 40px; padding: 4px 8px 4px 4px;
+    border-radius: 8px; border: 1px solid transparent;
+    background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.ra-picker__opt img { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
+.ra-picker__opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ra-picker__opt:hover, .ra-picker__opt.is-on { background: var(--accent-soft, rgba(249, 115, 22, 0.15)); }
+.ra-picker__opt.is-on { box-shadow: inset 0 0 0 1px var(--accent, #F97316); }
+
+.ra-headpic__delete {
+    position: absolute; top: 8px; right: 8px; z-index: 2;
+}
+.ra-headpic__delete .att__delete { margin: 0; }
+.ra-headpic__delete .att__trash {
+    background: rgba(0, 0, 0, 0.55); color: #fff; border-color: transparent;
+    width: 34px; height: 34px;
+}
+.ra-headpic__delete .att__confirm {
+    background: rgba(0, 0, 0, 0.78); color: #fff;
+    border-radius: 8px; padding: 6px 8px;
+}
+
+/* Shared Add files block sits under the header on this page. */
+.ra-photos .att { margin: 0; padding: 0; border: 0; background: transparent; }
+.ra-photos .att__label { font-size: var(--text-sm); }

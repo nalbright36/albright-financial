@@ -1,0 +1,83 @@
+{% comment %}
+Option C header + Add files (albright_meals.recipe_attachments.context). Cover photo (flagged, else the first
+upload, else the imported image_url). Change cover and the recipe-card flag are editor-only; view-only readers
+still see the header and the Recipe card button (it opens the existing swipe viewer). Delete uses the shared
+confirm (albright_labs/_attachment_delete.html). Wrapped by the article's data-att so the viewer can swipe.
+{% endcomment %}
+{% if recipe_cover.kind != "none" or recipe_att.count or recipe_photos_editable %}
+<div class="ra-photos" id="recipe-photos">
+    {% if recipe_cover.kind != "none" %}
+    <div class="ra-headpic">
+        {% if recipe_cover.kind == "attachment" %}
+        <a href="{{ recipe_cover.url }}" class="ra-headpic__link" data-att-view data-full="{{ recipe_cover.url }}" data-name="{{ recipe_cover.name|default:recipe.title }}">
+            <img src="{{ recipe_cover.url }}" alt="{{ recipe.title }}">
+        </a>
+        {% else %}
+        <img src="{{ recipe_cover.url }}" alt="{{ recipe.title }}" class="ra-headpic__img" loading="lazy" referrerpolicy="no-referrer">
+        {% endif %}
+        <div class="ra-headpic__bar">
+            {% if recipe_card %}
+            <a href="{{ recipe_card.url }}" class="ra-card-btn" data-att-view data-full="{{ recipe_card.url }}" data-name="{{ recipe_card.name }}" aria-label="Open the original recipe card">
+                <img src="{{ recipe_card.thumb_url }}" alt="">
+                <span>Recipe card</span>
+            </a>
+            {% endif %}
+            {% if recipe_photos_editable %}
+            <details class="ra-cover-details">
+                <summary class="ra-cover-btn">Change cover</summary>
+                <div class="ra-picker">
+                    <p class="ra-picker__label">Cover photo</p>
+                    {% if recipe.image_url %}
+                    <form method="post" action="{% url 'albright_meals:recipe_attachment_cover' recipe.pk %}" class="ra-picker__row">{% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <input type="hidden" name="attachment" value="image_url">
+                        <button type="submit" class="ra-picker__opt{% if recipe_cover.kind == 'image_url' %} is-on{% endif %}">
+                            <img src="{{ recipe.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                            <span>Imported photo</span>
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% for a in recipe_att.images %}
+                    <form method="post" action="{% url 'albright_meals:recipe_attachment_cover' recipe.pk %}" class="ra-picker__row">{% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <input type="hidden" name="attachment" value="{{ a.id }}">
+                        <button type="submit" class="ra-picker__opt{% if recipe_cover.id == a.id %} is-on{% endif %}">
+                            <img src="{{ a.thumb_url }}" alt="">
+                            <span>{{ a.name }}</span>
+                        </button>
+                    </form>
+                    {% empty %}
+                    {% if not recipe.image_url %}<p class="meals-hint">Add a photo first, then pick it as the cover.</p>{% endif %}
+                    {% endfor %}
+                    <p class="ra-picker__label">Recipe card</p>
+                    {% for a in recipe_att.images %}
+                    <form method="post" action="{% url 'albright_meals:recipe_attachment_card' recipe.pk %}" class="ra-picker__row">{% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <input type="hidden" name="attachment" value="{{ a.id }}">
+                        <button type="submit" class="ra-picker__opt{% if recipe_card and recipe_card.id == a.id %} is-on{% endif %}">
+                            <img src="{{ a.thumb_url }}" alt="">
+                            <span>{% if recipe_card and recipe_card.id == a.id %}Card: {% endif %}{{ a.name }}</span>
+                        </button>
+                    </form>
+                    {% empty %}
+                    <p class="meals-hint">Add a photo of the original card, then pick it here.</p>
+                    {% endfor %}
+                    {% if recipe_card %}
+                    <form method="post" action="{% url 'albright_meals:recipe_attachment_card' recipe.pk %}">{% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <input type="hidden" name="attachment" value="clear">
+                        <button type="submit" class="btn btn-secondary btn-sm">Clear recipe card</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
+        {% if recipe_photos_editable and recipe_cover.delete_url %}
+        <div class="ra-headpic__delete">{% include "albright_labs/_attachment_delete.html" with a=recipe_cover %}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% include "albright_labs/_attachments.html" with att=recipe_att att_omit_data_att=True %}
+</div>
+{% endif %}
