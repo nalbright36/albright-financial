@@ -681,7 +681,9 @@ def _site_name(meta, node, blocks, index, page_url):
         if "website" in _types(other) and _first_text(other.get("name")):
             return _first_text(other.get("name"))[:120]
     host = (urlsplit(page_url).hostname or "").lower()
-    return host[4:] if host.startswith("www.") else host
+    if host.startswith("www."):
+        host = host[4:]
+    return host[:120]
 
 
 def _from_schema(node, page_url, meta, blocks, index):
@@ -812,7 +814,7 @@ def ai_extract(html_text, page_url, client=None):
         "total_time_minutes": iso_minutes(checked("total_time", 100)),
         "image_url": _image(meta["image"], page_url, None),
         "author": checked("author"),
-        "source_name": meta["site_name"][:120] or (host[4:] if host.startswith("www.") else host),
+        "source_name": meta["site_name"][:120] or (host[4:] if host.startswith("www.") else host)[:120],
         "source_url": clean_url(meta["canonical"] or page_url)[:500],
         "page_url": page_url,
         "needs_review": True,

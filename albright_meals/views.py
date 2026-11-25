@@ -12,7 +12,7 @@ from urllib.parse import urlencode, urlsplit
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import DataError, IntegrityError, transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -919,8 +919,19 @@ def recipe_import_save(request):
             return quick.ok(f"Already saved: {existing.title}", reverse("albright_meals:recipe", args=[existing.pk]))
         messages.info(request, f"Already saved: {existing.title}.")
         return redirect("albright_meals:recipe", pk=existing.pk)
-    with transaction.atomic():
-        saved = importer.save_new({**data, **form.recipe_fields(data)}, request.space, user=request.user)
+    try:
+        with transaction.atomic():
+            saved = importer.save_new({**data, **form.recipe_fields(data)}, request.space, user=request.user)
+    except (DataError, IntegrityError):
+        # Belt and suspenders: Recipe.save trims overlong imported fields, but a leftover bad value
+        # must not 500. Show the preview again so they can fix it.
+        message = "Couldn't save that recipe - check the title, times and links, then try again."
+        if quick.wanted(request):
+            return quick.error(message)
+        form.add_error(None, message)
+        return render(request, "albright_meals/recipe_import.html", {
+            "import_status": "needs_review" if data["needs_review"] else "preview", "import_data": data,
+            "import_form": form, "import_url": data.get("page_url", "")})
     imports.pop(import_id, None)
     request.session[IMPORTS_SESSION_KEY] = imports
     if quick.wanted(request):
@@ -939,6 +950,8 @@ def recipe_reimport(request, pk):
         importer.reimport(obj)
     except importer.RecipeImportError as exc:
         messages.error(request, f"Couldn't re-import: {exc.message} Nothing was changed.")
+    except (DataError, IntegrityError):
+        messages.error(request, "Couldn't re-import: the page had a value that wouldn't save. Nothing was changed.")
     else:
         messages.success(request, f"Re-imported {obj.title} from {obj.source_name or 'its source'}."
                                   + (" It's marked \"Needs review\"." if obj.needs_review else ""))

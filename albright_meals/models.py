@@ -93,15 +93,58 @@ class Recipe(_Authored):
     def __str__(self):
         return self.title
 
+    def _fit_columns(self, names=None):
+        """Trim Char/URL fields and clamp servings/minutes so Postgres never raises DataError on save
+        (imports can bring a long image URL, author, or site name, or a servings count that overflows
+        smallint). names=None means every field; otherwise only those being written."""
+        from .importer import MAX_MINUTES
+        changed = []
+        fields = {f.name: f for f in self._meta.concrete_fields}
+        for name in list(names if names is not None else fields):
+            field = fields.get(name)
+            if field is None:
+                continue
+            value = getattr(self, field.name)
+            if (isinstance(field, models.CharField) and field.max_length
+                    and isinstance(value, str) and len(value) > field.max_length):
+                setattr(self, field.name, value[:field.max_length])
+                changed.append(field.name)
+        if names is None or "servings" in names:
+            try:
+                n = int(self.servings) if self.servings is not None else None
+            except (TypeError, ValueError):
+                n = None
+            fitted = n if n is not None and 1 <= n <= 100 else None
+            if fitted != self.servings:
+                self.servings = fitted
+                changed.append("servings")
+        for name in ("prep_minutes", "cook_minutes", "total_time_minutes"):
+            if names is not None and name not in names:
+                continue
+            value = getattr(self, name)
+            try:
+                n = int(value) if value is not None else None
+            except (TypeError, ValueError):
+                n = None
+            fitted = n if n is not None and 0 <= n <= MAX_MINUTES else None
+            if fitted != value:
+                setattr(self, name, fitted)
+                changed.append(name)
+        return changed
+
     def save(self, *args, **kwargs):
         from .importer import normalize_url
         from .ingredients import normalize_list
+        update = kwargs.get("update_fields")
+        # Clip only the columns this save will write, then add any clipped names so a partial save
+        # still stores the fitted values (an import that only updates source_url included).
+        changed = self._fit_columns(None if update is None else set(update))
         self.source_key = normalize_url(self.source_url)[:500] if self.source_url else ""
         # Every way a recipe is saved (the form, imports, the Bot API, the assistant): each ingredient split into
         # amount / unit / name / note with its original line kept, and given a category (ingredients.py).
         self.ingredients = normalize_list(self.ingredients)
-        if kwargs.get("update_fields") is not None and "source_url" in kwargs["update_fields"]:
-            kwargs["update_fields"] = {*kwargs["update_fields"], "source_key"}
+        if update is not None:
+            kwargs["update_fields"] = {*update, *changed, *(("source_key",) if "source_url" in update else ())}
         super().save(*args, **kwargs)
 
     @property

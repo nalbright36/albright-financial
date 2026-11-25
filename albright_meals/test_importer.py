@@ -12,7 +12,9 @@ connect-time check), the size and time limits, duplicate links with tracking
 parameters, re-import, the preview/save flow, adding to the grocery list,
 and the Bot API endpoint with and without its scope."""
 import json
+import re
 import socket
+from html import unescape
 from pathlib import Path
 from unittest import mock
 
@@ -31,6 +33,7 @@ from .tests import API, Base
 
 FIXTURES = Path(__file__).parent / "test_fixtures"
 CHILI_URL = "https://www.examplekitchen.com/recipes/weeknight-chili/"
+JOCOOKS_URL = "https://www.jocooks.com/recipes/polish-kolaczki/"
 PUBLIC_IP = "93.184.216.34"
 PRIVATE_HOSTS = {"localhost": "127.0.0.1", "internal.example": "10.0.0.8", "metadata.example": "169.254.169.254",
                  "rebind.example": "127.0.0.1", "v6local.example": "::1"}
@@ -218,6 +221,20 @@ class ParsingTests(SimpleTestCase):
         self.assertEqual(importer.normalize_url("https://x.example/r?b=2&utm_campaign=z&a=1"), "x.example/r?a=1&b=2")
         self.assertNotEqual(importer.normalize_url("https://x.example/r?id=1"), importer.normalize_url("https://x.example/r?id=2"))
         self.assertEqual(importer.clean_url("https://X.example/Path?utm_source=a&id=3#top"), "https://x.example/Path?id=3")
+
+    def test_source_name_from_a_long_host_fits_the_column(self, _dns):
+        """No og:site_name: the host is used as the credit line, and must fit source_name (120)."""
+        host = "www." + ("very-long-name-" * 10) + ".example.com"
+        self.assertGreater(len(host[4:]), 120)
+        html = (
+            '<html><head><script type="application/ld+json">'
+            '{"@context":"https://schema.org","@type":"Recipe","name":"Soup",'
+            '"recipeIngredient":["1 onion"],"recipeInstructions":["Cook."]}'
+            "</script></head><body></body></html>"
+        )
+        recipe = importer.parse_recipe_html(html, f"https://{host}/soup")
+        self.assertLessEqual(len(recipe["source_name"]), 120)
+        self.assertTrue(recipe["source_name"].startswith("very-long-name-"))
 
 
 @mock.patch("albright_meals.importer.socket.getaddrinfo", side_effect=fake_getaddrinfo)
@@ -410,6 +427,18 @@ def fetching(html, final_url=CHILI_URL):
     return mock.patch("albright_meals.importer.fetch", return_value=(final_url, html))
 
 
+def preview_fields(html_out):
+    """The preview form's fields as the browser would post them (hidden inputs + textareas)."""
+    fields = {}
+    for name, value in re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"', html_out):
+        fields[name] = unescape(value)
+    for value, name in re.findall(r'<input[^>]*value="([^"]*)"[^>]*name="([^"]+)"', html_out):
+        fields.setdefault(name, unescape(value))
+    for name, content in re.findall(r'<textarea[^>]*name="([^"]+)"[^>]*>(.*?)</textarea>', html_out, re.S):
+        fields[name] = unescape(content)
+    return fields
+
+
 class WebsiteImportTests(Base):
     XHR = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
 
@@ -484,6 +513,64 @@ class WebsiteImportTests(Base):
         self.assertContains(detail, '<span class="ing__amt">2 lb</span><span class="ing__name">ground beef</span></label>')   # a tickable ingredient
         self.assertContains(detail, 'id="recipe-reimport"')
         self.assertNotContains(detail, "Needs review")
+
+    def test_import_then_save_jocooks_kolaczki(self):
+        """The URL that 500'd on the live site: import fills the preview, Save recipe posts it as the browser would."""
+        with fetching(fixture("jocooks_kolaczki.html"), JOCOOKS_URL):
+            data = self.preview(JOCOOKS_URL).json()
+        self.assertEqual(data["status"], "preview")
+        fields = preview_fields(data["html"])
+        self.assertEqual(fields["title"], "Polish Kolaczki")
+        self.assertEqual(fields["servings"], "24")
+        self.assertEqual(fields["total_time_minutes"], "100")
+        response = self.client.post(reverse("albright_meals:recipe_import_save"), fields)
+        recipe = Recipe.objects.get()
+        self.assertRedirects(response, reverse("albright_meals:recipe", args=[recipe.pk]), fetch_redirect_response=False)
+        self.assertEqual((recipe.title, recipe.servings, recipe.prep_minutes, recipe.cook_minutes,
+                          recipe.total_time_minutes, recipe.author, recipe.source_name),
+                         ("Polish Kolaczki", 24, 25, 15, 100, "Joanna Cismaru", "Jo Cooks"))
+        self.assertEqual(recipe.source_url, JOCOOKS_URL)
+        self.assertEqual(recipe.image_url, "https://www.jocooks.com/wp-content/uploads/2025/12/polish-kolaczki-1-3.jpg")
+        self.assertEqual(len(recipe.ingredients), 6)
+        self.assertEqual(len(recipe.steps), 7)
+        self.assertEqual(self.client.get(reverse("albright_meals:recipe", args=[recipe.pk])).status_code, 200)
+
+    def test_overlong_imported_fields_are_trimmed_instead_of_500(self):
+        """Session-only fields (image, author, site name, source URL) are not on the preview form; a value
+        longer than the column used to 500 on Postgres when Save recipe ran."""
+        with fetching(fixture("jsonld_graph.html")):
+            html = self.preview().json()["html"]
+        import_id = html.split('name="import_id" value="', 1)[1].split('"', 1)[0]
+        session = self.client.session
+        stored = dict(session["meals_imports"][import_id])
+        stored["image_url"] = "https://cdn.example.com/photo.jpg?" + "x" * 600
+        stored["author"] = "A" * 300
+        stored["source_name"] = "N" * 200
+        stored["source_url"] = CHILI_URL + "?" + "q" * 600
+        session["meals_imports"] = {import_id: stored}
+        session.save()
+        response = self.client.post(reverse("albright_meals:recipe_import_save"), {
+            "import_id": import_id, "title": "Chili", "servings": "6", "ingredients_text": "1 onion",
+            "steps_text": "Cook."})
+        self.assertEqual(response.status_code, 302, response.content[:500])
+        recipe = Recipe.objects.get()
+        self.assertLessEqual(len(recipe.image_url), 500)
+        self.assertEqual(recipe.author, "A" * 200)
+        self.assertEqual(recipe.source_name, "N" * 120)
+        self.assertLessEqual(len(recipe.source_url), 500)
+        self.assertEqual(recipe.title, "Chili")
+
+    def test_out_of_range_servings_and_minutes_do_not_500(self):
+        """A servings count or duration that overflows Postgres (smallint/int) is dropped, not a 500."""
+        recipe = Recipe(space=self.space, title="Huge", servings=99999, prep_minutes=10**12,
+                        cook_minutes=-1, total_time_minutes=10081)  # MAX_MINUTES is 10080
+        recipe.save()
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.title, "Huge")
+        self.assertIsNone(recipe.servings)
+        self.assertIsNone(recipe.prep_minutes)
+        self.assertIsNone(recipe.cook_minutes)
+        self.assertIsNone(recipe.total_time_minutes)
 
     def test_preview_without_js_is_its_own_page(self):
         with fetching(fixture("microdata.html"), "https://oldfamily.example/pancakes"):
