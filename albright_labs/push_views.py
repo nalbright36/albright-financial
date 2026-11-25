@@ -88,7 +88,7 @@ def remove(request, pk):
 # The app shell the worker saves at install (offline viewing - albright_labs.offline): with cache_bust's ?v=, the same
 # URLs the pages ask for. The fonts' CSS and files are saved the first time a page loads them.
 SHELL = ("style.css", "labs/launcher.css", "labs/launcher.js", "labs/text.js", "labs/push.js", "labs/offline.js", "labs/offline_view.js",
-         "labs/sync_core.js", "labs/sync.js",
+         "labs/sync_core.js", "labs/sync.js", "labs/search.css", "labs/search.js",
          "js/app_nav.js", "js/menu.js", "js/md_editor.js", "js/fab_dock.js", "labs/quicksave.js", "labs/notifications.js",
          "labs/share.js", "icons/logo-mark-white.png", "icons/logo-mark-dark.png", "icons/icon-192.png",
          "icons/favicon-32.png")

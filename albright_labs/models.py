@@ -195,6 +195,8 @@ class UserPreference(models.Model):
     opps_seen_at = models.DateTimeField(null=True, blank=True)
     # My account > Offline data: keep a read-only copy (pages and the snapshot) on their devices (albright_labs.offline).
     offline_enabled = models.BooleanField(default=True)
+    # The search palette's recent searches (albright_labs.search_views), newest first, at most 8.
+    recent_searches = models.JSONField(default=list, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

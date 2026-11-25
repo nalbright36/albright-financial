@@ -72,6 +72,7 @@ api_urlpatterns = [
     path("notes/<int:note_id>", notes_api.note_item, name="note"),
     # Read helpers across apps (albright_bot_api.overview_api).
     path("search", overview_api.search, name="search"),
+    path("search/all", overview_api.search_all, name="search_all"),
     path("today", overview_api.today, name="today"),
     # Activity (albright_labs.activity) - the owner's notifications.
     path("activity", api_views.activity, name="activity"),

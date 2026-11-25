@@ -4,7 +4,7 @@ from albright_bot_api import oauth_views
 
 from . import offline, quick_actions
 from . import (activity_views, api_key_views, attachment_views, circle_views, invite_views, public_views, push_views,
-               share_views, views)
+               search_views, share_views, views)
 
 app_name = "labs"
 
@@ -16,6 +16,9 @@ urlpatterns = [
     path("terms/", public_views.placeholder, {"page": "terms"}, name="terms"),
     path("contact/", public_views.placeholder, {"page": "contact"}, name="contact"),
     path("home/", views.hub, name="hub"),
+    # The global search (search_views; the one source: albright_notes.links.find).
+    path("search/", search_views.search, name="search"),
+    path("search/recent/", search_views.remember, name="search_recent"),
     path("home/tiles/<slug:key>/", views.tile, name="tile"),
     path("home/launcher/", views.launcher_lines, name="launcher_lines"),
     path("home/landing/", views.save_landing, name="save_landing"),

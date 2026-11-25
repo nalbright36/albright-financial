@@ -205,6 +205,22 @@ see (by title). Only the parts this key can read are included. Returns {"q", "no
        query={"q": S("Words to look for", maxLength=100)}, required=("q",), example={"q": "chili"},
        returns={"q": "chili", "notes": [{"id": 8, "title": "Chili notes", "tags": []}],
                 "recipes": [{"id": 12, "title": "Turkey chili"}], "groceries": [], "planner_items": []}),
+    Op("GET", "search/all", "searchEverything", "Search everything the owner can open, like the site's search box",
+       """The site's global search (Ctrl K): every word of q (required, <=100 characters, any order) must appear in an
+item's title or text; title matches come first, then the most recent. Searches Planner tasks and checklist items
+(schedule:read), notes (notes:read), recipes (meals:read) and Fitness workouts and programs (fitness:read) - only
+the groups this key can read, and only what the owner could open on the site (their own, their circles', and what's
+shared with them). Up to 5 results per group; app= one group key (planner, notes, recipes, fitness) for up to 30.
+Returns {"q", "groups": [{"key", "label", "more" (more matches than shown), "results": [{"type" (task, checklist,
+note, recipe, workout, program), "id", "title", "snippet" (the matching text, when the match isn't in the title),
+"info" (date, sharing...), "url" (its page on the site)}]}]}. A checklist item's url is its task's page.""",
+       scopes=("schedule:read", "notes:read", "meals:read", "fitness:read"), display="search/all?q=<words>",
+       section="overview", query={"q": S("Words to look for", maxLength=100),
+                                  "app": S("Only this group: planner, notes, recipes or fitness")},
+       required=("q",), example={"q": "tile"},
+       returns={"q": "tile", "groups": [{"key": "planner", "label": "Planner", "more": False, "results": [
+           {"type": "task", "id": 41, "title": "Call tile guy about backsplash", "snippet": "",
+            "info": "Thu, Nov 27 · Shared with Home", "url": "/planner/item/41/"}]}]}),
     Op("GET", "today", "getTodaySummary", "Today at a glance: Planner, meals and fitness", """The owner's today (in their time zone): {"date", "weekday", "planner": [occurrences, as in listSchedule],
 "meals": [today's meal plan entries, as in getMealPlan], "fitness": {"planned_workouts": [{"name", "program",
 "done"}], "macros": {"calories": {"eaten", "target"}, ...}}}. Only the parts this key can read are included.""",

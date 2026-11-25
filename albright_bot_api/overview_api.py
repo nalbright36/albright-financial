@@ -5,6 +5,8 @@ they're in catalog.OPS, so API keys, the OpenAPI spec and the MCP tools get them
   GET notes/<id>             getNote          notes:read   - one of the owner's own notes, with its Markdown body
   GET meals/recipes/<id>     getRecipe        meals:read   - one recipe the owner's Meals space can see
   GET search?q=              searchMyItems    any of notes:read, meals:read, schedule:read - only the parts it may read
+  GET search/all?q=&app=     searchEverything any of schedule:read, notes:read, meals:read, fitness:read - the site's
+                                              global search (albright_notes.links.find), only the groups it may read
   GET today                  getTodaySummary  any of schedule:read, meals:read, fitness:read - likewise
 
 Every check is the usual one (auth.bot_endpoint): the key's scopes AND the owner's app access right now."""
@@ -82,6 +84,26 @@ def search(request, token):
                                 for i in items]
     count = sum(len(v) for v in out.values() if isinstance(v, list))
     return out, 200, f"searched {q[:40]!r}: {count} found"
+
+
+# The global search's groups each scope may read. Money, Ideas and People have no Bot API scope, so a key never
+# searches them.
+SEARCH_GROUPS = {"schedule:read": "planner", "notes:read": "notes", "meals:read": "recipes", "fitness:read": "fitness"}
+
+
+@bot_endpoint(tuple(SEARCH_GROUPS))
+def search_all(request, token):
+    from albright_notes import links
+    q = _query(request)
+    only = {group for scope, group in SEARCH_GROUPS.items() if _usable(token, scope)}
+    group = request.GET.get("app", "")
+    if group and group not in only:
+        raise ApiError(400, f'"app" must be one of: {", ".join(sorted(only))}.', "rejected: bad app")
+    groups = links.find(token.owner, q, group or None, only=only)
+    out = {"q": q, "groups": [{"key": g["key"], "label": g["label"], "more": g["more"], "results": [
+        {k: r[k] for k in ("type", "id", "title", "snippet", "info", "url")} for r in g["results"]]} for g in groups]}
+    count = sum(len(g["results"]) for g in groups)
+    return out, 200, f"searched everything {q[:40]!r}: {count} found"
 
 
 @bot_endpoint(("schedule:read", "meals:read", "fitness:read"))
