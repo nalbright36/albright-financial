@@ -106,7 +106,9 @@ def circle_page(request, pk):
             elif action == "threshold":
                 circles.set_money_threshold(user, circle, request.POST.get("amount", ""))
             elif action == "invite":
-                sent = _invite_many(request, circle, request.POST.get("who", ""))
+                # "Your people" ticked (connected people, by username) plus anything typed.
+                picked = [u for u in request.POST.getlist("who_pick") if u]
+                sent = _invite_many(request, circle, "\n".join(picked + [request.POST.get("who", "")]))
                 if sent:
                     messages.success(request, f"Invited {sent}.")
                 return redirect("labs:circle", pk=circle.pk)
@@ -143,8 +145,13 @@ def circle_page(request, pk):
         members.append({"m": m, "initials": _initials(m.user), "name": _person(m.user),
                         "apps": [a for a in _app_rows(circle.enabled_apps) if a["key"] in (m.apps or [])]})
     waiting = [i for i in circle.invites.select_related("user") if i.status in ("pending", "expired")] if owner else []
+    people = []
+    if owner:                                       # "Add to circle": connected people first (albright_labs.connections)
+        from . import connections
+        taken = {m.user_id for m in circle.memberships.all() if m.status in ("active", "invited")} |             {i.user_id for i in waiting if i.user_id}
+        people = [p for p in connections.connected_people(user) if p.pk not in taken]
     return render(request, "albright_labs/circle.html", {
-        "circle": circle, "me": me, "owner": owner, "members": members, "waiting": waiting,
+        "circle": circle, "me": me, "owner": owner, "members": members, "waiting": waiting, "your_people": people,
         "enabled": _app_rows(circle.enabled_apps), "all_apps": _app_rows(CIRCLE_APPS),
         "my_apps": [{**a, "on": a["key"] in (me.apps or [])} for a in _app_rows(circle.enabled_apps)],
         "activity_rows": activity_views.recent_for_circle(user, circle)})

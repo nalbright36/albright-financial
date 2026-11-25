@@ -166,8 +166,143 @@ def _search_limited(request):
 @login_required
 @never_cache
 def people_page(request):
-    """My account > People: everyone you're connected with, and Remove for anyone who isn't also a circle-mate."""
-    return render(request, "albright_labs/people.html", {"rows": connections.people_page_rows(request.user)})
+    """My account > People: Find people (?q= - connections.find, rate-limited per person), requests for you and sent,
+    everyone you're connected with (Remove / Block), and who you've blocked."""
+    user = request.user
+    q = " ".join(request.GET.get("q", "").split())[:connections.SEARCH_QUERY_MAX]
+    found, limited = [], False
+    if q:
+        limited = _find_limited(request)
+        found = [] if limited else connections.find(user, q)
+        # Connect / Block take only ids Find people showed this person (no stepping through ids to read names).
+        shown = [p["id"] for p in found] + [i for i in request.session.get(SHOWN_KEY, []) if isinstance(i, int)]
+        request.session[SHOWN_KEY] = list(dict.fromkeys(shown))[:SHOWN_MAX]
+    looks_like_email = "@" in q and bool(connections.EMAIL_SHAPE.match(q))
+    return render(request, "albright_labs/people.html", {
+        "rows": connections.people_page_rows(user), "q": q, "found": found, "limited": limited,
+        "invite_url": _invite_url(user, q) if q and looks_like_email and not found else "",
+        "incoming": connections.incoming(user), "outgoing": connections.outgoing(user),
+        "blocked": connections.blocked_by_me(user)})
+
+
+FIND_PER_MINUTE = 30
+SHOWN_KEY, SHOWN_MAX = "people_found", 100
+
+
+def _shown(request, pk):
+    """The account behind a Find people result this person was shown (session), still findable - else None."""
+    try:
+        pk = int(pk)
+    except (TypeError, ValueError):
+        return None
+    if pk not in request.session.get(SHOWN_KEY, []):
+        return None
+    return connections.findable_person(request.user, pk)
+
+
+def _find_limited(request):
+    """Find people: at most FIND_PER_MINUTE searches a minute per person - no fishing through the directory."""
+    key = f"people-find:{request.user.pk}"
+    n = cache.get(key, 0)
+    if n >= FIND_PER_MINUTE:
+        return True
+    cache.set(key, n + 1, 60)
+    return False
+
+
+def _invite_url(user, email):
+    """"Invite them by email" - the existing invite flows: Admin > Users (superusers), else Circles' Invite by email."""
+    from urllib.parse import urlencode
+    if user.is_superuser:
+        return reverse("albright_control:users") + "?" + urlencode({"email": email}) + "#invite-user"
+    return reverse("labs:circles") + "?" + urlencode({"invite": email})
+
+
+def _back(request, anchor=""):
+    nxt = request.POST.get("next", "")
+    if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+        return redirect(nxt)
+    return redirect(reverse("labs:people") + anchor)
+
+
+@login_required
+@require_POST
+def people_connect(request, pk):
+    """Connect: a request to someone Find people showed (connections.findable_person - else the same "No one found")."""
+    other = _shown(request, pk)
+    try:
+        if other is None:
+            raise connections.ConnectionError("No one found.")
+        _row, outcome = connections.send_request(request.user, other)
+    except connections.ConnectionError as exc:
+        messages.error(request, str(exc))
+        return _back(request)
+    name = sharing.person_name(other)
+    messages.success(request, {"sent": f"Request sent to {name}.", "already_sent": f"Request sent to {name}.",
+                               "accepted": f"You're connected with {name}.",
+                               "connected": f"You're already connected with {name}."}[outcome])
+    return _back(request)
+
+
+@login_required
+@require_POST
+def people_request(request, pk, action):
+    """Accept / Decline a request for you, or Cancel one you sent."""
+    row = connections.request_for(request.user, pk)
+    try:
+        if row is None or action not in ("accept", "decline", "cancel"):
+            raise connections.ConnectionError("That request isn't there any more.")
+        other = row.to_user if row.from_user_id == request.user.pk else row.from_user
+        getattr(connections, action)(request.user, row)
+        messages.success(request, {"accept": f"You're connected with {sharing.person_name(other)}.",
+                                   "decline": "Request declined. They aren't told.",
+                                   "cancel": "Request cancelled."}[action])
+    except connections.ConnectionError as exc:
+        messages.error(request, str(exc))
+    return _back(request, "#requests")
+
+
+@login_required
+@require_POST
+def people_block(request, pk):
+    """Block: they can't find or ask you again (and aren't told). Only someone you're connected with, someone who
+    asked you, or someone Find people shows."""
+    user = request.user
+    other = connections.person_if_connected(user, pk) or _shown(request, pk)
+    if other is None:
+        row = connections.Connection.objects.filter(status=connections.PENDING, to_user=user, from_user_id=pk).first()
+        other = row.from_user if row else None
+    try:
+        connections.block(user, other)
+        messages.success(request, f"Blocked {sharing.person_name(other)}. They can't find you or ask to connect.")
+    except connections.ConnectionError as exc:
+        messages.error(request, str(exc))
+    return _back(request)
+
+
+@login_required
+@require_POST
+def people_unblock(request, pk):
+    other = next((p for p in connections.blocked_by_me(request.user) if str(p.pk) == str(pk)), None)
+    if other is not None:
+        connections.unblock(request.user, other)
+        messages.success(request, f"Unblocked {sharing.person_name(other)}.")
+    return _back(request, "#blocked")
+
+
+@login_required
+@require_POST
+def privacy(request):
+    """My account > Privacy: who can find me (Find people), and whether connection requests are emailed."""
+    from .models import UserPreference
+    pref = UserPreference.objects.get_or_create(user=request.user)[0]
+    choice = request.POST.get("findable")
+    if choice in dict(UserPreference.FIND_CHOICES):
+        pref.findable = choice
+    pref.email_connect_requests = request.POST.get("email_requests") == "1"
+    pref.save(update_fields=["findable", "email_connect_requests", "updated_at"])
+    messages.success(request, "Privacy saved.")
+    return redirect(reverse("labs:account") + "#privacy")
 
 
 @login_required

@@ -79,7 +79,8 @@ Must sit OUTSIDE another <form> when share.obj exists (it has its own).
         <button type="submit" class="btn btn-secondary btn-sm"{% if not share.circles and not share.people %} disabled{% endif %}>Share</button>
         </div>
     </form>
-    {% if not share.circles and not share.people %}<p class="share-box__note">No one to share with yet — people in your circles and anyone you’ve shared with will appear here. Manage them in <a href="{% url 'labs:people' %}">People</a>.</p>{% endif %}
+    {% if not share.circles and not share.people %}<p class="share-box__note">No one to share with yet — people in your circles and the people you connect with will appear here.</p>{% endif %}
+    <p class="share-box__note share-box__find"><a href="{% url 'labs:people' %}#find" id="share-find-someone">Find someone new</a> to connect with.</p>
     {{ share.choices|json_script:"share-choices" }}
     <p class="share-box__status" data-share-status role="status" aria-live="polite"></p>
     {% endif %}

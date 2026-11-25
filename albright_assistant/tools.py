@@ -30,6 +30,7 @@ SECTION_APP = {"schedule": "planner", "meals": "meals", "notes": "notes", "fitne
                "account": "", "activity": ""}
 SETTINGS_OPS = {"pauseProgram", "resumeProgram"}
 EDIT_OPS = {"updateNote", "updateGrocery", "fixFoodEntry", "setMeal"}
+REACH_OUT_OPS = {"sendConnectRequest"}      # someone else is notified: the person approves it first
 
 
 # --- definitions -------------------------------------------------------------------------------------------------------
@@ -73,6 +74,8 @@ def needs_approval(calls, from_photo=False):
             reasons[call.id] = "Shares with someone"
         elif call.name in SETTINGS_OPS:
             reasons[call.id] = "Changes a setting"
+        elif call.name in REACH_OUT_OPS:
+            reasons[call.id] = "Sends a request to someone"
         elif call.name in EDIT_OPS and len(edits) > EDIT_LIMIT:
             reasons[call.id] = f"Edits {len(edits)} items at once"
         elif from_photo and call.name in PHOTO_APPROVAL_OPS:

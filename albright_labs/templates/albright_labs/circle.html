@@ -57,9 +57,13 @@ removing people, making someone an owner, and deleting it. Nobody here ever sees
     <section class="card circles-card" id="circle-invites" aria-labelledby="circle-invites-h">
         <h2 class="circles-card__title" id="circle-invites-h">Invite people</h2>
         <form method="post" class="circles-form">{% csrf_token %}<input type="hidden" name="action" value="invite">
+            {% if your_people %}<fieldset class="privacy-choices" id="circle-your-people"><legend class="people-sub">Your people</legend>
+                {% for p in your_people %}<label><input type="checkbox" name="who_pick" value="{{ p.username }}"> {{ p.first_name|default:p.username }} <span class="circles-muted">@{{ p.username }}</span></label>{% endfor %}
+            </fieldset>{% endif %}
             <label for="circle-who" class="visually-hidden">Their exact username or email</label>
-            <textarea name="who" id="circle-who" class="ledger-input" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" required placeholder="Their exact username or email - one per line"></textarea>
+            <textarea name="who" id="circle-who" class="ledger-input" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Their exact username or email - one per line"></textarea>
             <button type="submit" class="btn btn-primary btn-sm">Invite</button>
+            <a href="{% url 'labs:people' %}#find" class="circles-muted" id="circle-find-someone">Find someone new</a>
         </form>
         {% for i in waiting %}
         <div class="circles-row">

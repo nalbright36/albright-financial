@@ -1,0 +1,12 @@
+{% autoescape off %}Hi{% if recipient %} {{ recipient }}{% endif %},
+
+{{ name }} (@{{ username }}) wants to connect with you on Albright Labs. Once you're connected you can share tasks, notes, recipes and programs with each other.
+
+Accept or decline on your People page:
+
+{{ link }}
+
+If you don't know them, decline - or block them so they can't ask again.
+
+- Albright Labs
+{{ site_url }}{% endautoescape %}

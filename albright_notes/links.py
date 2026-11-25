@@ -242,12 +242,11 @@ def _my_circles(user):
 
 
 def _people_scope(user):
-    """People in my circles (active members, both of us) - never anyone else."""
+    """People I'm connected with (albright_labs.connections - circle-mates, accepted requests, people I've shared
+    with or invited) - never anyone else."""
     from django.contrib.auth import get_user_model
-    from albright_labs.models import CircleMembership
-    ids = CircleMembership.objects.filter(circle_id__in=_my_circles(user), status=CircleMembership.ACTIVE) \
-        .exclude(user=user).values("user_id")
-    return get_user_model().objects.filter(is_active=True, pk__in=ids)
+    from albright_labs import connections
+    return get_user_model().objects.filter(is_active=True, pk__in=connections.connected_ids(user))
 
 
 def _person_title(o):
@@ -267,14 +266,15 @@ def _people_circles(user, objs):
 
 def _people_info(user, objs):
     circles = _people_circles(user, objs)
-    return {o.pk: _join(o.get_username() if o.get_full_name().strip() else "",
-                        "In " + ", ".join(c.name for c in circles.get(o.pk, []))) for o in objs}
+    return {o.pk: _join("@" + o.get_username(),
+                        ("In " + ", ".join(c.name for c in circles[o.pk])) if circles.get(o.pk) else "Connected")
+            for o in objs}
 
 
 def _person_href(user):
     def href(o):
         circles = _people_circles(user, [o]).get(o.pk)
-        return reverse("labs:circle", args=[circles[0].pk]) if circles else reverse("labs:people")
+        return reverse("labs:circle", args=[circles[0].pk]) if circles else reverse("labs:people") + "#connected"
     return href
 
 
@@ -305,7 +305,7 @@ KINDS = (
          group="fitness", recent="-created_at", icon="dumb", scope=_program_scope, info=_program_info,
          related=("owner",)),
     Kind("", "person", "Person", settings.AUTH_USER_MODEL, "username", group="people",
-         title_also=("first_name", "last_name"), recent="username", icon="user", linkable=False,
+         title_also=("first_name", "last_name"),  # never the email recent="username", icon="user", linkable=False,
          scope=_people_scope, info=_people_info, show=_person_title),
     # Archived apps: kept so existing links still show; search skips them (app_access never allows an archived app).
     Kind("resell", "ledger", "Ledger item", "albright_reselling_app.LedgerEntry", "item",

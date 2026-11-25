@@ -11,6 +11,18 @@
         <a href="{% url 'labs:circles' %}" class="btn btn-secondary">Circles</a>
         <a href="{% url 'labs:people' %}" class="btn btn-secondary">People</a>
     </section>
+    {# Privacy (share_views.privacy; albright_labs.connections.find): who can find me in People > Find people. #}
+    <section class="card" id="privacy" style="margin-top: var(--space-5, 20px);">
+        <div class="card__header"><span class="card__label">Privacy</span></div>
+        <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">Others see you as <strong>{{ user.first_name|default:user.username }}</strong> (@{{ user.username }}). Your email address is never shown to anyone, even someone who searched by it.</p>
+        <form method="post" action="{% url 'labs:privacy_settings' %}">{% csrf_token %}
+            <fieldset class="privacy-choices"><legend style="font-weight: 600; font-size: 0.875rem; margin-bottom: 4px;">Who can find me</legend>
+                {% for key, label in find_choices %}<label><input type="radio" name="findable" value="{{ key }}"{% if key == findable %} checked{% endif %}> {{ label }}</label>{% endfor %}
+            </fieldset>
+            <label style="display: flex; gap: 8px; font-size: 0.875rem; margin-bottom: 10px;"><input type="checkbox" name="email_requests" value="1"{% if email_connect_requests %} checked{% endif %}> Email me when someone asks to connect</label>
+            <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+        </form>
+    </section>
     <section class="card" id="activity-link" style="margin-top: var(--space-5, 20px);">
         <div class="card__header"><span class="card__label">Activity</span>{% if notification_count %} <span class="badge navbar__badge">{{ notification_count_label }} unread</span>{% endif %}</div>
         <p style="margin: 0 0 10px; font-size: 0.875rem; color: var(--text-secondary);">What others changed in things shared with you and in your circles, and how you're told about it.</p>

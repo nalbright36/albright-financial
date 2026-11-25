@@ -77,6 +77,9 @@ api_urlpatterns = [
     path("today", overview_api.today, name="today"),
     # Activity (albright_labs.activity) - the owner's notifications.
     path("activity", api_views.activity, name="activity"),
+    # People (albright_labs.connections): the owner's connections, and a request by exact username.
+    path("people/connections", api_views.people_connections, name="people_connections"),
+    path("people/connect", api_views.people_connect, name="people_connect"),
     # Planner (albright_bot_api.schedule_api).
     path("schedule", schedule_api.schedule_collection, name="schedule"),
     path("schedule/<int:item_id>/complete", schedule_api.schedule_complete, name="schedule_complete"),

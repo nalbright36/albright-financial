@@ -2,29 +2,97 @@
 {% block page_title %}People · {% endblock %}
 {% block content %}
 {% comment %}
-My account > People (labs.share_views.people_page; the rules: albright_labs.connections): everyone you're
-connected with - circle-mates, anyone you've already shared with (either way), and anyone you've
-connected with. Remove hides person shares both ways until you reconnect. Circle-mates stay until
-you leave the circle. Connection requests are slice 2.
+My account > People (labs.share_views.people_page; the rules: albright_labs.connections):
+  - Find people: an exact email or a username / name that starts with 3+ letters (connections.find) - never a list of
+    everyone, never an email in the results, the same "No one found" whether or not an email is registered.
+  - Requests for you (Accept / Decline / Block) and Sent (Cancel).
+  - Connected: everyone you can share with one at a time - circle-mates, people you've shared with, people you
+    invited or who invited you, and accepted requests. Remove hides person shares both ways; Block also stops them
+    finding or asking you. Circle-mates stay until you leave the circle.
+  - Blocked (Unblock).
 {% endcomment %}
 <div class="container people-page">
     <h1 class="circles-title">People</h1>
-    <p class="people-lead">People you can share with one at a time — everyone in your circles, anyone you’ve already shared with, and anyone you’ve connected with. Circles themselves still have their own page.</p>
+    <p class="people-lead">People you can share with one at a time, and pick when adding to a circle. Circles have their own page.</p>
     <nav class="circles-links" aria-label="Sharing"><a href="{% url 'labs:circles' %}" class="btn btn-secondary btn-sm">Circles</a> <a href="{% url 'labs:shared_with_me' %}" class="btn btn-secondary btn-sm">Shared with me</a> <a href="{% url 'labs:sharing_defaults' %}" class="btn btn-secondary btn-sm">Sharing defaults</a></nav>
 
-    <section class="card circles-card" aria-labelledby="people-h">
-        <h2 class="circles-card__title" id="people-h">Your people</h2>
+    <section class="card circles-card" id="find" aria-labelledby="find-h">
+        <h2 class="circles-card__title" id="find-h">Find people</h2>
+        <form method="get" action="{% url 'labs:people' %}#find" class="people-find" role="search">
+            <label for="people-find-q" class="visually-hidden">Email address, username or name</label>
+            <input type="search" name="q" id="people-find-q" class="ledger-input people-find__input" value="{{ q }}" maxlength="80"
+                   placeholder="Their exact email, or a username or name" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <button type="submit" class="btn btn-primary btn-sm">Search</button>
+        </form>
+        <p class="circles-muted people-find__hint">An exact email address, or the start of a username or name (3 letters or more).</p>
+        {% if q %}
+        <div class="people-results" id="find-results" aria-live="polite">
+            {% if limited %}<p class="circles-muted">Too many searches - try again in a minute.</p>
+            {% else %}
+            {% for p in found %}
+            <div class="people-row" data-found="{{ p.id }}">
+                <span class="share-chip__avatar" aria-hidden="true">{{ p.initials }}</span>
+                <span class="people-row__main"><span class="people-row__name">{{ p.name }}</span><span class="people-row__meta">@{{ p.username }}</span></span>
+                <div class="people-row__actions">
+                    {% if p.relation == "connected" %}<span class="people-state people-state--on">Connected</span>
+                    {% elif p.relation == "sent" %}<span class="people-state">Request sent</span>
+                    {% elif p.relation == "incoming" %}<a href="#requests" class="btn btn-primary btn-sm">Accept</a>
+                    {% elif p.relation == "blocked" %}<span class="people-state">Blocked</span>
+                    {% else %}<form method="post" action="{% url 'labs:people_connect' p.id %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'labs:people' %}#find"><button type="submit" class="btn btn-primary btn-sm">Connect</button></form>{% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p class="people-none" id="find-none">No one found.{% if invite_url %} <a href="{{ invite_url }}">Invite them by email</a>{% endif %}</p>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+
+    {% if incoming or outgoing %}
+    <section class="card circles-card" id="requests" aria-labelledby="requests-h">
+        <h2 class="circles-card__title" id="requests-h">Requests</h2>
+        {% if incoming %}<h3 class="people-sub">Requests for you</h3>
+        {% for r in incoming %}
+        <div class="people-row" data-request="{{ r.pk }}">
+            <span class="share-chip__avatar" aria-hidden="true">{{ r.from_user.first_name|default:r.from_user.username|slice:":1"|upper }}</span>
+            <span class="people-row__main"><span class="people-row__name">{{ r.from_user.first_name|default:r.from_user.username }} wants to connect</span><span class="people-row__meta">@{{ r.from_user.username }}</span></span>
+            <div class="people-row__actions">
+                <form method="post" action="{% url 'labs:people_request' r.pk 'accept' %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm">Accept</button></form>
+                <form method="post" action="{% url 'labs:people_request' r.pk 'decline' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Decline</button></form>
+                <form method="post" action="{% url 'labs:people_block' r.from_user.pk %}" data-confirm="Block {{ r.from_user.first_name|default:r.from_user.username }}? They won't be able to find you or ask again, and aren't told.">{% csrf_token %}<button type="submit" class="people-link-btn">Block</button></form>
+            </div>
+        </div>
+        {% endfor %}{% endif %}
+        {% if outgoing %}<h3 class="people-sub">Sent</h3>
+        {% for r in outgoing %}
+        <div class="people-row" data-sent="{{ r.pk }}">
+            <span class="share-chip__avatar" aria-hidden="true">{{ r.to_user.first_name|default:r.to_user.username|slice:":1"|upper }}</span>
+            <span class="people-row__main"><span class="people-row__name">{{ r.to_user.first_name|default:r.to_user.username }}</span><span class="people-row__meta">@{{ r.to_user.username }} &middot; Request sent {{ r.created_at|date:"M j" }}</span></span>
+            <div class="people-row__actions">
+                <form method="post" action="{% url 'labs:people_request' r.pk 'cancel' %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Cancel</button></form>
+            </div>
+        </div>
+        {% endfor %}{% endif %}
+    </section>
+    {% endif %}
+
+    <section class="card circles-card" id="connected" aria-labelledby="people-h">
+        <h2 class="circles-card__title" id="people-h">Connected</h2>
         {% for r in rows %}
         <div class="people-row" data-person="{{ r.user.pk }}">
             <span class="share-chip__avatar" aria-hidden="true">{{ r.initials }}</span>
             <span class="people-row__main">
                 <span class="people-row__name">{{ r.name }}</span>
-                <span class="people-row__meta">{{ r.meta }}</span>
+                <span class="people-row__meta">@{{ r.user.username }} &middot; {{ r.meta }}</span>
             </span>
             {% if r.can_remove %}
             <div class="people-row__actions">
                 <form method="post" action="{% url 'labs:people_remove' r.user.pk %}" data-confirm="Remove {{ r.name }}? Your shares with each other will be hidden until you reconnect.">{% csrf_token %}
-                    <button type="submit" class="btn btn-secondary btn-sm">Remove</button>
+                    <button type="submit" class="btn btn-secondary btn-sm">Remove connection</button>
+                </form>
+                <form method="post" action="{% url 'labs:people_block' r.user.pk %}" data-confirm="Block {{ r.name }}? They won't be able to find you or ask to connect again, and aren't told.">{% csrf_token %}
+                    <button type="submit" class="people-link-btn">Block</button>
                 </form>
             </div>
             {% else %}
@@ -32,8 +100,20 @@ you leave the circle. Connection requests are slice 2.
             {% endif %}
         </div>
         {% empty %}
-        <p class="circles-muted">You’re not connected with anyone yet. People in your circles, and anyone you’ve already shared with, will show up here.</p>
+        <p class="circles-muted">You're not connected with anyone yet. Find people above, or invite them to one of your circles.</p>
         {% endfor %}
     </section>
+
+    {% if blocked %}
+    <section class="card circles-card" id="blocked" aria-labelledby="blocked-h">
+        <h2 class="circles-card__title" id="blocked-h">Blocked</h2>
+        {% for b in blocked %}
+        <div class="people-row">
+            <span class="people-row__main"><span class="people-row__name">{{ b.first_name|default:b.username }}</span><span class="people-row__meta">@{{ b.username }}</span></span>
+            <div class="people-row__actions"><form method="post" action="{% url 'labs:people_unblock' b.pk %}">{% csrf_token %}<button type="submit" class="btn btn-secondary btn-sm">Unblock</button></form></div>
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
 </div>
 {% endblock %}

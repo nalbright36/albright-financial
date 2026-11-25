@@ -157,6 +157,7 @@ macros, check foods/search first for known foods, and send everything in one POS
 Never the owner's own actions. Each event is checked when you ask: something unshared, or a circle the owner left
 or opted out of, disappears at once. The owner's notification settings apply (an app or circle turned Off, or
 "Only things that involve me"). Kept 90 days."""),
+    Section("people", "PEOPLE (the owner's connections - who they can share with)", """Names and usernames only, never email addresses. There's no directory search: a request goes to one exact username."""),
     Section("trading", "TRADING (site admin only)"),
     Section("reselling", "RESELLING (site admin only)"),
     Section("opportunities", "OPPORTUNITIES (site admin only)"),
@@ -681,6 +682,24 @@ tasks no longer linked to the program. Returns {"deleted": id, "name", "workouts
 "planner_kept"}.""",
        scopes=("fitness:write",), section="fitness", query={"remove_scheduled": B(default=True)},
        returns={"deleted": 4, "name": "Strength", "workouts_kept": 12, "planner_ended": 6, "planner_kept": 0}),
+
+    # ----- people -----------------------------------------------------------------------------------------------------
+    Op("GET", "people/connections", "listConnections", "The owner's connections and connection requests", """\
+Who the owner is connected with (they can share with them one at a time and add them to circles) and their pending
+requests. Returns {"connections": [{"id", "name", "username"}], "requests_for_you": [{"request_id", "id", "name",
+"username"}], "sent": [{"request_id", "id", "name", "username"}]}. Never email addresses. The owner accepts or
+declines requests on their People page.""",
+       scopes=("people:read",), section="people",
+       returns={"connections": [{"id": 7, "name": "Sam", "username": "sam"}], "requests_for_you": [], "sent": []}),
+    Op("POST", "people/connect", "sendConnectRequest", "Ask someone to connect, by their exact username", """\
+Sends the owner's connection request to one person: {"username": their exact username (case-insensitive; a leading
+@ is fine)}. They get a notification and accept or decline. There is no search: a username that doesn't exist, or
+someone who can't be found, is the same 404 "No one found". Returns 201 {"outcome": "sent", "id", "name",
+"username"}, or 200 with outcome "already_sent", "connected" (already connected) or "accepted" (they had asked the
+owner - now connected).""",
+       scopes=("people:write",), section="people", status=201, body={"username": S(maxLength=150)},
+       required=("username",), example={"username": "sam"},
+       returns={"outcome": "sent", "id": 7, "name": "Sam", "username": "sam"}),
 
     # ----- activity --------------------------------------------------------------------------------------------------
     Op("GET", "activity", "listActivity", "The owner's notifications (what others changed)", """\

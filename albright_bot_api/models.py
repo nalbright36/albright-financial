@@ -42,6 +42,8 @@ SCOPES = [   # (scope, one-line description of what it allows)
     ("fitness:food:write", "Add, fix and remove entries in the owner's food log - an AI's estimates (fitness/food-entries)."),
     ("activity:read", "Read the owner's notifications - what others changed in things shared with them and in their "
                       "circles - e.g. to summarize what changed today."),
+    ("people:read", "List the owner's connections and connection requests (names and usernames - never emails)."),
+    ("people:write", "Send a connection request for the owner to someone by their exact username."),
 ]
 SCOPE_KEYS = [key for key, _label in SCOPES]
 TOKEN_PREFIX = "abt_"

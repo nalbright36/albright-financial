@@ -326,7 +326,7 @@ class PeoplePageTests(Base):
         self.family(self.sam)
         share_with(self.note(), self.kate)
         page = self.client.get(reverse("labs:people")).content.decode()
-        self.assertIn("Your people", page)
+        self.assertIn("Connected", page)
         self.assertIn("Sam", page)
         self.assertIn("Kate", page)
         self.assertNotIn("Jordan", page)

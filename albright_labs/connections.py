@@ -3,16 +3,23 @@
 You're connected to someone when any of these hold:
   - you're both ACTIVE members of the same circle;
   - there's a visible (not hidden) person ShareGrant either way;
-  - there's an explicit Connection row with status CONNECTED (slice 2: after they accept a request).
+  - one of you invited the other to the site (an Invitation they signed up with);
+  - there's an explicit Connection row ACCEPTED (they accepted a request - People > Find people, the Bot API).
+A BLOCKED or REMOVED row undoes the last three (circle-mates stay connected until one leaves the circle).
 
 Remove (My account > People) writes a REMOVED Connection and hides person ShareGrants between you,
 without deleting them. You disappear from each other's pickers and lose access, both ways. Joining
 a circle together reconnects you and restores those shares. Slice 2 will also restore when a
 connection request is accepted. Circle-mates can't be removed here: leave the circle to disconnect.
 
-The type-ahead and search endpoint only ever look at this connected set (and your shareable
-circles). They never search every user on the site.
+The share type-ahead and search endpoint only ever look at this connected set (and your shareable
+circles). The one directory search is find() (People > Find people): an exact email (case-insensitive) or a
+username / display name that starts with 3+ characters - never a partial email, never a list of everyone - and it
+skips people who chose "Nobody" (or "Only by username" for the email and name matches) in My account > Privacy,
+and anyone either of you blocked. Results never include an email address. A request is a PENDING row; the other
+person gets a bell notification (and an email if they want one) and Accepts or Declines.
 """
+import re
 from collections import defaultdict
 
 from django.contrib.auth import get_user_model
@@ -25,6 +32,7 @@ from .models import Circle, CircleMembership, Connection, ShareGrant
 
 ACTIVE = CircleMembership.ACTIVE
 REMOVED, CONNECTED = Connection.REMOVED, Connection.CONNECTED
+PENDING, DECLINED, BLOCKED = Connection.PENDING, Connection.DECLINED, Connection.BLOCKED
 
 # How a 1:1 share is described on People and in the picker ("Shared notes with you").
 SHARE_PHRASE = {"planner": "Planner items", "notes": "notes", "meals": "recipes", "fitness": "workouts"}
@@ -121,13 +129,21 @@ def _explicit_ids(user, status):
     return {(r.user_b_id if r.user_a_id == user.pk else r.user_a_id) for r in rows}
 
 
+def invite_ids(user):
+    """People this person invited to the site who signed up, and whoever invited them."""
+    from .models import Invitation
+    sent = Invitation.objects.filter(created_by=user, used_by__isnull=False).values_list("used_by_id", flat=True)
+    got = Invitation.objects.filter(used_by=user, created_by__isnull=False).values_list("created_by_id", flat=True)
+    return set(sent) | set(got)
+
+
 def connected_ids(user):
     """Pks of people this person is connected to (active accounts only are applied by connected_people)."""
     if user is None or not getattr(user, "is_authenticated", False):
         return set()
     mates = circle_mate_ids(user)
-    ids = mates | _visible_share_ids(user) | _explicit_ids(user, CONNECTED)
-    ids -= (_explicit_ids(user, REMOVED) - mates)
+    ids = mates | _visible_share_ids(user) | _explicit_ids(user, CONNECTED) | invite_ids(user)
+    ids -= ((_explicit_ids(user, REMOVED) | _explicit_ids(user, BLOCKED)) - mates)
     ids.discard(user.pk)
     return ids
 
@@ -407,3 +423,208 @@ def connect_signals():
 def _on_membership(sender, instance, **kwargs):
     if instance.status == ACTIVE and instance.user_id:
         restore_with_mates(instance.user, instance.circle)
+
+
+# ---------------------------------------------------------------------------
+# Find people and connection requests
+# ---------------------------------------------------------------------------
+
+FIND_MIN = 3
+FIND_LIMIT = 10
+EMAIL_SHAPE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def blocked_ids(user):
+    """Everyone this person blocked, and everyone who blocked them - they never find or request each other."""
+    return _explicit_ids(user, BLOCKED)
+
+
+def find(user, query):
+    """People > Find people: [{"id", "name", "username", "initials", "relation"}] - never an email address.
+    An exact email (case-insensitive) finds someone who lets anyone find them; otherwise the username or display
+    name must START with the query (3+ characters). "Only by username" people match only on their username; "Nobody"
+    people never match. Never anyone either of you blocked, inactive accounts or yourself."""
+    from .models import UserPreference
+    q = " ".join((query or "").split())[:SEARCH_QUERY_MAX]
+    if not q or user is None or not user.is_authenticated:
+        return []
+    User = get_user_model()
+    base = User.objects.filter(is_active=True).exclude(pk=user.pk).exclude(pk__in=blocked_ids(user))
+    nobody = UserPreference.objects.filter(findable=UserPreference.FIND_NOBODY).values("user_id")
+    username_only = UserPreference.objects.filter(findable=UserPreference.FIND_USERNAME).values("user_id")
+    if "@" in q:
+        if not EMAIL_SHAPE.match(q):
+            return []
+        found = base.filter(email__iexact=q).exclude(pk__in=nobody).exclude(pk__in=username_only)
+    else:
+        if len(q) < FIND_MIN:
+            return []
+        handle = q.lstrip("@")
+        by_username = Q(username__istartswith=handle)
+        by_name = Q(first_name__istartswith=q) | Q(last_name__istartswith=q)
+        if " " in q:
+            first, _, last = q.partition(" ")
+            by_name |= Q(first_name__iexact=first, last_name__istartswith=last)
+        found = base.exclude(pk__in=nobody).filter(by_username | (by_name & ~Q(pk__in=username_only)))
+    people = list(found.order_by("username")[:FIND_LIMIT])
+    return [{"id": p.pk, "name": _name(p), "username": p.get_username(), "initials": _initials(p),
+             "relation": relation(user, p)} for p in people]
+
+
+def findable_person(user, pk):
+    """The account behind a Find people result (an id from find()) - only if find() could have shown it: active, not
+    yourself, not blocked either way, and not "Nobody". Otherwise None, the same as an id that doesn't exist."""
+    from .models import UserPreference
+    try:
+        pk = int(pk)
+    except (TypeError, ValueError):
+        return None
+    if pk == getattr(user, "pk", None) or pk in blocked_ids(user):
+        return None
+    other = get_user_model().objects.filter(pk=pk, is_active=True).first()
+    if other is None:
+        return None
+    pref = UserPreference.objects.filter(user=other).first()
+    if pref is not None and pref.findable == UserPreference.FIND_NOBODY and pk not in connected_ids(user) \
+            and relation(user, other) != "incoming":
+        return None
+    return other
+
+
+def relation(user, other):
+    """What the Find people button says: "connected", "sent" (a request out, or one they declined - never told),
+    "incoming" (they asked you: Accept), "blocked" (you blocked them), or "none" (Connect)."""
+    row = pair(user, other)
+    if row is not None:
+        if row.status == BLOCKED:
+            return "blocked" if row.blocked_by_id == user.pk else "none"
+        if row.status == PENDING:
+            return "sent" if row.from_user_id == user.pk else "incoming"
+        if row.status == DECLINED and row.from_user_id == user.pk:
+            return "sent"
+    if other.pk in connected_ids(user):
+        return "connected"
+    return "none"
+
+
+def _clear_bell(asker, asked):
+    from .models import ActivityEvent
+    ActivityEvent.objects.filter(app="circles", verb="connect", actor=asker, recipient=asked).delete()
+
+
+def _notify_request(row):
+    """The bell ("<name> wants to connect") for the person asked - and an email when they want one."""
+    from . import activity, emails
+    from .models import ActivityEvent, UserPreference
+    asker, asked = row.from_user, row.to_user
+    url = reverse("labs:people") + "#requests"
+    _clear_bell(asker, asked)
+    activity.record_activity("circles", "connect", "wants to connect", actor=asker, recipient=asked,
+                             audience=ActivityEvent.CIRCLE, url=url)
+    pref = UserPreference.objects.filter(user=asked).first()
+    if asked.email and (pref is None or pref.email_connect_requests):
+        emails.send("connect_request", asked.email, {
+            "name": _name(asker), "username": asker.get_username(), "recipient": (asked.first_name or "").strip(),
+            "link": emails.site_url(url), "button": "See the request"})
+
+
+def send_request(actor, other, notify=True):
+    """Ask to connect. Returns (row, outcome): "sent", "already_sent", "accepted" (they'd asked you - now
+    connected) or "connected" (already). Raises ConnectionError with the same vague message for anyone you can't
+    reach (yourself, inactive, blocked either way) so nothing is revealed."""
+    if other is None or other.pk == actor.pk or not other.is_active:
+        raise ConnectionError("No one found.")
+    row = pair(actor, other)
+    if row is not None and row.status == BLOCKED:
+        raise ConnectionError("No one found.")
+    if row is not None and row.status == PENDING:
+        if row.from_user_id == actor.pk:
+            return row, "already_sent"
+        return accept(actor, row), "accepted"
+    if row is not None and row.status == DECLINED and row.from_user_id == actor.pk:
+        return row, "already_sent"                       # they said no; asking again doesn't bother them
+    if other.pk in connected_ids(actor):
+        return row, "connected"
+    low, high = _ordered(actor, other)
+    row, _created = Connection.objects.update_or_create(user_a=low, user_b=high, defaults={
+        "status": PENDING, "from_user": actor, "to_user": other, "responded_at": None, "blocked_by": None})
+    if notify:
+        _notify_request(row)
+    return row, "sent"
+
+
+def incoming(user):
+    return list(Connection.objects.filter(status=PENDING, to_user=user, from_user__is_active=True)
+                .select_related("from_user").order_by("-created_at"))
+
+
+def outgoing(user):
+    return list(Connection.objects.filter(status__in=(PENDING, DECLINED), from_user=user, to_user__is_active=True)
+                .select_related("to_user").order_by("-created_at"))
+
+
+def blocked_by_me(user):
+    rows = Connection.objects.filter(status=BLOCKED, blocked_by=user).select_related("user_a", "user_b")
+    return [(r.user_b if r.user_a_id == user.pk else r.user_a) for r in rows]
+
+
+def request_for(user, pk):
+    """A request this person may act on (theirs to answer, or theirs to cancel), or None."""
+    try:
+        pk = int(pk)
+    except (TypeError, ValueError):
+        return None
+    return Connection.objects.filter(pk=pk, status__in=(PENDING, DECLINED)).filter(
+        Q(to_user=user) | Q(from_user=user)).select_related("from_user", "to_user").first()
+
+
+def accept(actor, row):
+    if row.status != PENDING or row.to_user_id != actor.pk:
+        raise ConnectionError("That request isn't waiting for you.")
+    row.status, row.responded_at = CONNECTED, timezone.now()
+    row.save(update_fields=["status", "responded_at"])
+    _set_hidden(row.from_user, row.to_user, None)          # shares hidden by an earlier Remove come back
+    _clear_bell(row.from_user, actor)
+    from . import activity
+    from .models import ActivityEvent
+    activity.record_activity("circles", "connected", "accepted your request to connect", actor=actor,
+                             recipient=row.from_user, audience=ActivityEvent.CIRCLE, url=reverse("labs:people"))
+    return row
+
+
+def decline(actor, row):
+    if row.status != PENDING or row.to_user_id != actor.pk:
+        raise ConnectionError("That request isn't waiting for you.")
+    row.status, row.responded_at = DECLINED, timezone.now()
+    row.save(update_fields=["status", "responded_at"])
+    _clear_bell(row.from_user, actor)
+    return row
+
+
+def cancel(actor, row):
+    if row.from_user_id != actor.pk or row.status not in (PENDING, DECLINED):
+        raise ConnectionError("That isn't your request.")
+    _clear_bell(actor, row.to_user)
+    row.delete()
+
+
+def block(actor, other):
+    """They can't find or request you again; nothing is sent. Person shares between you are hidden. A circle you're
+    both in still connects you until one of you leaves it."""
+    if other is None or other.pk == actor.pk:
+        raise ConnectionError("No one found.")
+    low, high = _ordered(actor, other)
+    row, _created = Connection.objects.update_or_create(user_a=low, user_b=high, defaults={
+        "status": BLOCKED, "blocked_by": actor, "responded_at": timezone.now()})
+    _clear_bell(other, actor)
+    if not share_a_circle(actor, other):
+        _set_hidden(actor, other, timezone.now())
+    return row
+
+
+def unblock(actor, other):
+    """Unblock: back to not connected (they can find you and ask again)."""
+    row = pair(actor, other)
+    if row is not None and row.status == BLOCKED and row.blocked_by_id == actor.pk:
+        row.status, row.removed_by, row.removed_at = REMOVED, actor, timezone.now()
+        row.save(update_fields=["status", "removed_by", "removed_at"])

@@ -160,7 +160,7 @@ def record_activity(app, verb, summary, *, obj=None, actor=None, via=None, circl
         url = url or kind.url(obj)
         if group:
             group = f"{group}|{_audience_key(obj)}"
-    elif circle is None:
+    elif circle is None and recipient is None:
         return None                                         # a Personal space: only its person sees it
     now = timezone.now()
     fields = {"content_type": _ct(obj) if obj is not None else None, "object_id": obj.pk if obj is not None else None}

@@ -578,3 +578,47 @@ def activity(request, token):
     return ({"since": since.isoformat(),
              "events": [{**labs_activity.as_json(e), "unread": e.pk in unread} for e in events]},
             200, f"read {len(events)} activity event(s)")
+
+
+
+# --- People (albright_labs.connections) - the owner's connections; never a directory search ---------------------------
+
+def _person_json(user):
+    from albright_labs.sharing import person_name
+    return {"id": user.pk, "name": person_name(user), "username": user.get_username()}     # never an email
+
+
+@bot_endpoint("people:read")
+def people_connections(request, token):
+    from albright_labs import connections
+    owner = token.owner
+    out = {"connections": [_person_json(p) for p in connections.connected_people(owner)],
+           "requests_for_you": [{"request_id": r.pk, **_person_json(r.from_user)} for r in connections.incoming(owner)],
+           "sent": [{"request_id": r.pk, **_person_json(r.to_user)} for r in connections.outgoing(owner)]}
+    return out, 200, f"listed {len(out['connections'])} connections"
+
+
+@bot_endpoint("people:write", methods=("POST",))
+def people_connect(request, token):
+    """A connection request to one person by their exact username (case-insensitive) - only someone who can be
+    found by username (My account > Privacy). Anyone else - unknown, "Nobody", blocked - is the same 404."""
+    from django.contrib.auth import get_user_model
+    from albright_labs import connections
+    from albright_labs.models import UserPreference
+    data = json_body(request)
+    username = str(data.get("username") or "").strip().lstrip("@")[:150]
+    if not username:
+        raise ApiError(400, '"username" is required (their exact username).', "rejected: missing username")
+    owner = token.owner
+    other = get_user_model().objects.filter(username__iexact=username, is_active=True).first()
+    pref = UserPreference.objects.filter(user=other).first() if other else None
+    hidden = other is None or (pref is not None and pref.findable == UserPreference.FIND_NOBODY
+                               and other.pk not in connections.connected_ids(owner))
+    if hidden or other.pk in connections.blocked_ids(owner):
+        raise ApiError(404, "No one found with that username.", "rejected: no one found")
+    try:
+        _row, outcome = connections.send_request(owner, other)
+    except connections.ConnectionError:
+        raise ApiError(404, "No one found with that username.", "rejected: no one found") from None
+    return ({"outcome": outcome, **_person_json(other)}, 201 if outcome == "sent" else 200,
+            f"connect request to {other.get_username()}: {outcome}")

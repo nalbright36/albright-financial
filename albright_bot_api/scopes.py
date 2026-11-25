@@ -33,9 +33,11 @@ PLAIN = {
     "fitness:food:read": "Read your food log",
     "fitness:food:write": "Add and edit food entries",
     "activity:read": "See my notifications - what others changed in things shared with me and in my circles",
+    "people:read": "See who I'm connected with and my connection requests",
+    "people:write": "Send connection requests for me (by exact username)",
 }
 # Scopes anyone allowed API keys can use (not tied to one app).
-OPEN_SCOPES = {"activity:read"}
+OPEN_SCOPES = {"activity:read", "people:read", "people:write"}
 # The admin-only scopes that belong to an app that can be archived (albright_labs.archive).
 ADMIN_APP_SCOPES = {"trading:notes": "trade", "reseller:read": "resell", "reseller:suggest": "resell",
                     "opportunities:read": "opps", "opportunities:suggest": "opps", "opportunities:write": "opps"}
@@ -84,7 +86,8 @@ def grouped_choices(user):
     groups = {}
     for key, label in choices(user):
         app = APP_SCOPES.get(key)
-        name = apps_registry.BY_KEY[app].label if app in apps_registry.BY_KEY else ("Notifications" if key in OPEN_SCOPES else "Admin")
+        name = apps_registry.BY_KEY[app].label if app in apps_registry.BY_KEY else (
+            ("People" if key.startswith("people:") else "Notifications") if key in OPEN_SCOPES else "Admin")
         groups.setdefault((GROUP_ORDER.index(app) if app in GROUP_ORDER else 99, name), []).append((key, label))
     return [(name, rows) for (_order, name), rows in sorted(groups.items(), key=lambda kv: kv[0])]
 

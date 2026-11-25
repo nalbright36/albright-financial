@@ -39,7 +39,7 @@ and by my bots (albright_labs.sharing.apply_defaults). People are added by exact
     {# Active public recipe share links (albright_meals.share_links) - anyone with one can see that recipe. #}
     <section class="card circles-card" id="recipe-share-links" aria-labelledby="recipe-share-links-h">
         <h2 class="circles-card__title" id="recipe-share-links-h">Recipe share links <span class="circles-muted">anyone with one can see that recipe</span></h2>
-        <ul class="circles-links" role="list">{% for l in share_links %}
+        <ul class="recipe-links" role="list">{% for l in share_links %}
             <li data-share-link-row="{{ l.pk }}"><a href="{% url 'albright_meals:recipe' l.recipe_id %}#share-box">{{ l.recipe.title }}</a>
                 <span class="circles-muted">Made {{ l.created_at|date:"M j, Y" }} &middot; {{ l.view_count }} view{{ l.view_count|pluralize }}</span>
                 <form method="post" action="{% url 'albright_meals:recipe_share_link' l.recipe_id %}">{% csrf_token %}<input type="hidden" name="action" value="off"><input type="hidden" name="next" value="{% url 'labs:sharing_defaults' %}#recipe-share-links">

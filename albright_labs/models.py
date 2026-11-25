@@ -193,6 +193,14 @@ class UserPreference(models.Model):
     current_spaces = models.JSONField(default=dict, blank=True)
     # When they last opened the Opportunities Inbox - Home's "New opps" tile counts what arrived since.
     opps_seen_at = models.DateTimeField(null=True, blank=True)
+    # My account > Privacy "Who can find me" (People > Find people - albright_labs.connections.find): anyone with my
+    # exact email or my username (default), only by username, or nobody (invite links still work).
+    FIND_ANYONE, FIND_USERNAME, FIND_NOBODY = "anyone", "username", "nobody"
+    FIND_CHOICES = [(FIND_ANYONE, "Anyone with my exact email or username"), (FIND_USERNAME, "Only by my username"),
+                    (FIND_NOBODY, "Nobody (invite links still work)")]
+    findable = models.CharField("Who can find me", max_length=10, choices=FIND_CHOICES, default=FIND_ANYONE)
+    # Email me when someone asks to connect (the bell always shows it).
+    email_connect_requests = models.BooleanField("Email me connection requests", default=True)
     # My account > Offline data: keep a read-only copy (pages and the snapshot) on their devices (albright_labs.offline).
     offline_enabled = models.BooleanField(default=True)
     # The search palette's recent searches (albright_labs.search_views), newest first, at most 8.
@@ -392,16 +400,31 @@ class SharingDefault(models.Model):
 
 
 class Connection(models.Model):
-    """One pair of people (canonical: user_a_id < user_b_id). Implicit connections - a shared active circle,
-    or a visible person ShareGrant either way - do not need a row. A REMOVED row is written when either of
-    you clicks Remove (My account > People): person ShareGrants between you are hidden, not deleted, and
-    restored when you reconnect (joining a circle together; slice 2 also restores when a request is accepted).
-    CONNECTED is an explicit accepted request (slice 2). albright_labs.connections enforces every rule."""
-    CONNECTED, REMOVED = "connected", "removed"
-    STATUSES = [(CONNECTED, "Connected"), (REMOVED, "Removed")]
+    """One pair of people (canonical: user_a_id < user_b_id - so one row per pair, whoever asked). Implicit
+    connections - a shared active circle, a visible person ShareGrant either way, or an invite one of you sent the
+    other - need no row. albright_labs.connections enforces every rule.
+      PENDING  - from_user asked to connect with to_user (People > Find people, or the Bot API); to_user Accepts or
+                 Declines, from_user can Cancel (the row goes).
+      ACCEPTED - connected: each can pick the other in share pickers and "Add to circle".
+      DECLINED - to_user said no; from_user sees "Request sent" (never told), and can't ask again.
+      BLOCKED  - blocked_by blocked the other: they can't find or request them again; nothing is sent.
+      REMOVED  - either clicked Remove: person ShareGrants between you are hidden, not deleted, and restored when you
+                 reconnect (joining a circle together, or a new request being accepted)."""
+    PENDING, ACCEPTED, DECLINED, BLOCKED, REMOVED = "pending", "accepted", "declined", "blocked", "removed"
+    CONNECTED = ACCEPTED
+    STATUSES = [(PENDING, "Pending"), (ACCEPTED, "Accepted"), (DECLINED, "Declined"), (BLOCKED, "Blocked"),
+                (REMOVED, "Removed")]
     user_a = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections_as_a")
     user_b = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections_as_b")
-    status = models.CharField(max_length=10, choices=STATUSES, default=CONNECTED)
+    status = models.CharField(max_length=10, choices=STATUSES, default=ACCEPTED)
+    # Who asked whom (a request); kept after it's answered.
+    from_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name="connection_requests_sent")
+    to_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+                                related_name="connection_requests_received")
+    responded_at = models.DateTimeField(null=True, blank=True)
+    blocked_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
     removed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name="+")
     removed_at = models.DateTimeField(null=True, blank=True)

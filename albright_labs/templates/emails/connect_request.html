@@ -1,0 +1,9 @@
+{% extends "emails/_base.html" %}
+{% block body %}
+<p style="margin:0 0 12px;">Hi{% if recipient %} {{ recipient }}{% endif %},</p>
+<p style="margin:0 0 12px;"><strong>{{ name }}</strong> (@{{ username }}) wants to connect with you on Albright Labs. Once you're connected you can share tasks, notes, recipes and programs with each other.</p>
+<p style="margin:0;">Accept or decline on your People page.</p>
+{% endblock %}
+{% block after %}
+<p style="margin:20px 0 0; font-size:13px; color:#8B94A1;">If you don't know them, decline - or block them so they can't ask again. You can turn these emails off in My account &rsaquo; Privacy.</p>
+{% endblock %}

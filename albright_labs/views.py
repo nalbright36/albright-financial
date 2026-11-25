@@ -28,6 +28,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from . import app_access, apps_registry, home_tiles, landing, launcher, public_views, tiles
+from .models import UserPreference
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +138,10 @@ def account(request):
     files, _ = attachments.storage_used(request.user)
     return render(request, "albright_labs/account.html", {**_settings_context(request),
                                                           "api_keys": keys_allowed(request.user),
+                                                          "find_choices": UserPreference.FIND_CHOICES,
+                                                          "findable": UserPreference.for_user(request.user).findable,
+                                                          "email_connect_requests":
+                                                              UserPreference.for_user(request.user).email_connect_requests,
                                                           "attachment_files": files,
                                                           "usage": storage.get_storage_usage(request.user),
                                                           "attachment_max": attachments.size_limit_label(attachments.max_bytes())})
