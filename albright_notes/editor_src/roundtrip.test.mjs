@@ -20,6 +20,8 @@ const cases = [
   "Trip\n- x\nafter",
   "- [ ] call mom @[date:2026-12-03T17:00|task:12]\n- [x] milk, eggs @[grocery:45,46]\nok @[grocery:7|already] @[grocery] hi @[person:3|Sam Lee]",
   "**due @[date:2026-12-03]** done",
+  "Gift list\n\n@[budget:9]\n\nWrapping paper",
+  "inline @[budget:9] still a chip",
 ];
 let bad = 0;
 for (const c of cases) {
@@ -48,4 +50,8 @@ for (const [text, date, time] of when) {
   console.log(ok ? "ok  " : "BAD ", JSON.stringify(text), "->", JSON.stringify(got));
 }
 console.log(JSON.stringify(NE.atItems("gro", { groceries: true, now }).map((i) => i.label)), JSON.stringify(NE.atItems("", { now, people: [{ id: 1, name: "Sam" }] }).map((i) => i.label)));
+const budgetItem = NE.atItems("budget Christmas Gifts", { budget: true, now })[0];
+if (!budgetItem || budgetItem.label !== "Create budget" || budgetItem.name !== "Christmas Gifts") {
+  bad++; console.log("BAD  atItems budget", JSON.stringify(budgetItem));
+} else console.log("ok   Create budget", budgetItem.name);
 process.exit(bad ? 1 : 0);

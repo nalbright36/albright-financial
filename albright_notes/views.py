@@ -620,6 +620,64 @@ def smart_budget_info(request, pk, draft_id):
 
 @login_required
 @require_POST
+def smart_budget_lines(request, pk, draft_id):
+    """Add a line item to the note's budget plan: {text: "Mom 50"} or {text: "Mom: scarf 30"}."""
+    _editable(request, pk)
+    text = " ".join(str(_json(request).get("text") or "").split())
+    if not text:
+        return JsonResponse({"ok": False, "error": "Nothing to add"}, status=400)
+    try:
+        info, line, item = smart.add_budget_item(request.user, draft_id, text)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    if info is None:
+        return JsonResponse({"ok": False}, status=404)
+    return JsonResponse({"ok": True, "line_id": line.pk, "item_id": item.pk, **info})
+
+
+@login_required
+@require_POST
+def smart_budget_item(request, pk, draft_id, item_id):
+    """Update or delete one item: {label?, amount?} or {delete: true}."""
+    _editable(request, pk)
+    data = _json(request)
+    if data.get("delete"):
+        info = smart.delete_budget_item(request.user, draft_id, item_id)
+        if info is None:
+            return JsonResponse({"ok": False}, status=404)
+        return JsonResponse({"ok": True, **info})
+    from albright_money import money
+    amount = None
+    if "amount" in data:
+        amount = money.to_decimal(str(data.get("amount") or ""))
+        if amount is None or amount < 0:
+            return JsonResponse({"ok": False, "error": "Amount must be 0 or more"}, status=400)
+    label = data.get("label") if "label" in data else None
+    if isinstance(label, str):
+        label = label.strip()[:80]
+    elif label is not None:
+        return JsonResponse({"ok": False, "error": "Label must be text"}, status=400)
+    info = smart.update_budget_item(request.user, draft_id, item_id, amount=amount, label=label)
+    if info is None:
+        return JsonResponse({"ok": False}, status=404)
+    return JsonResponse({"ok": True, **info})
+
+
+@login_required
+@require_POST
+def smart_budget_line(request, pk, draft_id, line_id):
+    """Delete a person or event group: {delete: true}."""
+    _editable(request, pk)
+    if not _json(request).get("delete"):
+        return JsonResponse({"ok": False, "error": "Nothing to do"}, status=400)
+    info = smart.delete_budget_line(request.user, draft_id, line_id)
+    if info is None:
+        return JsonResponse({"ok": False}, status=404)
+    return JsonResponse({"ok": True, **info})
+
+
+@login_required
+@require_POST
 def smart_planner(request, pk):
     """A dated line goes to the Planner (sent by the editor when you leave the line, or "Add to Planner" on its chip):
     {date, time?, text} -> {task_id, url, created}. Sending the same line twice gives back the same task."""

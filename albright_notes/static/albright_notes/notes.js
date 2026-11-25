@@ -14,8 +14,8 @@
  *                  On a phone the note opens in a reading layout; tap the text to edit right there
  *   "@"            a due date ("@today call mom", "@fri 5pm" - a chip; the line goes to the Planner when you leave
  *                  it, with Undo; tap the chip to change it or open the task), the grocery list ("@grocery milk,
- *                  eggs" - sent when you leave the line, with Undo), a draft budget item in Money ("@budget Christmas
- *                  gifts 300" - sent when you leave the line, with Undo; the amount prefills it), or a person. Linked dates
+ *                  eggs" - sent when you leave the line, with Undo), a budget plan in Money ("@budget Christmas
+ *                  Gifts" - tap Create budget or press Return; lines under the block become people or gifts until you press Return on an empty row), or a person. Linked dates
  *                  and grocery tags stay in step with their Planner task / grocery line both ways (smart.py)
  *   autosave       title, body, tags and "Move checked items to the bottom" save as you type (debounced): "Saving…" /
  *                  "Saved ✓". Each save sends the version it started from; a 409 means someone else changed the
@@ -528,7 +528,8 @@
             onBlur: function (_ed, event) { onEditorBlur(event); },
             slash: {onOpen: slashOpen, onUpdate: slashUpdate, onKey: slashKey, onClose: closeBlockMenu, onImage: pickFile},
             at: smart ? {people: smart.people || [], groceries: !!smart.groceries, budget: !!smart.budget, onOpen: atUpdate, onUpdate: atUpdate,
-                         onKey: atKey, onClose: closeBlockMenu, onPick: function (range) { openChipPop(null, range); }} : null,
+                         onKey: atKey, onClose: closeBlockMenu, onPick: function (range) { openChipPop(null, range); },
+                         onCreateBudget: createBudgetBlock, onBudgetMount: mountBudgetBlock, onBudgetDestroy: destroyBudgetBlock} : null,
         });
         editor = ne.editor;
         preview.hidden = true;
@@ -867,6 +868,252 @@
             return res.data;
         });
     }
+
+    function budgetInfoUrl(bid) {
+        return root.dataset.budgetInfoUrl.replace("/0/", "/" + bid + "/");
+    }
+    function budgetLinesUrl(bid) { return budgetInfoUrl(bid) + "lines/"; }
+    function budgetItemUrl(bid, itemId) { return budgetInfoUrl(bid) + "items/" + itemId + "/"; }
+    function budgetGroupUrl(bid, lineId) { return budgetInfoUrl(bid) + "lines/" + lineId + "/"; }
+    function moneyUsd(n) {
+        var x = Number(n);
+        if (!isFinite(x)) return "$0";
+        return (x < 0 ? "-" : "") + "$" + Math.abs(x).toLocaleString("en-US", {minimumFractionDigits: x % 1 ? 2 : 0, maximumFractionDigits: 2});
+    }
+    function itemLabel(item) { return (item && item.label) ? item.label : "Item"; }
+
+    function createBudgetBlock(ed, range, name) {
+        var text = (name || "").trim() || "Budget plan";
+        api(root.dataset.budgetUrl, {text: text}).then(function (data) {
+            NoteEditor.insertBudgetBlock(ed, data.id, range);
+            toast("Budget created: " + data.name, "Undo", function () {
+                api(root.dataset.budgetRemoveUrl, {id: data.id}).then(function () {
+                    toast("Budget draft removed");
+                }).catch(function () {});
+                // The block itself is undone by the editor's document history if the person also taps Undo;
+                // remove it here so the note no longer points at a deleted plan.
+                ed.state.doc.descendants(function (node, pos) {
+                    if (node.type.name === "budgetBlock" && Number(node.attrs.bid) === data.id) {
+                        NoteEditor.removeBudgetBlock(ed, pos);
+                        return false;
+                    }
+                    return true;
+                });
+            });
+        }).catch(function (err) {
+            toast(err.message === "failed" ? "Couldn't create the budget" : err.message);
+        });
+    }
+
+    var budgetWidgets = [];
+    function destroyBudgetBlock(dom) {
+        budgetWidgets = budgetWidgets.filter(function (w) { return w.dom !== dom; });
+    }
+    function mountBudgetBlock(dom, attrs, ed, getPos) {
+        destroyBudgetBlock(dom);
+        var state = {dom: dom, bid: attrs.bid, data: null, entering: !!attrs.fresh, open: {}, canEdit: !!(root && root.dataset.canEdit === "1") && !!(ed && ed.isEditable)};
+        budgetWidgets.push(state);
+        function paint(data) {
+            if (data) state.data = data;
+            renderBudgetBlock(state, ed, getPos);
+        }
+        paint(null);
+        fetch(budgetInfoUrl(attrs.bid), {credentials: "same-origin", headers: {"X-Requested-With": "XMLHttpRequest"}})
+            .then(function (r) { if (!r.ok) throw new Error("gone"); return r.json(); })
+            .then(paint)
+            .catch(function () { state.gone = true; paint(state.data); });
+    }
+
+    function renderBudgetBlock(state, ed, getPos) {
+        var dom = state.dom, data = state.data, canEdit = state.canEdit && !state.gone;
+        dom.className = "nt-bblock" + (state.entering ? "" : " is-collapsed");
+        dom.innerHTML = "";
+        var head = el("div", "nt-bblock__head");
+        head.appendChild(el("span", "nt-bblock__mark", "💰"));
+        head.appendChild(el("div", "nt-bblock__name", (data && data.name) || (state.gone ? "Budget removed" : "Budget")));
+        var open = el("a", "nt-bblock__open", "Open in Money");
+        open.href = (data && data.url) || "#";
+        if (data && data.url) { /* ok */ } else open.setAttribute("aria-disabled", "true");
+        head.appendChild(open);
+        dom.appendChild(head);
+        var tot = el("div", "nt-bblock__tot");
+        if (!data) {
+            tot.textContent = state.gone ? "This plan is gone." : "Loading…";
+            dom.appendChild(tot);
+            return;
+        }
+        var groups = data.groups || [];
+        var people = groups.length, items = data.item_count || 0;
+        tot.appendChild(document.createTextNode("Spent "));
+        var strong = el("strong", "", moneyUsd(data.spent));
+        tot.appendChild(strong);
+        if (people) {
+            tot.appendChild(document.createTextNode(" · " + people + (people === 1 ? " person" : " people")));
+            if (items && items !== people) tot.appendChild(document.createTextNode(", " + items + " item" + (items === 1 ? "" : "s")));
+        } else {
+            tot.appendChild(document.createTextNode(" · add people or costs"));
+        }
+        dom.appendChild(tot);
+        var lines = el("div", "nt-bblock__lines");
+        groups.forEach(function (g) {
+            var multi = (g.items || []).length > 1;
+            var row = el("div", "nt-brow" + (multi ? " nt-brow--group" : ""));
+            var name = el("div", "nt-brow__name", g.name);
+            row.appendChild(name);
+            if (multi) {
+                var toggle = el("button", "nt-brow__toggle", g.item_count + " items");
+                toggle.type = "button";
+                toggle.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    state.open[g.id] = !state.open[g.id];
+                    renderBudgetBlock(state, ed, getPos);
+                });
+                row.appendChild(toggle);
+            }
+            row.appendChild(el("div", "nt-brow__amt")).appendChild(el("span", "cur", "$"));
+            row.querySelector(".nt-brow__amt").appendChild(document.createTextNode(String(Number(g.spent) % 1 ? Number(g.spent).toFixed(2) : Number(g.spent))));
+            if (canEdit) {
+                var x = el("button", "nt-brow__x", "×");
+                x.type = "button";
+                x.setAttribute("aria-label", "Remove " + g.name);
+                x.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    var snapshot = JSON.stringify(data);
+                    api(budgetGroupUrl(state.bid, g.id), {delete: true}).then(function (next) {
+                        state.data = next;
+                        renderBudgetBlock(state, ed, getPos);
+                        toast("Removed " + g.name, "Undo", function () {
+                            (g.items || []).forEach(function (item) {
+                                var text = g.name + (item.label ? ": " + item.label : "") + " " + item.amount;
+                                api(budgetLinesUrl(state.bid), {text: text}).then(function (restored) {
+                                    state.data = restored;
+                                    renderBudgetBlock(state, ed, getPos);
+                                }).catch(function () {});
+                            });
+                        });
+                    }).catch(function (err) { toast(err.message || "Couldn't remove that"); });
+                });
+                row.appendChild(x);
+            }
+            lines.appendChild(row);
+            if (multi && state.open[g.id]) {
+                var box = el("div", "nt-bitems");
+                (g.items || []).forEach(function (item) {
+                    var ir = el("div", "nt-bitem");
+                    ir.appendChild(el("div", "nt-bitem__label", itemLabel(item)));
+                    var amt = el("div", "nt-bitem__amt");
+                    amt.appendChild(el("span", "cur", "$"));
+                    amt.appendChild(document.createTextNode(String(Number(item.amount) % 1 ? Number(item.amount).toFixed(2) : Number(item.amount))));
+                    ir.appendChild(amt);
+                    if (canEdit) {
+                        var ix = el("button", "nt-bitem__x", "×");
+                        ix.type = "button";
+                        ix.setAttribute("aria-label", "Remove item");
+                        ix.addEventListener("click", function (event) {
+                            event.preventDefault();
+                            api(budgetItemUrl(state.bid, item.id), {delete: true}).then(function (next) {
+                                state.data = next;
+                                renderBudgetBlock(state, ed, getPos);
+                                toast("Removed item", "Undo", function () {
+                                    var text = g.name + (item.label ? ": " + item.label : "") + " " + item.amount;
+                                    api(budgetLinesUrl(state.bid), {text: text}).then(function (restored) {
+                                        state.data = restored;
+                                        renderBudgetBlock(state, ed, getPos);
+                                    }).catch(function () {});
+                                });
+                            }).catch(function (err) { toast(err.message || "Couldn't remove that"); });
+                        });
+                        ir.appendChild(ix);
+                    }
+                    box.appendChild(ir);
+                });
+                lines.appendChild(box);
+            }
+        });
+        if (canEdit && state.entering) {
+            var input = el("div", "nt-brow nt-brow--input");
+            var field = document.createElement("input");
+            field.type = "text";
+            field.className = "nt-brow__field";
+            field.placeholder = "Name or Name: label 30";
+            field.setAttribute("aria-label", "Budget line");
+            var amtwrap = el("div", "nt-brow__amtwrap");
+            amtwrap.appendChild(el("span", "", "$"));
+            var amtField = document.createElement("input");
+            amtField.type = "text";
+            amtField.inputMode = "decimal";
+            amtField.placeholder = "";
+            amtField.setAttribute("aria-label", "Amount");
+            amtwrap.appendChild(amtField);
+            input.appendChild(field);
+            input.appendChild(amtwrap);
+            input.appendChild(el("span", "nt-brow__x"));
+            lines.appendChild(input);
+            field.addEventListener("input", function () {
+                var m = /\s+(\$?\d[\d,]*(?:\.\d{1,2})?)\s*$/.exec(field.value);
+                if (m && !amtField.value) amtField.placeholder = m[1].replace("$", "");
+            });
+            function submitOrExit() {
+                var text = field.value.trim();
+                if (!text) {
+                    state.entering = false;
+                    renderBudgetBlock(state, ed, getPos);
+                    if (NoteEditor.focusAfterBudgetBlock) NoteEditor.focusAfterBudgetBlock(ed, getPos);
+                    return;
+                }
+                if (amtField.value.trim() && !/\d/.test(text.slice(-1))) text = text + " " + amtField.value.trim();
+                field.disabled = true;
+                api(budgetLinesUrl(state.bid), {text: text}).then(function (next) {
+                    state.data = next;
+                    field.value = "";
+                    amtField.value = "";
+                    amtField.placeholder = "";
+                    field.disabled = false;
+                    renderBudgetBlock(state, ed, getPos);
+                    var again = state.dom.querySelector(".nt-brow__field");
+                    if (again) again.focus();
+                }).catch(function (err) {
+                    field.disabled = false;
+                    toast(err.message || "Couldn't add that line");
+                    field.focus();
+                });
+            }
+            field.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); submitOrExit(); }
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    state.entering = false;
+                    renderBudgetBlock(state, ed, getPos);
+                }
+            });
+            amtField.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); submitOrExit(); }
+            });
+        }
+        dom.appendChild(lines);
+        if (canEdit && state.entering && !(data.groups || []).length) {
+            dom.appendChild(el("p", "nt-bblock__hint", "Type a name and amount (Mom 50), or Mom: scarf 30. Return saves. Return again on an empty line to finish."));
+        }
+        if (canEdit && !state.entering) {
+            var add = el("button", "nt-bblock__add", "+ Add a line");
+            add.type = "button";
+            add.addEventListener("click", function (event) {
+                event.preventDefault();
+                state.entering = true;
+                renderBudgetBlock(state, ed, getPos);
+                var again = state.dom.querySelector(".nt-brow__field");
+                if (again) again.focus();
+            });
+            dom.appendChild(add);
+        }
+        if (canEdit && state.entering) {
+            setTimeout(function () {
+                var f = dom.querySelector(".nt-brow__field");
+                if (f) f.focus();
+            }, 0);
+        }
+    }
+
     function chipBy(uid) {
         return NoteEditor.findChips(editor).filter(function (c) { return c.uid === uid; })[0] || null;
     }

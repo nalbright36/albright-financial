@@ -469,15 +469,74 @@ def remove_budget_draft(user, draft_id):
 
 
 def budget_draft(user, draft_id):
-    """{name, planned, confirmed, category, url} for a chip's popover, or None when it's gone / not theirs to see."""
-    from albright_money.models import BudgetDraft
-    d = BudgetDraft.objects.visible_to(user).select_related("line__category", "line__budget").filter(pk=draft_id).first()
+    """{name, planned (the plan cap), confirmed, category, url, groups, spent, ...} for a chip or the budget
+    block, or None when it's gone / not theirs to see in Money."""
+    from albright_money.budget import plan_payload, visible_plan
+    d = visible_plan(user, draft_id)
     if d is None:
         return None
-    from albright_money.budget import plan_url
-    return {"name": d.name, "planned": str(d.planned) if d.planned is not None else None,
-            "confirmed": not d.is_draft, "category": d.line.category.name if d.line_id else None,
-            "url": plan_url(d)}
+    data = plan_payload(d)
+    data.update({
+        "planned": str(d.planned) if d.planned is not None else None,
+        "confirmed": not d.is_draft,
+        "category": d.line.category.name if d.line_id else None,
+    })
+    return data
+
+
+def add_budget_item(user, draft_id, text):
+    """Add a Notes line ('Mom 50' / 'Mom: scarf 30') to the plan. Returns (payload, line, item) or
+    (None, None, None) when the plan is not theirs. Raises ValueError when the text has no name or amount."""
+    from albright_money import budget
+    plan = budget.visible_plan(user, draft_id)
+    if plan is None:
+        return None, None, None
+    made = budget.add_item_from_text(plan, text)
+    if made is None:
+        raise ValueError("Give a name and an amount, like Mom 50 or Mom: scarf 30")
+    line, item = made
+    return budget_draft(user, plan.pk), line, item
+
+
+def update_budget_item(user, draft_id, item_id, amount=None, label=None):
+    """Change one item on the plan. Returns the payload, or None when the item or plan is not theirs."""
+    from albright_money import budget
+    from albright_money.models import BudgetPlanItem
+    plan = budget.visible_plan(user, draft_id)
+    if plan is None:
+        return None
+    item = BudgetPlanItem.objects.filter(pk=item_id, line__plan=plan).select_related("line").first()
+    if item is None:
+        return None
+    budget.update_item(item, amount=amount, label=label)
+    return budget_draft(user, plan.pk)
+
+
+def delete_budget_item(user, draft_id, item_id):
+    """Remove one item. Returns the payload, or None when the item or plan is not theirs."""
+    from albright_money import budget
+    from albright_money.models import BudgetPlanItem
+    plan = budget.visible_plan(user, draft_id)
+    if plan is None:
+        return None
+    item = BudgetPlanItem.objects.filter(pk=item_id, line__plan=plan).select_related("line").first()
+    if item is None:
+        return None
+    budget.delete_item(item)
+    return budget_draft(user, plan.pk)
+
+
+def delete_budget_line(user, draft_id, line_id):
+    """Remove a person or event (and its items). Returns the payload, or None when it's not theirs."""
+    from albright_money import budget
+    plan = budget.visible_plan(user, draft_id)
+    if plan is None:
+        return None
+    line = plan.plan_lines.filter(pk=line_id).first()
+    if line is None:
+        return None
+    line.delete()
+    return budget_draft(user, plan.pk)
 
 
 def add_task(note, user, day, at=None, text=""):

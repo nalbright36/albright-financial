@@ -27,6 +27,7 @@ w.fetch = (url, opts) => {
     : { ok: true, version: 4, updated_iso: new Date().toISOString(), link_state: {}, sync: [] };
   return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(reply) });
 };
+w.eval(fs.readFileSync("../../albright_labs/static/labs/text.js", "utf8"));   // plural(), loaded by index.html
 w.eval(fs.readFileSync("../static/albright_notes/vendor/note-editor.js", "utf8"));
 w.eval(fs.readFileSync("../static/albright_notes/notes.js", "utf8"));
 const mount = w.document.getElementById("nt-editor-mount");

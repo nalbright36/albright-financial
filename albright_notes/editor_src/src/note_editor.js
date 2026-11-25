@@ -174,6 +174,9 @@ function renderChunk(lines) {
     html = html.replace(new RegExp("<p>" + EMPTY + "</p>", "g"), "<p></p>")
         .replace(new RegExp("<p>" + SMALL, "g"), '<p data-small="">')
         .replace(new RegExp(EMPTY, "g"), "");
+    // A paragraph that is only @[budget:id] becomes a block widget, not an inline chip.
+    html = html.replace(/<p>\s*<span data-chip="@\[budget:(\d+)\]"><\/span>\s*<\/p>/g,
+                        '<div data-budget-block="$1"></div>');
     return html;
 }
 
@@ -359,6 +362,7 @@ function tableMarkdown(node) {
 
 function block(node) {
     switch (node.type) {
+        case "budgetBlock": return "@[budget" + (node.attrs && node.attrs.bid ? ":" + node.attrs.bid : "") + "]";
         case "paragraph": return inline(node.content);
         case "smallText": return "-# " + inline(node.content);
         case "heading": return "#".repeat(Math.min(Math.max(node.attrs.level || 1, 1), 6)) + " " + inline(node.content);
@@ -607,7 +611,10 @@ export function atItems(query, opts) {
         items.push({ kind: "grocery", icon: "🛒", label: "Grocery list", hint: "Put this line on your grocery list" });
     }
     if (opts.budget && (!q || "budget".startsWith(q) || q.startsWith("budget"))) {
-        items.push({ kind: "budget", icon: "💰", label: "Budget draft", hint: "Start a budget item in Money from this line" });
+        const raw = String(query || "").trim();
+        const name = q.startsWith("budget") ? raw.replace(/^budget\s*/i, "").trim() : "";
+        items.push({ kind: "budget", icon: "💰", label: "Create budget",
+            hint: name || "Start a budget plan from this line", name });
     }
     (opts.people || []).filter((p) => !q || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.name.toLowerCase().startsWith(q))
         .slice(0, 5).forEach((p) => items.push({ kind: "person", pid: p.id, name: p.name, icon: "@", label: p.name, hint: "Mention" }));
@@ -673,10 +680,7 @@ function atExtension(at) {
                             props.command({ kind: "grocery" });
                             return;
                         }
-                        if (/^budget $/i.test(props.query) && at.budget) {             // "@budget" then space
-                            props.command({ kind: "budget" });
-                            return;
-                        }
+                        // "@budget " does not auto-insert a chip: the menu stays open as "Create budget".
                         if (at.onUpdate) at.onUpdate(props);
                     },
                     onKeyDown: (props) => (at.onKey ? at.onKey(props) : false),
@@ -690,6 +694,10 @@ function atExtension(at) {
 export function insertChip(editor, item, range, at) {
     if (item.kind === "pick") {
         if (at && at.onPick) at.onPick(range);
+        return;
+    }
+    if (item.kind === "budget" && at && at.onCreateBudget) {
+        at.onCreateBudget(editor, range, item.name || "");
         return;
     }
     const attrs = { kind: item.kind, fresh: true, uid: "c" + (++chipSeq) };
@@ -855,6 +863,82 @@ export function sortChecked(editor) {
     if (tr.docChanged) editor.view.dispatch(tr);
 }
 
+// A budget plan block: the Markdown is still "@[budget:9]" on its own line. The page fills the widget
+// (options.at.onBudgetMount).
+function budgetBlock(at) {
+    return Node.create({
+        name: "budgetBlock",
+        group: "block",
+        atom: true,
+        selectable: true,
+        draggable: false,
+        addAttributes() {
+            return {
+                bid: { default: null, parseHTML: (el) => {
+                    const n = Number(el.getAttribute("data-budget-block"));
+                    return Number.isFinite(n) && n > 0 ? n : null;
+                } },
+                fresh: { default: false, rendered: false, parseHTML: () => false },
+            };
+        },
+        parseHTML() { return [{ tag: "div[data-budget-block]" }]; },
+        renderHTML({ node }) {
+            return ["div", { "data-budget-block": String(node.attrs.bid || ""), class: "nt-bblock" }];
+        },
+        addNodeView() {
+            return ({ node, editor, getPos }) => {
+                const dom = document.createElement("div");
+                dom.className = "nt-bblock";
+                dom.setAttribute("data-budget-block", String(node.attrs.bid || ""));
+                dom.contentEditable = "false";
+                if (at && at.onBudgetMount) at.onBudgetMount(dom, node.attrs, editor, getPos);
+                return {
+                    dom,
+                    update(updated) {
+                        if (updated.type.name !== "budgetBlock") return false;
+                        return true;
+                    },
+                    ignoreMutation: () => true,
+                    stopEvent: () => true,
+                    destroy() { if (at && at.onBudgetDestroy) at.onBudgetDestroy(dom); },
+                };
+            };
+        },
+    });
+}
+
+export function insertBudgetBlock(editor, bid, range) {
+    let chain = editor.chain().focus();
+    if (range) chain = chain.deleteRange(range);
+    chain.insertContent([
+        { type: "budgetBlock", attrs: { bid, fresh: true } },
+        { type: "paragraph" },
+    ]).run();
+}
+
+export function removeBudgetBlock(editor, getPos) {
+    const pos = typeof getPos === "function" ? getPos() : getPos;
+    if (typeof pos !== "number") return false;
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== "budgetBlock") return false;
+    editor.view.dispatch(editor.state.tr.delete(pos, pos + node.nodeSize));
+    return true;
+}
+
+export function focusAfterBudgetBlock(editor, getPos) {
+    const pos = typeof getPos === "function" ? getPos() : getPos;
+    if (typeof pos !== "number") return;
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node) return;
+    const after = pos + node.nodeSize;
+    const $after = editor.state.doc.resolve(Math.min(after, editor.state.doc.content.size));
+    if ($after.nodeAfter && $after.nodeAfter.type.name === "paragraph") {
+        editor.chain().focus().setTextSelection(after + 1).run();
+        return;
+    }
+    editor.chain().focus().insertContentAt(after, { type: "paragraph" }).setTextSelection(after + 1).run();
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The editor
 // ---------------------------------------------------------------------------------------------------------------
@@ -877,6 +961,7 @@ export function create(options) {
         SmallText,
         Callout,
         SmartChip,
+        budgetBlock(options.at || {}),
         FileDrop.configure({ onFiles: options.onFiles || null }),
         Placeholder.configure({
             includeChildren: true,
