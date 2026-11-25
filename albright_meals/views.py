@@ -625,6 +625,9 @@ def recipe(request, pk):
     obj, editable = scope.readable_recipe(request.user, request.space, pk)
     _recipe_grants().filter(object_id=obj.pk, user=request.user, seen_at__isnull=True).update(seen_at=timezone.now())
     ingredients = _ingredients_for(obj.space if obj.space_id in scope.space_ids(request.user) else request.space, obj)
+    photos = recipe_attachments.ingredient_photo_map(obj)
+    for row in ingredients:
+        row["photo"] = photos.get(row.get("id") or "")
     group_mode = ingredient_categories.mode_for(request.user, obj.ingredients)
     source_link = obj.source_url if importer.is_web_url(obj.source_url) else ""
     host = (urlsplit(source_link).hostname or "") if source_link else ""
@@ -640,7 +643,7 @@ def recipe(request, pk):
         "recipe": obj, "editable": editable, "owned": owned, "shared_grant": shared_grant, "ingredients": ingredients,
         "ingredient_groups": ingredient_categories.group_rows(ingredients, group_mode), "group_mode": group_mode,
         "share": sheet.sheet(request.user, obj), "move_spaces": [s for s in request.spaces if s.pk != obj.space_id] if owned else [],
-        "step_groups": importer.step_groups(obj.steps),
+        "step_groups": recipe_attachments.decorate_steps(obj, importer.step_groups(obj.steps)),
         "source_link": source_link, "source_host": host[4:] if host.startswith("www.") else host,
         "plan_form": PlanSlotForm(initial={"date": timezone.localdate()}),
         "nutrition": getattr(obj, "nutrition", None), "per_serving": recipe_nutrition.per_serving(getattr(obj, "nutrition", None)),

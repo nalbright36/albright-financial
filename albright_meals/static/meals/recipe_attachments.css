@@ -81,3 +81,44 @@
 /* Shared Add files block sits under the header on this page. */
 .ra-photos .att { margin: 0; padding: 0; border: 0; background: transparent; }
 .ra-photos .att__label { font-size: var(--text-sm); }
+
+/* e2: thumbs beside ingredient lines, photos under steps */
+.ing.ing--withpic { grid-template-columns: minmax(3.75rem, 5.25rem) minmax(0, 1fr) auto 40px; align-items: center; }
+.ing.ing--pick.ing--withpic { grid-template-columns: 22px minmax(3.5rem, 4.75rem) minmax(0, 1fr) auto 40px; }
+.ing.ing--tools.ing--withpic { grid-template-columns: minmax(3.75rem, 5.25rem) minmax(0, 1fr) auto 40px; }
+.ing.ing--noamt.ing--withpic { grid-template-columns: minmax(0, 1fr) auto 40px; }
+.ing.ing--pick.ing--noamt.ing--withpic { grid-template-columns: 22px minmax(0, 1fr) auto 40px; }
+.ing__pic, .ing__addpic {
+    width: 40px; height: 40px; border-radius: 8px; padding: 0; overflow: hidden;
+    border: 1px solid var(--border); background: var(--surface-raised); cursor: pointer;
+    flex: 0 0 40px; justify-self: end;
+}
+.ing__pic { display: block; }
+.ing__pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ing__addpic {
+    display: grid; place-items: center; border-style: dashed;
+    border-color: var(--border-strong, var(--border));
+    color: var(--text-secondary); background: transparent;
+}
+.ing__addpic:hover, .ing__addpic:focus-visible {
+    color: var(--accent-hover, #FB923C); border-color: var(--accent, #F97316);
+    background: var(--accent-soft, rgba(249, 115, 22, 0.12));
+}
+.ra-step { margin: 0; }
+.ra-step__photo {
+    display: block; margin-top: 8px; width: 140px; height: 96px; object-fit: cover;
+    border-radius: var(--radius-sm, 8px); border: 1px solid var(--border);
+}
+.ra-step__add {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 8px; min-height: 32px; padding: 0 10px;
+    border-radius: 8px; border: 1px dashed var(--border-strong, var(--border));
+    background: transparent; color: var(--text-secondary);
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
+}
+.ra-step__add:hover, .ra-step__add:focus-visible {
+    color: var(--accent-hover, #FB923C); border-color: var(--accent, #F97316);
+}
+.ra-link-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+
+.ing__addform, .ra-step__form { margin: 0; display: grid; }

@@ -73,3 +73,45 @@ def set_card(request, pk):
         card = recipe_attachments.recipe_card_for(recipe)
         return JsonResponse({"ok": True, "card_id": None if card is None else card["id"]})
     return redirect(_next(request, recipe))
+
+
+@login_required
+@require_POST
+def link_photo(request, pk):
+    """Upload (or pick) a photo and pin it to an ingredient line or a step. Images only."""
+    recipe = _editable(request, pk)
+    ingredient_id = (request.POST.get("ingredient") or "").strip()
+    step_raw = (request.POST.get("step") or "").strip()
+    attachment = None
+    files = request.FILES.getlist("file")
+    if files:
+        try:
+            attachment = attachments.add(request.user, recipe, files[0])
+        except attachments.AttachmentError as exc:
+            messages.error(request, str(exc))
+            return redirect(_next(request, recipe))
+    elif (request.POST.get("attachment") or "").strip():
+        attachment = recipe_attachments.find_on_recipe(recipe, request.POST.get("attachment"))
+        if attachment is None:
+            raise Http404
+    if attachment is None:
+        messages.error(request, "Choose a photo to attach.")
+        return redirect(_next(request, recipe))
+    if not attachment.is_image:
+        messages.error(request, "Only a photo can be attached to a line or a step.")
+        return redirect(_next(request, recipe))
+    try:
+        if ingredient_id:
+            recipe_attachments.link_to_ingredient(recipe, attachment, ingredient_id)
+            messages.success(request, "Photo added to that ingredient.")
+        elif step_raw != "":
+            recipe_attachments.link_to_step(recipe, attachment, step_raw)
+            messages.success(request, "Photo added to that step.")
+        else:
+            messages.error(request, "Pick a line or a step to attach this photo to.")
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "id": attachment.pk,
+                             "url": attachments.describe(attachment)["url"]})
+    return redirect(_next(request, recipe))

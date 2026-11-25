@@ -23,6 +23,7 @@ from albright_labs.testing import kitchen
 
 from . import groceries, plan
 from .digest import digest_lines
+from .ingredients import without_ids
 from .models import GroceryItem, MealIdea, MealPlanEntry, MealsSettings, Recipe
 
 PASSWORD = "pw-not-real-12345"
@@ -373,7 +374,7 @@ class IdeaAndRecipeTests(Base):
         curry = Recipe.objects.get(title="Chicken curry")
         detail = self.client.get(reverse("albright_meals:recipe", args=[curry.pk]))
         self.assertContains(detail, '<span class="ing__amt">1 lb</span><span class="ing__name">chicken</span>')
-        self.assertContains(detail, "<li>Simmer.</li>")
+        self.assertContains(detail, '<li class="ra-step">Simmer.')
         self.client.post(reverse("albright_meals:recipe_plan", args=[curry.pk]),
                          {"date": self.today.isoformat(), "slot": "dinner"})
         self.assertEqual(MealPlanEntry.objects.get(date=self.today, slot="dinner").recipe, curry)
@@ -383,7 +384,7 @@ class IdeaAndRecipeTests(Base):
             "title": "Chili", "ingredients_text": "2 lb ground beef\n1 onion, diced", "steps_text": "Brown.\nSimmer.",
             "tags_text": "Beef, Easy", "description": "", "notes": "", "source_url": "", "image_url": ""})
         chili = Recipe.objects.get(title="Chili")
-        self.assertEqual(chili.ingredients, [
+        self.assertEqual(without_ids(chili.ingredients), [
             {"name": "ground beef", "quantity": "2", "unit": "lb", "note": "", "original": "2 lb ground beef", "category": "meat"},
             {"name": "onion", "quantity": "1", "unit": "", "note": "diced", "original": "1 onion, diced", "category": "produce"}])
         self.assertEqual((chili.steps, chili.tags, chili.created_by), (["Brown.", "Simmer."], ["beef", "easy"],
@@ -505,7 +506,7 @@ class BotApiTests(Base):
         self.assertEqual(created.status_code, 201)
         recipe_id = created.json()["id"]
         recipe = Recipe.objects.get(pk=recipe_id)
-        self.assertEqual(recipe.ingredients[0], {"name": "chicken", "quantity": "1", "unit": "lb", "note": "",
+        self.assertEqual(without_ids(recipe.ingredients[0]), {"name": "chicken", "quantity": "1", "unit": "lb", "note": "",
                                                  "original": "1 lb chicken", "category": "meat"})
         self.assertEqual((recipe.tags, recipe.from_bot, recipe.author_label), (["quick", "chicken"], True, "Recipe Bot"))
         updated = self.call("POST", "meals/recipes", {"title": "chicken curry", "notes": "Add more ginger."})

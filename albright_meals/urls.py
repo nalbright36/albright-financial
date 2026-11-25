@@ -46,6 +46,7 @@ urlpatterns = [
     path("recipes/<int:pk>/share-link/", share_link_views.recipe_share_link, name="recipe_share_link"),
     path("recipes/<int:pk>/attachments/cover/", recipe_attachment_views.set_cover, name="recipe_attachment_cover"),
     path("recipes/<int:pk>/attachments/card/", recipe_attachment_views.set_card, name="recipe_attachment_card"),
+    path("recipes/<int:pk>/attachments/link/", recipe_attachment_views.link_photo, name="recipe_attachment_link"),
     path("recipes/grouping/", views.ingredient_grouping, name="ingredient_grouping"),
     # Public, read-only share links (share_link_views; ungated in apps_registry - no sign-in, no Meals needed).
     path("r/<str:token>/", share_link_views.shared_recipe, name="shared_recipe"),

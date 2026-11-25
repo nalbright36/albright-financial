@@ -82,7 +82,9 @@ def ingredient_rows(ingredients):
             rows.append({"index": index, "section": (original or text).strip().lstrip("#").strip().rstrip(":").strip()})
             continue
         category = ingredient.get("category") if isinstance(ingredient, dict) else ""
-        rows.append({"index": index, "amount": amount, "name": text or original, "note": note, "original": original,
+        ident = ingredient.get("id") if isinstance(ingredient, dict) else ""
+        rows.append({"index": index, "id": ident or "", "amount": amount, "name": text or original, "note": note,
+                     "original": original,
                      "category": category or categorize(text), "qty": _number(quantity) if amount_qty else None,
                      "qty_min": _number(low), "unit_one": _unit_text(unit, 1), "unit_many": _unit_text(unit, 2)})
     return rows

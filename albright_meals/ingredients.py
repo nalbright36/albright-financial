@@ -1,7 +1,7 @@
 """A recipe's ingredients: one shape for every one, and its category.
 
 Every saved ingredient (Recipe.save runs normalize_list - the recipe form, imports, the Bot API, the assistant) is a
-dict: {"original": the line as written (never lost), "quantity": "1.5" (the most to buy - a range's upper end),
+dict: {"id": a 16-char hex that stays with the line so a photo can stay attached, "original": the line as written (never lost), "quantity": "1.5" (the most to buy - a range's upper end),
 "quantity_min": "1" (a range's lower end, else absent), "unit": "cup", "name": "chicken broth", "note": "low-sodium",
 "category": "pantry"} - or, for a section line ("For the sauce:"), {"original", "name", "section": true}.
 Older rows that kept the whole line in "name" ("2 lb beef stew meat, trimmed") are parsed again from their text
@@ -14,6 +14,7 @@ pantry, not meat. Someone can change it on the recipe's edit page (normalize nev
 suggest_with_ai() asks the person's connected AI assistant about the ones the map leaves as Other."""
 import json
 import re
+import secrets
 
 CATEGORIES = [("meat", "Meat & seafood"), ("produce", "Produce"), ("dairy", "Dairy & eggs"),
               ("pantry", "Pantry & canned"), ("spices", "Spices & seasonings"), ("sauces", "Sauces & condiments"),
@@ -153,6 +154,18 @@ def _line_of(ingredient):
     return f"{text}, {note}" if note else text
 
 
+
+_ID = re.compile(r"^[0-9a-f]{16}$")
+
+
+def new_ingredient_id():
+    return secrets.token_hex(8)  # 16 hex characters
+
+
+def valid_ingredient_id(value):
+    return bool(_ID.fullmatch(str(value or "")))
+
+
 def normalize(ingredient):
     """One ingredient (a dict or a plain line) -> the stored shape. Idempotent; keeps a category someone chose."""
     from . import importer
@@ -186,10 +199,20 @@ def normalize(ingredient):
     out.pop("section", None)
     if out.get("category") not in ORDER:
         out["category"] = categorize(out["name"])
+    # Keep a valid id so a photo stays on this line across saves; stamp a new one when the line is new.
+    existing = str(out.get("id") or "")
+    out["id"] = existing if valid_ingredient_id(existing) else new_ingredient_id()
     return out
 
 
 _TASTE = re.compile(r"(?i)[ ,]+to taste$")
+
+
+def without_ids(value):
+    """Drop the stable id so a stored ingredient can be compared to a fixture (tests)."""
+    if isinstance(value, dict):
+        return {k: v for k, v in value.items() if k != "id"}
+    return [without_ids(v) for v in value]
 
 
 def normalize_list(ingredients):

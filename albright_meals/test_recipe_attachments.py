@@ -15,8 +15,9 @@ from albright_labs import attachments
 from albright_labs.test_attachments import Helpers, png, upload_file
 from albright_labs.testing import kitchen, share_with, with_apps
 
-from . import recipe_attachments
-from .models import Recipe
+from . import recipe_attachments, share_links
+from .ingredients import valid_ingredient_id
+from .models import Recipe, RecipeAttachment
 
 PASSWORD = "pw-not-real-12345"
 UPLOAD = reverse("labs:attachment_upload")
@@ -187,3 +188,85 @@ class RecipeAttachmentPermissionTests(Base):
         guest = Client()
         self.assertEqual(guest.get(reverse("labs:attachment", args=[photo.pk])).status_code, 404)
         self.assertEqual(self.post_file(guest, self.recipe, "nope.png", png(), app="meals").status_code, 404)
+
+
+class RecipeAttachmentLinkTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.recipe.refresh_from_db()
+        self.ing_id = self.recipe.ingredients[0]["id"]
+        self.assertTrue(valid_ingredient_id(self.ing_id))
+
+    def test_a_photo_stays_on_an_ingredient_across_an_edit_and_drops_when_the_line_is_deleted(self):
+        photo = self.attach(self.nate, self.recipe, "oil.png")
+        recipe_attachments.link_to_ingredient(self.recipe, photo, self.ing_id)
+        # Same line, new amount: the form keeps the dict (and its id) when the written line is unchanged.
+        self.recipe.ingredients = [
+            {**self.recipe.ingredients[0], "quantity": "1", "original": "1 cup olive oil"},
+            {"raw": "2 tbsp vinegar", "name": "vinegar"},
+        ]
+        self.recipe.save()
+        self.recipe.refresh_from_db()
+        # The first line was rewritten, so it may have a new id; link by the still-valid id only if preserved.
+        # Simulate an edit that keeps the original written line (RecipeForm's unchanged-line path).
+        self.recipe.ingredients = [{"name": "olive oil", "quantity": "3/4", "unit": "cup", "note": "",
+                                    "original": "3/4 cup olive oil", "id": self.ing_id, "category": "pantry"},
+                                   {"name": "vinegar", "quantity": "2", "unit": "tbsp", "note": "",
+                                    "original": "2 tbsp vinegar"}]
+        self.recipe.save()
+        self.recipe.refresh_from_db()
+        self.assertEqual(self.recipe.ingredients[0]["id"], self.ing_id)
+        meta = RecipeAttachment.objects.get(attachment=photo)
+        self.assertEqual(meta.ingredient_id, self.ing_id)
+
+        # Delete the oil line: the link is dropped cleanly.
+        self.recipe.ingredients = [self.recipe.ingredients[1]]
+        self.recipe.save()
+        meta.refresh_from_db()
+        self.assertEqual(meta.ingredient_id, "")
+
+    def test_plus_uploads_a_photo_onto_a_line_and_the_thumb_opens_the_viewer(self):
+        url = reverse("albright_meals:recipe_attachment_link", args=[self.recipe.pk])
+        res = self.client.post(url, {"ingredient": self.ing_id, "next": reverse("albright_meals:recipe",
+                                                                               args=[self.recipe.pk]),
+                                     "file": upload_file("oil.png", png())})
+        self.assertEqual(res.status_code, 302, getattr(res, "content", b""))
+        meta = RecipeAttachment.objects.get(recipe=self.recipe, ingredient_id=self.ing_id)
+        page = self.page()
+        self.assertContains(page, 'class="ing__pic"')
+        self.assertContains(page, "data-att-view")
+        self.assertContains(page, reverse("labs:attachment", args=[meta.attachment_id]))
+        # A view-only reader sees the thumb, not the plus.
+        share_with(self.recipe, self.kim, permission="view", by=self.nate)
+        kim = self.as_user(self.kim)
+        kim_page = self.page(kim)
+        self.assertContains(kim_page, 'class="ing__pic"')
+        self.assertNotContains(kim_page, "data-ra-plus")
+        self.assertEqual(kim.post(url, {"ingredient": self.ing_id, "file": upload_file("nope.png", png())}).status_code, 404)
+
+    def test_a_step_photo_and_cleanup_when_the_step_is_removed(self):
+        photo = self.attach(self.nate, self.recipe, "shake.png")
+        recipe_attachments.link_to_step(self.recipe, photo, 0)
+        page = self.page()
+        self.assertContains(page, "ra-step__photo")
+        self.recipe.steps = ["## Finish", "Taste and adjust."]
+        self.recipe.save()
+        meta = RecipeAttachment.objects.get(attachment=photo)
+        self.assertIsNone(meta.step_index)
+        self.assertEqual(meta.step_text, "")
+
+    def test_public_share_links_hide_the_photos(self):
+        """Safer option: no anonymous read path. Public share pages never include the photos."""
+        photo = self.attach(self.nate, self.recipe, "dish.png")
+        recipe_attachments.set_cover(self.recipe, photo)
+        recipe_attachments.link_to_ingredient(self.recipe, photo, self.ing_id)
+        link, _created = share_links.get_or_create(self.recipe, self.nate)
+        guest = Client()
+        page = guest.get(reverse("albright_meals:shared_recipe", args=[link.token]))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Papa Dave")
+        self.assertNotContains(page, "ra-headpic")
+        self.assertNotContains(page, "Add files")
+        self.assertNotContains(page, "ing__pic")
+        self.assertNotContains(page, reverse("labs:attachment", args=[photo.pk]))
+        self.assertEqual(guest.get(reverse("labs:attachment", args=[photo.pk])).status_code, 404)

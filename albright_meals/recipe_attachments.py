@@ -120,6 +120,9 @@ def find_on_recipe(recipe, pk):
     return attachment
 
 
+# ---------------------------------------------------------------------------
+# e2: ingredient / step links
+# ---------------------------------------------------------------------------
 
 def ingredient_ids(recipe):
     return {str(row.get("id") or "") for row in (recipe.ingredients or []) if isinstance(row, dict) and row.get("id")}
@@ -163,6 +166,76 @@ def cleanup_links(recipe):
             meta.save(update_fields=sorted(set(changed)))
 
 
+def link_to_ingredient(recipe, attachment, ingredient_id):
+    ingredient_id = str(ingredient_id or "")
+    if ingredient_id not in ingredient_ids(recipe):
+        raise ValueError("That ingredient is not on this recipe.")
+    with transaction.atomic():
+        RecipeAttachment.objects.filter(recipe=recipe, ingredient_id=ingredient_id).update(ingredient_id="")
+        meta = ensure_meta(recipe, attachment)
+        meta.ingredient_id = ingredient_id
+        meta.step_index = None
+        meta.step_text = ""
+        meta.save(update_fields=["ingredient_id", "step_index", "step_text"])
+        return meta
+
+
+def link_to_step(recipe, attachment, step_index):
+    try:
+        step_index = int(step_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("That step is not on this recipe.") from exc
+    entries = dict(_step_entries(recipe))
+    if step_index not in entries:
+        raise ValueError("That step is not on this recipe.")
+    with transaction.atomic():
+        RecipeAttachment.objects.filter(recipe=recipe, step_index=step_index).update(step_index=None, step_text="")
+        meta = ensure_meta(recipe, attachment)
+        meta.step_index = step_index
+        meta.step_text = entries[step_index]
+        meta.ingredient_id = ""
+        meta.save(update_fields=["ingredient_id", "step_index", "step_text"])
+        return meta
+
+
+def ingredient_photo_map(recipe):
+    """ingredient_id -> describe(attachment) for links that still resolve."""
+    ids = ingredient_ids(recipe)
+    out = {}
+    for meta in for_recipe(recipe):
+        if meta.ingredient_id and meta.ingredient_id in ids and meta.attachment.is_image:
+            out[meta.ingredient_id] = _describe(meta.attachment)
+    return out
+
+
+def step_photo_map(recipe):
+    """resolved step_index -> describe(attachment)."""
+    cleanup_links(recipe)
+    valid = {i for i, _text in _step_entries(recipe)}
+    out = {}
+    for meta in for_recipe(recipe):
+        if meta.step_index is not None and meta.step_index in valid and meta.attachment.is_image:
+            out[meta.step_index] = _describe(meta.attachment)
+    return out
+
+
+def decorate_steps(recipe, groups):
+    """Copy step_groups and add source_index + photo on each displayed step."""
+    photos = step_photo_map(recipe)
+    entries = _step_entries(recipe)
+    cursor = 0
+    out = []
+    for group in groups:
+        steps = []
+        for text in group["steps"]:
+            index = entries[cursor][0] if cursor < len(entries) else None
+            cursor += 1
+            photo = photos.get(index) if index is not None else None
+            steps.append({"text": text, "index": index, "photo": photo})
+        out.append({**group, "steps": steps})
+    return out
+
+
 def context(user, recipe, editable=None):
     """Template context for the recipe page's photos."""
     can_edit = attachments.can_edit(user, recipe) if editable is None else editable
@@ -174,6 +247,8 @@ def context(user, recipe, editable=None):
         "recipe_cover": cover,
         "recipe_card": card,
         "recipe_photos_editable": can_edit,
+        "ingredient_photos": ingredient_photo_map(recipe),
+        "step_photos": step_photo_map(recipe),
     }
 
 
@@ -190,4 +265,5 @@ def connect():
         except (ProgrammingError, OperationalError):
             pass  # the RecipeAttachment table does not exist yet (a migration mid-way)
 
-    post_save.connect(_after_save, sender=Recipe, dispatch_uid="meals-recipe-attachment-cleanup")
+    # weak=False: _after_save is local to connect(); a weak reference would let it be garbage-collected at once.
+    post_save.connect(_after_save, sender=Recipe, weak=False, dispatch_uid="meals-recipe-attachment-cleanup")

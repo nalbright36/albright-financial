@@ -1,0 +1,11 @@
+{% comment %}Thumb or dashed plus for one ingredient row. Not a <form> - the grocery list form wraps these lines.{% endcomment %}
+{% if i.photo %}
+<a href="{{ i.photo.url }}" class="ing__pic" data-att-view data-full="{{ i.photo.url }}" data-name="{{ i.photo.name|default:i.name }}" aria-label="Photo of {{ i.name }}">
+    <img src="{{ i.photo.thumb_url }}" alt="">
+</a>
+{% elif recipe_photos_editable and i.id %}
+<span class="ing__addform">
+    <input type="file" accept="image/*,.heic,.heif" class="ra-link-file" data-ra-file data-ra-url="{% url 'albright_meals:recipe_attachment_link' recipe.pk %}" data-ra-ingredient="{{ i.id }}" data-ra-csrf="{{ csrf_token }}" aria-hidden="true">
+    <button type="button" class="ing__addpic" data-ra-plus aria-label="Add a photo of {{ i.name }}" title="Add a photo">+</button>
+</span>
+{% endif %}

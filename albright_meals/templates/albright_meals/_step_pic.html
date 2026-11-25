@@ -1,0 +1,10 @@
+{% if step.photo %}
+<a href="{{ step.photo.url }}" class="ra-step__photo-link" data-att-view data-full="{{ step.photo.url }}" data-name="{{ step.photo.name }}" aria-label="Photo for this step">
+    <img src="{{ step.photo.thumb_url }}" alt="" class="ra-step__photo">
+</a>
+{% elif recipe_photos_editable and step.index != None %}
+<span class="ra-step__form">
+    <input type="file" accept="image/*,.heic,.heif" class="ra-link-file" data-ra-file data-ra-url="{% url 'albright_meals:recipe_attachment_link' recipe.pk %}" data-ra-step="{{ step.index }}" data-ra-csrf="{{ csrf_token }}" aria-hidden="true">
+    <button type="button" class="ra-step__add" data-ra-plus>+ Add photo</button>
+</span>
+{% endif %}
