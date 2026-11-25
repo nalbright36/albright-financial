@@ -23,7 +23,7 @@ from albright_labs import quick, sheet
 from . import budget as budgets
 from . import imports, money, quickadd
 from .forms import AccountForm, CategoryForm, MappingForm, RuleForm, SplitRows, TransactionForm, TransferForm, UploadForm
-from .models import ZERO, Account, BudgetDraft, BudgetPlanLine, Category, Rule, Split, Transaction
+from .models import ZERO, Account, BudgetDraft, BudgetPlanItem, BudgetPlanLine, Category, Rule, Split, Transaction
 
 LIST_LIMIT = 300
 
@@ -668,23 +668,41 @@ def _plan(request, pk):
 
 
 def _save_plan_lines(request, plan, here):
-    """Update every posted line (name, planned, spent, status, notes) on this plan."""
-    allowed = {line.pk: line for line in plan.plan_lines.all()}
+    """Update every posted line (name, planned, status, notes) and any posted items (label, amount).
+    A posted spent field is applied only when the group has no items or one unlabeled item (older form)."""
+    allowed = {line.pk: line for line in plan.plan_lines.prefetch_related("items").all()}
     errors = 0
     for line in allowed.values():
         prefix = f"line_{line.pk}_"
         name = (request.POST.get(prefix + "name") or "").strip()[:80]
         planned = money.to_decimal(request.POST.get(prefix + "planned") or "0")
-        spent = money.to_decimal(request.POST.get(prefix + "spent") or "0")
         status = request.POST.get(prefix + "status") or BudgetPlanLine.TO_BUY
         notes = (request.POST.get(prefix + "notes") or "").strip()[:200]
-        if not name or planned is None or spent is None or planned < 0 or spent < 0:
+        if not name or planned is None or planned < 0:
             errors += 1
             continue
         if status not in dict(BudgetPlanLine.STATUSES):
             status = line.status
-        line.name, line.planned, line.spent, line.status, line.notes = name, planned, spent, status, notes
+        line.name, line.planned, line.status, line.notes = name, planned, status, notes
+        line.planned_auto = False
         line.save()
+        if prefix + "spent" in request.POST:
+            spent = money.to_decimal(request.POST.get(prefix + "spent") or "0")
+            if spent is None or spent < 0:
+                errors += 1
+                continue
+            budgets.set_spent(line, spent)
+        for item in line.items.all():
+            ip = f"item_{item.pk}_"
+            if ip + "label" not in request.POST and ip + "amount" not in request.POST:
+                continue
+            label = request.POST.get(ip + "label")
+            raw = request.POST.get(ip + "amount")
+            amount = money.to_decimal(raw or "0") if raw is not None else item.amount
+            if amount is None or amount < 0:
+                errors += 1
+                continue
+            budgets.update_item(item, amount=amount, label=None if label is None else label)
     if errors:
         messages.error(request, "Every line needs a name and amounts of 0 or more.")
         return redirect(here)
@@ -783,8 +801,32 @@ def budget_plan(request, pk):
                 messages.error(request, "Amounts must be 0 or more.")
                 return redirect(here)
             order = (plan.plan_lines.order_by("-order").values_list("order", flat=True).first() or 0) + 1
-            BudgetPlanLine.objects.create(plan=plan, name=name, planned=planned, spent=spent, order=order)
+            line = BudgetPlanLine.objects.create(plan=plan, name=name, planned=planned, spent=ZERO,
+                                                planned_auto=(planned == ZERO), order=order)
+            if spent > 0:
+                budgets.set_spent(line, spent)
             messages.success(request, "Line added.")
+            return redirect(here)
+        if action == "add_item":
+            line = plan.plan_lines.filter(pk=request.POST.get("line")).first()
+            if line is None:
+                messages.error(request, "That person or event is gone.")
+                return redirect(here)
+            amount = money.to_decimal(request.POST.get("amount") or "0") or ZERO
+            if amount <= 0:
+                messages.error(request, "Give the item an amount over $0.")
+                return redirect(here)
+            label = (request.POST.get("label") or "").strip()[:80]
+            budgets.add_item(plan, line.name, amount, label)
+            messages.success(request, "Item added.")
+            return redirect(here)
+        if action == "delete_item":
+            item = BudgetPlanItem.objects.filter(pk=request.POST.get("item"), line__plan=plan).first()
+            if item is None:
+                messages.error(request, "That item is gone.")
+                return redirect(here)
+            budgets.delete_item(item)
+            messages.success(request, "Item removed.")
             return redirect(here)
         if action == "delete_line":
             line = plan.plan_lines.filter(pk=request.POST.get("line")).first()

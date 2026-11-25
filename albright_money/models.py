@@ -227,14 +227,16 @@ class BudgetDraft(Scoped):
 
 
 class BudgetPlanLine(models.Model):
-    """One row on a budget plan: a person, a trip cost, etc. `spent` is entered by hand (linking Money
-    transactions is a later step). Status is To buy or Bought."""
+    """A person or event on a budget plan (a group). `planned` is the budget for them; `spent` is the
+    sum of their BudgetPlanItem rows (gifts or purchases), kept in sync by budget.sync_spent.
+    Status is To buy or Bought."""
     TO_BUY, BOUGHT = "to-buy", "bought"
     STATUSES = [(TO_BUY, "To buy"), (BOUGHT, "Bought")]
     plan = models.ForeignKey(BudgetDraft, on_delete=models.CASCADE, related_name="plan_lines")
     name = models.CharField(max_length=80)
     planned = models.DecimalField(default=ZERO, **MONEY)
     spent = models.DecimalField(default=ZERO, **MONEY)
+    planned_auto = models.BooleanField(default=True)  # Planned follows Spent until the cap is set in Money
     status = models.CharField(max_length=10, choices=STATUSES, default=TO_BUY)
     notes = models.CharField(max_length=200, blank=True)
     order = models.PositiveIntegerField(default=0)
@@ -244,3 +246,19 @@ class BudgetPlanLine(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class BudgetPlanItem(models.Model):
+    """One gift or purchase under a BudgetPlanLine (a person or event). An optional `label` (e.g. "scarf")
+    names the item; `amount` adds to the group's spent. A line can have many items bought at different times."""
+    line = models.ForeignKey(BudgetPlanLine, on_delete=models.CASCADE, related_name="items")
+    label = models.CharField(max_length=80, blank=True)
+    amount = models.DecimalField(default=ZERO, **MONEY)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return self.label or "Item"

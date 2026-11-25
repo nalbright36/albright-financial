@@ -63,7 +63,8 @@
         {% for row in rows %}{% with line=row.line %}
         <div class="mn-pline mn-pline--{{ row.status }}{% if line.status == 'bought' %} mn-pline--bought{% endif %}">
             <label class="mn-pline__name"><span class="visually-hidden">Name</span>
-                <input type="text" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_name" value="{{ line.name }}" required maxlength="80"></label>
+                <input type="text" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_name" value="{{ line.name }}" required maxlength="80">
+                {% if row.items|length > 1 %}<span class="mn-tag-count">{{ row.items|length }} items</span>{% endif %}</label>
             <label class="mn-pline__status"><span class="visually-hidden">Status</span>
                 <select class="ledger-input mn-pline__pill" form="mn-lines" name="line_{{ line.pk }}_status">
                     {% for val, lab in statuses %}<option value="{{ val }}"{% if line.status == val %} selected{% endif %}>{{ lab }}</option>{% endfor %}
@@ -82,12 +83,37 @@
                 <label class="mn-pline__planned"><span class="mn-label">Planned</span>
                     <span class="mn-pline__money"><span aria-hidden="true">$</span>
                     <input type="text" inputmode="decimal" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_planned" value="{{ line.planned }}"></span></label>
-                <label class="mn-pline__spent"><span class="mn-label">Spent</span>
-                    <span class="mn-pline__money"><span aria-hidden="true">$</span>
-                    <input type="text" inputmode="decimal" class="ledger-input" form="mn-lines" name="line_{{ line.pk }}_spent" value="{{ line.spent }}"></span></label>
-                <span class="mn-pline__left">{% if row.left < 0 %}{{ row.left|usd }} over{% else %}{{ row.left|usd }} left{% endif %}</span>
+                <div class="mn-pline__spent"><span class="mn-label">Spent</span>
+                    <span class="mn-pline__spent-read">{{ row.spent|usd }}</span>
+                    <span class="mn-spent-of">of {{ line.planned|usd }} planned{% if row.left < 0 %} · {{ row.left|usd }} over{% else %} · {{ row.left|usd }} left{% endif %}</span></div>
             </div>
             <div class="mn-bar mn-bar--{{ row.status }}" role="img" aria-label="{{ row.pct }}% of {{ line.planned|usd }} used"><span style="width: {{ row.pct }}%;"></span></div>
+            <div class="mn-pline__items">
+                {% for item in row.items %}
+                <div class="mn-pitem">
+                    <label class="visually-hidden" for="mn-item-{{ item.pk }}-label">Item label</label>
+                    <input type="text" id="mn-item-{{ item.pk }}-label" class="ledger-input mn-pitem__label" form="mn-lines" name="item_{{ item.pk }}_label" value="{{ item.label }}" maxlength="80" placeholder="Item">
+                    <label class="visually-hidden" for="mn-item-{{ item.pk }}-amount">Amount</label>
+                    <span class="mn-pline__money mn-pitem__amt"><span aria-hidden="true">$</span>
+                        <input type="text" id="mn-item-{{ item.pk }}-amount" inputmode="decimal" class="ledger-input" form="mn-lines" name="item_{{ item.pk }}_amount" value="{{ item.amount }}"></span>
+                    <form method="post" class="mn-inline">{% csrf_token %}
+                        <input type="hidden" name="action" value="delete_item">
+                        <input type="hidden" name="item" value="{{ item.pk }}">
+                        <button type="submit" class="mn-pline__remove mn-pitem__x" aria-label="Remove item" title="Remove">&times;</button>
+                    </form>
+                </div>
+                {% endfor %}
+                <form method="post" class="mn-add-item">{% csrf_token %}
+                    <input type="hidden" name="action" value="add_item">
+                    <input type="hidden" name="line" value="{{ line.pk }}">
+                    <label class="visually-hidden" for="mn-add-item-{{ line.pk }}-label">Item label</label>
+                    <input type="text" id="mn-add-item-{{ line.pk }}-label" name="label" class="ledger-input" maxlength="80" placeholder="Label (optional)">
+                    <label class="visually-hidden" for="mn-add-item-{{ line.pk }}-amount">Amount</label>
+                    <span class="mn-pline__money"><span aria-hidden="true">$</span>
+                        <input type="text" id="mn-add-item-{{ line.pk }}-amount" inputmode="decimal" name="amount" class="ledger-input" placeholder="0.00"></span>
+                    <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+                </form>
+            </div>
             <input type="text" class="ledger-input mn-pline__note" id="mn-note-{{ line.pk }}" form="mn-lines" name="line_{{ line.pk }}_notes" value="{{ line.notes }}" maxlength="200" placeholder="Notes (optional)" aria-label="Notes">
         </div>
         {% endwith %}{% endfor %}

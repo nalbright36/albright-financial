@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from . import money
-from .models import ZERO, Budget, BudgetDraft, BudgetLine, BudgetPlanLine, Category, Split, Transaction
+from .models import ZERO, Budget, BudgetDraft, BudgetLine, BudgetPlanItem, BudgetPlanLine, Category, Split, Transaction
 
 NEAR = Decimal("0.9")
 
@@ -300,7 +300,7 @@ def apply_template(plan, template, replace=False):
     existing = list(plan.plan_lines.all())
     if existing and not replace:
         return None
-    if existing and any(line.spent and line.spent > 0 for line in existing):
+    if existing and any((line.spent and line.spent > 0) or line.items.exists() for line in existing):
         return None
     if existing:
         plan.plan_lines.all().delete()
@@ -314,12 +314,189 @@ def apply_template(plan, template, replace=False):
     return len(lines)
 
 
+
+def parse_line_text(text):
+    """ "Mom 50", "Mom $50", or "Mom: scarf 30" -> (name, amount, label), or None when there is no
+    amount or no name. The amount is the first or last word ($ and commas allowed). A colon splits
+    the person or event from the item's optional label."""
+    from .quickadd import AMOUNT
+    words = " ".join((text or "").split()).split()
+    if not words:
+        return None
+    raw = None
+    if AMOUNT.match(words[-1]):
+        raw, words = words[-1], words[:-1]
+    elif AMOUNT.match(words[0]):
+        raw, words = words[0], words[1:]
+    amount = money.to_decimal(raw.lstrip("+-")) if raw else None
+    if amount is None or amount <= 0:
+        return None
+    rest = " ".join(words).strip(" -–")
+    if not rest:
+        return None
+    if ":" in rest:
+        name, _, label = rest.partition(":")
+        name, label = name.strip(" -–"), label.strip(" -–")
+    else:
+        name, label = rest, ""
+    name = name[:80]
+    if not name:
+        return None
+    return name, amount, (label[:80] if label else "")
+
+
+def find_group(plan, name):
+    """The plan line whose name matches `name` case-insensitively, or None."""
+    key = (name or "").strip().lower()
+    if not key:
+        return None
+    return next((line for line in plan.plan_lines.all() if line.name.lower() == key), None)
+
+
+def _next_order(qs):
+    return (qs.order_by("-order").values_list("order", flat=True).first() or 0) + 1
+
+
+def _items(line):
+    """The line's items from the database (not a stale prefetch cache)."""
+    return list(BudgetPlanItem.objects.filter(line=line).order_by("order", "pk"))
+
+
+def spent_of(line):
+    """The group's spent: the sum of its items, or the stored spent when it has none (older rows)."""
+    items = _items(line)
+    if items:
+        return sum((item.amount or ZERO) for item in items)
+    return line.spent or ZERO
+
+
+def sync_spent(line):
+    """Write the sum of items onto line.spent (0 when there are no items). Returns the new spent."""
+    items = _items(line)
+    spent = sum((item.amount or ZERO) for item in items) if items else ZERO
+    if line.spent != spent:
+        line.spent = spent
+        line.save(update_fields=["spent"])
+    return spent
+
+
+def add_item(plan, name, amount, label=""):
+    """Add an item under the group named `name` (case-insensitive), creating the group if needed.
+    Planned follows Spent while line.planned_auto is True (a new group's first item sets both;
+    editing Planned in Money turns planned_auto off). Returns (line, item)."""
+    amount = amount if amount is not None else ZERO
+    if amount < 0:
+        raise ValueError("amount must be 0 or more")
+    line = find_group(plan, name)
+    if line is None:
+        line = BudgetPlanLine.objects.create(
+            plan=plan, name=(name or "").strip()[:80] or "Person or event",
+            planned=ZERO, spent=ZERO, planned_auto=True, order=_next_order(plan.plan_lines))
+    item = BudgetPlanItem.objects.create(
+        line=line, label=(label or "").strip()[:80], amount=amount, order=_next_order(line.items))
+    spent = sync_spent(line)
+    if line.planned_auto:
+        line.planned = spent
+        line.save(update_fields=["planned"])
+    return line, item
+
+
+def add_item_from_text(plan, text):
+    """Parse a Notes line ('Mom 50' / 'Mom: scarf 30') and add it. Returns (line, item), or None if the text
+    has no name or amount."""
+    parsed = parse_line_text(text)
+    if not parsed:
+        return None
+    name, amount, label = parsed
+    return add_item(plan, name, amount, label)
+
+
+def update_item(item, amount=None, label=None):
+    """Change an item's amount and/or label. Planned follows Spent while planned_auto is True."""
+    line = item.line
+    fields = []
+    if amount is not None:
+        if amount < 0:
+            raise ValueError("amount must be 0 or more")
+        item.amount = amount
+        fields.append("amount")
+    if label is not None:
+        item.label = (label or "").strip()[:80]
+        fields.append("label")
+    if fields:
+        item.save(update_fields=fields)
+    spent = sync_spent(line)
+    if line.planned_auto:
+        line.planned = spent
+        line.save(update_fields=["planned"])
+    return item
+
+
+def delete_item(item):
+    """Remove an item and resync its group's spent (and planned, when planned_auto is still on). Returns the line."""
+    line = item.line
+    item.delete()
+    spent = sync_spent(line)
+    if line.planned_auto:
+        line.planned = spent
+        line.save(update_fields=["planned"])
+    return line
+
+
+def set_spent(line, spent):
+    """Set a group's spent when the form still posts a single spent field: create or update one unlabeled
+    item if the group has no items or only one unlabeled item; leave a multi-item group alone and return
+    the sum of its items."""
+    spent = spent or ZERO
+    if spent < 0:
+        raise ValueError("amount must be 0 or more")
+    items = _items(line)
+    if len(items) > 1 or (len(items) == 1 and items[0].label):
+        return sync_spent(line)
+    if spent == ZERO:
+        if items:
+            items[0].delete()
+        sync_spent(line)
+    elif items:
+        items[0].amount = spent
+        items[0].save(update_fields=["amount"])
+        sync_spent(line)
+    else:
+        BudgetPlanItem.objects.create(line=line, amount=spent, label="", order=0)
+        sync_spent(line)
+    # Custom spent from the Money form is an explicit amount, not a request to retarget Planned.
+    return line.spent
+
+
+def plan_payload(plan):
+    """JSON for the Notes budget block and the Notes API: groups with items, plus spent / planned totals.
+    `cap` is the plan's optional overall cap (BudgetDraft.planned), not the sum of group planned amounts."""
+    totals = plan_totals(plan)
+    groups = []
+    for row in totals["rows"]:
+        line = row["line"]
+        items = [{"id": item.pk, "label": item.label, "amount": str(item.amount)} for item in row["items"]]
+        groups.append({
+            "id": line.pk, "name": line.name, "planned": str(line.planned or ZERO),
+            "spent": str(row["spent"]), "left": str(row["left"]), "status": row["status"],
+            "item_count": len(items), "items": items,
+        })
+    return {
+        "id": plan.pk, "name": plan.name, "url": plan_url(plan),
+        "groups": groups, "spent": str(totals["spent"]), "group_planned": str(totals["planned"]),
+        "remaining": str(totals["remaining"]), "count": totals["count"],
+        "item_count": sum(g["item_count"] for g in groups),
+        "cap": str(totals["cap"]) if totals["cap"] is not None else None,
+    }
+
+
 def plan_totals(plan):
-    """Summary numbers for a plan: planned and spent (sum of lines), remaining, % used, bought / to-buy counts,
+    """Summary numbers for a plan: planned and spent (sum of groups; spent is the sum of each group's items,
+    falling back to the line's spent when it has no items yet), remaining, % used, bought / to-buy counts,
     days left until due_date, and a weekly pace (remaining / weeks left) when there is a future due date."""
-    lines = list(plan.plan_lines.all())
+    lines = list(plan.plan_lines.prefetch_related("items").all())
     planned = sum((line.planned or ZERO) for line in lines) if lines else ZERO
-    spent = sum((line.spent or ZERO) for line in lines) if lines else ZERO
+    spent = sum((spent_of(line) for line in lines), ZERO) if lines else ZERO
     remaining = planned - spent
     pct = int(spent / planned * 100) if planned > 0 else (100 if spent > 0 else 0)
     bought = sum(1 for line in lines if line.status == BudgetPlanLine.BOUGHT)
@@ -334,19 +511,21 @@ def plan_totals(plan):
     cap_over = (planned - cap) if cap and planned > cap else None
     rows = []
     for line in lines:
-        leftover = (line.planned or ZERO) - (line.spent or ZERO)
-        if line.spent > line.planned:
+        line_spent = spent_of(line)
+        leftover = (line.planned or ZERO) - line_spent
+        if line_spent > (line.planned or ZERO):
             st = "over"
         elif line.status == BudgetPlanLine.BOUGHT:
             st = "under"
-        elif line.planned > 0 and line.spent >= line.planned * NEAR:
+        elif line.planned > 0 and line_spent >= line.planned * NEAR:
             st = "near"
         else:
             st = "under"
-        lpct = 0 if line.planned <= 0 else min(100, int(line.spent / line.planned * 100))
-        if line.planned <= 0 and line.spent > 0:
+        lpct = 0 if line.planned <= 0 else min(100, int(line_spent / line.planned * 100))
+        if line.planned <= 0 and line_spent > 0:
             lpct = 100
-        rows.append({"line": line, "left": leftover, "status": st, "pct": lpct})
+        rows.append({"line": line, "spent": line_spent, "items": list(line.items.all()),
+                     "left": leftover, "status": st, "pct": lpct})
     return {
         "lines": lines, "rows": rows, "planned": planned, "spent": spent, "remaining": remaining,
         "pct": min(pct, 100), "bought": bought, "to_buy": to_buy, "count": len(lines),

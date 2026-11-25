@@ -134,8 +134,11 @@ class PlanUITests(TestCase):
         # Planned / Spent are separate fields, not .mn-bline__input (that grid-area stacked them).
         self.assertIn("mn-pline__planned", page)
         self.assertIn("mn-pline__spent", page)
+        self.assertIn("mn-pline__spent-read", page)
         self.assertIn(f'name="line_{self.lexi.pk}_planned"', page)
-        self.assertIn(f'name="line_{self.lexi.pk}_spent"', page)
+        self.assertNotIn(f'name="line_{self.lexi.pk}_spent"', page)
+        self.assertIn("mn-pline__items", page)
+        self.assertIn('name="action" value="add_item"', page)
         start = page.find(f'name="line_{self.lexi.pk}_name"')
         end = page.find("mn-pline", start + 1)
         block = page[start:end if end > start else start + 1800]
