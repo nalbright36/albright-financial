@@ -1239,7 +1239,7 @@ def _save_weather(request, prefs):
     except weather.LookupDown:
         return "Couldn't look up that place right now - try again in a moment."
     if not found:
-        return "Couldn't find that place - try a city and state, like Lone Tree, CO."
+        return "Couldn't find that place - try a city and state."
     prefs.weather_label, prefs.weather_lat, prefs.weather_lon = found["label"], found["lat"], found["lon"]
     return None
 

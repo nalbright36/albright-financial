@@ -106,7 +106,7 @@ class ItemForm(forms.Form):
         except weather.LookupDown:
             raise forms.ValidationError("Couldn't look up that place right now - try again in a moment.")
         if not found:
-            raise forms.ValidationError("Couldn't find that place - try a city and state, like Lone Tree, CO.")
+            raise forms.ValidationError("Couldn't find that place - try a city and state.")
         self.place = (found["label"], found["lat"], found["lon"])
         return found["label"]
 

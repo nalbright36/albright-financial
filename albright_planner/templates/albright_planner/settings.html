@@ -62,8 +62,8 @@ source off takes its items off the Planner; a deleted item never comes back.
             </label>
             {% if prefs.weather_auto and prefs.weather_auto_label %}<p class="pl-help">Currently using: <strong>{{ prefs.weather_auto_label }}</strong>.</p>{% endif %}
             <label class="pl-field" for="pl-weather-location">Home location (used when the box above is off, or if you don't share your location)</label>
-            <input type="text" name="weather_location" id="pl-weather-location" class="pl-input" value="{{ prefs.weather_label }}" maxlength="200" placeholder="Lone Tree, CO" autocomplete="off" spellcheck="false">
-            <span class="pl-help">A city, a ZIP code, or coordinates like 39.54, -104.88.</span>
+            <input type="text" name="weather_location" id="pl-weather-location" class="pl-input" value="{{ prefs.weather_label }}" maxlength="200" placeholder="Add location" autocomplete="off" spellcheck="false">
+            <span class="pl-help">A city, a ZIP code, or coordinates (latitude, longitude).</span>
         </fieldset>
         <div class="pl-actions"><button type="submit" class="pl-btn pl-btn--primary">Save</button></div>
     </form>
