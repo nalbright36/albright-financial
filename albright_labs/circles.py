@@ -36,6 +36,11 @@ class CircleError(Exception):
 # members (no opt-in) - a saved Visual (albright_labs.sharing).
 ALWAYS_ON = {"visuals"}
 
+# Meals and Money store circle data in a shared space (recipes, the plan, accounts). Members who can
+# open the app are opted in when they join (the accept form starts checked) or when the owner turns
+# the app on. Notes / Planner / Fitness stay opt-in: you choose what to share. Opt-out still works.
+SPACE_APPS = ("meals", "money")
+
 
 def can_use_app(user, app):
     from . import app_access
@@ -227,6 +232,7 @@ def set_enabled_apps(user, circle, apps):
         from . import activity
         names = ", ".join(activity.APP_LABELS[a] for a in added)
         activity.circle_event(circle, "apps", f"turned on {names} for {circle.name}", actor=user)
+        opt_in_members_for_apps(circle=circle, apps=[a for a in added if a in SPACE_APPS], dry_run=False)
 
 
 def set_money_threshold(user, circle, amount):
@@ -255,6 +261,35 @@ def set_participation(user, circle, app, on):
     m.apps = _clean_apps(apps)
     m.save(update_fields=["apps"])
     return m
+
+
+def opt_in_members_for_apps(circle=None, apps=None, *, dry_run=True):
+    """Opt active members into space-backed apps (meals, money) when the circle has the app enabled
+    and they can use it. Idempotent. `circle` limits to one circle; `apps` defaults to SPACE_APPS.
+    Returns {app: {"memberships": n, "circles": m}} — counts only, no names."""
+    wanted = [a for a in (apps or SPACE_APPS) if a in SPACE_APPS]
+    if circle is not None:
+        wanted = [a for a in wanted if a in (circle.enabled_apps or [])]
+    counts = {a: {"memberships": 0, "circles": 0} for a in wanted}
+    qs = Circle.objects.all() if circle is None else Circle.objects.filter(pk=circle.pk)
+    for here in qs:
+        enabled = set(here.enabled_apps or [])
+        members = list(CircleMembership.objects.filter(circle=here, status=ACTIVE).select_related("user"))
+        for app in wanted:
+            if app not in enabled:
+                continue
+            touched = False
+            for membership in members:
+                if app in (membership.apps or []) or not can_use_app(membership.user, app):
+                    continue
+                counts[app]["memberships"] += 1
+                touched = True
+                if not dry_run:
+                    membership.apps = _clean_apps(list(membership.apps or []) + [app])
+                    membership.save(update_fields=["apps"])
+            if touched:
+                counts[app]["circles"] += 1
+    return counts
 
 
 def _owners(circle):

@@ -85,7 +85,9 @@ class InviteTests(Base):
         sam = self.as_user(self.sam)
         page = sam.get(reverse("labs:circle_invite", args=[invite.pk])).content.decode()
         self.assertIn("Nathan</strong> invited you", page)
-        self.assertNotIn("checked", page.split('id="circle-accept"', 1)[1].split("</form>", 1)[0])   # all off
+        box = page.split('id="circle-accept"', 1)[1].split("</form>", 1)[0]
+        self.assertIn('value="meals" checked', box)    # apps they can open start checked
+        self.assertIn('value="money" checked', box)
         sam.post(reverse("labs:circle_invite", args=[invite.pk]), {"action": "accept", "apps": ["money", "notes"]})
         m = CircleMembership.objects.get(circle=circle, user=self.sam)
         self.assertEqual((m.status, m.role, m.apps), ("active", "member", ["money"]))   # notes isn't enabled
@@ -177,6 +179,27 @@ class VisibilityTests(Base):
         circles.leave(self.sam, self.c)
         self.assertEqual(sam.get(reverse("albright_money:account", args=[self.joint.pk])).status_code, 404)
         self.assertTrue(Account.objects.filter(pk=self.joint.pk).exists())          # the circle's data stays
+
+    def test_turning_on_meals_opts_in_members_who_can_use_it(self):
+        circles.accept(self.sam, self.invite, [])                  # joined with Recipes off
+        self.assertNotIn(self.space, circles.visible_spaces(self.sam, "meals"))
+        circles.set_enabled_apps(self.nate, self.c, ["money"])     # meals off
+        circles.set_enabled_apps(self.nate, self.c, ["meals", "money"])
+        self.assertIn("meals", CircleMembership.objects.get(circle=self.c, user=self.sam).apps)
+        self.assertIn(self.space, circles.visible_spaces(self.sam, "meals"))
+        self.assertEqual(self.as_user(self.sam).get(reverse("albright_meals:recipe", args=[self.recipe.pk])).status_code, 200)
+
+    def test_opt_in_repair_is_idempotent_and_prints_counts_only(self):
+        circles.accept(self.sam, self.invite, [])
+        dry = circles.opt_in_members_for_apps(dry_run=True)
+        self.assertEqual(dry["meals"]["memberships"], 1)
+        self.assertNotIn("meals", CircleMembership.objects.get(circle=self.c, user=self.sam).apps)
+        applied = circles.opt_in_members_for_apps(dry_run=False)
+        self.assertEqual(applied["meals"]["memberships"], 1)
+        self.assertIn("meals", CircleMembership.objects.get(circle=self.c, user=self.sam).apps)
+        again = circles.opt_in_members_for_apps(dry_run=False)
+        self.assertEqual(again["meals"]["memberships"], 0)
+        self.assertIn(self.space, circles.visible_spaces(self.sam, "meals"))
 
     def test_removed_member_loses_access_and_keeps_their_own(self):
         circles.accept(self.sam, self.invite, ["meals", "money"])

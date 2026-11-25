@@ -249,11 +249,17 @@ def space_visibility(user, obj, space_kind=None):
     for space in circles.visible_spaces(user, space_kind.app):
         if not space.circle_id:
             continue
+        on = bool(current and current.pk == space.pk)
+        label = sharing.app_label(space_kind.app)
+        noun = space_kind.noun
         options.append({
             "target": f"space:{space.pk}",
             "name": space.name,
-            "meta": f"Everyone in this circle who uses {sharing.app_label(space_kind.app)}",
-            "on": bool(current and current.pk == space.pk),
+            # These radios MOVE the item into the circle's space; they are not a ShareGrant.
+            "meta": (f"This {noun} is in this circle's list. Members with {label} on for this circle can see it."
+                     if on else
+                     f"Move this {noun} into this circle's list. Members with {label} on for this circle can see it."),
+            "on": on,
         })
     return options
 

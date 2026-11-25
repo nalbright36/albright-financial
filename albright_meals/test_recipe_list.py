@@ -2,8 +2,10 @@
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from albright_labs import circles
 from albright_labs.circles import remember
-from albright_labs.testing import personal, share_with
+from albright_labs.models import CircleMembership
+from albright_labs.testing import grants_of, personal, share_with
 from django.urls import reverse
 
 from .models import Recipe
@@ -226,3 +228,48 @@ class AllRecipesListTests(Base):
         self.assertEqual(saved.space, self.ours)
         wife = self.as_user(self.wife)
         self.assertIn("Imported kolaczki", titles(wife.get(url("recipes"), {"from": f"space-{self.ours.pk}"})))
+
+
+    def test_moving_a_recipe_into_a_circle_is_hidden_until_the_member_has_meals_on(self):
+        """The Share sheet radios MOVE the recipe's space (set_space), they do not create a ShareGrant.
+        A member who joined without Recipes ticked — the accept boxes used to start unchecked — does
+        not see the circle's space under All, even though they use Recipes for their own recipes."""
+        remember(self.nate, "meals", self.mine.pk)
+        dressing = self.recipe("Papa Dave's Dressing", space=self.mine, from_bot=True)
+        # What the Share sheet radio does (not share_with):
+        dressing.space = self.ours
+        dressing.save(update_fields=["space", "updated_at"])
+        self.assertEqual(grants_of(dressing), [])
+
+        # A member who can use Meals but is not opted in for this circle (the live bug)
+        membership = CircleMembership.objects.get(circle=self.ours.circle, user=self.wife)
+        membership.apps = [a for a in (membership.apps or []) if a != "meals"]
+        membership.save(update_fields=["apps"])
+        chili = Recipe.objects.create(space=personal(self.wife), title="Grigg's Chili",
+                                      created_by=self.wife, total_time_minutes=345)
+        wife = self.as_user(self.wife)
+        shown = titles(wife.get(url("recipes"), {"from": "all"}))
+        self.assertEqual(shown, ["Grigg's Chili"])
+        self.assertNotIn("Papa Dave's Dressing", shown)
+        page = wife.get(url("recipes"), {"from": "all"}).content.decode()
+        self.assertNotIn("Goon", page)
+        self.assertNotIn("Albrights", page)     # circle is not in the Showing menu either
+
+        # After the opt-in repair, All and the circle filter include the moved recipe
+        counts = circles.opt_in_members_for_apps(circle=self.ours.circle, apps=["meals"], dry_run=False)
+        self.assertEqual(counts["meals"]["memberships"], 1)
+        wife_all = wife.get(url("recipes"), {"from": "all"})
+        self.assertEqual(titles(wife_all), ["Family Meatballs", "Grigg's Chili", "Papa Dave's Dressing"])
+        self.assertEqual(badges(wife_all)["Papa Dave's Dressing"], "Albrights")
+        self.assertEqual(titles(wife.get(url("recipes"), {"from": f"space-{self.ours.pk}"})),
+                         ["Family Meatballs", "Papa Dave's Dressing"])
+
+    def test_share_sheet_radios_say_they_move_the_recipe(self):
+        in_circle = self.client.get(url("recipe", self.meatballs.pk)).content.decode()
+        self.assertIn('name="action" value="set_space"', in_circle)
+        # Apostrophe is HTML-escaped in the template (circle&#x27;s).
+        self.assertIn("This recipe is in this circle", in_circle)
+        self.assertIn("Members with Recipes on for this circle can see it", in_circle)
+        self.assertNotIn("Everyone in this circle who uses Recipes", in_circle)
+        personal_page = self.client.get(url("recipe", self.solo.pk)).content.decode()
+        self.assertIn("Move this recipe into this circle", personal_page)
