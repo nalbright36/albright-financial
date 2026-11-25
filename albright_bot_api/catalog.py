@@ -142,11 +142,14 @@ they don't see is a 404; leaving a circle or turning Meals off for it takes effe
 Slots: "breakfast" | "lunch" | "dinner" | "snack" - one meal per day per slot. Aisles: "produce" | "meat" |
 "dairy" | "bakery" | "pantry" | "frozen" | "household" | "other". Quantities: a number (2, 0.5) or a string
 ("1 1/2"), up to 100000. "added_by" is "Recipe Bot" for what you created, else the person's name."""),
-    Section("notes", "NOTES (the owner's private notes - Markdown; website feature ideas go to the ideas endpoint)", """\
+    Section("notes", "NOTES (the owner's notes, and notes shared with them - Markdown; website feature ideas go to the ideas endpoint)", """\
 Every call is a 403 if the owner can't open Notes. Tags are lowercased, "#" dropped, <=20 of <=50 chars.
-Links point a note at a record the owner can open: {"app": "meals", "type": "recipe", "id": 12} - kinds:
-meals/recipe, resell/ledger, resell/lot, opps/opportunity, trade/strategy, trade/option_strategy - or
-{"url": "<a record's page on this site>"}."""),
+GET notes and GET notes/<id> use the same visibility as the site (the owner's notes, plus ones a person or
+circle shared with them). scope=mine | shared narrows the list; the default is all. A bot can change a
+shared note only when the owner has "Can edit"; a view-only share is a 403. It can't delete or re-share
+someone else's note. Links point a note at a record the owner can open: {"app": "meals", "type": "recipe",
+"id": 12} - kinds: meals/recipe, resell/ledger, resell/lot, opps/opportunity, trade/strategy,
+trade/option_strategy - or {"url": "<a record's page on this site>"}."""),
     Section("fitness", "FITNESS (the owner's own workouts, food diary and weigh-ins - private to them, even within a circle)",
             """\
 Every call is a 403 if the owner can't open Fitness. Dates are YYYY-MM-DD (default today, never in the future).
@@ -197,9 +200,9 @@ above a lowered limit), "remaining_bytes": int, "tier": name of their storage pl
                                    "remaining_bytes": 103809024, "tier": "Standard"}),
 
     # ----- overview (overview_api) -------------------------------------------------------------------------------
-    Op("GET", "search", "searchMyItems", "Search the owner's notes, recipes, grocery list and Planner items", """Finds the owner's items whose words match q (required, <=100 characters): up to 10 each of their notes (full-text,
-not archived), the current Meals space's recipes and grocery lines (by title / name), and Planner items they can
-see (by title). Only the parts this key can read are included. Returns {"q", "notes": [{"id", "title", "tags"}],
+    Op("GET", "search", "searchMyItems", "Search the owner's notes, recipes, grocery list and Planner items", """Finds the owner's items whose words match q (required, <=100 characters): up to 10 each of their notes and notes
+shared with them (full-text, not archived), the current Meals space's recipes and grocery lines (by title / name),
+and Planner items they can see (by title). Only the parts this key can read are included. Returns {"q", "notes": [{"id", "title", "tags"}],
 "recipes": [{"id", "title"}], "groceries": [{"id", "name", "checked"}], "planner_items": [{"id", "title", "kind",
 "date"}]}. Use the ids with getNote, getRecipe and the other endpoints.""",
        scopes=("notes:read", "meals:read", "schedule:read"), display="search?q=<words>", section="overview",
@@ -468,15 +471,20 @@ reader is unavailable or over its daily limit.""",
                 "plan": {"date": "2026-11-17", "slot": "dinner"}, "groceries": {"added": 8, "merged": 1, "already_listed": 2}}),
 
     # ----- notes -----------------------------------------------------------------------------------------------------
-    Op("GET", "notes", "listNotes", "The owner's own notes (search by words or tag)", """\
-The owner's own notes (never notes others shared with them), pinned first then most recently changed, or
-best matches first with q (full-text over title, tags and body; each word also matches as a prefix).
-Up to 200. Returns {"notes": [{"id", "title", "tags", "pinned", "archived", "created_by", "created_at",
-"updated_at", "attachments"}]}. """ + ATTACHMENTS_NOTE,
-       scopes=("notes:read",), display="notes?q=<words>&tag=<tag>&archived=1", section="notes",
-       query={"q": S("Words to search for"), "tag": S(), "archived": ENUM(["1"], "1 = archived notes")},
+    Op("GET", "notes", "listNotes", "The owner's notes, including ones shared with them", """\
+The owner's notes and notes a person or circle shared with them (the same visibility as the site), pinned
+first then most recently changed, or best matches first with q (full-text over title, tags and body; each
+word also matches as a prefix). scope=all (default) | mine | shared. archived=1 lists archived notes
+instead (including archived ones shared with them). Up to 200. Returns {"notes": [{"id", "title", "tags",
+"pinned", "archived", "owner" (username), "shared" (true when someone else owns it), "can_edit" (what the
+site would allow the owner: their own notes, or a share with "Can edit"), "created_by", "created_at",
+"updated_at", "attachments", "next_due"}]}. """ + ATTACHMENTS_NOTE,
+       scopes=("notes:read",), display="notes?q=<words>&tag=<tag>&archived=1&scope=all", section="notes",
+       query={"q": S("Words to search for"), "tag": S(), "archived": ENUM(["1"], "1 = archived notes"),
+              "scope": ENUM(["all", "mine", "shared"], "all = default; mine = the owner's only; shared = only ones shared with them")},
        example={"q": "gift"},
        returns={"notes": [{"id": 8, "title": "Gift ideas", "tags": ["family"], "pinned": False, "archived": False,
+                           "owner": "sam", "shared": False, "can_edit": True,
                            "created_by": "Sam", "attachments": []}]}),
     Op("POST", "notes", "addNote", "Save a new note for the owner", """\
 Body: {"title": str (required, <=200), "body": Markdown str (optional, <=100000), "tags": [str] (optional),
@@ -492,8 +500,8 @@ The note belongs to the owner and shows "by <your token's name>". Returns 201 {"
              "items": A(O('{"text", "due"?: "YYYY-MM-DD", "time"?: "HH:MM", "grocery"?: bool, "checklist"?: bool}'))},
        required=("title",), example={"title": "Gift ideas", "body": "- Board game\n- Scarf", "tags": ["family"]},
        returns={"id": 8, "title": "Gift ideas", "url": "/notes/8/", "linked": None}),
-    Op("GET", "notes/{id}", "getNote", "One of the owner's notes, with its text", """One of the owner's own notes (anything else is a 404) with its Markdown "body" (the first 20000 characters;
-"truncated": true when there's more). Returns the note as in listNotes plus "body", "truncated",
+    Op("GET", "notes/{id}", "getNote", "One note the owner can see, with its text", """One note the owner can see - theirs, or one shared with them (anything else is a 404) - with its Markdown
+"body" (the first 20000 characters; "truncated": true when there's more). Returns the note as in listNotes plus "body", "truncated",
 "due_items": [{"line", "text", "date", "time", "task_id" (its Planner task or null), "done"}] and "grocery_items":
 [{"line", "text", "grocery_ids", "already", "pending", "done"}]. In the body these are tokens: "@[date:2026-12-03]",
 "@[date:2026-12-03T17:00|task:12]", "@[grocery:45,46]", "@[person:7|Sam]" - keep them as they are when you replace
@@ -501,7 +509,9 @@ the body. listNotes rows have "next_due" (the soonest date on a line not ticked 
        scopes=("notes:read",), section="notes",
        returns={"id": 8, "title": "Gift ideas", "tags": ["family"], "body": "- Board game", "truncated": False}),
     Op("PATCH", "notes/{id}", "updateNote", "Add to or replace a note's text, or add tags", """\
-Only notes this token created, or that are shared with the owner to edit (anything else is a 404).
+Only notes this token created, or that are shared with the owner to edit (a view-only share is a 403;
+anything the owner can't see, or the owner's own note this token didn't create, is a 404). It never
+deletes or re-shares someone else's note.
 Body: {"append": str} (added after a blank line) or {"body": str} (replaces it), and/or {"tags": [str]}
 (added to the note's tags), and/or {"items": [...]} (dated and grocery lines added at the end - as in createNote).
 Ticking a dated or grocery line in "body" ticks its Planner task / grocery line too. Returns the note.""",

@@ -2,7 +2,7 @@
 items, and today's summary. Built for the in-site AI assistant (albright_assistant) but ordinary API operations:
 they're in catalog.OPS, so API keys, the OpenAPI spec and the MCP tools get them too.
 
-  GET notes/<id>             getNote          notes:read   - one of the owner's own notes, with its Markdown body
+  GET notes/<id>             getNote          notes:read   - one note the owner can see (theirs or shared with them), with its Markdown body
   GET meals/recipes/<id>     getRecipe        meals:read   - one recipe the owner's Meals space can see
   GET search?q=              searchMyItems    any of notes:read, meals:read, schedule:read - only the parts it may read
   GET search/all?q=&app=     searchEverything any of schedule:read, notes:read, meals:read, fitness:read - the site's
@@ -26,12 +26,12 @@ def note_detail(request, token, note_id):
     from albright_notes.models import Note
     from .notes_api import _note_json, _require_notes_access
     _require_notes_access(token)
-    note = Note.objects.filter(pk=note_id, owner=token.owner).first()
+    note = Note.objects.visible_to(token.owner).select_related("owner").filter(pk=note_id).first()
     if note is None:
-        raise ApiError(404, f"No note {note_id} of the owner's.", "rejected: note not found")
+        raise ApiError(404, f"No note {note_id} the owner can see.", "rejected: note not found")
     body = note.body or ""
     from albright_notes import smart
-    out = {**_note_json(note, request), "body": body[:NOTE_BODY_MAX], "truncated": len(body) > NOTE_BODY_MAX,
+    out = {**_note_json(note, request, viewer=token.owner), "body": body[:NOTE_BODY_MAX], "truncated": len(body) > NOTE_BODY_MAX,
            "due_items": smart.due_items(body), "grocery_items": smart.grocery_items(body)}
     return out, 200, f"read note #{note.pk}"
 
@@ -63,7 +63,7 @@ def search(request, token):
     if _usable(token, "notes:read"):
         from albright_notes import notes
         from albright_notes.models import Note
-        found = notes.search(Note.objects.filter(owner=owner, archived=False), q)[:SEARCH_LIMIT]
+        found = notes.search(Note.objects.visible_to(owner).filter(archived=False), q)[:SEARCH_LIMIT]
         out["notes"] = [{"id": n.pk, "title": n.title, "tags": n.tags} for n in found]
     if _usable(token, "meals:read"):
         from albright_labs import circles

@@ -461,20 +461,144 @@ class BotApiTests(TestCase):
         self.assertEqual(self.call("GET", reverse("bot_api_v1:notes")).status_code, 403)
         self.assertEqual(self.call("POST", reverse("bot_api_v1:notes"), {"title": "t"}).status_code, 403)
 
-    def test_list_only_the_owners_own_notes_with_search_and_tag(self):
+    NOTE_FIELDS = {"id", "title", "tags", "pinned", "archived", "owner", "shared", "can_edit",
+                   "created_by", "created_at", "updated_at", "attachments", "next_due"}
+
+    def test_list_includes_shared_notes_with_search_tag_and_scope(self):
         other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
         mine = notes.create(self.owner, "Water heater", "anode rod", tags=["house"])
         notes.create(self.owner, "Gift ideas", tags=["xmas"])
-        theirs = notes.create(other, "Their private note")
-        share_with(theirs, self.owner, "edit")
+        theirs = notes.create(other, "Papa Dave's", "anode gift", tags=["xmas"])
+        share_with(theirs, self.owner, "view")
         archived = notes.create(self.owner, "Old")
         Note.objects.filter(pk=archived.pk).update(archived=True)
-        titles = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]]
-        self.assertEqual(sorted(titles), ["Gift ideas", "Water heater"])
+        rows = self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]
+        by_title = {n["title"]: n for n in rows}
+        self.assertEqual(sorted(by_title), ["Gift ideas", "Papa Dave's", "Water heater"])
+        self.assertEqual((by_title["Water heater"]["owner"], by_title["Water heater"]["shared"],
+                          by_title["Water heater"]["can_edit"]), ("owner", False, True))
+        self.assertEqual((by_title["Papa Dave's"]["owner"], by_title["Papa Dave's"]["shared"],
+                          by_title["Papa Dave's"]["can_edit"]), ("other", True, False))
+        self.assertEqual(set(rows[0]), self.NOTE_FIELDS)
+        mine_titles = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes") + "?scope=mine").json()["notes"]]
+        self.assertEqual(sorted(mine_titles), ["Gift ideas", "Water heater"])
+        shared_rows = self.call("GET", reverse("bot_api_v1:notes") + "?scope=shared").json()["notes"]
+        self.assertEqual([(n["title"], n["shared"], n["can_edit"]) for n in shared_rows],
+                         [("Papa Dave's", True, False)])
+        self.assertEqual(self.call("GET", reverse("bot_api_v1:notes") + "?scope=nope").status_code, 400)
         data = self.call("GET", reverse("bot_api_v1:notes") + "?q=anode").json()["notes"]
-        self.assertEqual([(n["id"], n["tags"]) for n in data], [(mine.pk, ["house"])])
-        self.assertEqual(set(data[0]), {"id", "title", "tags", "pinned", "archived", "created_by", "created_at", "updated_at", "attachments", "next_due"})
-        self.assertEqual([n["title"] for n in self.call("GET", reverse("bot_api_v1:notes") + "?tag=xmas").json()["notes"]], ["Gift ideas"])
+        self.assertEqual(sorted(n["title"] for n in data), ["Papa Dave's", "Water heater"])
+        self.assertEqual(set(data[0]), self.NOTE_FIELDS)
+        tagged = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes") + "?tag=xmas").json()["notes"]]
+        self.assertEqual(sorted(tagged), ["Gift ideas", "Papa Dave's"])
+        tagged_mine = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes") + "?tag=xmas&scope=mine").json()["notes"]]
+        self.assertEqual(tagged_mine, ["Gift ideas"])
+
+    def test_get_shared_view_only_is_readable_not_writable(self):
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        theirs = notes.create(other, "Dressing recipe", "oil and vinegar")
+        share_with(theirs, self.owner, "view")
+        path = reverse("bot_api_v1:note", args=[theirs.pk])
+        data = self.call("GET", path).json()
+        self.assertEqual((data["title"], data["body"], data["owner"], data["shared"], data["can_edit"]),
+                         ("Dressing recipe", "oil and vinegar", "other", True, False))
+        self.assertEqual(set(data) >= self.NOTE_FIELDS | {"body", "truncated", "due_items", "grocery_items"}, True)
+        self.assertEqual(self.call("PATCH", path, {"append": "no"}).status_code, 403)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.body, "oil and vinegar")
+
+    def test_get_and_patch_a_shared_editable_note(self):
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        theirs = notes.create(other, "Shared to edit", "line one")
+        share_with(theirs, self.owner, "edit")
+        path = reverse("bot_api_v1:note", args=[theirs.pk])
+        data = self.call("GET", path).json()
+        self.assertEqual((data["shared"], data["can_edit"], data["body"]), (True, True, "line one"))
+        self.assertEqual(self.call("PATCH", path, {"append": "ok"}).status_code, 200)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.body, "line one\n\nok")
+        self.assertEqual(theirs.updated_by, "Note Bot")
+
+    def test_stranger_unshared_and_trashed_notes_are_404(self):
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        stranger_note = notes.create(other, "Not shared")
+        was_shared = notes.create(other, "Was shared", "secret")
+        grant = share_with(was_shared, self.owner, "view")
+        self.assertEqual(self.call("GET", reverse("bot_api_v1:note", args=[was_shared.pk])).status_code, 200)
+        grant.delete()
+        trashed = notes.create(other, "Trashed then shared")
+        share_with(trashed, self.owner, "view")
+        notes.trash(trashed)
+        for note in (stranger_note, was_shared, trashed):
+            with self.subTest(title=note.title):
+                self.assertEqual(self.call("GET", reverse("bot_api_v1:note", args=[note.pk])).status_code, 404)
+                self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[note.pk]), {"append": "no"}).status_code, 404)
+        titles = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]]
+        self.assertNotIn("Not shared", titles)
+        self.assertNotIn("Was shared", titles)
+        self.assertNotIn("Trashed then shared", titles)
+        self.assertNotIn("secret", self.call("GET", reverse("bot_api_v1:notes")).content.decode())
+
+    def test_archived_shared_notes_only_with_archived_flag(self):
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        theirs = notes.create(other, "Old shared")
+        share_with(theirs, self.owner, "view")
+        Note.objects.filter(pk=theirs.pk).update(archived=True)
+        titles = [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]]
+        self.assertNotIn("Old shared", titles)
+        archived = self.call("GET", reverse("bot_api_v1:notes") + "?archived=1").json()["notes"]
+        self.assertEqual([(n["title"], n["shared"], n["archived"]) for n in archived],
+                         [("Old shared", True, True)])
+        data = self.call("GET", reverse("bot_api_v1:note", args=[theirs.pk])).json()
+        self.assertEqual((data["title"], data["archived"], data["shared"]), ("Old shared", True, True))
+
+    def test_circle_share_is_visible_until_they_leave(self):
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        space = kitchen(other, self.owner, name="Family", apps=("notes",))
+        theirs = notes.create(other, "Family packing list")
+        share_with(theirs, circle=space.circle, permission="view")
+        data = self.call("GET", reverse("bot_api_v1:note", args=[theirs.pk])).json()
+        self.assertEqual((data["title"], data["shared"], data["can_edit"], data["owner"]),
+                         ("Family packing list", True, False, "other"))
+        self.assertIn("Family packing list",
+                      [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]])
+        from albright_labs import circles
+        circles.leave(self.owner, space.circle)
+        self.assertEqual(self.call("GET", reverse("bot_api_v1:note", args=[theirs.pk])).status_code, 404)
+        self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[theirs.pk]), {"append": "no"}).status_code, 404)
+        self.assertNotIn("Family packing list",
+                         [n["title"] for n in self.call("GET", reverse("bot_api_v1:notes")).json()["notes"]])
+
+    def test_shared_note_attachments_are_listed(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from albright_labs import attachments
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        theirs = notes.create(other, "Recipe card")
+        share_with(theirs, self.owner, "view")
+        added = attachments.add(other, theirs, SimpleUploadedFile("card.txt", b"original recipe", content_type="text/plain"))
+        listed = self.call("GET", reverse("bot_api_v1:notes") + "?scope=shared").json()["notes"][0]
+        self.assertEqual([(a["id"], a["name"], a["size"]) for a in listed["attachments"]],
+                         [(added.pk, "card.txt", added.size_bytes)])
+        detail = self.call("GET", reverse("bot_api_v1:note", args=[theirs.pk])).json()
+        self.assertEqual([a["id"] for a in detail["attachments"]], [added.pk])
+        self.assertIn("/attachments/", detail["attachments"][0]["url"])
+
+    def test_search_finds_shared_notes_but_not_strangers(self):
+        other = with_apps(User.objects.create_user(username="other", password=PASSWORD), ["notes"])
+        mine = notes.create(self.owner, "Chili tips", "cumin")
+        shared = notes.create(other, "Chili from Sam", "paprika")
+        share_with(shared, self.owner, "view")
+        hidden = notes.create(other, "Chili secret", "private")
+        found = {n["title"] for n in self.call("GET", reverse("bot_api_v1:search") + "?q=chili").json()["notes"]}
+        self.assertEqual(found, {"Chili tips", "Chili from Sam"})
+        self.assertNotIn("Chili secret", found)
+        self.assertEqual(self.call("GET", reverse("bot_api_v1:note", args=[hidden.pk])).status_code, 404)
+
+    def test_docs_describe_shared_notes(self):
+        docs = self.call("GET", reverse("bot_api_v1:docs")).content.decode()
+        self.assertIn("scope=all (default) | mine | shared", docs)
+        self.assertIn("view-only share is a 403", docs)
+        self.assertNotIn("never notes others shared with them", docs)
 
     def test_patch_only_its_own_notes_or_ones_shared_to_edit(self):
         own = notes.create(self.owner, "Bot's", "line one", tags=["a"], token=self.token)
@@ -484,6 +608,7 @@ class BotApiTests(TestCase):
         share_with(shared_edit, self.owner, "edit")
         shared_view = notes.create(other, "Shared to view")
         share_with(shared_view, self.owner, "view")
+        stranger = notes.create(other, "Not shared")
         response = self.call("PATCH", reverse("bot_api_v1:note", args=[own.pk]), {"append": "line two", "tags": ["B"]})
         self.assertEqual(response.status_code, 200, response.content)
         own.refresh_from_db()
@@ -491,8 +616,11 @@ class BotApiTests(TestCase):
         self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[own.pk]), {"body": "new"}).status_code, 200)
         own.refresh_from_db()
         self.assertEqual(own.body, "new")
-        self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[shared_edit.pk]), {"append": "ok"}).status_code, 200)
-        for note in (mine, shared_view):
+        patched = self.call("PATCH", reverse("bot_api_v1:note", args=[shared_edit.pk]), {"append": "ok"})
+        self.assertEqual(patched.status_code, 200, patched.content)
+        self.assertTrue(patched.json()["shared"] and patched.json()["can_edit"])
+        self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[shared_view.pk]), {"append": "no"}).status_code, 403)
+        for note in (mine, stranger):
             with self.subTest(note=note.title):
                 self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[note.pk]), {"append": "no"}).status_code, 404)
         self.assertEqual(self.call("PATCH", reverse("bot_api_v1:note", args=[own.pk]), {"append": "x", "body": "y"}).status_code, 400)

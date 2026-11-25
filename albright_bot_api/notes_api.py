@@ -2,11 +2,13 @@
 
 Like Meals, these write straight to the Notes app's own table - that's what
 they're for. A note a bot creates belongs to the token's owner and is labeled
-with the bot's name (Note.created_by). notes:write creates notes and changes
-only the ones this bot created or that someone shared with the owner "Can
-edit"; notes:read lists the owner's own notes (never ones others shared with
-them). If the owner can't open Notes (Admin > Users), every call is a 403.
-Every call is in the Activity log (auth.bot_endpoint)."""
+with the bot's name (Note.created_by). notes:read lists the owner's notes and
+ones shared with them (the same Note.objects.visible_to the site uses); pass
+scope=mine or scope=shared to narrow it. notes:write creates notes and changes
+only the ones this bot created, or a note shared with the owner as "Can edit"
+(view-only is a 403; anything else is a 404). It never deletes or re-shares
+someone else's note. If the owner can't open Notes (Admin > Users), every
+call is a 403. Every call is in the Activity log (auth.bot_endpoint)."""
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -76,31 +78,62 @@ def _link(request, token, value):
     return found
 
 
-def _note_json(note, request=None, files=None):
-    """files: {note id: [...]} from attachments.api_lists (a list); without it this note's own are looked up."""
+def _note_json(note, request=None, files=None, viewer=None, editable_ids=None):
+    """files: {note id: [...]} from attachments.api_lists (a list); without it this note's own are looked up.
+    viewer: the token's owner; editable_ids: notes they may edit (from Note.objects.editable_by) so a list
+    doesn't query can_edit once per row. owner is the note owner's username; shared is True when it isn't
+    the viewer's; can_edit is what the site would allow them (own notes, or a share with "Can edit")."""
     from albright_notes import smart
     due = smart.next_due(note.body, timezone.localdate()) if "@[date:" in (note.body or "") else None
+    shared = bool(viewer is not None and note.owner_id != viewer.pk)
+    if editable_ids is not None:
+        can_edit = note.pk in editable_ids
+    elif viewer is not None:
+        can_edit = note.can_edit(viewer)
+    else:
+        can_edit = not shared
     return {"id": note.id, "title": note.title, "tags": note.tags, "pinned": note.pinned, "archived": note.archived,
+            "owner": note.owner.get_username() if note.owner_id else "",
+            "shared": shared, "can_edit": can_edit,
             "next_due": due[0].isoformat() if due else None,
             "created_by": note.created_by, "created_at": note.created_at.isoformat(),
             "updated_at": note.updated_at.isoformat(),
             "attachments": files.get(note.pk, []) if files is not None else attachments.api_list(note, request)}
 
 
+SCOPES = ("all", "mine", "shared")
+
+
+def _scoped_notes(token, request):
+    """The notes the owner can see (Note.objects.visible_to), optionally narrowed by scope= and archived=."""
+    scope = (request.GET.get("scope") or "all").strip().lower()
+    if scope not in SCOPES:
+        raise ApiError(400, '"scope" must be all, mine or shared.', "rejected: bad scope")
+    qs = _models().Note.objects.visible_to(token.owner).select_related("owner")
+    if scope == "mine":
+        qs = qs.filter(owner=token.owner)
+    elif scope == "shared":
+        qs = qs.exclude(owner=token.owner)
+    return qs.filter(archived=request.GET.get("archived") == "1"), scope
+
+
 @bot_endpoint("notes:read")
 def notes_list(request, token):
     from albright_notes import notes
     _require_notes_access(token)
-    qs = _models().Note.objects.filter(owner=token.owner, archived=request.GET.get("archived") == "1")
+    qs, scope = _scoped_notes(token, request)
     tag = request.GET.get("tag", "").strip().lstrip("#").lower()[:50]
     if tag:
         qs = qs.filter(tags__contains=[tag])
     q = request.GET.get("q", "").strip()[:200]
     qs = notes.search(qs, q) if q else qs.order_by("-pinned", "-updated_at", "-pk")
     page = list(qs[:LIST_LIMIT])
-    files = attachments.api_lists(_models().Note, [n.pk for n in page], request)
-    rows = [_note_json(n, request, files) for n in page]
-    return {"notes": rows}, 200, f"listed {len(rows)} notes" + (f" q={q[:40]}" if q else "") + (f" tag={tag}" if tag else "")
+    ids = [n.pk for n in page]
+    files = attachments.api_lists(_models().Note, ids, request)
+    editable_ids = set(_models().Note.objects.editable_by(token.owner).filter(pk__in=ids).values_list("pk", flat=True))
+    rows = [_note_json(n, request, files, viewer=token.owner, editable_ids=editable_ids) for n in page]
+    extra = (f" q={q[:40]}" if q else "") + (f" tag={tag}" if tag else "") + (f" scope={scope}" if scope != "all" else "")
+    return {"notes": rows}, 200, f"listed {len(rows)} notes" + extra
 
 
 @bot_endpoint("notes:write", methods=("POST",))
@@ -125,20 +158,24 @@ def notes_create(request, token):
     shared = share_field.apply(token, note, data)
     if found:
         links.add(note, *found)
-    return ({**_note_json(note, request), "url": request.build_absolute_uri(reverse("albright_notes:note", args=[note.pk])),
+    return ({**_note_json(note, request, viewer=token.owner), "url": request.build_absolute_uri(reverse("albright_notes:note", args=[note.pk])),
              "linked": found[0].title(found[1]) if found else None, "shared_with": shared}, 201, f"note #{note.pk}: {note.title[:80]}")
 
 
 @bot_endpoint("notes:write", methods=("PATCH",))
 def note_update(request, token, note_id):
     from albright_notes import notes
+    from albright_labs import sharing
     _require_notes_access(token)
     models = _models()
-    note = models.Note.objects.filter(pk=note_id).first()
-    from albright_labs import sharing
-    shared_edit = note is not None and note.owner_id != token.owner_id and sharing.can_edit(token.owner, note)
-    if note is None or not (note.bot_token_id == token.pk or shared_edit):
-        # Someone else's note, or one this bot didn't write: same answer as a missing one.
+    note = models.Note.objects.select_related("owner").filter(pk=note_id).first()
+    if note is None or not sharing.can_view(token.owner, note):
+        # A stranger's, unshared, or missing note: same 404 the site uses (views._visible).
+        raise ApiError(404, f"No note {note_id} this bot can change.", "rejected: note not found or not the bot's")
+    if note.owner_id != token.owner_id and not sharing.can_edit(token.owner, note):
+        raise ApiError(403, "This note is shared with the owner as view-only.", "rejected: view-only share")
+    if note.owner_id == token.owner_id and note.bot_token_id != token.pk:
+        # The owner's own note this bot didn't write: same answer as a missing one.
         raise ApiError(404, f"No note {note_id} this bot can change.", "rejected: note not found or not the bot's")
     data = json_body(request)
     if not {"append", "body", "tags", "items"} & set(data):
@@ -165,7 +202,7 @@ def note_update(request, token, note_id):
         fields["body"], summary = _add_items(note, items, token)
         changed.append(f"added {summary['lines']} item(s)")
     note = notes.save(note, token.name, actor=token.owner, **fields)
-    return _note_json(note, request), 200, f"updated note #{note.pk}: {', '.join(changed)}"
+    return _note_json(note, request, viewer=token.owner), 200, f"updated note #{note.pk}: {', '.join(changed)}"
 
 
 def _items(data):
