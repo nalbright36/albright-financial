@@ -271,3 +271,34 @@ class ChangeTests(Base):
         self.assertIn("Paused", self.client.get(url("body")).content.decode())
         self.client.post(url("weigh_in_pause", schedule.pk))
         self.assertTrue(self.task(schedule).is_weigh_in)
+
+
+
+class TodayRowTests(Base):
+    def test_fitness_today_shows_weigh_in_with_swipe(self):
+        self.create(frequency="daily")
+        page = self.client.get(url("dashboard")).content.decode()
+        self.assertIn("Weigh-in", page)
+        self.assertIn("data-skip-swipe", page)
+        self.assertIn("Log weight", page)
+        self.assertIn("Skip weigh-in", page)
+        row = weigh_in.today_row(self.me)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["date"], self.today)
+        self.assertFalse(row["wi"]["done"])
+
+    def test_skip_and_undo_on_fitness_today(self):
+        item = self.task(self.create(frequency="daily"))
+        response = self.client.post(reverse("albright_planner:skip", args=[item.pk]),
+                                    {"date": self.today.isoformat(), "reason": "travel"}, **AJAX)
+        self.assertTrue(response.json()["skipped"])
+        page = self.client.get(url("dashboard")).content.decode()
+        self.assertIn("Skipped - Travel", page)
+        self.assertIn("Undo", page)
+        self.assertNotIn("data-skip-swipe", page)
+        self.assertTrue(weigh_in.today_row(self.me)["occ"].skipped)
+
+    def test_hidden_on_a_day_the_schedule_does_not_cover(self):
+        # Weekly Mon & Thu; if today is neither and nothing is logged, no Today row.
+        self.create(frequency="weekly", days_of_week=[(self.today.weekday() + 1) % 7])  # tomorrow only
+        self.assertIsNone(weigh_in.today_row(self.me))

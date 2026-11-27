@@ -565,6 +565,67 @@
 
     // ---------- Insights' weeks table: start scrolled to the latest weeks (they're on the right) ----------
     document.querySelectorAll(".fx-heat-wrap").forEach(function (box) { box.scrollLeft = box.scrollWidth; });
+
+    // ---------- Fitness Today: "Log weight" opens the weigh-in sheet ----------
+    var openWi = null;
+    function closeWi() {
+        if (!openWi) return;
+        var box = openWi.closest(".wi"), button = box && box.querySelector("[data-wi-open]"), back = box && box.querySelector("[data-wi-close]");
+        openWi.classList.remove("is-open");
+        if (button) button.setAttribute("aria-expanded", "false");
+        if (back) back.hidden = true;
+        openWi = null;
+    }
+    function openWiPanel(panel) {
+        if (openWi === panel) return;
+        closeWi();
+        var box = panel.closest(".wi"), button = box.querySelector("[data-wi-open]"), back = box.querySelector("[data-wi-close]");
+        panel.classList.add("is-open");
+        if (button) button.setAttribute("aria-expanded", "true");
+        if (back) back.hidden = false;
+        openWi = panel;
+        var input = panel.querySelector("input[name=weight]");
+        if (input) input.focus();
+    }
+    document.addEventListener("click", function (event) {
+        var opener = event.target.closest && event.target.closest("#fx-today [data-wi-open]");
+        if (opener) {
+            var panel = document.getElementById(opener.getAttribute("aria-controls"));
+            if (panel === openWi) closeWi(); else if (panel) openWiPanel(panel);
+            return;
+        }
+        if (event.target.closest && event.target.closest("#fx-today [data-wi-close]")) { closeWi(); return; }
+        if (openWi && !openWi.contains(event.target)) closeWi();
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && openWi) closeWi();
+    });
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form.matches || !form.matches("#fx-today [data-wi-form]") || !window.fetch || !window.FormData) return;
+        event.preventDefault();
+        var body = new FormData(form);
+        if (event.submitter && event.submitter.name === "skip") body.set("skip", "1");
+        else if (!String(body.get("weight") || "").trim()) {
+            var empty = form.querySelector("[data-wi-msg]");
+            if (empty) empty.textContent = "Enter your weight, or Skip today.";
+            return;
+        }
+        var msg = form.querySelector("[data-wi-msg]");
+        if (msg) msg.textContent = "";
+        post(form.action, body).then(function (res) {
+            if (res.data && res.data.confirm) {
+                if (!window.confirm(res.data.confirm)) return;
+                body.set("replace", "1");
+                return post(form.action, body);
+            }
+            return res;
+        }).then(function (res) {
+            if (!res) return;
+            if (!res.ok) { if (msg) msg.textContent = (res.data && res.data.error) || "Couldn't save that - try again."; return; }
+            window.location.reload();
+        }).catch(function () { if (msg) msg.textContent = "Couldn't save that - try again."; });
+    });
 })();
 
 // ---------- Programs' guided setup: the exercise type-ahead and the Planner time ----------
@@ -723,4 +784,50 @@
     form.addEventListener("input", function () { clearTimeout(wait); wait = setTimeout(refresh, 300); });
     showFields();
     refresh();
+})();
+
+/* Swipe left on the Today weigh-in row to reveal Skip. */
+(function () {
+    var THRESH = 48, RAIL = 88, IGNORE = "a, button, input, textarea, select, label, summary, .skip-pop, .wi";
+    var startX = 0, startY = 0, active = null, tracking = false, opened = false;
+    function rowOf(node) { return node && node.closest ? node.closest("[data-skip-swipe]") : null; }
+    function closeAll(except) {
+        document.querySelectorAll("[data-skip-swipe].is-open").forEach(function (row) {
+            if (row !== except) row.classList.remove("is-open");
+        });
+    }
+    function onDown(event) {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        var row = rowOf(event.target);
+        if (!row || event.target.closest(IGNORE)) return;
+        startX = event.clientX; startY = event.clientY;
+        active = row; tracking = true; opened = row.classList.contains("is-open");
+        try { event.target.setPointerCapture(event.pointerId); } catch (e) {}
+    }
+    function onMove(event) {
+        if (!tracking || !active) return;
+        var dx = event.clientX - startX, dy = event.clientY - startY;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx)) { tracking = false; return; }
+        event.preventDefault();
+        var shift = opened ? Math.min(0, Math.max(-RAIL, dx - RAIL)) : Math.min(0, Math.max(-RAIL, dx));
+        var content = active.querySelector(".fx-swipe__content, .pl-swipe__content");
+        if (content) content.style.transform = "translateX(" + shift + "px)";
+    }
+    function onUp(event) {
+        if (!active) return;
+        var dx = event.clientX - startX;
+        var content = active.querySelector(".fx-swipe__content, .pl-swipe__content");
+        if (content) content.style.transform = "";
+        if (tracking && dx < -THRESH) { closeAll(active); active.classList.add("is-open"); }
+        else if (tracking && dx > THRESH) active.classList.remove("is-open");
+        tracking = false; active = null;
+    }
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointermove", onMove, { passive: false });
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    document.addEventListener("pointerdown", function (event) {
+        if (!rowOf(event.target)) closeAll();
+    }, true);
 })();

@@ -690,3 +690,31 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
   .pl-wx-pill__chev { width: 12px; height: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .pl-wx-panel.is-animating, .pl-wx-pill__chev { transition: none; } }
+
+
+/* Swipe-to-skip (Day and Home rows): swipe left on a repeating task or weigh-in to reveal Skip. */
+.pl-item.pl-swipe { position: relative; overflow: hidden; }
+.pl-item.pl-swipe:has(.skip-pop[open]) { overflow: visible; z-index: 6; }
+.pl-swipe__content { display: flex; flex-wrap: nowrap; align-items: center; column-gap: inherit; flex: 1 1 100%;
+  min-width: 0; min-height: inherit; transition: transform 180ms ease; }
+.pl-item.pl-swipe.is-open .pl-swipe__content { transform: translateX(-88px); }
+.pl-swipe__rail { position: absolute; right: 0; top: 0; width: 88px; height: 44px;
+  display: flex; align-items: center; justify-content: center; z-index: 0;
+  background: color-mix(in srgb, var(--text-secondary) 22%, transparent); }
+@media (max-width: 640px) { .pl-swipe__rail { height: 48px; } }
+.pl .pl-item .pl-swipe__btn { min-height: 32px; padding: 4px 10px; border: 0; background: transparent;
+  color: var(--text-primary); font-weight: 600; font-size: 0.8125rem; }
+.pl-unskip { display: inline-flex; flex-shrink: 0; margin: 0; }
+.pl-item.is-skipped .pl-ind__icon { display: none; }
+@media (max-width: 640px) { .pl-skip-label { max-width: 8.5em; } }
+/* Desktop / keyboard: Skip appears on hover or focus, no swipe needed. */
+@media (hover: hover) and (pointer: fine) {
+  .pl-item.pl-swipe { overflow: visible; }
+  .pl-item.pl-swipe.is-open .pl-swipe__content { transform: none; }
+  .pl-swipe__rail { right: 6px; width: auto; height: 44px; background: var(--pl-card, var(--surface-solid));
+    opacity: 0; pointer-events: none; z-index: 4; border-radius: 10px; }
+  .pl-item.pl-swipe:hover .pl-swipe__rail, .pl-item.pl-swipe:focus-within .pl-swipe__rail,
+  .pl-item.pl-swipe:has(.skip-pop[open]) .pl-swipe__rail { opacity: 1; pointer-events: auto; }
+  .pl .pl-item .pl-swipe__btn { border: 1px solid var(--pl-line, var(--border)); background: var(--surface-solid);
+    font-weight: 500; }
+}

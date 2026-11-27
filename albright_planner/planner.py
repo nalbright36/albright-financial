@@ -170,7 +170,7 @@ def occurrences(user, start, end, kind="", show_done=True, shared_only=False, wh
             occ.done_by = completion.completed_by if completion else None
             _mark_skip(occ, completion)
             _mark_sharing(occ, user)
-            if show_done or not occ.done:
+            if show_done or not occ.done or occ.skipped:
                 out.append(occ)
     out.sort(key=lambda o: (o.date, o.start_time is not None, o.start_time or time.min, o.title.lower()))
     return out
@@ -208,9 +208,11 @@ def current_occurrence(item, completed=None, skipped=None):
     return None
 
 
-def _move_on(item, occurrence_date, on_day):
-    """After the current occurrence was checked off or skipped on `on_day`: where the next one is."""
-    if item.repeat_from_completion:
+def _move_on(item, occurrence_date, on_day, from_skip=False):
+    """After the current occurrence was checked off or skipped on `on_day`: where the next one is.
+    from_skip: a marked skip is not a completion, so "every N days after it's done" stays on the regular
+    schedule (first_after) instead of stepping from the skip date."""
+    if item.repeat_from_completion and not from_skip:
         item.repeat_anchor = on_day
         item.next_due = recurrence.step_from(item, on_day)
     else:
@@ -246,7 +248,7 @@ def current_or_first(item):
 
 
 def _mark_skip(occ, completion):
-    """occ.skipped / occ.skip_label: a planned workout or weigh-in skipped on purpose (skip mark, muted, no strike)."""
+    """occ.skipped / occ.skip_label: this occurrence skipped on purpose (skip mark, muted, no strike)."""
     occ.skipped = bool(completion is not None and completion.skipped)
     occ.skip_label = completion.skip_label if occ.skipped else ""
 
@@ -362,8 +364,11 @@ def open_tasks_today(user):
 
 
 def is_completed(occ):
-    """A task occurrence that's finished: checked off, or every checklist row ticked (its owner may have "Complete
-    task when all items are checked" off, so the box itself can still be open)."""
+    """A task occurrence that's finished: checked off (not skipped), or every checklist row ticked (its owner may
+    have "Complete task when all items are checked" off, so the box itself can still be open). A skipped
+    occurrence is neither open nor done."""
+    if getattr(occ, "skipped", False):
+        return False
     progress = getattr(occ, "checklist_progress", None)
     return bool(occ.done or (progress and progress["total"] and not progress["open"]))
 
@@ -384,6 +389,8 @@ def today_panel(user, show_completed=False):
     fitness = sources.can_open(user, "fitness")
     workouts = [o for o in todays if fitness and o.item.source_app == "fitness"]
     todays = [o for o in todays if o not in workouts]
+    def _skipped(o):
+        return bool(getattr(o, "skipped", False))
     open_tasks = late + [o for o in todays if not is_completed(o)]
     done = [o for o in todays if is_completed(o)] if show_completed else []
     open_workouts = [o for o in workouts if not is_completed(o)]
@@ -395,13 +402,55 @@ def today_panel(user, show_completed=False):
             "meals": meals, "workouts": open_workouts + done_workouts,
             "has_weigh_in": any(o.item.is_weigh_in for o in workouts),
             "weigh_ins_only": bool(workouts) and all(o.item.is_weigh_in for o in workouts),
-            "open": len(open_tasks) + len(open_workouts), "overdue": len(late), "done": len(done) + len(done_workouts),
+            "open": sum(1 for o in open_tasks + open_workouts if not _skipped(o)),
+            "overdue": len(late), "done": len(done) + len(done_workouts),
             "show_completed": show_completed}
 
 
 # ---------------------------------------------------------------------------
 # Check-off
 # ---------------------------------------------------------------------------
+
+class SkipError(Exception):
+    """The occurrence can't be skipped (already done as a completion, or not a repeating task)."""
+
+
+@transaction.atomic
+def skip_occurrence(item, day, user, reason="", note=""):
+    """Mark one occurrence skipped (ItemCompletion.SKIPPED, optional reason). The series moves on to the next
+    regular date; a "every N after it's done" rule does not treat this as a completion. Workouts and weigh-ins
+    go through their Fitness services. Returns True, or raises SkipError. False if it isn't scheduled that day."""
+    from . import services
+
+    if item.is_workout:
+        from albright_fitness import workout_sync
+        try:
+            return workout_sync.skip_scheduled_workout(item, day, user, reason, note) is not None
+        except workout_sync.SkipError as exc:
+            raise SkipError(str(exc)) from exc
+    if item.is_weigh_in:
+        from albright_fitness import weigh_in
+        if not valid_occurrence(item, day):
+            return False
+        weigh_in.skip(item, day, user, reason, note)
+        return True
+    if not item.repeats:
+        raise SkipError("Only a repeating task can be skipped.")
+    if not valid_occurrence(item, day):
+        return False
+    completion = ItemCompletion.objects.filter(item=item, occurrence_date=day).first()
+    if completion is not None and not completion.skipped:
+        raise SkipError("It's already done - uncheck it first to skip it.")
+    if completion is not None:
+        services.set_skipped(item, day, reason, note)
+        return True
+    current = current_occurrence(item) if item.one_at_a_time else None
+    ItemCompletion.objects.get_or_create(item=item, occurrence_date=day, defaults={"completed_by": user})
+    if item.one_at_a_time and day == current:
+        _move_on(item, day, today(user), from_skip=True)
+    services.set_skipped(item, day, reason, note)
+    return True
+
 
 @transaction.atomic
 def toggle(item, occurrence_date, user, done=None):

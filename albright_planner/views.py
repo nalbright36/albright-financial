@@ -665,9 +665,9 @@ def view_item(request, pk):
     can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
     rows = checklist.occurrence_rows(item, occurrence)
     shared_with = planner.shared_names(item) if is_owner else []
-    # A planned workout: "Skip workout" (done as skipped, with a reason) instead of "Skip this one" (drops it).
+    # Skip marks the occurrence skipped (reason popover) - workouts, weigh-ins, and any repeating task.
     can_skip_workout = (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done
-    can_skip = item.repeats and can_edit and not item.is_workout
+    can_skip = can_edit and not occ.done and (item.repeats or item.is_workout or item.is_weigh_in)
     can_delete = is_owner and (can_edit or item.locked)
     template = "albright_planner/_view_panel.html" if panel else "albright_planner/item.html"
     quick = can_edit and not item.locked and not item.is_weigh_in             # edits right here (planner.js)
@@ -803,6 +803,7 @@ def edit_item(request, pk):
         "editor_rows": _editor_ticks(request, item, occurrence, _editor_rows(request, checklist.current_rows(item))),
         "can_tick": can_edit, "edit_page": True,
         "can_skip_workout": (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done,
+        "can_skip": can_edit and not occ.done and (item.repeats or item.is_workout or item.is_weigh_in),
         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
         "checklist_edit": _editor_rows(request, checklist.current_rows(item)),
         "checklist_from": checklist.edit_from(item), "show_done_by": is_owner and bool(shared_with) or not is_owner,
@@ -895,28 +896,31 @@ def toggle(request, pk):
 @login_required
 @require_POST
 def skip(request, pk):
-    """Skip one occurrence of a planned workout or weigh-in: POST date, reason (Rest day / Sick / Busy / Travel /
-    Other - optional), note (optional). Checked off as "skipped" (albright_fitness.workout_sync - one service for
-    the Planner, Home, Fitness and the Bot API); unchecking it (toggle) reopens it."""
+    """Skip one occurrence of a repeating task, planned workout or weigh-in: POST date, reason (Rest day / Sick /
+    Busy / Travel / Other - optional), note (optional). Marked skipped (not done); unchecking it or undo=1 reopens
+    it. Workouts still go through workout_sync."""
     item = _editable(request, pk)
     occurrence = _day(request.POST.get("date"))
-    reason, note = request.POST.get("reason", ""), request.POST.get("note", "")
-    error, done = "", None
-    if occurrence is None or not (item.is_workout or item.is_weigh_in):
-        error = "Only a planned workout or weigh-in can be skipped."
-    elif not planner.valid_occurrence(item, occurrence):
+    error = ""
+    if occurrence is None:
         error = "That item isn't scheduled that day."
-    elif item.is_workout:
-        from albright_fitness import workout_sync
+    elif request.POST.get("undo"):
+        if planner.toggle(item, occurrence, request.user, done=False) is None:
+            error = "That item isn't scheduled that day."
+        elif _wants_json(request):
+            return JsonResponse({"ok": True, "skipped": False})
+        else:
+            messages.success(request, f"Reopened {item.title}.")
+            return redirect(_next(request))
+    else:
         try:
-            done = workout_sync.skip_scheduled_workout(item, occurrence, request.user, reason, note)
-        except workout_sync.SkipError as exc:
+            done = planner.skip_occurrence(item, occurrence, request.user,
+                                           request.POST.get("reason", ""), request.POST.get("note", ""))
+        except planner.SkipError as exc:
             error = str(exc)
         else:
-            error = "" if done is not None else "That item isn't scheduled that day."
-    else:
-        from albright_fitness import weigh_in
-        weigh_in.skip(item, occurrence, request.user, reason, note)
+            if not done:
+                error = "That item isn't scheduled that day."
     if _wants_json(request):
         return JsonResponse({"ok": False, "error": error}, status=400) if error else JsonResponse({"ok": True, "skipped": True})
     if error:

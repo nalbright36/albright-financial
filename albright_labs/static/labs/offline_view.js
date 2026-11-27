@@ -177,7 +177,7 @@
             run.then(draw);
         }));
         if (o.repeats || o.workout || o.weigh_in) {
-            acts.appendChild(button("Skip this one", "btn btn-secondary btn-sm", function () {
+            acts.appendChild(button("Skip", "btn btn-secondary btn-sm", function () {
                 openPanel = null;
                 edit("planner.skip", {target: o.id, key: occKey(o), payload: {date: o.occurrence}, label: "Skip " + quoted(o.title)});
             }));

@@ -1886,3 +1886,52 @@
         });
     })();
 })();
+
+/* Swipe left on a repeating task or weigh-in (Day, Home) to reveal Skip. */
+(function () {
+    var THRESH = 48, RAIL = 88, IGNORE = "a, button, input, textarea, select, label, summary, [data-cl-toggle], .skip-pop, .wi, .pl-check-form";
+    var startX = 0, startY = 0, active = null, tracking = false, opened = false;
+
+    function rowOf(node) {
+        return node && node.closest ? node.closest("[data-skip-swipe]") : null;
+    }
+    function closeAll(except) {
+        document.querySelectorAll("[data-skip-swipe].is-open").forEach(function (row) {
+            if (row !== except) row.classList.remove("is-open");
+        });
+    }
+    function onDown(event) {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        var row = rowOf(event.target);
+        if (!row || event.target.closest(IGNORE)) return;
+        startX = event.clientX; startY = event.clientY;
+        active = row; tracking = true; opened = row.classList.contains("is-open");
+        try { event.target.setPointerCapture(event.pointerId); } catch (e) {}
+    }
+    function onMove(event) {
+        if (!tracking || !active) return;
+        var dx = event.clientX - startX, dy = event.clientY - startY;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx)) { tracking = false; return; }   // vertical scroll
+        event.preventDefault();
+        var shift = opened ? Math.min(0, Math.max(-RAIL, dx - RAIL)) : Math.min(0, Math.max(-RAIL, dx));
+        var content = active.querySelector(".pl-swipe__content");
+        if (content) content.style.transform = "translateX(" + shift + "px)";
+    }
+    function onUp(event) {
+        if (!active) return;
+        var dx = event.clientX - startX;
+        var content = active.querySelector(".pl-swipe__content");
+        if (content) content.style.transform = "";
+        if (tracking && dx < -THRESH) { closeAll(active); active.classList.add("is-open"); }
+        else if (tracking && dx > THRESH) active.classList.remove("is-open");
+        tracking = false; active = null;
+    }
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointermove", onMove, { passive: false });
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    document.addEventListener("pointerdown", function (event) {
+        if (!rowOf(event.target)) closeAll();
+    }, true);
+})();

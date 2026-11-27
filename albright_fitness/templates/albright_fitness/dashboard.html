@@ -1,4 +1,4 @@
-{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
+{% extends "albright_fitness/base.html" %}{% load fitness_extras weigh_in_tags %}
 {% block page_title %}Today · {% endblock %}
 {% block fitness %}
 {% comment %}
@@ -24,6 +24,25 @@ streak (weeks with every planned workout done), this week's working sets by musc
 <div class="fx-grid fx-grid--today">
 <section class="card fx-card fx-today" id="fx-today" aria-labelledby="fx-today-h">
     <h2 class="fx-card__title" id="fx-today-h">Today</h2>
+    {% if weigh_in_today %}{% with wi=weigh_in_today.wi occ=weigh_in_today.occ item=weigh_in_today.item %}
+    {% if wi.skipped %}<div class="fx-row is-skipped">
+        <span class="fx-row__title">Weigh-in</span>
+        <span class="fx-skipped">{% include "albright_planner/_skip_icon.html" %} {{ occ.skip_label }}</span>
+        <form method="post" action="{% url 'albright_planner:skip' item.pk %}" class="fx-inline">{% csrf_token %}<input type="hidden" name="date" value="{{ weigh_in_today.date|date:'Y-m-d' }}"><input type="hidden" name="undo" value="1"><button type="submit" class="btn btn-secondary btn-sm">Undo</button></form>
+    </div>
+    {% elif wi.done %}<div class="fx-row">
+        <span class="fx-row__title">Weigh-in</span>
+        <span class="wi-result">{{ wi.result }}</span>
+    </div>
+    {% else %}{% url 'albright_planner:skip' item.pk as wi_skip_url %}
+    <div class="fx-row fx-swipe" data-skip-swipe>
+        <div class="fx-swipe__rail">{% include "albright_planner/_skip_form.html" with action_url=wi_skip_url date=weigh_in_today.date next=request.path uid="fx-wi" btn_class="btn btn-secondary btn-sm fx-swipe__btn" go="Skip weigh-in" %}</div>
+        <span class="fx-row__title">Weigh-in</span>
+        <div class="fx-swipe__content">
+            <span class="fx-today__acts">{% weigh_in_box occ request.path %}</span>
+        </div>
+    </div>
+    {% endif %}{% endwith %}{% endif %}
     {% url 'albright_fitness:skip_day' as skip_day_url %}{% for day, done in today %}
     <div class="fx-row">
         <span class="fx-row__title">{{ day.name }} <span class="fx-muted fx-small">{{ day.program.name }}</span></span>

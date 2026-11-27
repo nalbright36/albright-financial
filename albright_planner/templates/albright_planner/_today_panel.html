@@ -27,18 +27,18 @@ Styles and check-off: the Planner's planner.css / planner.js.
     {% if planner_today.workouts %}
     <div class="pl-today__sec pl-today__sec--workouts" id="planner-today-workouts">
         <h3 class="pl-label"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> {% if planner_today.weigh_ins_only %}Weigh-in today{% elif planner_today.has_weigh_in %}Fitness today{% else %}Workouts today{% endif %}</h3>
-        <ul class="pl-list" data-empty="No workouts left today.">{% for o in planner_today.workouts %}{% include "albright_planner/_occ.html" with here=planner_today.here start=True %}{% endfor %}</ul>
+        <ul class="pl-list" data-empty="No workouts left today.">{% for o in planner_today.workouts %}{% include "albright_planner/_occ.html" with here=planner_today.here start=True swipe=True %}{% endfor %}</ul>
     </div>
     {% endif %}
     <div class="pl-today__cols">
         <div>
             <h3 class="pl-label">Tasks</h3>
-            <ul class="pl-list" id="planner-today-tasks">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
+            <ul class="pl-list" id="planner-today-tasks">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here swipe=True %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
             <p class="pl-today__toast pl-small" id="planner-today-toast" role="status" aria-live="polite" hidden><span id="planner-today-toast-text">Done</span> &middot; <button type="button" class="pl-today__undo" id="planner-today-undo">Undo</button></p>
         </div>
         <div>
             <h3 class="pl-label">Events</h3>
-            <ul class="pl-list">{% for o in planner_today.events %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No events today.</li>{% endfor %}</ul>
+            <ul class="pl-list">{% for o in planner_today.events %}{% include "albright_planner/_occ.html" with here=planner_today.here swipe=True %}{% empty %}<li class="pl-empty">No events today.</li>{% endfor %}</ul>
         </div>
     </div>
 </section>

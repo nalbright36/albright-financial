@@ -131,7 +131,8 @@ class OneShowsTests(Base):
         page = self.client.get(url("edit", item.pk)).content.decode()
         self.assertIn("Repeats every Mon · next appears after this one is done", page)
         self.assertIn("due Mon Nov 9, 2026", page)
-        self.assertIn("Skip this one", page)
+        self.assertIn("Skip…", page)
+        self.assertNotIn("Skip this one", page)
 
 
 class OnScheduleTests(Base):

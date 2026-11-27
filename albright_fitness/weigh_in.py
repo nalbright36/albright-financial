@@ -165,6 +165,27 @@ def current(user):
     return WeighInSchedule.objects.filter(owner=user).order_by("-active", "-pk").select_related("planner_item").first()
 
 
+def today_row(user):
+    """Today's weigh-in for Fitness Today: {"item", "date", "occ", "wi"} or None if nothing is scheduled today."""
+    from albright_planner import planner, recurrence
+    schedule = WeighInSchedule.objects.filter(owner=user, active=True, planner_item__isnull=False) \
+        .select_related("planner_item").first()
+    if schedule is None:
+        return None
+    item, day = schedule.planner_item, _today(user)
+    has = item.completions.filter(occurrence_date=day).exists()
+    if item.one_at_a_time:
+        due = planner.current_occurrence(item)
+        if not has and due != day:
+            return None
+    elif not recurrence.is_scheduled(item, day) and not has:
+        return None
+    if not planner.valid_occurrence(item, day):
+        return None
+    occ = planner.occurrence_for(item, day, user)
+    return {"item": item, "date": day, "occ": occ, "wi": box(item, day, occ.done, user)}
+
+
 # ---------------------------------------------------------------------------
 # The Planner task: make, end, replace - only through albright_planner.services
 # ---------------------------------------------------------------------------

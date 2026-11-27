@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 
 from albright_labs import quick as quick_add, sharing, sheet
 
-from . import body, burn, glossary, insights, nutrition, programs, stats, training
+from . import body, burn, glossary, insights, nutrition, programs, stats, training, weigh_in
 from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord,
                      ProgramDay, ProgramExercise, ScheduledSession, Workout, WorkoutExercise, WorkoutSet)
 
@@ -77,7 +77,7 @@ def dashboard(request):
         "week_summary": insights.week(request.user, stats.week_start(timezone.localdate())), "weight": _dashboard_weight(request.user, profile),
         "records_text": [(r, training.record_text(r)) for r in data["records"]],
         "recent": Workout.objects.filter(owner=request.user, finished_at__isnull=False).select_related("program_day")[:5],
-        "quick": _quick_log(request.user, profile)})
+        "quick": _quick_log(request.user, profile), "weigh_in_today": weigh_in.today_row(request.user)})
 
 
 RECENT_EXERCISES = 8

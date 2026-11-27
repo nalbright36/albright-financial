@@ -590,3 +590,62 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
 @media (max-width: 480px) {
   .fx-targets-banner__go.btn { flex: 1 1 auto; text-align: center; }
 }
+
+
+.fx-row.is-skipped .fx-row__title { color: var(--text-secondary); font-weight: 500; }
+.fx-row.is-skipped { color: var(--text-secondary); }
+
+/* Swipe-to-skip the Fitness Today weigh-in row. */
+.fx-row.fx-swipe { position: relative; overflow: hidden; }
+.fx-row.fx-swipe:has(.skip-pop[open]) { overflow: visible; z-index: 6; }
+.fx-today:has(.skip-pop[open]) { overflow: visible; }
+.fx-swipe__content { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: 1; min-width: 0; min-height: inherit;
+  transition: transform 180ms ease; }
+.fx-row.fx-swipe.is-open .fx-swipe__content { transform: translateX(-88px); }
+.fx-swipe__rail { position: absolute; right: 0; top: 0; width: 88px; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--text-secondary) 22%, transparent); }
+.fx-today .fx-swipe__btn { min-height: 32px; }
+@media (hover: hover) and (pointer: fine) {
+  .fx-row.fx-swipe { overflow: visible; }
+  .fx-row.fx-swipe.is-open .fx-swipe__content { transform: none; }
+  .fx-swipe__rail { right: 6px; width: auto; background: var(--bg-elevated, #0A0B0D);
+    opacity: 0; pointer-events: none; z-index: 4; border-radius: 10px; }
+  .fx-row.fx-swipe:hover .fx-swipe__rail, .fx-row.fx-swipe:focus-within .fx-swipe__rail,
+  .fx-row.fx-swipe:has(.skip-pop[open]) .fx-swipe__rail { opacity: 1; pointer-events: auto; }
+}
+
+
+/* Weigh-in Log weight control on Fitness Today (same sheet as planner.css .wi-panel). */
+.fx-today .wi { display: inline-flex; align-items: center; flex-shrink: 0; position: relative; }
+.fx-today .wi-open, .fx-today .wi-save { appearance: none; min-height: 32px; padding: 0 10px; font: inherit; font-size: 0.8125rem;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-hover); color: var(--text-primary); cursor: pointer; }
+.fx-today .wi-save, .fx-today .pl-btn--primary { background: var(--accent-solid, #fff); color: var(--accent-contrast, #000);
+  border: 0; font-weight: 600; min-height: 40px; }
+.fx-today .wi-result { font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.fx-today .wi-result.is-skipped { color: var(--text-secondary); font-weight: 400; }
+.fx-today .wi-panel { display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+  width: min(320px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg-elevated, var(--surface-solid)); box-shadow: var(--overlay-shadow); }
+.fx-today .wi-panel.is-open { display: block; }
+html:not(.js) .fx-today .wi-panel { display: block; position: static; width: 100%; margin-top: 6px; box-shadow: none; }
+html:not(.js) .fx-today .wi-open { display: none; }
+.fx-today .wi-label { display: block; margin: 0 0 6px; font-size: 0.8125rem; color: var(--text-secondary); }
+.fx-today .wi-row { display: flex; align-items: center; gap: 8px; }
+.fx-today .wi-input { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 0 10px; font-size: 1rem;
+  border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-primary); }
+.fx-today .wi-unit { font-size: 0.875rem; color: var(--text-secondary); }
+.fx-today .wi-save { min-height: 40px; }
+.fx-today .wi-skip { margin-top: 8px; padding: 4px 0; border: 0; background: none; color: var(--text-secondary);
+  font-size: 0.8125rem; text-decoration: underline; cursor: pointer; }
+.fx-today .wi-msg { margin: 6px 0 0; min-height: 1em; font-size: 0.8125rem; color: var(--red); }
+.fx-today .wi-msg:empty { display: none; }
+.fx-today .wi-backdrop { display: none; }
+@media (max-width: 640px) {
+  .fx-today .wi-panel.is-open { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto;
+    padding: 16px 16px max(16px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; border-bottom: 0; z-index: 1001; }
+  .fx-today .wi-backdrop:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 1000; background: var(--backdrop); }
+  .fx-today .wi-panel .wi-input { min-height: 56px; font-size: 1.75rem; font-weight: 600; text-align: center; }
+  .fx-today .wi-panel .wi-save { min-height: 56px; padding: 0 20px; }
+  .fx-today .wi-skip { min-height: 44px; }
+}
