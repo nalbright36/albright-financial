@@ -1,0 +1,898 @@
+diff --git a/albright_fitness/static/albright_fitness/fitness.css b/albright_fitness/static/albright_fitness/fitness.css
+index b63ae45..1a2972c 100644
+--- a/albright_fitness/static/albright_fitness/fitness.css
++++ b/albright_fitness/static/albright_fitness/fitness.css
+@@ -590,3 +590,62 @@ a.fx-chip { color: var(--text-primary); text-decoration: none; }
+ @media (max-width: 480px) {
+   .fx-targets-banner__go.btn { flex: 1 1 auto; text-align: center; }
+ }
++
++
++.fx-row.is-skipped .fx-row__title { color: var(--text-secondary); font-weight: 500; }
++.fx-row.is-skipped { color: var(--text-secondary); }
++
++/* Swipe-to-skip the Fitness Today weigh-in row. */
++.fx-row.fx-swipe { position: relative; overflow: hidden; }
++.fx-row.fx-swipe:has(.skip-pop[open]) { overflow: visible; z-index: 6; }
++.fx-today:has(.skip-pop[open]) { overflow: visible; }
++.fx-swipe__content { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: 1; min-width: 0; min-height: inherit;
++  transition: transform 180ms ease; }
++.fx-row.fx-swipe.is-open .fx-swipe__content { transform: translateX(-88px); }
++.fx-swipe__rail { position: absolute; right: 0; top: 0; width: 88px; height: 100%;
++  display: flex; align-items: center; justify-content: center;
++  background: color-mix(in srgb, var(--text-secondary) 22%, transparent); }
++.fx-today .fx-swipe__btn { min-height: 32px; }
++@media (hover: hover) and (pointer: fine) {
++  .fx-row.fx-swipe { overflow: visible; }
++  .fx-row.fx-swipe.is-open .fx-swipe__content { transform: none; }
++  .fx-swipe__rail { right: 6px; width: auto; background: var(--bg-elevated, #0A0B0D);
++    opacity: 0; pointer-events: none; z-index: 4; border-radius: 10px; }
++  .fx-row.fx-swipe:hover .fx-swipe__rail, .fx-row.fx-swipe:focus-within .fx-swipe__rail,
++  .fx-row.fx-swipe:has(.skip-pop[open]) .fx-swipe__rail { opacity: 1; pointer-events: auto; }
++}
++
++
++/* Weigh-in Log weight control on Fitness Today (same sheet as planner.css .wi-panel). */
++.fx-today .wi { display: inline-flex; align-items: center; flex-shrink: 0; position: relative; }
++.fx-today .wi-open, .fx-today .wi-save { appearance: none; min-height: 32px; padding: 0 10px; font: inherit; font-size: 0.8125rem;
++  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-hover); color: var(--text-primary); cursor: pointer; }
++.fx-today .wi-save, .fx-today .pl-btn--primary { background: var(--accent-solid, #fff); color: var(--accent-contrast, #000);
++  border: 0; font-weight: 600; min-height: 40px; }
++.fx-today .wi-result { font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
++.fx-today .wi-result.is-skipped { color: var(--text-secondary); font-weight: 400; }
++.fx-today .wi-panel { display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
++  width: min(320px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--border); border-radius: 12px;
++  background: var(--bg-elevated, var(--surface-solid)); box-shadow: var(--overlay-shadow); }
++.fx-today .wi-panel.is-open { display: block; }
++html:not(.js) .fx-today .wi-panel { display: block; position: static; width: 100%; margin-top: 6px; box-shadow: none; }
++html:not(.js) .fx-today .wi-open { display: none; }
++.fx-today .wi-label { display: block; margin: 0 0 6px; font-size: 0.8125rem; color: var(--text-secondary); }
++.fx-today .wi-row { display: flex; align-items: center; gap: 8px; }
++.fx-today .wi-input { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 0 10px; font-size: 1rem;
++  border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-primary); }
++.fx-today .wi-unit { font-size: 0.875rem; color: var(--text-secondary); }
++.fx-today .wi-save { min-height: 40px; }
++.fx-today .wi-skip { margin-top: 8px; padding: 4px 0; border: 0; background: none; color: var(--text-secondary);
++  font-size: 0.8125rem; text-decoration: underline; cursor: pointer; }
++.fx-today .wi-msg { margin: 6px 0 0; min-height: 1em; font-size: 0.8125rem; color: var(--red); }
++.fx-today .wi-msg:empty { display: none; }
++.fx-today .wi-backdrop { display: none; }
++@media (max-width: 640px) {
++  .fx-today .wi-panel.is-open { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto;
++    padding: 16px 16px max(16px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; border-bottom: 0; z-index: 1001; }
++  .fx-today .wi-backdrop:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 1000; background: var(--backdrop); }
++  .fx-today .wi-panel .wi-input { min-height: 56px; font-size: 1.75rem; font-weight: 600; text-align: center; }
++  .fx-today .wi-panel .wi-save { min-height: 56px; padding: 0 20px; }
++  .fx-today .wi-skip { min-height: 44px; }
++}
+diff --git a/albright_fitness/static/albright_fitness/fitness.js b/albright_fitness/static/albright_fitness/fitness.js
+index 66f0030..13124ed 100644
+--- a/albright_fitness/static/albright_fitness/fitness.js
++++ b/albright_fitness/static/albright_fitness/fitness.js
+@@ -565,6 +565,67 @@
+ 
+     // ---------- Insights' weeks table: start scrolled to the latest weeks (they're on the right) ----------
+     document.querySelectorAll(".fx-heat-wrap").forEach(function (box) { box.scrollLeft = box.scrollWidth; });
++
++    // ---------- Fitness Today: "Log weight" opens the weigh-in sheet ----------
++    var openWi = null;
++    function closeWi() {
++        if (!openWi) return;
++        var box = openWi.closest(".wi"), button = box && box.querySelector("[data-wi-open]"), back = box && box.querySelector("[data-wi-close]");
++        openWi.classList.remove("is-open");
++        if (button) button.setAttribute("aria-expanded", "false");
++        if (back) back.hidden = true;
++        openWi = null;
++    }
++    function openWiPanel(panel) {
++        if (openWi === panel) return;
++        closeWi();
++        var box = panel.closest(".wi"), button = box.querySelector("[data-wi-open]"), back = box.querySelector("[data-wi-close]");
++        panel.classList.add("is-open");
++        if (button) button.setAttribute("aria-expanded", "true");
++        if (back) back.hidden = false;
++        openWi = panel;
++        var input = panel.querySelector("input[name=weight]");
++        if (input) input.focus();
++    }
++    document.addEventListener("click", function (event) {
++        var opener = event.target.closest && event.target.closest("#fx-today [data-wi-open]");
++        if (opener) {
++            var panel = document.getElementById(opener.getAttribute("aria-controls"));
++            if (panel === openWi) closeWi(); else if (panel) openWiPanel(panel);
++            return;
++        }
++        if (event.target.closest && event.target.closest("#fx-today [data-wi-close]")) { closeWi(); return; }
++        if (openWi && !openWi.contains(event.target)) closeWi();
++    });
++    document.addEventListener("keydown", function (event) {
++        if (event.key === "Escape" && openWi) closeWi();
++    });
++    document.addEventListener("submit", function (event) {
++        var form = event.target;
++        if (!form.matches || !form.matches("#fx-today [data-wi-form]") || !window.fetch || !window.FormData) return;
++        event.preventDefault();
++        var body = new FormData(form);
++        if (event.submitter && event.submitter.name === "skip") body.set("skip", "1");
++        else if (!String(body.get("weight") || "").trim()) {
++            var empty = form.querySelector("[data-wi-msg]");
++            if (empty) empty.textContent = "Enter your weight, or Skip today.";
++            return;
++        }
++        var msg = form.querySelector("[data-wi-msg]");
++        if (msg) msg.textContent = "";
++        post(form.action, body).then(function (res) {
++            if (res.data && res.data.confirm) {
++                if (!window.confirm(res.data.confirm)) return;
++                body.set("replace", "1");
++                return post(form.action, body);
++            }
++            return res;
++        }).then(function (res) {
++            if (!res) return;
++            if (!res.ok) { if (msg) msg.textContent = (res.data && res.data.error) || "Couldn't save that - try again."; return; }
++            window.location.reload();
++        }).catch(function () { if (msg) msg.textContent = "Couldn't save that - try again."; });
++    });
+ })();
+ 
+ // ---------- Programs' guided setup: the exercise type-ahead and the Planner time ----------
+@@ -724,3 +785,49 @@
+     showFields();
+     refresh();
+ })();
++
++/* Swipe left on the Today weigh-in row to reveal Skip. */
++(function () {
++    var THRESH = 48, RAIL = 88, IGNORE = "a, button, input, textarea, select, label, summary, .skip-pop, .wi";
++    var startX = 0, startY = 0, active = null, tracking = false, opened = false;
++    function rowOf(node) { return node && node.closest ? node.closest("[data-skip-swipe]") : null; }
++    function closeAll(except) {
++        document.querySelectorAll("[data-skip-swipe].is-open").forEach(function (row) {
++            if (row !== except) row.classList.remove("is-open");
++        });
++    }
++    function onDown(event) {
++        if (event.pointerType === "mouse" && event.button !== 0) return;
++        var row = rowOf(event.target);
++        if (!row || event.target.closest(IGNORE)) return;
++        startX = event.clientX; startY = event.clientY;
++        active = row; tracking = true; opened = row.classList.contains("is-open");
++        try { event.target.setPointerCapture(event.pointerId); } catch (e) {}
++    }
++    function onMove(event) {
++        if (!tracking || !active) return;
++        var dx = event.clientX - startX, dy = event.clientY - startY;
++        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
++        if (Math.abs(dy) > Math.abs(dx)) { tracking = false; return; }
++        event.preventDefault();
++        var shift = opened ? Math.min(0, Math.max(-RAIL, dx - RAIL)) : Math.min(0, Math.max(-RAIL, dx));
++        var content = active.querySelector(".fx-swipe__content, .pl-swipe__content");
++        if (content) content.style.transform = "translateX(" + shift + "px)";
++    }
++    function onUp(event) {
++        if (!active) return;
++        var dx = event.clientX - startX;
++        var content = active.querySelector(".fx-swipe__content, .pl-swipe__content");
++        if (content) content.style.transform = "";
++        if (tracking && dx < -THRESH) { closeAll(active); active.classList.add("is-open"); }
++        else if (tracking && dx > THRESH) active.classList.remove("is-open");
++        tracking = false; active = null;
++    }
++    document.addEventListener("pointerdown", onDown);
++    document.addEventListener("pointermove", onMove, { passive: false });
++    document.addEventListener("pointerup", onUp);
++    document.addEventListener("pointercancel", onUp);
++    document.addEventListener("pointerdown", function (event) {
++        if (!rowOf(event.target)) closeAll();
++    }, true);
++})();
+diff --git a/albright_fitness/templates/albright_fitness/dashboard.html b/albright_fitness/templates/albright_fitness/dashboard.html
+index fb694c8..0a1e723 100644
+--- a/albright_fitness/templates/albright_fitness/dashboard.html
++++ b/albright_fitness/templates/albright_fitness/dashboard.html
+@@ -1,4 +1,4 @@
+-{% extends "albright_fitness/base.html" %}{% load fitness_extras %}
++{% extends "albright_fitness/base.html" %}{% load fitness_extras weigh_in_tags %}
+ {% block page_title %}Today · {% endblock %}
+ {% block fitness %}
+ {% comment %}
+@@ -24,6 +24,25 @@ streak (weeks with every planned workout done), this week's working sets by musc
+ <div class="fx-grid fx-grid--today">
+ <section class="card fx-card fx-today" id="fx-today" aria-labelledby="fx-today-h">
+     <h2 class="fx-card__title" id="fx-today-h">Today</h2>
++    {% if weigh_in_today %}{% with wi=weigh_in_today.wi occ=weigh_in_today.occ item=weigh_in_today.item %}
++    {% if wi.skipped %}<div class="fx-row is-skipped">
++        <span class="fx-row__title">Weigh-in</span>
++        <span class="fx-skipped">{% include "albright_planner/_skip_icon.html" %} {{ occ.skip_label }}</span>
++        <form method="post" action="{% url 'albright_planner:skip' item.pk %}" class="fx-inline">{% csrf_token %}<input type="hidden" name="date" value="{{ weigh_in_today.date|date:'Y-m-d' }}"><input type="hidden" name="undo" value="1"><button type="submit" class="btn btn-secondary btn-sm">Undo</button></form>
++    </div>
++    {% elif wi.done %}<div class="fx-row">
++        <span class="fx-row__title">Weigh-in</span>
++        <span class="wi-result">{{ wi.result }}</span>
++    </div>
++    {% else %}{% url 'albright_planner:skip' item.pk as wi_skip_url %}
++    <div class="fx-row fx-swipe" data-skip-swipe>
++        <div class="fx-swipe__rail">{% include "albright_planner/_skip_form.html" with action_url=wi_skip_url date=weigh_in_today.date next=request.path uid="fx-wi" btn_class="btn btn-secondary btn-sm fx-swipe__btn" go="Skip weigh-in" %}</div>
++        <span class="fx-row__title">Weigh-in</span>
++        <div class="fx-swipe__content">
++            <span class="fx-today__acts">{% weigh_in_box occ request.path %}</span>
++        </div>
++    </div>
++    {% endif %}{% endwith %}{% endif %}
+     {% url 'albright_fitness:skip_day' as skip_day_url %}{% for day, done in today %}
+     <div class="fx-row">
+         <span class="fx-row__title">{{ day.name }} <span class="fx-muted fx-small">{{ day.program.name }}</span></span>
+diff --git a/albright_fitness/test_weigh_in.py b/albright_fitness/test_weigh_in.py
+index 14030ce..e692c9f 100644
+--- a/albright_fitness/test_weigh_in.py
++++ b/albright_fitness/test_weigh_in.py
+@@ -271,3 +271,34 @@ class ChangeTests(Base):
+         self.assertIn("Paused", self.client.get(url("body")).content.decode())
+         self.client.post(url("weigh_in_pause", schedule.pk))
+         self.assertTrue(self.task(schedule).is_weigh_in)
++
++
++
++class TodayRowTests(Base):
++    def test_fitness_today_shows_weigh_in_with_swipe(self):
++        self.create(frequency="daily")
++        page = self.client.get(url("dashboard")).content.decode()
++        self.assertIn("Weigh-in", page)
++        self.assertIn("data-skip-swipe", page)
++        self.assertIn("Log weight", page)
++        self.assertIn("Skip weigh-in", page)
++        row = weigh_in.today_row(self.me)
++        self.assertIsNotNone(row)
++        self.assertEqual(row["date"], self.today)
++        self.assertFalse(row["wi"]["done"])
++
++    def test_skip_and_undo_on_fitness_today(self):
++        item = self.task(self.create(frequency="daily"))
++        response = self.client.post(reverse("albright_planner:skip", args=[item.pk]),
++                                    {"date": self.today.isoformat(), "reason": "travel"}, **AJAX)
++        self.assertTrue(response.json()["skipped"])
++        page = self.client.get(url("dashboard")).content.decode()
++        self.assertIn("Skipped - Travel", page)
++        self.assertIn("Undo", page)
++        self.assertNotIn("data-skip-swipe", page)
++        self.assertTrue(weigh_in.today_row(self.me)["occ"].skipped)
++
++    def test_hidden_on_a_day_the_schedule_does_not_cover(self):
++        # Weekly Mon & Thu; if today is neither and nothing is logged, no Today row.
++        self.create(frequency="weekly", days_of_week=[(self.today.weekday() + 1) % 7])  # tomorrow only
++        self.assertIsNone(weigh_in.today_row(self.me))
+diff --git a/albright_fitness/views.py b/albright_fitness/views.py
+index 68ea14b..2deaf58 100644
+--- a/albright_fitness/views.py
++++ b/albright_fitness/views.py
+@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
+ 
+ from albright_labs import quick as quick_add, sharing, sheet
+ 
+-from . import body, burn, glossary, insights, nutrition, programs, stats, training
++from . import body, burn, glossary, insights, nutrition, programs, stats, training, weigh_in
+ from .models import (EQUIPMENT, MUSCLES, CustomFood, Exercise, FoodLogEntry, NutritionProfile, PersonalRecord,
+                      ProgramDay, ProgramExercise, ScheduledSession, Workout, WorkoutExercise, WorkoutSet)
+ 
+@@ -77,7 +77,7 @@ def dashboard(request):
+         "week_summary": insights.week(request.user, stats.week_start(timezone.localdate())), "weight": _dashboard_weight(request.user, profile),
+         "records_text": [(r, training.record_text(r)) for r in data["records"]],
+         "recent": Workout.objects.filter(owner=request.user, finished_at__isnull=False).select_related("program_day")[:5],
+-        "quick": _quick_log(request.user, profile)})
++        "quick": _quick_log(request.user, profile), "weigh_in_today": weigh_in.today_row(request.user)})
+ 
+ 
+ RECENT_EXERCISES = 8
+diff --git a/albright_fitness/weigh_in.py b/albright_fitness/weigh_in.py
+index a8aca4b..91adedf 100644
+--- a/albright_fitness/weigh_in.py
++++ b/albright_fitness/weigh_in.py
+@@ -165,6 +165,27 @@ def current(user):
+     return WeighInSchedule.objects.filter(owner=user).order_by("-active", "-pk").select_related("planner_item").first()
+ 
+ 
++def today_row(user):
++    """Today's weigh-in for Fitness Today: {"item", "date", "occ", "wi"} or None if nothing is scheduled today."""
++    from albright_planner import planner, recurrence
++    schedule = WeighInSchedule.objects.filter(owner=user, active=True, planner_item__isnull=False) \
++        .select_related("planner_item").first()
++    if schedule is None:
++        return None
++    item, day = schedule.planner_item, _today(user)
++    has = item.completions.filter(occurrence_date=day).exists()
++    if item.one_at_a_time:
++        due = planner.current_occurrence(item)
++        if not has and due != day:
++            return None
++    elif not recurrence.is_scheduled(item, day) and not has:
++        return None
++    if not planner.valid_occurrence(item, day):
++        return None
++    occ = planner.occurrence_for(item, day, user)
++    return {"item": item, "date": day, "occ": occ, "wi": box(item, day, occ.done, user)}
++
++
+ # ---------------------------------------------------------------------------
+ # The Planner task: make, end, replace - only through albright_planner.services
+ # ---------------------------------------------------------------------------
+diff --git a/albright_labs/static/labs/offline_view.js b/albright_labs/static/labs/offline_view.js
+index 5e63f73..d0759dc 100644
+--- a/albright_labs/static/labs/offline_view.js
++++ b/albright_labs/static/labs/offline_view.js
+@@ -177,7 +177,7 @@
+             run.then(draw);
+         }));
+         if (o.repeats || o.workout || o.weigh_in) {
+-            acts.appendChild(button("Skip this one", "btn btn-secondary btn-sm", function () {
++            acts.appendChild(button("Skip", "btn btn-secondary btn-sm", function () {
+                 openPanel = null;
+                 edit("planner.skip", {target: o.id, key: occKey(o), payload: {date: o.occurrence}, label: "Skip " + quoted(o.title)});
+             }));
+diff --git a/albright_planner/planner.py b/albright_planner/planner.py
+index 66d0bd2..e8075b7 100644
+--- a/albright_planner/planner.py
++++ b/albright_planner/planner.py
+@@ -170,7 +170,7 @@ def occurrences(user, start, end, kind="", show_done=True, shared_only=False, wh
+             occ.done_by = completion.completed_by if completion else None
+             _mark_skip(occ, completion)
+             _mark_sharing(occ, user)
+-            if show_done or not occ.done:
++            if show_done or not occ.done or occ.skipped:
+                 out.append(occ)
+     out.sort(key=lambda o: (o.date, o.start_time is not None, o.start_time or time.min, o.title.lower()))
+     return out
+@@ -208,9 +208,11 @@ def current_occurrence(item, completed=None, skipped=None):
+     return None
+ 
+ 
+-def _move_on(item, occurrence_date, on_day):
+-    """After the current occurrence was checked off or skipped on `on_day`: where the next one is."""
+-    if item.repeat_from_completion:
++def _move_on(item, occurrence_date, on_day, from_skip=False):
++    """After the current occurrence was checked off or skipped on `on_day`: where the next one is.
++    from_skip: a marked skip is not a completion, so "every N days after it's done" stays on the regular
++    schedule (first_after) instead of stepping from the skip date."""
++    if item.repeat_from_completion and not from_skip:
+         item.repeat_anchor = on_day
+         item.next_due = recurrence.step_from(item, on_day)
+     else:
+@@ -246,7 +248,7 @@ def current_or_first(item):
+ 
+ 
+ def _mark_skip(occ, completion):
+-    """occ.skipped / occ.skip_label: a planned workout or weigh-in skipped on purpose (skip mark, muted, no strike)."""
++    """occ.skipped / occ.skip_label: this occurrence skipped on purpose (skip mark, muted, no strike)."""
+     occ.skipped = bool(completion is not None and completion.skipped)
+     occ.skip_label = completion.skip_label if occ.skipped else ""
+ 
+@@ -362,8 +364,11 @@ def open_tasks_today(user):
+ 
+ 
+ def is_completed(occ):
+-    """A task occurrence that's finished: checked off, or every checklist row ticked (its owner may have "Complete
+-    task when all items are checked" off, so the box itself can still be open)."""
++    """A task occurrence that's finished: checked off (not skipped), or every checklist row ticked (its owner may
++    have "Complete task when all items are checked" off, so the box itself can still be open). A skipped
++    occurrence is neither open nor done."""
++    if getattr(occ, "skipped", False):
++        return False
+     progress = getattr(occ, "checklist_progress", None)
+     return bool(occ.done or (progress and progress["total"] and not progress["open"]))
+ 
+@@ -384,6 +389,8 @@ def today_panel(user, show_completed=False):
+     fitness = sources.can_open(user, "fitness")
+     workouts = [o for o in todays if fitness and o.item.source_app == "fitness"]
+     todays = [o for o in todays if o not in workouts]
++    def _skipped(o):
++        return bool(getattr(o, "skipped", False))
+     open_tasks = late + [o for o in todays if not is_completed(o)]
+     done = [o for o in todays if is_completed(o)] if show_completed else []
+     open_workouts = [o for o in workouts if not is_completed(o)]
+@@ -395,7 +402,8 @@ def today_panel(user, show_completed=False):
+             "meals": meals, "workouts": open_workouts + done_workouts,
+             "has_weigh_in": any(o.item.is_weigh_in for o in workouts),
+             "weigh_ins_only": bool(workouts) and all(o.item.is_weigh_in for o in workouts),
+-            "open": len(open_tasks) + len(open_workouts), "overdue": len(late), "done": len(done) + len(done_workouts),
++            "open": sum(1 for o in open_tasks + open_workouts if not _skipped(o)),
++            "overdue": len(late), "done": len(done) + len(done_workouts),
+             "show_completed": show_completed}
+ 
+ 
+@@ -403,6 +411,47 @@ def today_panel(user, show_completed=False):
+ # Check-off
+ # ---------------------------------------------------------------------------
+ 
++class SkipError(Exception):
++    """The occurrence can't be skipped (already done as a completion, or not a repeating task)."""
++
++
++@transaction.atomic
++def skip_occurrence(item, day, user, reason="", note=""):
++    """Mark one occurrence skipped (ItemCompletion.SKIPPED, optional reason). The series moves on to the next
++    regular date; a "every N after it's done" rule does not treat this as a completion. Workouts and weigh-ins
++    go through their Fitness services. Returns True, or raises SkipError. False if it isn't scheduled that day."""
++    from . import services
++
++    if item.is_workout:
++        from albright_fitness import workout_sync
++        try:
++            return workout_sync.skip_scheduled_workout(item, day, user, reason, note) is not None
++        except workout_sync.SkipError as exc:
++            raise SkipError(str(exc)) from exc
++    if item.is_weigh_in:
++        from albright_fitness import weigh_in
++        if not valid_occurrence(item, day):
++            return False
++        weigh_in.skip(item, day, user, reason, note)
++        return True
++    if not item.repeats:
++        raise SkipError("Only a repeating task can be skipped.")
++    if not valid_occurrence(item, day):
++        return False
++    completion = ItemCompletion.objects.filter(item=item, occurrence_date=day).first()
++    if completion is not None and not completion.skipped:
++        raise SkipError("It's already done - uncheck it first to skip it.")
++    if completion is not None:
++        services.set_skipped(item, day, reason, note)
++        return True
++    current = current_occurrence(item) if item.one_at_a_time else None
++    ItemCompletion.objects.get_or_create(item=item, occurrence_date=day, defaults={"completed_by": user})
++    if item.one_at_a_time and day == current:
++        _move_on(item, day, today(user), from_skip=True)
++    services.set_skipped(item, day, reason, note)
++    return True
++
++
+ @transaction.atomic
+ def toggle(item, occurrence_date, user, done=None):
+     """Check off (or undo) one occurrence. Returns whether it's now done, or None if it isn't scheduled that day.
+diff --git a/albright_planner/static/albright_planner/planner.css b/albright_planner/static/albright_planner/planner.css
+index dede444..cde69cb 100644
+--- a/albright_planner/static/albright_planner/planner.css
++++ b/albright_planner/static/albright_planner/planner.css
+@@ -690,3 +690,31 @@ html:not(.js) .pl-item:has(.wi) { flex-wrap: wrap; }
+   .pl-wx-pill__chev { width: 12px; height: 12px; }
+ }
+ @media (prefers-reduced-motion: reduce) { .pl-wx-panel.is-animating, .pl-wx-pill__chev { transition: none; } }
++
++
++/* Swipe-to-skip (Day and Home rows): swipe left on a repeating task or weigh-in to reveal Skip. */
++.pl-item.pl-swipe { position: relative; overflow: hidden; }
++.pl-item.pl-swipe:has(.skip-pop[open]) { overflow: visible; z-index: 6; }
++.pl-swipe__content { display: flex; flex-wrap: nowrap; align-items: center; column-gap: inherit; flex: 1 1 100%;
++  min-width: 0; min-height: inherit; transition: transform 180ms ease; }
++.pl-item.pl-swipe.is-open .pl-swipe__content { transform: translateX(-88px); }
++.pl-swipe__rail { position: absolute; right: 0; top: 0; width: 88px; height: 44px;
++  display: flex; align-items: center; justify-content: center; z-index: 0;
++  background: color-mix(in srgb, var(--text-secondary) 22%, transparent); }
++@media (max-width: 640px) { .pl-swipe__rail { height: 48px; } }
++.pl .pl-item .pl-swipe__btn { min-height: 32px; padding: 4px 10px; border: 0; background: transparent;
++  color: var(--text-primary); font-weight: 600; font-size: 0.8125rem; }
++.pl-unskip { display: inline-flex; flex-shrink: 0; margin: 0; }
++.pl-item.is-skipped .pl-ind__icon { display: none; }
++@media (max-width: 640px) { .pl-skip-label { max-width: 8.5em; } }
++/* Desktop / keyboard: Skip appears on hover or focus, no swipe needed. */
++@media (hover: hover) and (pointer: fine) {
++  .pl-item.pl-swipe { overflow: visible; }
++  .pl-item.pl-swipe.is-open .pl-swipe__content { transform: none; }
++  .pl-swipe__rail { right: 6px; width: auto; height: 44px; background: var(--pl-card, var(--surface-solid));
++    opacity: 0; pointer-events: none; z-index: 4; border-radius: 10px; }
++  .pl-item.pl-swipe:hover .pl-swipe__rail, .pl-item.pl-swipe:focus-within .pl-swipe__rail,
++  .pl-item.pl-swipe:has(.skip-pop[open]) .pl-swipe__rail { opacity: 1; pointer-events: auto; }
++  .pl .pl-item .pl-swipe__btn { border: 1px solid var(--pl-line, var(--border)); background: var(--surface-solid);
++    font-weight: 500; }
++}
+diff --git a/albright_planner/static/albright_planner/planner.js b/albright_planner/static/albright_planner/planner.js
+index 04abd6e..ed82c41 100644
+--- a/albright_planner/static/albright_planner/planner.js
++++ b/albright_planner/static/albright_planner/planner.js
+@@ -1886,3 +1886,52 @@
+         });
+     })();
+ })();
++
++/* Swipe left on a repeating task or weigh-in (Day, Home) to reveal Skip. */
++(function () {
++    var THRESH = 48, RAIL = 88, IGNORE = "a, button, input, textarea, select, label, summary, [data-cl-toggle], .skip-pop, .wi, .pl-check-form";
++    var startX = 0, startY = 0, active = null, tracking = false, opened = false;
++
++    function rowOf(node) {
++        return node && node.closest ? node.closest("[data-skip-swipe]") : null;
++    }
++    function closeAll(except) {
++        document.querySelectorAll("[data-skip-swipe].is-open").forEach(function (row) {
++            if (row !== except) row.classList.remove("is-open");
++        });
++    }
++    function onDown(event) {
++        if (event.pointerType === "mouse" && event.button !== 0) return;
++        var row = rowOf(event.target);
++        if (!row || event.target.closest(IGNORE)) return;
++        startX = event.clientX; startY = event.clientY;
++        active = row; tracking = true; opened = row.classList.contains("is-open");
++        try { event.target.setPointerCapture(event.pointerId); } catch (e) {}
++    }
++    function onMove(event) {
++        if (!tracking || !active) return;
++        var dx = event.clientX - startX, dy = event.clientY - startY;
++        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
++        if (Math.abs(dy) > Math.abs(dx)) { tracking = false; return; }   // vertical scroll
++        event.preventDefault();
++        var shift = opened ? Math.min(0, Math.max(-RAIL, dx - RAIL)) : Math.min(0, Math.max(-RAIL, dx));
++        var content = active.querySelector(".pl-swipe__content");
++        if (content) content.style.transform = "translateX(" + shift + "px)";
++    }
++    function onUp(event) {
++        if (!active) return;
++        var dx = event.clientX - startX;
++        var content = active.querySelector(".pl-swipe__content");
++        if (content) content.style.transform = "";
++        if (tracking && dx < -THRESH) { closeAll(active); active.classList.add("is-open"); }
++        else if (tracking && dx > THRESH) active.classList.remove("is-open");
++        tracking = false; active = null;
++    }
++    document.addEventListener("pointerdown", onDown);
++    document.addEventListener("pointermove", onMove, { passive: false });
++    document.addEventListener("pointerup", onUp);
++    document.addEventListener("pointercancel", onUp);
++    document.addEventListener("pointerdown", function (event) {
++        if (!rowOf(event.target)) closeAll();
++    }, true);
++})();
+diff --git a/albright_planner/templates/albright_planner/_occ.html b/albright_planner/templates/albright_planner/_occ.html
+index 781cdb6..03f8d47 100644
+--- a/albright_planner/templates/albright_planner/_occ.html
++++ b/albright_planner/templates/albright_planner/_occ.html
+@@ -13,9 +13,12 @@ its box or chevron opens the view panel (a dialog - planner.js; the panel's own
+ watchlist's auctions) opens its record directly. data-open-subtasks lets checking the task ask "Mark all subtasks
+ done too?" (planner.js).{% endcomment %}
+ {% load planner_extras weigh_in_tags %}{% if o.is_meal %}{% include "albright_planner/_meal.html" %}{% else %}
+-<li class="pl-item{% if drag %} rb-it rb-it--{% if o.item.is_weigh_in %}weigh_in{% elif o.item.is_workout %}workout{% elif o.item.kind == 'event' %}event{% else %}task{% endif %}{% endif %}{% if o.skipped %} is-skipped{% elif o.done %} is-done{% endif %}{% if o.overdue %} is-overdue{% endif %}{% if o.item.kind == 'event' %} is-event{% endif %}{% if o.shared_in %} is-shared-in{% endif %}{% if o.item.source_app == 'fitness' %} is-fitness{% endif %}"
+-    data-item="{{ o.item.pk }}" data-date="{{ o.occurrence_date|date:'Y-m-d' }}" data-repeats="{{ o.item.repeats|yesno:'1,0' }}"{% if o.item.is_workout and o.item.source_url %} data-log-url="{{ o.item.source_url }}&amp;date={{ o.occurrence_date|date:'Y-m-d' }}"{% endif %}{% if o.checklist_progress %} data-open-subtasks="{{ o.checklist_progress.open }}"{% endif %}
++{% if swipe and o.can_edit and not o.done and not o.item.is_workout and o.item.repeats %}{% url 'albright_planner:skip' o.item.pk as skip_url %}{% endif %}
++<li class="pl-item{% if drag %} rb-it rb-it--{% if o.item.is_weigh_in %}weigh_in{% elif o.item.is_workout %}workout{% elif o.item.kind == 'event' %}event{% else %}task{% endif %}{% endif %}{% if o.skipped %} is-skipped{% elif o.done %} is-done{% endif %}{% if o.overdue %} is-overdue{% endif %}{% if o.item.kind == 'event' %} is-event{% endif %}{% if o.shared_in %} is-shared-in{% endif %}{% if o.item.source_app == 'fitness' %} is-fitness{% endif %}{% if swipe and o.can_edit and not o.done and not o.item.is_workout and o.item.repeats %} pl-swipe{% endif %}"
++    data-item="{{ o.item.pk }}" data-date="{{ o.occurrence_date|date:'Y-m-d' }}" data-repeats="{{ o.item.repeats|yesno:'1,0' }}"{% if swipe and o.can_edit and not o.done and not o.item.is_workout and o.item.repeats %} data-skip-swipe{% endif %}{% if o.item.is_workout and o.item.source_url %} data-log-url="{{ o.item.source_url }}&amp;date={{ o.occurrence_date|date:'Y-m-d' }}"{% endif %}{% if o.checklist_progress %} data-open-subtasks="{{ o.checklist_progress.open }}"{% endif %}
+     {% if o.can_edit and drag %}draggable="true" data-move-url="{% url 'albright_planner:move' o.item.pk %}" {% endif %}{% if o.item.color %}style="--pl-color: {{ o.item.color }};"{% endif %}>
++    {% if swipe and o.can_edit and not o.done and not o.item.is_workout and o.item.repeats %}<div class="pl-swipe__rail">{% include "albright_planner/_skip_form.html" with action_url=skip_url date=o.occurrence_date next=here uid=o.item.pk|stringformat:"s"|add:"-"|add:o.occurrence_date.isoformat btn_class="pl-btn pl-swipe__btn" go=o.item.is_weigh_in|yesno:"Skip weigh-in,Skip" %}</div>
++    <div class="pl-swipe__content">{% endif %}
+     {% if o.item.checkable %}{% if o.can_edit %}
+     <form method="post" action="{% url 'albright_planner:toggle' o.item.pk %}" class="pl-check-form">{% csrf_token %}
+         <input type="hidden" name="date" value="{{ o.occurrence_date|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ here }}">
+@@ -30,7 +33,8 @@ done too?" (planner.js).{% endcomment %}
+         <span class="pl-ind">{% if o.skipped %}<span class="pl-skip-label" title="{{ o.skip_label }}">{{ o.skip_label }}</span>{% endif %}{% if o.item.priority == "high" %}<span class="pl-prio" aria-label="High priority">!</span>{% endif %}{% if o.overdue %}<span class="pl-ind__time pl-overdue"><span class="visually-hidden">Overdue, </span>{{ o.date|date:"M j" }}</span>{% elif o.start_time %}<span class="pl-ind__time pl-time">{{ o.start_time|time:"g:i" }}<span class="pl-time__ampm"> {{ o.start_time|time:"A" }}</span></span>{% endif %}{% if o.item.repeats %}<span class="pl-ind__icon" title="Repeats" aria-label="Repeats">&#x21bb;</span>{% endif %}{% if o.weather and o.weather_place %}{% include "albright_planner/_weather.html" with wx=o.weather place=o.weather_place minimal=True %}{% endif %}</span>
+     </a>
+     {# Home's Today rows: Skip only - starting a workout is in Fitness (Today card, Quick log) and on the task's view page. #}
+-    {% if start and o.item.is_workout and o.item.source_url and not o.done and o.item.owner_id == request.user.pk %}{% url 'albright_planner:skip' o.item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=o.occurrence_date next=here uid=o.item.pk|stringformat:"s"|add:"-"|add:o.occurrence_date.isoformat btn_class="pl-btn pl-today__skip" %}{% endif %}
++    {% if start and o.item.is_workout and o.item.source_url and not o.done and o.item.owner_id == request.user.pk %}{% url 'albright_planner:skip' o.item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=o.occurrence_date next=here uid=o.item.pk|stringformat:"s"|add:"-"|add:o.occurrence_date.isoformat btn_class="pl-btn pl-today__skip" go="Skip workout" %}{% endif %}
++    {% if o.skipped and o.can_edit %}<form method="post" action="{% url 'albright_planner:skip' o.item.pk %}" class="pl-unskip">{% csrf_token %}<input type="hidden" name="date" value="{{ o.occurrence_date|date:'Y-m-d' }}"><input type="hidden" name="undo" value="1"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="pl-btn pl-today__skip">Undo</button></form>{% endif %}
+     {% if o.item.is_weigh_in %}{% weigh_in_box o here %}{% elif o.item.is_workout %}{% workout_participants o as parts %}{% if parts %}<span class="pl-parts" aria-label="Doing it together">{% for p in parts %}<span class="pl-avatar pl-part is-{{ p.state }}" style="--pl-avatar: {{ p.user|avatar_color }};" title="{{ p.user|person }}: {% if p.state == 'done' %}done{% elif p.state == 'skipped' %}skipped{% else %}not yet{% endif %}">{{ p.user|initial }}<span class="pl-part__mark" aria-hidden="true">{% if p.state == 'done' %}&#x2713;{% elif p.state == 'skipped' %}&#x21E5;{% endif %}</span></span>{% endfor %}</span>{% endif %}{% endif %}
+     {% if o.checklist_progress %}{% if o.checklist %}<button type="button" class="pl-cl-toggle" data-cl-toggle aria-expanded="false" aria-controls="pl-cl-{{ o.item.pk }}-{{ o.occurrence_date|date:'Ymd' }}" title="Checklist: {{ o.checklist_progress.title }}"><span aria-hidden="true">&#x2611;</span> <span data-cl-progress>{{ o.checklist_progress.label }}</span><span class="visually-hidden"> - show the checklist</span><svg class="pl-cl-toggle__chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+     {% else %}<span class="pl-cl-count" title="Checklist: {{ o.checklist_progress.title }}"><span aria-hidden="true">&#x2611;</span> <span data-cl-progress>{{ o.checklist_progress.label }}</span></span>{% endif %}{% endif %}
+@@ -40,6 +44,7 @@ done too?" (planner.js).{% endcomment %}
+     {% if o.item.attachment_count %}<span class="att-mark pl-att-mark" title="{{ o.item.attachment_count }} attachment{{ o.item.attachment_count|pluralize }}" aria-label="{{ o.item.attachment_count }} attachment{{ o.item.attachment_count|pluralize }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.4 11.1l-9.2 9.2a6 6 0 01-8.5-8.5l9.2-9.2a4 4 0 015.7 5.7l-9.2 9.2a2 2 0 01-2.8-2.8l8.5-8.5"/></svg>{{ o.item.attachment_count }}</span>{% endif %}
+     {% if o.item.idea_id %}<a href="{% url 'albright_control:idea' o.item.idea_id %}" class="pl-src pl-idea" title="Open its Idea" aria-label="Open the Idea for &ldquo;{{ o.title }}&rdquo;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+     {% elif o.item.source_href and not o.item.locked %}<a href="{{ o.item.source_href }}" class="pl-src" title="Open in its app" aria-label="Open &ldquo;{{ o.title }}&rdquo; in its app">&#x2197;</a>{% endif %}
++    {% if swipe and o.can_edit and not o.done and not o.item.is_workout and o.item.repeats %}</div>{% endif %}
+     {% if o.checklist %}<ul class="pl-cl__rows pl-item__cl" id="pl-cl-{{ o.item.pk }}-{{ o.occurrence_date|date:'Ymd' }}" hidden>{% for row in o.checklist %}{% if o.can_edit %}{% if not row.grocery_item_id or can_check_groceries %}{% include "albright_planner/_checklist_row.html" with task=o.item back=here day=o.occurrence_date show_done_by=o.shared can_toggle=True %}{% else %}{% include "albright_planner/_checklist_row.html" with task=o.item back=here day=o.occurrence_date show_done_by=o.shared can_toggle=False %}{% endif %}{% else %}{% include "albright_planner/_checklist_row.html" with task=o.item back=here day=o.occurrence_date show_done_by=o.shared can_toggle=False %}{% endif %}{% endfor %}</ul>{% endif %}
+ </li>
+ {% endif %}
+diff --git a/albright_planner/templates/albright_planner/_skip_form.html b/albright_planner/templates/albright_planner/_skip_form.html
+index fb52265..6bd8984 100644
+--- a/albright_planner/templates/albright_planner/_skip_form.html
++++ b/albright_planner/templates/albright_planner/_skip_form.html
+@@ -3,7 +3,7 @@ pop-over with optional reason chips (Rest day, Sick, Busy, Travel, Other) and a
+ (a <details> and a plain form post). action_url: albright_planner:skip (date + next) or albright_fitness:skip_day
+ (day_pk). uid keeps the ids unique on a page; label: the summary's text (default "Skip"); btn_class: its classes.{% endcomment %}
+ {% load planner_extras %}{% skip_reasons as skip_reasons %}<details class="skip-pop" data-skip-pop>
+-    <summary class="{{ btn_class|default:'pl-btn' }} skip-pop__btn" id="skip-btn-{{ uid }}">{{ label|default:"Skip" }}</summary>
++    <summary class="{{ btn_class|default:'pl-btn' }} skip-pop__btn" id="{{ btn_id|default:'' }}{% if not btn_id %}skip-btn-{{ uid }}{% endif %}">{{ label|default:"Skip" }}</summary>
+     <form method="post" action="{{ action_url }}" class="skip-pop__form" aria-labelledby="skip-btn-{{ uid }}">{% csrf_token %}
+         {% if date %}<input type="hidden" name="date" value="{{ date|date:'Y-m-d' }}">{% endif %}
+         {% if day_pk %}<input type="hidden" name="day" value="{{ day_pk }}">{% endif %}
+@@ -14,6 +14,6 @@ pop-over with optional reason chips (Rest day, Sick, Busy, Travel, Other) and a
+         </fieldset>
+         <label class="visually-hidden" for="skip-note-{{ uid }}">Note</label>
+         <input type="text" name="note" id="skip-note-{{ uid }}" class="skip-pop__note" maxlength="200" placeholder="Note (optional)" autocomplete="off">
+-        <button type="submit" class="skip-pop__go">Skip workout</button>
++        <button type="submit" class="skip-pop__go">{{ go|default:"Skip" }}</button>
+     </form>
+ </details>
+diff --git a/albright_planner/templates/albright_planner/_today_panel.html b/albright_planner/templates/albright_planner/_today_panel.html
+index be8d63f..c5d1fd9 100644
+--- a/albright_planner/templates/albright_planner/_today_panel.html
++++ b/albright_planner/templates/albright_planner/_today_panel.html
+@@ -27,18 +27,18 @@ Styles and check-off: the Planner's planner.css / planner.js.
+     {% if planner_today.workouts %}
+     <div class="pl-today__sec pl-today__sec--workouts" id="planner-today-workouts">
+         <h3 class="pl-label"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> {% if planner_today.weigh_ins_only %}Weigh-in today{% elif planner_today.has_weigh_in %}Fitness today{% else %}Workouts today{% endif %}</h3>
+-        <ul class="pl-list" data-empty="No workouts left today.">{% for o in planner_today.workouts %}{% include "albright_planner/_occ.html" with here=planner_today.here start=True %}{% endfor %}</ul>
++        <ul class="pl-list" data-empty="No workouts left today.">{% for o in planner_today.workouts %}{% include "albright_planner/_occ.html" with here=planner_today.here start=True swipe=True %}{% endfor %}</ul>
+     </div>
+     {% endif %}
+     <div class="pl-today__cols">
+         <div>
+             <h3 class="pl-label">Tasks</h3>
+-            <ul class="pl-list" id="planner-today-tasks">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
++            <ul class="pl-list" id="planner-today-tasks">{% for o in planner_today.tasks %}{% include "albright_planner/_occ.html" with here=planner_today.here swipe=True %}{% empty %}<li class="pl-empty">No tasks today.</li>{% endfor %}</ul>
+             <p class="pl-today__toast pl-small" id="planner-today-toast" role="status" aria-live="polite" hidden><span id="planner-today-toast-text">Done</span> &middot; <button type="button" class="pl-today__undo" id="planner-today-undo">Undo</button></p>
+         </div>
+         <div>
+             <h3 class="pl-label">Events</h3>
+-            <ul class="pl-list">{% for o in planner_today.events %}{% include "albright_planner/_occ.html" with here=planner_today.here %}{% empty %}<li class="pl-empty">No events today.</li>{% endfor %}</ul>
++            <ul class="pl-list">{% for o in planner_today.events %}{% include "albright_planner/_occ.html" with here=planner_today.here swipe=True %}{% empty %}<li class="pl-empty">No events today.</li>{% endfor %}</ul>
+         </div>
+     </div>
+ </section>
+diff --git a/albright_planner/templates/albright_planner/_view_panel.html b/albright_planner/templates/albright_planner/_view_panel.html
+index fb2d3b6..79e5639 100644
+--- a/albright_planner/templates/albright_planner/_view_panel.html
++++ b/albright_planner/templates/albright_planner/_view_panel.html
+@@ -23,8 +23,7 @@ its checklist boxes tick right here (saved to the note) for someone who can edit
+         <details class="pl-menu" id="pl-view-menu" data-menu data-menu-scope="pl">
+             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
+             <div class="pl-menu__panel" data-menu-panel>
+-                {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" label=item.is_weigh_in|yesno:"Skip weigh-in…,Skip workout…" btn_class="pl-menu__item" %}{% endif %}
+-                {% if can_skip %}<form method="post" action="{% url 'albright_planner:remove' item.pk %}">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="this"><input type="hidden" name="next" value="{{ back }}"><button type="submit" class="pl-menu__item" id="pl-view-skip">Skip this one</button></form>{% endif %}
++                {% if can_skip %}{% url 'albright_planner:skip' item.pk as skip_url %}{% if item.is_weigh_in %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" btn_id="pl-view-skip" label="Skip weigh-in…" go="Skip weigh-in" btn_class="pl-menu__item" %}{% elif item.is_workout %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" btn_id="pl-view-skip" label="Skip workout…" go="Skip workout" btn_class="pl-menu__item" %}{% else %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="menu" btn_id="pl-view-skip" label="Skip…" go="Skip" btn_class="pl-menu__item" %}{% endif %}{% endif %}
+                 {% if can_move and not quick %}<details class="pl-menu__move">
+                     <summary class="pl-menu__item">Move&hellip;</summary>
+                     <form method="post" action="{% url 'albright_planner:move' item.pk %}" class="pl-menu__form" id="pl-view-move">{% csrf_token %}
+@@ -105,8 +104,8 @@ its checklist boxes tick right here (saved to the note) for someone who can edit
+     <section class="pl-view__section pl-view__fitness" id="pl-view-fitness" aria-labelledby="pl-view-fit-h">
+         <h3 class="pl-view__label" id="pl-view-fit-h"><span class="pl-fit-icon" aria-hidden="true">{% include "albright_planner/_dumbbell.html" %}</span> Workout</h3>
+         {% if fitness.rows %}<ul class="pl-view__rows">{% for r in fitness.rows %}<li class="pl-view__row"><span class="pl-view__row-name" title="{{ r.exercise.name }}">{{ r.exercise.name }}{% if r.last %}<span class="pl-view__last" title="Last time: {{ r.last }}">Last time: {{ r.last }}</span>{% endif %}</span>{% if r.target %}<span class="pl-view__row-ind">{{ r.target }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+-        {% if fitness.start_url and not o.done or can_skip_workout and not item.is_weigh_in %}<div class="pl-view__acts">{% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
+-        {% if can_skip_workout and not item.is_weigh_in %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="panel" %}{% endif %}</div>{% endif %}
++        {% if fitness.start_url and not o.done or can_skip_workout %}<div class="pl-view__acts">{% if fitness.start_url and not o.done %}<a href="{{ fitness.start_url }}" class="pl-btn pl-btn--primary" id="pl-view-start">Start workout</a>{% endif %}
++        {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=back uid="panel" go=item.is_weigh_in|yesno:"Skip weigh-in,Skip workout" %}{% endif %}</div>{% endif %}
+     </section>
+     {% endif %}
+     {% if subtasks %}
+diff --git a/albright_planner/templates/albright_planner/day.html b/albright_planner/templates/albright_planner/day.html
+index f062506..8246ee4 100644
+--- a/albright_planner/templates/albright_planner/day.html
++++ b/albright_planner/templates/albright_planner/day.html
+@@ -10,12 +10,12 @@
+     {% if overdue %}
+     <section class="pl-section pl-section--overdue" aria-labelledby="pl-overdue-h">
+         <h2 class="pl-section__title" id="pl-overdue-h">Overdue <span class="pl-count">{{ overdue|length }}</span></h2>
+-        <ul class="pl-list">{% for o in overdue %}{% include "albright_planner/_occ.html" %}{% endfor %}</ul>
++        <ul class="pl-list">{% for o in overdue %}{% include "albright_planner/_occ.html" with swipe=True %}{% endfor %}</ul>
+     </section>
+     {% endif %}
+     <section class="pl-section" aria-labelledby="pl-allday-h">
+         <h2 class="pl-section__title" id="pl-allday-h">All day &amp; tasks</h2>
+-        <ul class="pl-list" id="pl-allday">{% for o in top %}{% include "albright_planner/_occ.html" %}{% empty %}<li class="pl-empty">Nothing without a time.</li>{% endfor %}</ul>
++        <ul class="pl-list" id="pl-allday">{% for o in top %}{% include "albright_planner/_occ.html" with swipe=True %}{% empty %}<li class="pl-empty">Nothing without a time.</li>{% endfor %}</ul>
+     </section>
+     <section class="pl-section" aria-labelledby="pl-timeline-h">
+         <h2 class="pl-section__title" id="pl-timeline-h">Schedule</h2>
+@@ -23,7 +23,7 @@
+             {% for h in hours %}
+             <li class="pl-hour{% if h.items %} has-items{% endif %}" data-hour="{{ h.hour }}">
+                 <span class="pl-hour__label">{{ h.label }}</span>
+-                <ul class="pl-list pl-hour__items">{% for o in h.items %}{% include "albright_planner/_occ.html" %}{% endfor %}</ul>
++                <ul class="pl-list pl-hour__items">{% for o in h.items %}{% include "albright_planner/_occ.html" with swipe=True %}{% endfor %}</ul>
+             </li>
+             {% endfor %}
+         </ol>
+diff --git a/albright_planner/templates/albright_planner/form.html b/albright_planner/templates/albright_planner/form.html
+index cfeff69..3b21c41 100644
+--- a/albright_planner/templates/albright_planner/form.html
++++ b/albright_planner/templates/albright_planner/form.html
+@@ -30,10 +30,9 @@ on the New item form; the title sits above the form but belongs to it (form="pl-
+             <summary class="pl-menu__btn" aria-label="More actions" title="More actions"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></summary>
+             <div class="pl-menu__panel" data-menu-panel>
+                 {% if item.source_href %}<a href="{{ item.source_href }}" class="pl-menu__item"{% if item.locked %} target="_blank" rel="noopener noreferrer"{% endif %}>Open in its app &#x2197;</a>{% endif %}
+-                {% if can_skip_workout %}{% url 'albright_planner:skip' item.pk as skip_url %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=next uid="edmenu" label=item.is_weigh_in|yesno:"Skip weigh-in…,Skip workout…" btn_class="pl-menu__item" %}{% endif %}
++                {% if can_skip %}{% url 'albright_planner:skip' item.pk as skip_url %}{% if item.is_weigh_in %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=next uid="edmenu" btn_id="pl-skip" label="Skip weigh-in…" go="Skip weigh-in" btn_class="pl-menu__item" %}{% elif item.is_workout %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=next uid="edmenu" btn_id="pl-skip" label="Skip workout…" go="Skip workout" btn_class="pl-menu__item" %}{% else %}{% include "albright_planner/_skip_form.html" with action_url=skip_url date=occurrence next=next uid="edmenu" btn_id="pl-skip" label="Skip…" go="Skip" btn_class="pl-menu__item" %}{% endif %}{% endif %}
+                 <form method="post" action="{% url 'albright_planner:duplicate' item.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item" id="pl-ed-duplicate">Duplicate</button></form>
+                 {% if can_remove %}{% if item.repeats %}
+-                <form method="post" action="{% url 'albright_planner:remove' item.pk %}">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="this"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item" id="pl-skip">{% if is_current %}Skip this one{% else %}Skip this occurrence{% endif %}</button></form>
+                 {% if is_owner %}
+                 <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="End this series before {{ occurrence|date:'M j' }}? Earlier occurrences stay.">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="following"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item pl-menu__item--danger">Delete this and following</button></form>
+                 <form method="post" action="{% url 'albright_planner:remove' item.pk %}" data-confirm="Delete every occurrence of &ldquo;{{ item.title }}&rdquo;? This can't be undone.">{% csrf_token %}<input type="hidden" name="date" value="{{ occurrence|date:'Y-m-d' }}"><input type="hidden" name="scope" value="all"><input type="hidden" name="next" value="{{ next }}"><button type="submit" class="pl-menu__item pl-menu__item--danger">Delete all occurrences</button></form>
+diff --git a/albright_planner/test_one_at_a_time.py b/albright_planner/test_one_at_a_time.py
+index fabcd22..6e8a8e1 100644
+--- a/albright_planner/test_one_at_a_time.py
++++ b/albright_planner/test_one_at_a_time.py
+@@ -131,7 +131,8 @@ class OneShowsTests(Base):
+         page = self.client.get(url("edit", item.pk)).content.decode()
+         self.assertIn("Repeats every Mon · next appears after this one is done", page)
+         self.assertIn("due Mon Nov 9, 2026", page)
+-        self.assertIn("Skip this one", page)
++        self.assertIn("Skip…", page)
++        self.assertNotIn("Skip this one", page)
+ 
+ 
+ class OnScheduleTests(Base):
+diff --git a/albright_planner/test_skip_task.py b/albright_planner/test_skip_task.py
+new file mode 100644
+index 0000000..6b0e801
+--- /dev/null
++++ b/albright_planner/test_skip_task.py
+@@ -0,0 +1,111 @@
++"""Repeating-task skip marks the occurrence skipped (ItemCompletion), keeps the next date on the regular
++schedule, does not count as done, and is offered as swipe-to-skip on Day / Home (not 'Skip this one')."""
++from datetime import date
++
++from django.urls import reverse
++
++from .models import ItemCompletion, ItemException
++from .test_one_at_a_time import Base, d
++from . import planner
++
++DAILY = "FREQ=DAILY"
++AJAX = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
++
++
++def url(name, *args):
++    return reverse(f"albright_planner:{name}", args=args)
++
++
++class SkipOccurrenceTests(Base):
++    # Base today is Wed Nov 4.
++
++    def test_marks_skipped_not_an_exception(self):
++        item = self.task(title="Make the bed", rule=DAILY, start=d(11, 4))
++        self.assertTrue(planner.skip_occurrence(item, d(11, 4), self.me, "travel"))
++        completion = ItemCompletion.objects.get(item=item, occurrence_date=d(11, 4))
++        self.assertTrue(completion.skipped)
++        self.assertEqual(completion.skip_reason, "travel")
++        self.assertEqual(completion.skip_label, "Skipped - Travel")
++        self.assertFalse(ItemException.objects.filter(item=item).exists())
++        self.assertEqual(self.current(item), d(11, 5))
++        shown = {o.date: o for o in planner.occurrences(self.me, d(11, 4), d(11, 5)) if o.item.pk == item.pk}
++        self.assertTrue(shown[d(11, 4)].skipped)
++        self.assertFalse(shown[d(11, 5)].done)
++
++    def test_from_completion_does_not_step_from_the_skip_date(self):
++        item = self.task(title="Walk", rule=DAILY, start=d(11, 3), repeat_from_completion=True)
++        # If skip counted as done, next would be Nov 6 (every day after Nov 5's check-off clock).
++        # Skip on Nov 4 (today; current is Nov 3 if never done? start Nov 3, today Nov 4:
++        # current is Nov 3 still if not done). Skip the current one (Nov 3).
++        self.assertEqual(self.current(item), d(11, 3))
++        planner.skip_occurrence(item, d(11, 3), self.me, "travel")
++        # Regular daily schedule: next is Nov 4, not Nov 5 (step_from after a "done" on Nov 3 or 4).
++        self.assertEqual(self.current(item), d(11, 4))
++
++    def test_already_done_cannot_be_skipped(self):
++        item = self.task(rule=DAILY, start=d(11, 4))
++        self.done(item, d(11, 4))
++        with self.assertRaises(planner.SkipError):
++            planner.skip_occurrence(item, d(11, 4), self.me)
++        self.assertFalse(ItemCompletion.objects.get(item=item).skipped)
++
++    def test_one_off_cannot_be_skipped(self):
++        item = self.task(rule="", start=d(11, 4))
++        with self.assertRaises(planner.SkipError):
++            planner.skip_occurrence(item, d(11, 4), self.me)
++
++    def test_undo_reopens_and_puts_it_back(self):
++        item = self.task(rule=DAILY, start=d(11, 4))
++        planner.skip_occurrence(item, d(11, 4), self.me, "busy")
++        self.assertEqual(self.current(item), d(11, 5))
++        self.assertFalse(planner.toggle(item, d(11, 4), self.me, done=False))
++        self.assertEqual(self.current(item), d(11, 4))
++        self.assertFalse(item.completions.exists())
++
++    def test_skipped_is_not_counted_as_done_on_today(self):
++        item = self.task(title="Make the bed", rule=DAILY, start=d(11, 4))
++        other = self.task(title="Trash", rule=DAILY, start=d(11, 4))
++        planner.skip_occurrence(item, d(11, 4), self.me, "travel")
++        self.done(other, d(11, 4))
++        panel = planner.today_panel(self.me, show_completed=True)
++        titles = [o.title for o in panel["tasks"]]
++        self.assertIn("Make the bed", titles)
++        skipped = next(o for o in panel["tasks"] if o.title == "Make the bed")
++        self.assertTrue(skipped.skipped)
++        self.assertEqual(panel["done"], 1)          # only Trash
++        self.assertEqual(panel["open"], 0)
++
++
++class SkipViewTests(Base):
++    def test_post_skips_with_a_reason(self):
++        item = self.task(title="Make the bed", rule=DAILY, start=d(11, 4))
++        response = self.client.post(url("skip", item.pk), {
++            "date": "2026-11-04", "reason": "travel", "next": "/planner/day/",
++        }, **AJAX)
++        self.assertEqual(response.status_code, 200)
++        self.assertTrue(response.json()["skipped"])
++        self.assertTrue(ItemCompletion.objects.get(item=item).skipped)
++
++    def test_undo_from_the_view(self):
++        item = self.task(rule=DAILY, start=d(11, 4))
++        planner.skip_occurrence(item, d(11, 4), self.me, "travel")
++        response = self.client.post(url("skip", item.pk), {"date": "2026-11-04", "undo": "1"}, **AJAX)
++        self.assertEqual(response.json(), {"ok": True, "skipped": False})
++        self.assertFalse(item.completions.exists())
++
++    def test_day_page_has_swipe_and_no_skip_this_one(self):
++        item = self.task(title="Make the bed", rule=DAILY, start=d(11, 4))
++        page = self.client.get(url("day")).content.decode()
++        block = page.split(f'data-item="{item.pk}"', 1)[1][:2500]
++        self.assertIn("data-skip-swipe", page.split(f'data-item="{item.pk}"', 1)[0][-200:] + block[:200])
++        self.assertIn("pl-swipe", page)
++        self.assertNotIn("Skip this one", page)
++        self.assertIn("skip-pop", block)
++
++    def test_view_panel_menu_uses_the_skip_form(self):
++        item = self.task(title="Make the bed", rule=DAILY, start=d(11, 4), recurrence_until=d(12, 31))
++        page = self.client.get(url("item", item.pk) + "?panel=1&date=2026-11-04").content.decode()
++        self.assertIn('id="pl-view-skip"', page)
++        self.assertIn("skip-pop", page)
++        self.assertNotIn("Skip this one", page)
++        self.assertNotIn('scope" value="this"', page)
+diff --git a/albright_planner/views.py b/albright_planner/views.py
+index 19f1b9d..2622e4d 100644
+--- a/albright_planner/views.py
++++ b/albright_planner/views.py
+@@ -665,9 +665,9 @@ def view_item(request, pk):
+     can_edit, is_owner = occ.can_edit, item.owner_id == request.user.pk
+     rows = checklist.occurrence_rows(item, occurrence)
+     shared_with = planner.shared_names(item) if is_owner else []
+-    # A planned workout: "Skip workout" (done as skipped, with a reason) instead of "Skip this one" (drops it).
++    # Skip marks the occurrence skipped (reason popover) - workouts, weigh-ins, and any repeating task.
+     can_skip_workout = (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done
+-    can_skip = item.repeats and can_edit and not item.is_workout
++    can_skip = can_edit and not occ.done and (item.repeats or item.is_workout or item.is_weigh_in)
+     can_delete = is_owner and (can_edit or item.locked)
+     template = "albright_planner/_view_panel.html" if panel else "albright_planner/item.html"
+     quick = can_edit and not item.locked and not item.is_weigh_in             # edits right here (planner.js)
+@@ -803,6 +803,7 @@ def edit_item(request, pk):
+         "editor_rows": _editor_ticks(request, item, occurrence, _editor_rows(request, checklist.current_rows(item))),
+         "can_tick": can_edit, "edit_page": True,
+         "can_skip_workout": (item.is_workout or item.is_weigh_in) and is_owner and can_edit and not occ.done,
++        "can_skip": can_edit and not occ.done and (item.repeats or item.is_workout or item.is_weigh_in),
+         "checklist": rows, "checklist_progress": checklist.progress(rows) if rows else None,
+         "checklist_edit": _editor_rows(request, checklist.current_rows(item)),
+         "checklist_from": checklist.edit_from(item), "show_done_by": is_owner and bool(shared_with) or not is_owner,
+@@ -895,28 +896,31 @@ def toggle(request, pk):
+ @login_required
+ @require_POST
+ def skip(request, pk):
+-    """Skip one occurrence of a planned workout or weigh-in: POST date, reason (Rest day / Sick / Busy / Travel /
+-    Other - optional), note (optional). Checked off as "skipped" (albright_fitness.workout_sync - one service for
+-    the Planner, Home, Fitness and the Bot API); unchecking it (toggle) reopens it."""
++    """Skip one occurrence of a repeating task, planned workout or weigh-in: POST date, reason (Rest day / Sick /
++    Busy / Travel / Other - optional), note (optional). Marked skipped (not done); unchecking it or undo=1 reopens
++    it. Workouts still go through workout_sync."""
+     item = _editable(request, pk)
+     occurrence = _day(request.POST.get("date"))
+-    reason, note = request.POST.get("reason", ""), request.POST.get("note", "")
+-    error, done = "", None
+-    if occurrence is None or not (item.is_workout or item.is_weigh_in):
+-        error = "Only a planned workout or weigh-in can be skipped."
+-    elif not planner.valid_occurrence(item, occurrence):
++    error = ""
++    if occurrence is None:
+         error = "That item isn't scheduled that day."
+-    elif item.is_workout:
+-        from albright_fitness import workout_sync
++    elif request.POST.get("undo"):
++        if planner.toggle(item, occurrence, request.user, done=False) is None:
++            error = "That item isn't scheduled that day."
++        elif _wants_json(request):
++            return JsonResponse({"ok": True, "skipped": False})
++        else:
++            messages.success(request, f"Reopened {item.title}.")
++            return redirect(_next(request))
++    else:
+         try:
+-            done = workout_sync.skip_scheduled_workout(item, occurrence, request.user, reason, note)
+-        except workout_sync.SkipError as exc:
++            done = planner.skip_occurrence(item, occurrence, request.user,
++                                           request.POST.get("reason", ""), request.POST.get("note", ""))
++        except planner.SkipError as exc:
+             error = str(exc)
+         else:
+-            error = "" if done is not None else "That item isn't scheduled that day."
+-    else:
+-        from albright_fitness import weigh_in
+-        weigh_in.skip(item, occurrence, request.user, reason, note)
++            if not done:
++                error = "That item isn't scheduled that day."
+     if _wants_json(request):
+         return JsonResponse({"ok": False, "error": error}, status=400) if error else JsonResponse({"ok": True, "skipped": True})
+     if error:
